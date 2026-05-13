@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(Rename-Item \"C:\\\\Users\\\\Edgar Lovera\\\\OneDrive\\\\Desktop\\\\loveraapp\\\\public\\\\logo.png.png\" \"logo.png\")",
+      "Bash(cd \"/c/Users/Edgar Lovera/OneDrive/Desktop/loveraapp\" && cat package.json)",
+      "Read(//mnt/c/**)",
+      "Read(//proc/**)",
+      "Bash(xargs sed -i 's/bg-slate-900\\\\/40/bg-slate-900\\\\/70/g; s/bg-slate-950\\\\/30/bg-slate-950\\\\/60/g; s/bg-slate-950\\\\/40/bg-slate-950\\\\/70/g; s/bg-slate-900\\\\/30/bg-slate-900\\\\/60/g')",
+      "Bash(xargs -0 sed -i 's/bg-slate-900\\\\/40/bg-slate-900\\\\/70/g; s/bg-slate-950\\\\/30/bg-slate-950\\\\/60/g; s/bg-slate-950\\\\/40/bg-slate-950\\\\/70/g; s/bg-slate-900\\\\/30/bg-slate-900\\\\/60/g')",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}
