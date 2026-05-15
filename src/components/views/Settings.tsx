@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Bot, Smartphone, Download, Upload, Plus, Edit2, Power, AlertTriangle, FileText, BrainCircuit, Trash2, Key, Lock, Eye, EyeOff, BellRing, Loader2, CheckCircle2 } from 'lucide-react';
+import { Users, Bot, Smartphone, Download, Upload, Plus, Edit2, Power, AlertTriangle, FileText, BrainCircuit, Trash2, Key, Lock, Eye, EyeOff, BellRing, Loader2, CheckCircle2, QrCode, MessageCircle, Send, X, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { sendPushNotification, requestNotificationPermission } from '../../lib/notifications';
 import { AgentDesigner } from './AgentDesigner';
@@ -626,50 +626,156 @@ function BotTab() {
   );
 }
 
+interface Channel {
+  id: number;
+  name: string;
+  type: 'WhatsApp' | 'Telegram';
+  status: 'Conectada' | 'Desconectada' | 'Esperando QR';
+  supportBoth: boolean;
+  identifier?: string; // teléfono o @bot
+}
+
 function CanalesTab() {
-  const [lines, setLines] = useState([
-    { id: 1, name: 'Captura y Seguimiento QR (WhatsApp)', type: 'WhatsApp', status: 'Conectada', supportBoth: false },
-    { id: 2, name: 'Captura y Seguimiento QR (Telegram)', type: 'Telegram', status: 'Conectada', supportBoth: false },
-    { id: 3, name: 'Soporte, Seguimiento y Morosidad', type: 'WhatsApp', status: 'Conectada', supportBoth: true },
-    { id: 4, name: 'Línea — Reclutamiento', type: 'WhatsApp', status: 'Conectada', supportBoth: false },
-    { id: 5, name: 'Línea — Ventas Externas', type: 'WhatsApp', status: 'Esperando QR', supportBoth: false },
-  ]);
+  const [lines, setLines] = useState<Channel[]>(() => {
+    const saved = localStorage.getItem('adhdreams_channels');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return [
+      { id: 1, name: 'Captura y Seguimiento QR (WhatsApp)', type: 'WhatsApp' as const, status: 'Conectada' as const, supportBoth: false },
+      { id: 2, name: 'Captura y Seguimiento QR (Telegram)', type: 'Telegram' as const, status: 'Conectada' as const, supportBoth: false },
+      { id: 3, name: 'Soporte, Seguimiento y Morosidad', type: 'WhatsApp' as const, status: 'Conectada' as const, supportBoth: true },
+      { id: 4, name: 'Línea — Reclutamiento', type: 'WhatsApp' as const, status: 'Conectada' as const, supportBoth: false },
+      { id: 5, name: 'Línea — Ventas Externas', type: 'WhatsApp' as const, status: 'Esperando QR' as const, supportBoth: false },
+    ];
+  });
 
   const [configuringId, setConfiguringId] = useState<number | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [connectModal, setConnectModal] = useState<'whatsapp' | 'telegram' | null>(null);
+
+  const persistLines = (next: Channel[]) => {
+    setLines(next);
+    localStorage.setItem('adhdreams_channels', JSON.stringify(next));
+  };
+
+  const handleAddChannel = (channel: Omit<Channel, 'id'>) => {
+    const nextId = Math.max(0, ...lines.map(l => l.id)) + 1;
+    persistLines([...lines, { ...channel, id: nextId }]);
+    setConnectModal(null);
+  };
 
   const handleConnect = (id: number) => {
-    setLines(lines.map(l => l.id === id ? { ...l, status: 'Conectada' } : l));
+    persistLines(lines.map(l => l.id === id ? { ...l, status: 'Conectada' as const } : l));
   };
 
   const handleDisconnect = (id: number) => {
-    setLines(lines.map(l => l.id === id ? { ...l, status: 'Desconectada' } : l));
+    persistLines(lines.map(l => l.id === id ? { ...l, status: 'Desconectada' as const } : l));
   };
 
-  const handleTypeChange = (id: number, newType: string) => {
-    setLines(lines.map(l => l.id === id ? { ...l, type: newType, status: 'Esperando QR' } : l));
+  const handleTypeChange = (id: number, newType: 'WhatsApp' | 'Telegram') => {
+    persistLines(lines.map(l => l.id === id ? { ...l, type: newType, status: 'Esperando QR' as const } : l));
   };
+
+  const handleDelete = (id: number) => {
+    persistLines(lines.filter(l => l.id !== id));
+  };
+
+  const hasPending = lines.some(l => l.status === 'Esperando QR');
 
   return (
     <div className="space-y-6">
-      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-6">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <h4 className="text-amber-400 font-medium text-sm">Escaneo Pendiente</h4>
-            <p className="text-amber-400/80 text-xs mt-1">Hay una línea en "Esperando QR". Se requiere escanear el código para activarla.</p>
+      {/* Vincular nueva cuenta */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={() => setConnectModal('whatsapp')}
+          className="flex-1 group bg-gradient-to-br from-emerald-600/20 to-emerald-500/5 hover:from-emerald-600/30 hover:to-emerald-500/10 border border-emerald-500/30 rounded-2xl p-5 transition-all text-left flex items-center gap-4"
+        >
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
+            <MessageCircle className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <h4 className="text-base font-bold text-slate-100">Vincular WhatsApp</h4>
+              <QrCode className="w-4 h-4 text-emerald-400" />
+            </div>
+            <p className="text-xs text-slate-400">Conecta una cuenta escaneando el código QR con tu teléfono.</p>
+          </div>
+          <Plus className="w-5 h-5 text-emerald-400 shrink-0 group-hover:rotate-90 transition-transform" />
+        </button>
+
+        <button
+          onClick={() => setConnectModal('telegram')}
+          className="flex-1 group bg-gradient-to-br from-sky-600/20 to-sky-500/5 hover:from-sky-600/30 hover:to-sky-500/10 border border-sky-500/30 rounded-2xl p-5 transition-all text-left flex items-center gap-4"
+        >
+          <div className="w-12 h-12 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center shrink-0">
+            <Send className="w-6 h-6 text-sky-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-base font-bold text-slate-100 mb-0.5">Conectar Telegram</h4>
+            <p className="text-xs text-slate-400">Vincula un bot creado en @BotFather con tu token de acceso.</p>
+          </div>
+          <Plus className="w-5 h-5 text-sky-400 shrink-0 group-hover:rotate-90 transition-transform" />
+        </button>
+      </div>
+
+      {hasPending && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-amber-400 font-medium text-sm">Escaneo Pendiente</h4>
+              <p className="text-amber-400/80 text-xs mt-1">Hay una línea en "Esperando QR". Se requiere escanear el código para activarla.</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {connectModal === 'whatsapp' && (
+        <WhatsAppQrModal
+          onClose={() => setConnectModal(null)}
+          onConnected={(phone) => handleAddChannel({
+            name: `WhatsApp — ${phone}`,
+            type: 'WhatsApp',
+            status: 'Conectada',
+            supportBoth: false,
+            identifier: phone,
+          })}
+        />
+      )}
+      {connectModal === 'telegram' && (
+        <TelegramConnectModal
+          onClose={() => setConnectModal(null)}
+          onConnected={(botUsername) => handleAddChannel({
+            name: `Telegram — @${botUsername}`,
+            type: 'Telegram',
+            status: 'Conectada',
+            supportBoth: false,
+            identifier: `@${botUsername}`,
+          })}
+        />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {lines.map(line => (
           <div key={line.id} className="bg-slate-950/80 border border-white/5 rounded-xl p-5 flex flex-col shadow-inner relative">
-            <div className="flex justify-between items-start mb-4">
-              <div className="font-medium text-slate-100 text-sm leading-tight pr-2">{line.name}</div>
+            <button
+              onClick={() => handleDelete(line.id)}
+              title="Eliminar línea"
+              className="absolute top-2 right-2 p-1 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex justify-between items-start mb-4 pr-6">
+              <div className="font-medium text-slate-100 text-sm leading-tight pr-2 flex items-center gap-2">
+                {line.type === 'WhatsApp'
+                  ? <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  : <Send className="w-4 h-4 text-sky-400 shrink-0" />}
+                {line.name}
+              </div>
               <span className={cn(
                 "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border whitespace-nowrap",
-                line.status === 'Conectada' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : 
+                line.status === 'Conectada' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
                 line.status === 'Esperando QR' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"
               )}>
                 {line.status}
@@ -681,9 +787,9 @@ function CanalesTab() {
                 {line.supportBoth && (
                   <div>
                     <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1 block">Plataforma</label>
-                    <select 
-                      value={line.type} 
-                      onChange={(e) => handleTypeChange(line.id, e.target.value)}
+                    <select
+                      value={line.type}
+                      onChange={(e) => handleTypeChange(line.id, e.target.value as 'WhatsApp' | 'Telegram')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg p-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                     >
                       <option value="WhatsApp">WhatsApp</option>
@@ -801,6 +907,238 @@ function ImportExportTab() {
             <div className="text-xs text-slate-500 font-mono">12 KB • Hace 2 días</div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// WhatsApp QR Modal — simula el flujo de WhatsApp Web
+// Muestra un QR con un session ID único; el usuario "escanea"
+// con su teléfono y la conexión se completa.
+// ──────────────────────────────────────────────────────────
+function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConnected: (phone: string) => void; }) {
+  const [step, setStep] = useState<'qr' | 'phone' | 'connecting' | 'done'>('qr');
+  const [sessionId, setSessionId] = useState(() => generateSessionId());
+  const [secondsLeft, setSecondsLeft] = useState(60);
+  const [phone, setPhone] = useState('');
+
+  useEffect(() => {
+    if (step !== 'qr') return;
+    if (secondsLeft <= 0) return;
+    const t = setInterval(() => setSecondsLeft(s => s - 1), 1000);
+    return () => clearInterval(t);
+  }, [step, secondsLeft]);
+
+  const handleRefresh = () => {
+    setSessionId(generateSessionId());
+    setSecondsLeft(60);
+  };
+
+  const handleSimulateScan = () => {
+    setStep('phone');
+  };
+
+  const handleConfirmPhone = () => {
+    const cleaned = phone.replace(/\s+/g, '');
+    if (!/^\+?\d{10,15}$/.test(cleaned)) {
+      toast.error('Ingresa un número válido con código de país (ej. +5215512345678).');
+      return;
+    }
+    setStep('connecting');
+    setTimeout(() => {
+      setStep('done');
+      toast.success(`WhatsApp ${cleaned} conectado correctamente.`);
+      setTimeout(() => onConnected(cleaned), 700);
+    }, 1500);
+  };
+
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&bgcolor=ffffff&color=000000&data=${encodeURIComponent('https://web.whatsapp.com/wa-link/' + sessionId)}`;
+
+  return (
+    <ModalShell title="Vincular WhatsApp" accent="emerald" icon={<MessageCircle className="w-5 h-5 text-emerald-400" />} onClose={onClose}>
+      {step === 'qr' && (
+        <>
+          <ol className="text-xs text-slate-400 space-y-1.5 mb-4 list-decimal list-inside">
+            <li>Abre <b className="text-slate-200">WhatsApp</b> en tu teléfono.</li>
+            <li>Toca <b className="text-slate-200">Menú</b> (⋮) o <b className="text-slate-200">Ajustes</b> y selecciona <b className="text-slate-200">Dispositivos vinculados</b>.</li>
+            <li>Toca <b className="text-slate-200">Vincular un dispositivo</b> y escanea este código.</li>
+          </ol>
+          <div className="relative mx-auto w-fit bg-white p-2 rounded-xl">
+            <img src={qrUrl} alt="QR de vinculación de WhatsApp" className="block w-[260px] h-[260px]" />
+            {secondsLeft <= 0 && (
+              <div className="absolute inset-0 bg-white/85 rounded-xl flex flex-col items-center justify-center gap-2 backdrop-blur-sm">
+                <p className="text-xs font-bold text-slate-700">Código expirado</p>
+                <button onClick={handleRefresh} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium">
+                  <RefreshCw className="w-3.5 h-3.5" /> Regenerar
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
+            <span>Caduca en <span className="text-slate-300 font-mono">{Math.max(0, secondsLeft)}s</span></span>
+            <button onClick={handleRefresh} className="flex items-center gap-1 text-slate-400 hover:text-slate-200">
+              <RefreshCw className="w-3 h-3" /> Nuevo código
+            </button>
+          </div>
+          <button onClick={handleSimulateScan} className="mt-5 w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">
+            Ya escaneé el código
+          </button>
+        </>
+      )}
+      {step === 'phone' && (
+        <>
+          <p className="text-xs text-slate-400 mb-3">Confirma el número de WhatsApp que estás vinculando:</p>
+          <input
+            type="tel"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="+52 1 55 1234 5678"
+            className="w-full bg-slate-950 border border-white/10 rounded-lg p-3 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 font-mono"
+            autoFocus
+          />
+          <button onClick={handleConfirmPhone} className="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">
+            Confirmar y conectar
+          </button>
+        </>
+      )}
+      {step === 'connecting' && (
+        <div className="py-10 flex flex-col items-center gap-3">
+          <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+          <p className="text-sm text-slate-300">Sincronizando con WhatsApp…</p>
+        </div>
+      )}
+      {step === 'done' && (
+        <div className="py-10 flex flex-col items-center gap-3">
+          <CheckCircle2 className="w-12 h-12 text-emerald-400" />
+          <p className="text-sm font-medium text-slate-200">Cuenta vinculada</p>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
+function generateSessionId(): string {
+  const rnd = () => Math.random().toString(36).slice(2, 10);
+  return `${Date.now().toString(36)}-${rnd()}-${rnd()}`;
+}
+
+// ──────────────────────────────────────────────────────────
+// Telegram Bot Modal — pide el token y verifica con getMe.
+// Guarda el token en localStorage para uso futuro.
+// ──────────────────────────────────────────────────────────
+function TelegramConnectModal({ onClose, onConnected }: { onClose: () => void; onConnected: (botUsername: string) => void; }) {
+  const [token, setToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleConnect = async () => {
+    const trimmed = token.trim();
+    if (!trimmed) {
+      setError('Pega el token del bot.');
+      return;
+    }
+    setError('');
+    setVerifying(true);
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${trimmed}/getMe`);
+      const data = await res.json();
+      if (!data?.ok || !data?.result?.username) {
+        throw new Error(data?.description || 'Token inválido');
+      }
+      const username = data.result.username as string;
+      // Persistir tokens
+      const tokens: Record<string, string> = JSON.parse(localStorage.getItem('adhdreams_telegram_bots') || '{}');
+      tokens[username] = trimmed;
+      localStorage.setItem('adhdreams_telegram_bots', JSON.stringify(tokens));
+      toast.success(`Bot @${username} conectado.`);
+      onConnected(username);
+    } catch (e: any) {
+      setError(e?.message || 'No se pudo conectar con Telegram.');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Conectar Telegram" accent="sky" icon={<Send className="w-5 h-5 text-sky-400" />} onClose={onClose}>
+      <ol className="text-xs text-slate-400 space-y-1.5 mb-4 list-decimal list-inside">
+        <li>Abre <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-sky-400 underline">@BotFather</a> en Telegram.</li>
+        <li>Envía <code className="bg-slate-900 px-1.5 py-0.5 rounded text-sky-300 font-mono">/newbot</code> y sigue las instrucciones (nombre + username terminando en <code className="text-sky-300">_bot</code>).</li>
+        <li>BotFather te dará un token tipo <span className="font-mono text-slate-300">123456:ABC-DEF…</span>. Pégalo abajo.</li>
+      </ol>
+
+      <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1 block">Token del bot</label>
+      <div className="relative">
+        <input
+          type={showToken ? 'text' : 'password'}
+          value={token}
+          onChange={e => { setToken(e.target.value); setError(''); }}
+          placeholder="123456:ABC-DEF1234ghIkl…"
+          className="w-full bg-slate-950 border border-white/10 rounded-lg p-3 pr-10 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500/50 font-mono"
+          autoFocus
+        />
+        <button
+          type="button"
+          onClick={() => setShowToken(v => !v)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {error && (
+        <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-red-500/10 border border-red-500/20 text-red-400">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <button
+        onClick={handleConnect}
+        disabled={verifying || !token.trim()}
+        className="mt-4 w-full bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:hover:bg-sky-600 text-white py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+      >
+        {verifying ? <><Loader2 className="w-4 h-4 animate-spin" /> Verificando…</> : 'Conectar bot'}
+      </button>
+    </ModalShell>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// ModalShell — contenedor reutilizable para modales
+// ──────────────────────────────────────────────────────────
+function ModalShell({
+  title,
+  icon,
+  accent,
+  onClose,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  accent: 'emerald' | 'sky';
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const ring = accent === 'emerald' ? 'ring-emerald-500/20' : 'ring-sky-500/20';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150" onClick={onClose}>
+      <div
+        onClick={e => e.stopPropagation()}
+        className={cn('bg-slate-950 border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl ring-1', ring)}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+            {icon}
+            {title}
+          </h3>
+          <button onClick={onClose} className="p-1 text-slate-500 hover:text-slate-200 hover:bg-white/5 rounded">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {children}
       </div>
     </div>
   );
