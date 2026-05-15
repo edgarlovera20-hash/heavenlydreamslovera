@@ -257,41 +257,12 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const frenteInputRef = useRef<HTMLInputElement>(null);
   const reversoInputRef = useRef<HTMLInputElement>(null);
 
-  // Guardar la imagen como base64 en el formulario, sin ejecutar OCR todavía.
-  const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onerror = () => toast.error('No se pudo leer el archivo.');
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
-      if (slot === 'frente') updateForm({ ineFrente: base64 });
-      else if (slot === 'reverso') updateForm({ ineReverso: base64 });
-      else updateForm({ curpDoc: base64 });
-    };
-    reader.readAsDataURL(file);
-    // limpiar el value para permitir reseleccionar el mismo archivo
-    event.target.value = '';
-  };
-
-  // Ejecuta OCR con Google Vision sobre las imágenes ya subidas.
-  const handleScan = async () => {
-    const imgs: string[] = [];
-    if (docType === 'ine') {
-      if (form.ineFrente) imgs.push(form.ineFrente);
-      if (form.ineReverso) imgs.push(form.ineReverso);
-    } else {
-      if (form.curpDoc) imgs.push(form.curpDoc);
-    }
-    if (imgs.length === 0) {
-      toast.error('Sube al menos una imagen antes de escanear.');
-      return;
-    }
-
+  // Núcleo del OCR — recibe lista de imágenes (base64) y autorellena.
+  const runOcrOnImages = async (imgs: string[]) => {
+    if (imgs.length === 0) return;
     setIsOcrLoading(true);
     setOcrProgress(0);
     try {
-      // Procesar cada imagen secuencialmente y combinar resultados (la última no-vacía gana por campo).
       const merged: Record<string, string> = {};
       for (let i = 0; i < imgs.length; i++) {
         const baseProgress = Math.round((i / imgs.length) * 100);
@@ -318,6 +289,41 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       setIsOcrLoading(false);
       setOcrProgress(0);
     }
+  };
+
+  // Al subir un documento, lo guardamos en el form Y disparamos OCR automáticamente sobre esa imagen.
+  const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => toast.error('No se pudo leer el archivo.');
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+      // Guardar la imagen en el formulario
+      if (slot === 'frente') updateForm({ ineFrente: base64 });
+      else if (slot === 'reverso') updateForm({ ineReverso: base64 });
+      else updateForm({ curpDoc: base64 });
+      // Disparar OCR automático sobre la imagen recién subida
+      await runOcrOnImages([base64]);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  // Botón manual — re-escanea TODAS las imágenes subidas (frente + reverso o curp).
+  const handleScan = async () => {
+    const imgs: string[] = [];
+    if (docType === 'ine') {
+      if (form.ineFrente) imgs.push(form.ineFrente);
+      if (form.ineReverso) imgs.push(form.ineReverso);
+    } else {
+      if (form.curpDoc) imgs.push(form.curpDoc);
+    }
+    if (imgs.length === 0) {
+      toast.error('Sube al menos una imagen antes de escanear.');
+      return;
+    }
+    await runOcrOnImages(imgs);
   };
 
   const removeImage = (slot: 'frente' | 'reverso' | 'curp') => {
@@ -548,7 +554,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                         className="group w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-blue-500/30 ring-1 ring-white/10"
                       >
                         <ScanLine className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        <span>Escanear con IA y autorellenar campos</span>
+                        <span>Volver a escanear con IA</span>
                         <Sparkles className="w-4 h-4 opacity-80" />
                       </button>
                     )}
