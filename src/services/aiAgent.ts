@@ -44,106 +44,68 @@ const MOCK_RESPONSES: Record<EventType, (c: CustomerData) => string> = {
 };
 
 // ─────────────────────────────────────────────
-// IMAGE PRE-PROCESSING
-// Escala, convierte a escala de grises y aumenta
-// contraste antes de pasarla a Tesseract.
-// Esto mejora significativamente la precisión.
+// GOOGLE CLOUD VISION — DOCUMENT_TEXT_DETECTION
+// Llama al REST API con la key guardada en
+// localStorage (adhdreams_google_vision_key).
+// Retorna el texto completo detectado.
 // ─────────────────────────────────────────────
-async function preprocessImage(base64Image: string): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const MAX_DIM = 2400;
-      const scale = Math.min(MAX_DIM / Math.max(img.width, img.height), 3);
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d')!;
-
-      // Fondo blanco (evita transparencia negra)
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0, w, h);
-
-      // Procesado pixel a pixel
-      const id = ctx.getImageData(0, 0, w, h);
-      const d = id.data;
-      for (let i = 0; i < d.length; i += 4) {
-        // Escala de grises
-        const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        // Contraste alto (factor 1.8)
-        const c = Math.min(255, Math.max(0, 1.8 * (gray - 128) + 128));
-        // Umbral adaptativo suave (binarización parcial)
-        const out = c > 145 ? 255 : c < 60 ? 0 : c;
-        d[i] = d[i + 1] = d[i + 2] = out;
-        d[i + 3] = 255;
-      }
-      ctx.putImageData(id, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => resolve(base64Image); // fallback sin procesar
-    img.src = base64Image;
-  });
-}
-
-// ─────────────────────────────────────────────
-// TESSERACT — doble pasada (PSM 3 + PSM 6)
-// PSM 3 = detección automática de layout
-// PSM 6 = bloque uniforme de texto
-// Combinar ambos maximiza cobertura de campos
-// ─────────────────────────────────────────────
-async function runTesseract(
+export async function runGoogleVision(
   base64Image: string,
   onProgress?: (p: number) => void,
 ): Promise<string> {
-  const { createWorker } = await import('tesseract.js');
+  const apiKey =
+    localStorage.getItem('adhdreams_google_vision_key')?.trim() || '';
 
-  // Preprocesar imagen
-  const processed = await preprocessImage(base64Image);
+  if (!apiKey) {
+    throw new Error(
+      'API key de Google Cloud Vision no configurada.\n' +
+      'Ve a Ajustes → Integraciones y APIs → OCR con Google Vision.',
+    );
+  }
 
-  const runPass = async (psm: number, weight: number): Promise<string> => {
-    const worker = await createWorker('spa', 1, {
-      logger: m => {
-        if (m.status === 'recognizing text' && onProgress) {
-          onProgress(Math.round(m.progress * weight * 100));
-        }
-      },
-    });
-    try {
-      await worker.setParameters({
-        tessedit_pageseg_mode: psm as any,
-        preserve_interword_spaces: '1',
-        tessedit_char_whitelist:
-          'ABCDEFGHIJKLMNÑOPQRSTUVWXYZabcdefghijklmnñopqrstuvwxyzÁÉÍÓÚáéíóú0123456789.,;:/-# ',
-      });
-      const { data } = await worker.recognize(processed);
-      return data.text || '';
-    } finally {
-      await worker.terminate();
-    }
-  };
+  // Quitar prefijo data-URL si viene incluido
+  const base64 = base64Image.replace(/^data:image\/[a-z+]+;base64,/, '');
 
-  // Pasada 1: PSM 3 (auto-layout), peso 0→50%
-  const text1 = await runPass(3, 0.5);
-  if (onProgress) onProgress(50);
-  // Pasada 2: PSM 6 (bloque uniforme), peso 50→100%
-  const text2 = await runPass(6, 0.5);
+  if (onProgress) onProgress(10);
+
+  const response = await fetch(
+    `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [
+          {
+            image: { content: base64 },
+            features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }],
+            imageContext: { languageHints: ['es', 'es-MX'] },
+          },
+        ],
+      }),
+    },
+  );
+
+  if (onProgress) onProgress(80);
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({})) as any;
+    const msg = err?.error?.message || response.statusText;
+    throw new Error(`Google Vision API error (${response.status}): ${msg}`);
+  }
+
+  const data = await response.json() as any;
+
   if (onProgress) onProgress(100);
 
-  // Combinar: el texto más largo suele ser más completo
-  return text1.length >= text2.length
-    ? text1 + '\n' + text2
-    : text2 + '\n' + text1;
+  // DOCUMENT_TEXT_DETECTION devuelve el texto en fullTextAnnotation.text
+  return (data?.responses?.[0]?.fullTextAnnotation?.text as string) || '';
 }
 
 // ─────────────────────────────────────────────
 // REGEX EXTRACTORS
 // ─────────────────────────────────────────────
 
-// CURP — 18 caracteres exactos
+// CURP — 18 caracteres exactos con validación de estado mexicano
 const CURP_RE =
   /\b([A-Z][AEIOUX][A-Z]{2}\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])[HM](?:AS|BC|BS|CC|CL|CM|CS|CH|DF|DG|GT|GR|HG|JC|MC|MN|MS|NT|NL|OC|PL|QT|QR|SP|SL|SR|TC|TS|TL|VZ|YN|ZS|NE)[B-DF-HJ-NP-TV-Z]{3}[A-Z0-9]\d)\b/;
 
@@ -159,7 +121,7 @@ const CP_PLAIN_RE = /\b(\d{5})\b/;
 
 function cleanText(s: string): string {
   return s
-    .replace(/[|\\[\]{}()*+?^$]/g, ' ')  // limpiar caracteres especiales OCR
+    .replace(/[|\\[\]{}()*+?^$]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase();
@@ -174,13 +136,10 @@ function extractCURP(text: string): string {
 }
 
 function extractFolioINE(text: string): string {
-  // 1. Clave de elector
   const ce = text.match(CLAVE_ELECTOR_RE);
   if (ce) return ce[1];
-  // 2. IDMEX / FOLIO
   const f = text.match(FOLIO_CREDENCIAL_RE);
   if (f) return f[1];
-  // 3. Línea que contenga solo alfanum 13-18 chars (reverso INE)
   for (const line of text.split('\n')) {
     const t = line.trim().replace(/\s/g, '');
     if (/^[A-Z0-9]{13,18}$/.test(t)) return t;
@@ -191,7 +150,6 @@ function extractFolioINE(text: string): string {
 function extractCP(text: string): string {
   const ctx = text.match(CP_RE);
   if (ctx) return ctx[1];
-  // Buscar en contexto de domicilio
   const domIdx = text.search(/DOMICILIO/);
   if (domIdx !== -1) {
     const m = text.slice(domIdx, domIdx + 300).match(CP_PLAIN_RE);
@@ -235,18 +193,7 @@ function extractNombre(
     }
   }
 
-  // Estrategia 2: CURP → derivar apellidos (determinístico)
-  if (!apellidoPaterno || !apellidoMaterno) {
-    const curp = extractCURP(text.toUpperCase());
-    if (curp.length === 18) {
-      // CURP: [APC1][APC2][AC][AM] — primera letra paterno, primera vocal interna paterno,
-      // primera consonante materno, primera consonante nombre(s)
-      // Posiciones: 0-3=letras, 4-9=fecha, 10=sexo, 11-12=estado, 13-15=consonantes, 16=homoclave, 17=dígito
-      // No podemos reconstruir el nombre completo, pero sí buscarlo en el texto
-    }
-  }
-
-  // Estrategia 3: bloque de 3 líneas ALL-CAPS consecutivas (INE legacy)
+  // Estrategia 2: bloque de 3 líneas ALL-CAPS consecutivas (INE legacy)
   if (!apellidoPaterno && !apellidoMaterno && !nombres) {
     const blocks: string[] = [];
     for (const line of lines) {
@@ -262,7 +209,7 @@ function extractNombre(
     }
   }
 
-  // Estrategia 4: buscar patrón "APELLIDO PATERNO: XXX"
+  // Estrategia 3: buscar patrón "APELLIDO PATERNO: XXX"
   if (!apellidoPaterno) {
     const m = text.match(/PATERNO[:\s]+([A-ZÁÉÍÓÚÑ ]{2,40})/i);
     if (m) apellidoPaterno = m[1].trim().toUpperCase();
@@ -293,7 +240,6 @@ function extractDomicilio(text: string): {
   };
   const upper = text.toUpperCase();
 
-  // Localizar sección de domicilio
   const domIdx = Math.max(
     upper.search(/DOMICILIO/),
     upper.search(/DIRECCI[OÓ]N/),
@@ -303,13 +249,11 @@ function extractDomicilio(text: string): {
     ? upper.slice(domIdx, domIdx + 500)
     : upper;
 
-  // Colonia
   const colMatch = section.match(
     /COL\.?\s*([A-ZÁÉÍÓÚÑ0-9 .]{2,40?})(?=\s*(?:\d{5}|C\.?P\.?|DEL|MUN|$))/,
   );
   if (colMatch) result.colonia = colMatch[1].trim();
 
-  // Calle + número exterior
   const calleMatch = section.match(
     /(?:CALLE|DOMICILIO)[:\s]*([A-ZÁÉÍÓÚÑ0-9 .]{3,50?}?)\s+(?:N[UÚ]M\.?|#|EXT\.?)?\s*(\d+[A-Z]?)/,
   );
@@ -317,7 +261,6 @@ function extractDomicilio(text: string): {
     result.calle = calleMatch[1].trim();
     result.numeroExterior = calleMatch[2];
   } else {
-    // Fallback: primera línea después de DOMICILIO con número al final
     const fallback = section.match(/([A-ZÁÉÍÓÚÑ ]{3,50})\s+(\d{1,5}[A-Z]?)\b/);
     if (fallback) {
       result.calle = fallback[1].trim();
@@ -325,27 +268,20 @@ function extractDomicilio(text: string): {
     }
   }
 
-  // Número interior
   const intMatch = section.match(/INT\.?\s*(\d+[A-Z]?)/);
   if (intMatch) result.numeroInterior = intMatch[1];
 
-  // Delegación / Municipio
   const delMatch = section.match(
     /(?:DEL\.?|MUN\.?|ALCALD[IÍ]A)\s+([A-ZÁÉÍÓÚÑ ]{3,40?})(?=\s*(?:\d|\n|CIUDAD|$))/,
   );
   if (delMatch) result.delegacion = delMatch[1].trim();
 
-  // Ciudad (buscar "CIUDAD DE MEXICO" o "CDMX" u otras)
   const cidMatch = section.match(/(?:CIUDAD[^,\n]{0,30}|CDMX|GDL|MTY)/);
   if (cidMatch) result.ciudad = cidMatch[0].trim();
 
   return result;
 }
 
-// ─────────────────────────────────────────────
-// MERGE RESULTS — combina dos pasadas OCR
-// prefiriendo el valor más largo y limpio
-// ─────────────────────────────────────────────
 function mergeOcr<T extends Record<string, string>>(a: T, b: T): T {
   const out = { ...a };
   for (const key of Object.keys(b) as (keyof T)[]) {
@@ -379,13 +315,12 @@ export class CRM_AI_Agent {
     onProgress?: (p: number) => void,
   ): Promise<Partial<OcrResult> | null> {
     try {
-      // Doble pasada de OCR con progreso dividido
-      const rawText = await runTesseract(base64Image, onProgress);
+      // Usar Google Cloud Vision para OCR de alta precisión
+      const rawText = await runGoogleVision(base64Image, onProgress);
       if (!rawText || rawText.trim().length < 10) return null;
 
       const cleaned = cleanText(rawText);
 
-      // Extraer desde texto limpio (para CURP/folio) y desde texto original (para nombres)
       const curp = extractCURP(cleaned);
       const folioIne = extractFolioINE(cleaned);
       const codigoPostal = extractCP(cleaned);
@@ -414,7 +349,7 @@ export class CRM_AI_Agent {
       return result;
     } catch (err) {
       console.error('[OCR] Error:', err);
-      return null;
+      throw err; // re-throw para que la UI muestre el mensaje al usuario
     }
   }
 }

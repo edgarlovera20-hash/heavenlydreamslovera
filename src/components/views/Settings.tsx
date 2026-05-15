@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Bot, Smartphone, Download, Upload, Plus, Edit2, Power, AlertTriangle, FileText, BrainCircuit, Trash2, Key, Lock, Eye, EyeOff, BellRing, Loader2 } from 'lucide-react';
+import { Users, Bot, Smartphone, Download, Upload, Plus, Edit2, Power, AlertTriangle, FileText, BrainCircuit, Trash2, Key, Lock, Eye, EyeOff, BellRing, Loader2, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { sendPushNotification, requestNotificationPermission } from '../../lib/notifications';
 import { AgentDesigner } from './AgentDesigner';
@@ -150,11 +150,55 @@ function IntegracionesTab() {
 
   const [keys, setKeys] = useState<any[]>([]);
 
+  // Google Vision OCR key
+  const [visionKey, setVisionKey] = useState('');
+  const [visionKeySaved, setVisionKeySaved] = useState('');
+  const [showVisionKey, setShowVisionKey] = useState(false);
+  const [visionTesting, setVisionTesting] = useState(false);
+  const [visionTestResult, setVisionTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
   useEffect(() => {
     if (!isUnlocked) return;
     const saved: any[] = JSON.parse(localStorage.getItem('adhdreams_apikeys') || '[]');
     setKeys(saved);
+    const vk = localStorage.getItem('adhdreams_google_vision_key') || '';
+    setVisionKeySaved(vk);
+    setVisionKey(vk);
   }, [isUnlocked]);
+
+  const handleSaveVisionKey = () => {
+    const trimmed = visionKey.trim();
+    localStorage.setItem('adhdreams_google_vision_key', trimmed);
+    setVisionKeySaved(trimmed);
+    setVisionTestResult(null);
+    toast.success(trimmed ? 'API key de Google Vision guardada.' : 'API key eliminada.');
+  };
+
+  const handleTestVisionKey = async () => {
+    const key = visionKey.trim();
+    if (!key) return;
+    setVisionTesting(true);
+    setVisionTestResult(null);
+    try {
+      // Imagen mínima 1×1 px en PNG base64 — solo para verificar que la key es válida
+      const tiny = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: [{ image: { content: tiny }, features: [{ type: 'LABEL_DETECTION', maxResults: 1 }] }] }),
+      });
+      if (res.ok) {
+        setVisionTestResult({ ok: true, msg: 'Conexión exitosa ✓ La API key es válida.' });
+      } else {
+        const err = await res.json().catch(() => ({})) as any;
+        setVisionTestResult({ ok: false, msg: err?.error?.message || `Error ${res.status}` });
+      }
+    } catch (e: any) {
+      setVisionTestResult({ ok: false, msg: e?.message || 'Error de red' });
+    } finally {
+      setVisionTesting(false);
+    }
+  };
 
   const appsDirectory = [
     { id: 'hubspot', name: 'HubSpot CRM', desc: 'Sincroniza contactos y ventas', icon: 'HubSpot', status: 'connected' },
@@ -237,6 +281,69 @@ function IntegracionesTab() {
         <button onClick={() => setIsUnlocked(false)} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition-colors border border-white/5 flex items-center gap-2">
           <Lock className="w-3.5 h-3.5" /> Bloquear
         </button>
+      </div>
+
+      {/* ── Google Cloud Vision OCR ─────────────────────── */}
+      <div className="bg-gradient-to-br from-blue-950/40 to-slate-900/60 border border-blue-500/20 rounded-2xl p-6 space-y-4">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+            <span className="text-xl">🔍</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
+              OCR con Google Cloud Vision
+              {visionKeySaved
+                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Activo</span>
+                : <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">Sin configurar</span>}
+            </h4>
+            <p className="text-xs text-slate-400 mt-1">
+              Se usa al capturar documentos (INE frente/atrás) para extraer CURP, nombre y domicilio con precisión superior a Tesseract. Necesitas una API key de{' '}
+              <a href="https://console.cloud.google.com/apis/library/vision.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">
+                Google Cloud Console
+              </a>.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <input
+              type={showVisionKey ? 'text' : 'password'}
+              value={visionKey}
+              onChange={e => { setVisionKey(e.target.value); setVisionTestResult(null); }}
+              placeholder="AIza…"
+              className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 pr-10 text-slate-100 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-slate-600"
+            />
+            <button
+              type="button"
+              onClick={() => setShowVisionKey(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              {showVisionKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <button
+            onClick={handleTestVisionKey}
+            disabled={!visionKey.trim() || visionTesting}
+            className="px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 rounded-xl border border-white/5 transition-colors whitespace-nowrap"
+          >
+            {visionTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Probar'}
+          </button>
+          <button
+            onClick={handleSaveVisionKey}
+            disabled={visionKey.trim() === visionKeySaved}
+            className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition-colors whitespace-nowrap"
+          >
+            Guardar
+          </button>
+        </div>
+
+        {visionTestResult && (
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border ${visionTestResult.ok ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+            {visionTestResult.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+            {visionTestResult.msg}
+          </div>
+        )}
       </div>
 
       {/* Recommended Apps */}

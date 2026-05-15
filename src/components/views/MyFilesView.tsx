@@ -42,11 +42,13 @@ interface Sale {
 function buildClientsFromSales(sales: Sale[], usersMap: Record<string, { displayName?: string; nombre?: string; telefono?: string }>): ClientRecord[] {
   return sales.map<ClientRecord>(s => {
     const promoter = s.asesorId ? usersMap[s.asesorId] : undefined;
-    const ineUploaded = Boolean(s.ineFrente || s.curpDoc);
+    const ineFrente = Boolean(s.ineFrente);
+    const ineAtras  = Boolean(s.ineReverso);
     const domicilio = Boolean(s.comprobanteDomicilio);
     const portabilidad = Boolean(s.anexoPortabilidad);
     const docs: DocumentStatus[] = [
-      { id: 'ine_curp', name: 'INE o CURP', isUploaded: ineUploaded, type: 'image' },
+      { id: 'ine_frente', name: 'INE Frente', isUploaded: ineFrente, type: 'image' },
+      { id: 'ine_atras',  name: 'INE Atrás',  isUploaded: ineAtras,  type: 'image' },
       { id: 'domicilio', name: 'Comprobante de domicilio', isUploaded: domicilio, type: 'image' },
       { id: 'contrato', name: 'Contrato firmado (Aviso priv. / T&C)', isUploaded: false, type: 'pdf' },
       { id: 'llamada', name: 'Llamada de validación', isUploaded: false, type: 'audio' },
