@@ -262,16 +262,22 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
 
     setIsOcrLoading(true);
     setOcrProgress(0);
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64String = reader.result as string;
-        // Save document image in form (base64) so it persists with the sale
-        if (docType === 'ine') {
-          updateForm({ ineFrente: base64String });
-        } else {
-          updateForm({ curpDoc: base64String });
-        }
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+      toast.error('No se pudo leer el archivo.');
+      setIsOcrLoading(false);
+      setOcrProgress(0);
+    };
+    reader.onloadend = async () => {
+      const base64String = reader.result as string;
+      // Guardar imagen del documento en el formulario (base64) para que persista con la venta
+      if (docType === 'ine') {
+        updateForm({ ineFrente: base64String });
+      } else {
+        updateForm({ curpDoc: base64String });
+      }
+      try {
         const result = await aiAgent.analyzeDocument(base64String, file.type, setOcrProgress);
         if (result && Object.keys(result).length > 0) {
           updateForm(result);
@@ -280,15 +286,15 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
         } else {
           toast.info('No se pudieron extraer datos. Completa los campos manualmente.', { duration: 5000 });
         }
+      } catch (err: any) {
+        console.error('OCR Error:', err);
+        toast.error(err?.message || 'Error al procesar el documento.', { duration: 7000 });
+      } finally {
         setIsOcrLoading(false);
         setOcrProgress(0);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error("OCR Error:", err);
-      toast.error('Error al procesar el documento.');
-      setIsOcrLoading(false);
-    }
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const getCurrentLocation = () => {
@@ -465,7 +471,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                 <div className="py-12 flex flex-col items-center justify-center border-2 border-dashed border-blue-500/50 bg-blue-500/10 rounded-xl animate-in fade-in duration-300">
                   <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4" />
                   <span className="font-medium text-lg text-blue-400 mb-2">Escaneando documento…</span>
-                  <span className="text-sm text-blue-300/70 text-center px-4">Tesseract analizando los campos del {docType === 'ine' ? 'INE' : 'CURP'}</span>
+                  <span className="text-sm text-blue-300/70 text-center px-4">Google Vision analizando los campos del {docType === 'ine' ? 'INE' : 'CURP'}</span>
                   {ocrProgress > 0 && (
                     <div className="w-64 h-2 bg-blue-500/20 rounded-full mt-4 overflow-hidden">
                       <div className="h-full bg-blue-500 transition-all duration-200" style={{ width: `${ocrProgress}%` }} />
