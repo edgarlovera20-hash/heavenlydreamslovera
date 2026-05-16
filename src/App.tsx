@@ -2,7 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import ShaderBackground from './components/ui/shader-background';
 const ManagerView = lazy(() => import('./components/views/ManagerView'));
 const MobileUserView = lazy(() => import('./components/views/MobileUserView'));
-import { RegisterForm } from './components/views/RegisterForm';
+const RegisterForm = lazy(() => import('./components/views/RegisterForm').then(m => ({ default: m.RegisterForm })));
 import Logo from './components/ui/Logo';
 import { MatrixInput } from './components/ui/MatrixInput';
 import { MatrixText } from './components/ui/matrix-text';
@@ -331,7 +331,9 @@ export default function App() {
       {/* Register */}
       {role === null && isRegistering && (
         <div className="relative z-10 flex flex-col items-center h-full px-6 overflow-y-auto py-12">
-          <RegisterForm onBack={() => setIsRegistering(false)} pendingRole={pendingRole} />
+          <Suspense fallback={<LoadingOverlay visible text="Cargando…" />}>
+            <RegisterForm onBack={() => setIsRegistering(false)} pendingRole={pendingRole} />
+          </Suspense>
         </div>
       )}
 

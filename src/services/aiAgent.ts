@@ -48,10 +48,23 @@ const MOCK_RESPONSES: Record<EventType, (c: CustomerData) => string> = {
 // Llama al endpoint del servidor /api/vision/ocr
 // que autentica con la cuenta de servicio.
 // ─────────────────────────────────────────────
+export interface VisionOCRResponse {
+  text: string;
+  fields?: Record<string, string>;
+}
+
 export async function runGoogleVision(
   base64Image: string,
   onProgress?: (p: number) => void,
 ): Promise<string> {
+  const data = await callVisionOCR(base64Image, onProgress);
+  return data.text;
+}
+
+export async function callVisionOCR(
+  base64Image: string,
+  onProgress?: (p: number) => void,
+): Promise<VisionOCRResponse> {
   if (onProgress) onProgress(10);
 
   const response = await fetch('/api/vision/ocr', {
@@ -68,9 +81,9 @@ export async function runGoogleVision(
     throw new Error(`OCR error (${response.status}): ${msg}`);
   }
 
-  const data = await response.json() as { text: string };
+  const data = await response.json() as VisionOCRResponse;
   if (onProgress) onProgress(100);
-  return data.text || '';
+  return { text: data.text || '', fields: data.fields };
 }
 
 // ─────────────────────────────────────────────
@@ -287,12 +300,30 @@ export class CRM_AI_Agent {
     onProgress?: (p: number) => void,
   ): Promise<Partial<OcrResult> | null> {
     try {
-      // Usar Google Cloud Vision para OCR de alta precisión
-      const rawText = await runGoogleVision(base64Image, onProgress);
+      const { text: rawText, fields } = await callVisionOCR(base64Image, onProgress);
+
+      // Si Ollama devolvió campos estructurados, úsalos directamente
+      if (fields && Object.keys(fields).length > 0) {
+        const result: Partial<OcrResult> = {};
+        const f = fields;
+        if (f.nombres)         result.nombres         = f.nombres;
+        if (f.apellidoPaterno) result.apellidoPaterno = f.apellidoPaterno;
+        if (f.apellidoMaterno) result.apellidoMaterno = f.apellidoMaterno;
+        if (f.curp)            result.curp            = f.curp;
+        if (f.folioIne)        result.folioIne        = f.folioIne;
+        if (f.calle)           result.calle           = f.calle;
+        if (f.numeroExterior)  result.numeroExterior  = f.numeroExterior;
+        if (f.numeroInterior)  result.numeroInterior  = f.numeroInterior;
+        if (f.colonia)         result.colonia         = f.colonia;
+        if (f.codigoPostal)    result.codigoPostal    = f.codigoPostal;
+        if (f.delegacion)      result.delegacion      = f.delegacion;
+        if (f.ciudad)          result.ciudad          = f.ciudad;
+        if (Object.keys(result).length > 0) return result;
+      }
+
+      // Fallback: extraer con regex del texto crudo
       if (!rawText || rawText.trim().length < 10) return null;
-
       const cleaned = cleanText(rawText);
-
       const curp = extractCURP(cleaned);
       const folioIne = extractFolioINE(cleaned);
       const codigoPostal = extractCP(cleaned);
@@ -304,24 +335,24 @@ export class CRM_AI_Agent {
       const dom = mergeOcr(dom1, dom2);
 
       const result: Partial<OcrResult> = {};
-      if (nombres) result.nombres = nombres;
-      if (apellidoPaterno) result.apellidoPaterno = apellidoPaterno;
-      if (apellidoMaterno) result.apellidoMaterno = apellidoMaterno;
-      if (curp) result.curp = curp;
-      if (folioIne) result.folioIne = folioIne;
-      if (codigoPostal) result.codigoPostal = codigoPostal;
-      if (dom.calle) result.calle = dom.calle;
+      if (nombres)           result.nombres         = nombres;
+      if (apellidoPaterno)   result.apellidoPaterno = apellidoPaterno;
+      if (apellidoMaterno)   result.apellidoMaterno = apellidoMaterno;
+      if (curp)              result.curp            = curp;
+      if (folioIne)          result.folioIne        = folioIne;
+      if (codigoPostal)      result.codigoPostal    = codigoPostal;
+      if (dom.calle)         result.calle           = dom.calle;
       if (dom.numeroExterior) result.numeroExterior = dom.numeroExterior;
       if (dom.numeroInterior) result.numeroInterior = dom.numeroInterior;
-      if (dom.colonia) result.colonia = dom.colonia;
-      if (dom.delegacion) result.delegacion = dom.delegacion;
-      if (dom.ciudad) result.ciudad = dom.ciudad;
+      if (dom.colonia)       result.colonia         = dom.colonia;
+      if (dom.delegacion)    result.delegacion      = dom.delegacion;
+      if (dom.ciudad)        result.ciudad          = dom.ciudad;
 
       if (Object.keys(result).length === 0) return null;
       return result;
     } catch (err) {
       console.error('[OCR] Error:', err);
-      throw err; // re-throw para que la UI muestre el mensaje al usuario
+      throw err;
     }
   }
 }
