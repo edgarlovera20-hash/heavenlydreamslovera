@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, ProductCategory } from '../../configs/package-catalog';
 import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
 import { chatUrl } from '../../lib/channels';
@@ -6,6 +6,7 @@ import { cn, formatCurrency } from '../../lib/utils';
 import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
 import { MatrixInput } from '../ui/MatrixInput';
 import { MapPicker } from '../ui/MapPicker';
+import { PortabilidadAnexo } from './PortabilidadAnexo';
 function getCurrentUserId(): string {
   try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s).uid : 'anonymous'; } catch { return 'anonymous'; }
 }
@@ -101,6 +102,8 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [showAnexo, setShowAnexo] = useState(false);
 
   // Field validation state
   type ValidationState = 'idle' | 'checking' | 'ok' | 'error';
@@ -464,6 +467,7 @@ const exportToPDF = async () => {
   const currentStepLabel = steps.find(s => s.id === step)?.label || '';
 
   return (
+    <>
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Persistent breadcrumb — sticky so the user always knows where they are */}
       <div className="sticky top-0 z-30 -mx-2 px-2 py-3 backdrop-blur-xl bg-slate-950/90 border-b border-white/10 mb-2">
@@ -1163,28 +1167,38 @@ const exportToPDF = async () => {
                       value={form.nip || ''} onChange={e => updateForm({ nip: e.target.value })} placeholder="1234" />
                   </div>
                 </div>
-                <div className="mt-4 pt-4 border-t border-white/10 space-y-4">
-                  <div 
-                    className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${form.anexoPendiente ? 'opacity-50 pointer-events-none border-slate-700 bg-slate-800 text-slate-500' : 'border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 text-blue-400'}`} 
-                    onClick={() => updateForm({ anexoPortabilidad: 'uploaded' })}
+                <div className="mt-4 pt-4 border-t border-white/10 space-y-3">
+                  {/* Botón principal del Anexo */}
+                  <button
+                    type="button"
+                    disabled={form.anexoPendiente}
+                    onClick={() => { updateForm({ anexoPortabilidad: 'generated' }); setShowAnexo(true); }}
+                    className={cn(
+                      "w-full border-2 border-dashed rounded-xl p-5 text-center transition-colors flex flex-col items-center gap-2",
+                      form.anexoPendiente
+                        ? 'border-slate-700 bg-slate-800/50 text-slate-500 cursor-not-allowed opacity-50'
+                        : form.anexoPortabilidad
+                          ? 'border-green-500/40 bg-green-500/10 hover:bg-green-500/20 cursor-pointer'
+                          : 'border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 cursor-pointer'
+                    )}
                   >
-                    <Upload className="w-6 h-6 mx-auto mb-2" />
-                    <p className={`text-sm font-medium ${form.anexoPendiente ? 'text-slate-400' : 'text-blue-300'}`}>
-                      {form.anexoPortabilidad ? '✅ Anexo de Portabilidad Cargado' : 'Subir Anexo de Portabilidad'}
+                    <Phone className={`w-7 h-7 ${form.anexoPortabilidad ? 'text-green-400' : 'text-blue-400'}`} />
+                    <p className={`text-sm font-bold uppercase tracking-wide ${form.anexoPortabilidad ? 'text-green-300' : 'text-blue-300'}`}>
+                      {form.anexoPortabilidad ? '✅ Anexo Generado — Ver / Reimprimir' : 'Generar Anexo de Portabilidad'}
                     </p>
-                    <p className={`text-xs mt-1 ${form.anexoPendiente ? 'text-slate-500' : 'text-blue-400/70'}`}>
-                      {form.anexoPendiente ? 'Subirá el anexo después' : 'Requerido para el trámite de portabilidad'}
+                    <p className={`text-xs ${form.anexoPortabilidad ? 'text-green-400/70' : 'text-blue-400/70'}`}>
+                      {form.anexoPendiente ? 'Se generará después' : 'Se auto-llena con los datos del cliente · Imprimible y exportable a PDF'}
                     </p>
-                  </div>
+                  </button>
 
                   <div className="flex items-center gap-3 bg-slate-900 border border-white/10 rounded-xl p-4">
-                    <AnimatedCheckbox 
-                      checked={form.anexoPendiente || false} 
+                    <AnimatedCheckbox
+                      checked={form.anexoPendiente || false}
                       onChange={(checked) => {
                         updateForm({ anexoPendiente: checked });
                         if (checked) updateForm({ anexoPortabilidad: undefined });
                       }}
-                      label="Subir Anexo de Portabilidad más tarde"
+                      label="Generar Anexo de Portabilidad más tarde"
                     />
                   </div>
                 </div>
@@ -1468,6 +1482,22 @@ const exportToPDF = async () => {
 
       </div>
     </div>
+    {showAnexo && (
+      <PortabilidadAnexo
+        data={{
+          apellidoPaterno: form.apellidoPaterno,
+          apellidoMaterno: form.apellidoMaterno,
+          nombres: form.nombres,
+          numeroAPortar: form.numeroAPortar,
+          companiaActual: form.companiaActual,
+          nip: form.nip,
+          fechaSolicitud: form.fechaSolicitud,
+          folio: form.folio,
+        }}
+        onClose={() => setShowAnexo(false)}
+      />
+    )}
+    </>
   );
 }
 
