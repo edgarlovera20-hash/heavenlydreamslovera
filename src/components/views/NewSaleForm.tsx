@@ -323,6 +323,50 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
+  // OCR de comprobante de domicilio (CFE/Izzi/Totalplay/Telmex) — auto-llena calle, colonia, CP, etc.
+  const handleComprobanteUpload = async (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+      updateForm({ comprobanteDomicilio: base64 });
+      setIsOcrLoading(true);
+      setOcrProgress(20);
+      try {
+        const res = await fetch('/api/vision/comprobante', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64 }),
+        });
+        setOcrProgress(80);
+        if (!res.ok) throw new Error(`OCR error (${res.status})`);
+        const data = await res.json();
+        const f = data.fields || {};
+        const updates: any = {};
+        if (f.calle)         updates.calle = f.calle;
+        if (f.numeroExterior) updates.numeroExterior = f.numeroExterior;
+        if (f.numeroInterior) updates.numeroInterior = f.numeroInterior;
+        if (f.colonia)       updates.colonia = f.colonia;
+        if (f.codigoPostal)  updates.codigoPostal = f.codigoPostal;
+        if (f.delegacion)    updates.delegacion = f.delegacion;
+        if (f.ciudad)        updates.ciudad = f.ciudad;
+        const count = Object.keys(updates).length;
+        if (count > 0) {
+          updateForm(updates);
+          toast.success(`Comprobante escaneado: ${count} campo${count !== 1 ? 's' : ''} de domicilio detectado${count !== 1 ? 's' : ''}.`);
+        } else {
+          toast.info('No se extrajo domicilio del comprobante. Llena los campos manualmente.', { duration: 5000 });
+        }
+      } catch (err: any) {
+        toast.error(err?.message || 'Error al procesar el comprobante.');
+      } finally {
+        setIsOcrLoading(false);
+        setOcrProgress(0);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Al subir un documento, lo guardamos en el form Y disparamos OCR automáticamente sobre esa imagen.
   const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -732,37 +776,25 @@ const exportToPDF = async () => {
                           className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-500 text-white rounded-full p-1">
                           <X className="w-4 h-4" />
                         </button>
-                        <p className="text-center text-xs text-green-400 py-2 bg-black/60">✓ Comprobante cargado</p>
+                        <p className="text-center text-xs text-green-400 py-2 bg-black/60">
+                          {isOcrLoading ? '⏳ Escaneando comprobante con IA…' : '✓ Comprobante cargado'}
+                        </p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-2 gap-3">
-                        {/* Subir archivo */}
                         <label className="border-2 border-dashed border-amber-500/40 bg-amber-500/10 rounded-xl p-5 text-center hover:bg-amber-500/20 transition-colors cursor-pointer flex flex-col items-center gap-2">
                           <input type="file" accept="image/*,application/pdf" className="hidden"
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onloadend = () => updateForm({ comprobanteDomicilio: reader.result as string });
-                              reader.readAsDataURL(file);
-                            }} />
+                            onChange={e => handleComprobanteUpload(e.target.files?.[0])} />
                           <Upload className="w-6 h-6 text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" />
                           <p className="text-xs text-amber-400 font-bold uppercase tracking-wide">Subir archivo</p>
-                          <p className="text-[10px] text-amber-400/60">JPG, PNG, PDF</p>
+                          <p className="text-[10px] text-amber-400/60">CFE, Izzi, Totalplay, Telmex…</p>
                         </label>
-                        {/* Tomar foto con cámara */}
                         <label className="border-2 border-dashed border-blue-500/40 bg-blue-500/10 rounded-xl p-5 text-center hover:bg-blue-500/20 transition-colors cursor-pointer flex flex-col items-center gap-2">
                           <input type="file" accept="image/*" capture="environment" className="hidden"
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onloadend = () => updateForm({ comprobanteDomicilio: reader.result as string });
-                              reader.readAsDataURL(file);
-                            }} />
+                            onChange={e => handleComprobanteUpload(e.target.files?.[0])} />
                           <Phone className="w-6 h-6 text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.5)]" />
                           <p className="text-xs text-blue-400 font-bold uppercase tracking-wide">Tomar foto</p>
-                          <p className="text-[10px] text-blue-400/60">Cámara del dispositivo</p>
+                          <p className="text-[10px] text-blue-400/60">Auto-llena domicilio</p>
                         </label>
                       </div>
                     )}

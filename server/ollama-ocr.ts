@@ -105,6 +105,48 @@ function parseJsonResponse(raw: string): Record<string, string> {
   }
 }
 
+// Prompt específico para comprobantes de domicilio (CFE, Izzi, Totalplay, Telmex, agua, etc.)
+const COMPROBANTE_PROMPT = `You are an OCR system for Mexican utility bills / proof of address documents (CFE electricity, Izzi cable, Totalplay, Telmex, water, gas).
+
+These bills have the customer's name and full installation address printed near the top, usually in a block format like:
+"NOMBRE COMPLETO
+CALLE NÚMERO INT
+COLONIA / FRACCIONAMIENTO
+DELEGACIÓN / MUNICIPIO, ESTADO
+C.P. 12345"
+
+Sometimes the address is on multiple lines without commas. Extract the data carefully.
+
+Respond ONLY with a valid JSON object (use "" if not found):
+
+{
+  "nombres": "given name(s)",
+  "apellidoPaterno": "first surname",
+  "apellidoMaterno": "second surname",
+  "calle": "street with number (e.g. CALZADA SAN LORENZO 151)",
+  "numeroExterior": "exterior number if separate",
+  "numeroInterior": "interior/department number if exists (e.g. INT 402)",
+  "colonia": "colonia/fraccionamiento/section",
+  "codigoPostal": "5-digit postal code",
+  "delegacion": "delegación/alcaldía/municipio",
+  "ciudad": "city or state (e.g. Ciudad de México, MEX)",
+  "proveedor": "company name issuing the bill: CFE, Izzi, Totalplay, Telmex, etc.",
+  "rawText": "all visible text exactly as it appears"
+}
+
+Do NOT include explanations, markdown, or text outside the JSON.`;
+
+export async function runComprobanteOCR(base64Image: string): Promise<OllamaOCRResult> {
+  const base64 = base64Image.replace(/^data:image\/[a-z+]+;base64,/, '');
+  const t0 = Date.now();
+  const raw = await callOllama(COMPROBANTE_PROMPT, base64);
+  if (!raw) throw new Error('Ollama devolvió respuesta vacía.');
+  const fields = parseJsonResponse(raw);
+  const text = fields.rawText || raw;
+  delete fields.rawText;
+  return { text, fields, model: OLLAMA_MODEL, durationMs: Date.now() - t0 };
+}
+
 export async function runOllamaOCR(base64Image: string): Promise<string> {
   const result = await runOllamaOCRVerbose(base64Image);
   return result.text;
