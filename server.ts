@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { randomUUID } from "crypto";
 import { initWhatsApp, getWhatsAppStatus, getWhatsAppQR, sendWhatsAppMessage, logoutWhatsApp, getRecentMessages } from "./server/whatsapp";
+import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
 import { runVisionOCR } from "./server/vision";
 import db, {
   Users, Ventas, SiacRecords, Tickets, AuditLog, Settings,
@@ -382,6 +383,44 @@ async function startServer() {
     res.json(getRecentMessages(100));
   }));
 
+  // ── TELEGRAM ──────────────────────────────────────────────
+  app.get("/api/telegram/status", wrap((_req: any, res: any) => {
+    res.json(getTelegramStatus());
+  }));
+
+  app.get("/api/telegram/messages", wrap((_req: any, res: any) => {
+    res.json(getTelegramMessages(100));
+  }));
+
+  app.post("/api/telegram/init", wrap(async (req: any, res: any) => {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'token requerido' });
+    // Persistir token en Settings para sobrevivir reinicios
+    Settings.set('telegram_bot_token', token);
+    const result = await initTelegram(token);
+    res.json(result);
+  }));
+
+  app.post("/api/telegram/stop", wrap((_req: any, res: any) => {
+    stopTelegram();
+    Settings.set('telegram_bot_token', '');
+    res.json({ ok: true });
+  }));
+
+  app.post("/api/telegram/send", wrap(async (req: any, res: any) => {
+    const { chatId, message } = req.body;
+    if (!chatId || !message) return res.status(400).json({ error: 'chatId y message requeridos' });
+    res.json(await sendTelegramMessage(chatId, message));
+  }));
+
+  // Mensajes combinados WA + Telegram (para panel unificado)
+  app.get("/api/channels/messages", wrap((_req: any, res: any) => {
+    const wa = getRecentMessages(100);
+    const tg = getTelegramMessages(100);
+    const all = [...wa, ...tg].sort((a, b) => a.timestamp - b.timestamp);
+    res.json(all.slice(-150));
+  }));
+
   // ── AGENTES AUTÓNOMOS ─────────────────────────────────────
   // Estado de agentes en memoria
   const agentState: Record<string, { active: boolean; lastRun: string | null; processed: number; errors: number }> = {
@@ -395,76 +434,153 @@ async function startServer() {
     capturista: null, archivero: null, consultor: null, validador: null,
   };
 
-  // Procesa mensaje entrante de WhatsApp buscando keywords de captura de venta
+  // ── Helpers compartidos por agentes ──────────────────────
+  const extractField = (text: string, key: string) => {
+    const re = new RegExp(`${key}[:\\s]+([^\\n,]+)`, 'i');
+    return text.match(re)?.[1]?.trim() || null;
+  };
+
+  type AnyChannelMsg = { id: string; from: string; fromName: string; body: string; timestamp: number; channel: string; chatId?: number };
+
+  async function replyToMsg(msg: AnyChannelMsg, text: string) {
+    try {
+      if (msg.channel === 'whatsapp') {
+        await sendWhatsAppMessage(msg.from.replace('@c.us', ''), text);
+      } else if (msg.channel === 'telegram' && (msg as TgMessage).chatId) {
+        await sendTelegramMessage((msg as TgMessage).chatId, text);
+      }
+    } catch { /* canal no disponible */ }
+  }
+
+  // Agente Capturista: detecta ventas en WA + Telegram
   async function runCapturistaAgent() {
-    const msgs = getRecentMessages(50);
-    const unprocessedKey = 'agent_capturista_last_ts';
-    const lastTs = parseInt(Settings.get(unprocessedKey) || '0');
-    const newMsgs = msgs.filter(m => m.timestamp > lastTs);
+    const waMsgs = getRecentMessages(50) as AnyChannelMsg[];
+    const tgMsgs = getTelegramMessages(50) as AnyChannelMsg[];
+    const allMsgs = [...waMsgs, ...tgMsgs];
+    const lastTsKey = 'agent_capturista_last_ts';
+    const lastTs = parseInt(Settings.get(lastTsKey) || '0');
+    const newMsgs = allMsgs.filter(m => m.timestamp > lastTs);
+
     for (const msg of newMsgs) {
       const body = msg.body.toLowerCase();
-      // Detectar patrones de captura: "nombre:", "telefono:", "plan:", "direccion:"
       if (body.includes('nombre:') && (body.includes('telefono:') || body.includes('tel:'))) {
         try {
-          // Extraer campos básicos
-          const extractField = (text: string, key: string) => {
-            const re = new RegExp(`${key}[:\\s]+([^\\n,]+)`, 'i');
-            return text.match(re)?.[1]?.trim() || null;
-          };
           const nombres = extractField(msg.body, 'nombre');
           const telefono = extractField(msg.body, 'tel(?:efono)?');
           const plan = extractField(msg.body, 'plan');
           const direccion = extractField(msg.body, 'direcci[oó]n|domicilio');
           if (nombres && telefono) {
             Ventas.create({
-              id: randomUUID(), folio: null, asesor_id: 'agente_wa',
+              id: randomUUID(), folio: null,
+              asesor_id: `agente_${msg.channel}`,
               asesor_nombre: msg.fromName, status: 'pendiente',
               nombres, apellidos: null, telefono, direccion, colonia: null, municipio: null,
               tipo_cliente: null, tipo_servicio: null, plan, renta_mensual: null, zona: null,
-              notas: `Capturado por Agente vía WhatsApp: ${msg.from}`,
+              notas: `Capturado por Agente vía ${msg.channel}: ${msg.from}`,
               fecha_solicitud: new Date().toISOString().split('T')[0],
               fecha_instalacion: null, contrato_pdf: null, ine_pdf: null, comprobante_pdf: null,
-              metadata: JSON.stringify({ source: 'whatsapp', raw: msg.body }),
+              metadata: JSON.stringify({ source: msg.channel, raw: msg.body }),
             });
+            await replyToMsg(msg, `✅ Venta registrada para <b>${nombres}</b>. El equipo la procesará pronto.`);
             agentState.capturista.processed++;
           }
         } catch { agentState.capturista.errors++; }
       }
     }
     if (newMsgs.length > 0) {
-      Settings.set(unprocessedKey, String(Math.max(...newMsgs.map(m => m.timestamp))));
+      Settings.set(lastTsKey, String(Math.max(...newMsgs.map(m => m.timestamp))));
     }
     agentState.capturista.lastRun = new Date().toISOString();
   }
 
-  // Agente consultor: responde consultas SIAC por WhatsApp
+  // Agente Consultor: responde consultas de folio SIAC en WA + Telegram
   async function runConsultorAgent() {
-    const msgs = getRecentMessages(50);
+    const waMsgs = getRecentMessages(50) as AnyChannelMsg[];
+    const tgMsgs = getTelegramMessages(50) as AnyChannelMsg[];
+    const allMsgs = [...waMsgs, ...tgMsgs];
     const lastTsKey = 'agent_consultor_last_ts';
     const lastTs = parseInt(Settings.get(lastTsKey) || '0');
-    const newMsgs = msgs.filter(m => m.timestamp > lastTs);
+    const newMsgs = allMsgs.filter(m => m.timestamp > lastTs);
+
     for (const msg of newMsgs) {
       const body = msg.body.toLowerCase().trim();
-      if (body.startsWith('folio ') || body.startsWith('consulta ') || body.includes('estatus ')) {
-        const folioMatch = msg.body.match(/\b(\d{6,})\b/);
-        if (folioMatch) {
-          const record = SiacRecords.getByFolio(folioMatch[1]) as any;
-          const reply = record
-            ? `📋 Folio ${record.folio_siac}\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha: ${record.fecha_captura || 'N/D'}`
-            : `❌ Folio ${folioMatch[1]} no encontrado en el sistema.`;
-          try {
-            const { sendWhatsAppMessage: send } = await import('./server/whatsapp.js');
-            await send(msg.from.replace('@c.us', ''), reply);
-          } catch { /* si no está conectado, no responde */ }
-        }
-        agentState.consultor.processed++;
+      const isQuery = body.startsWith('folio ') || body.startsWith('consulta ')
+        || body.startsWith('estatus ') || body.includes('mi folio');
+      if (!isQuery) continue;
+
+      const folioMatch = msg.body.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i);
+      if (folioMatch) {
+        const record = SiacRecords.getByFolio(folioMatch[1]) as any;
+        const reply = record
+          ? `📋 <b>Folio ${record.folio_siac}</b>\n` +
+            `Estatus: ${record.estatus_siac || 'N/D'}\n` +
+            `Promotora: ${record.promotor || 'N/D'}\n` +
+            `Fecha captura: ${record.fecha_captura || 'N/D'}\n` +
+            `Paquete: ${record.paquete || 'N/D'}`
+          : `❌ Folio <b>${folioMatch[1]}</b> no encontrado.\n¿Deseas que un asesor te contacte?`;
+        await replyToMsg(msg, reply);
+      } else {
+        await replyToMsg(msg, '🔍 Envía el número de folio para consultar. Ej: <b>folio 123456</b>');
       }
+      agentState.consultor.processed++;
     }
     if (newMsgs.length > 0) {
       Settings.set(lastTsKey, String(Math.max(...newMsgs.map(m => m.timestamp))));
     }
     agentState.consultor.lastRun = new Date().toISOString();
   }
+
+  // Registrar handler en tiempo real para Telegram (respuesta inmediata sin esperar el poll de 30s)
+  setTelegramMessageHandler(async (msg: TgMessage) => {
+    if (agentState.capturista.active) {
+      const body = msg.body.toLowerCase();
+      if (body.includes('nombre:') && (body.includes('telefono:') || body.includes('tel:'))) {
+        const nombres = extractField(msg.body, 'nombre');
+        const telefono = extractField(msg.body, 'tel(?:efono)?');
+        const plan = extractField(msg.body, 'plan');
+        const direccion = extractField(msg.body, 'direcci[oó]n|domicilio');
+        if (nombres && telefono) {
+          try {
+            Ventas.create({
+              id: randomUUID(), folio: null, asesor_id: 'agente_telegram',
+              asesor_nombre: msg.fromName, status: 'pendiente',
+              nombres, apellidos: null, telefono, direccion, colonia: null, municipio: null,
+              tipo_cliente: null, tipo_servicio: null, plan, renta_mensual: null, zona: null,
+              notas: `Capturado por Agente vía Telegram: ${msg.chatId}`,
+              fecha_solicitud: new Date().toISOString().split('T')[0],
+              fecha_instalacion: null, contrato_pdf: null, ine_pdf: null, comprobante_pdf: null,
+              metadata: JSON.stringify({ source: 'telegram', raw: msg.body }),
+            });
+            await sendTelegramMessage(msg.chatId, `✅ Venta registrada para <b>${nombres}</b>. El equipo la procesará pronto.`);
+            agentState.capturista.processed++;
+            agentState.capturista.lastRun = new Date().toISOString();
+          } catch { agentState.capturista.errors++; }
+        }
+        return;
+      }
+    }
+    if (agentState.consultor.active) {
+      const body = msg.body.toLowerCase().trim();
+      const isQuery = body.startsWith('folio ') || body.startsWith('consulta ')
+        || body.startsWith('estatus ') || body.includes('mi folio');
+      if (isQuery) {
+        const folioMatch = msg.body.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i);
+        if (folioMatch) {
+          const record = SiacRecords.getByFolio(folioMatch[1]) as any;
+          const reply = record
+            ? `📋 <b>Folio ${record.folio_siac}</b>\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha: ${record.fecha_captura || 'N/D'}`
+            : `❌ Folio <b>${folioMatch[1]}</b> no encontrado.`;
+          try {
+            await sendTelegramMessage(msg.chatId, reply);
+            agentState.consultor.processed++;
+            agentState.consultor.lastRun = new Date().toISOString();
+          } catch { agentState.consultor.errors++; }
+        } else {
+          await sendTelegramMessage(msg.chatId, '🔍 Envía el número de folio. Ej: <b>folio 123456</b>');
+        }
+      }
+    }
+  });
 
   const AGENT_RUNNERS: Record<string, () => Promise<void>> = {
     capturista: runCapturistaAgent,
@@ -603,6 +719,16 @@ async function startServer() {
   // Auto-import SIAC CSV on startup if table is empty
   if (SiacRecords.count() === 0) {
     importSiacCSV();
+  }
+
+  // Auto-reconectar Telegram si había token guardado
+  const savedToken = Settings.get('telegram_bot_token');
+  if (savedToken) {
+    initTelegram(savedToken)
+      .then(r => r.ok
+        ? console.log(`[TG] Auto-reconectado como @${r.botName}`)
+        : console.warn('[TG] Token guardado inválido:', r.error))
+      .catch(e => console.warn('[TG] Error auto-reconectando:', e.message));
   }
 
   app.listen(PORT, "0.0.0.0", () => {

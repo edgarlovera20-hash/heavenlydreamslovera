@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bot, Zap, Archive, Search, Phone, Play, Square, RefreshCw,
-  CheckCircle2, AlertCircle, Clock, Activity, MessageSquare,
-  Plus, Send, User, ChevronRight, Info,
+  Activity, MessageSquare, Plus, Send, User, Info,
+  Key, CheckCircle2, XCircle, Loader2,
 } from 'lucide-react';
 
 interface AgentStatus {
@@ -11,38 +11,41 @@ interface AgentStatus {
   processed: number;
   errors: number;
 }
-
 interface AgentState {
   capturista: AgentStatus;
   archivero: AgentStatus;
   consultor: AgentStatus;
   validador: AgentStatus;
 }
-
-interface WaMessage {
+interface ChannelMsg {
   id: string;
   from: string;
   fromName: string;
   body: string;
   timestamp: number;
   isGroup: boolean;
-  channel: 'whatsapp';
+  channel: 'whatsapp' | 'telegram';
+}
+interface TgStatus {
+  status: 'disconnected' | 'polling' | 'error';
+  error: string | null;
+  botToken: string | null;
 }
 
 const AGENT_META = [
   {
     id: 'capturista',
     name: 'Agente Capturista',
-    desc: 'Monitorea WhatsApp y Telegram capturando ventas automáticamente cuando detecta nombre + teléfono.',
+    desc: 'Detecta ventas en mensajes de WhatsApp y Telegram. Formato: Nombre: … Tel: … Plan: …',
     icon: Zap,
     color: 'emerald',
-    channels: ['WhatsApp', 'App', 'Telegram'],
-    hint: 'Envía por WhatsApp:\n"Nombre: Juan Pérez\\nTel: 5551234567\\nPlan: Internet 100MB"',
+    channels: ['WhatsApp', 'Telegram', 'App'],
+    hint: 'Envía por WA o Telegram:\n"Nombre: Juan Pérez\nTel: 5551234567\nPlan: Internet 100MB"',
   },
   {
     id: 'archivero',
     name: 'Agente Archivero',
-    desc: 'Analiza documentos subidos (INE, comprobante, contrato) y detecta posibles inconsistencias o fraudes.',
+    desc: 'Analiza documentos subidos (INE, comprobante, contrato) y detecta inconsistencias.',
     icon: Archive,
     color: 'blue',
     channels: ['App'],
@@ -51,117 +54,138 @@ const AGENT_META = [
   {
     id: 'consultor',
     name: 'Agente Consultor',
-    desc: 'Responde consultas de folios SIAC recibidas por WhatsApp de forma automática.',
+    desc: 'Responde consultas de folio SIAC en WhatsApp y Telegram automáticamente.',
     icon: Search,
     color: 'purple',
-    channels: ['WhatsApp'],
-    hint: 'El cliente envía por WhatsApp:\n"Folio 123456" o "Consulta 123456"',
+    channels: ['WhatsApp', 'Telegram'],
+    hint: 'El usuario envía:\n"folio 123456" o "consulta 123456"\ny el bot responde el estatus.',
   },
   {
     id: 'validador',
     name: 'Agente Validador',
-    desc: 'Realiza llamadas de validación autónomas vía Twilio para confirmar ventas pendientes.',
+    desc: 'Realiza llamadas de validación autónomas vía Twilio para confirmar ventas.',
     icon: Phone,
     color: 'yellow',
     channels: ['Twilio'],
-    hint: 'Requiere configurar credenciales Twilio en Config. Llamadas.',
+    hint: 'Requiere credenciales Twilio en Config. Llamadas.',
   },
 ] as const;
 
-const COLOR_MAP: Record<string, { bg: string; border: string; text: string; glow: string; dot: string }> = {
-  emerald: { bg: 'bg-emerald-400/10', border: 'border-emerald-400/30', text: 'text-emerald-400', glow: 'shadow-[0_0_12px_rgba(52,211,153,0.3)]', dot: 'bg-emerald-400' },
-  blue:    { bg: 'bg-blue-400/10',    border: 'border-blue-400/30',    text: 'text-blue-400',    glow: 'shadow-[0_0_12px_rgba(96,165,250,0.3)]',  dot: 'bg-blue-400' },
-  purple:  { bg: 'bg-purple-400/10',  border: 'border-purple-400/30',  text: 'text-purple-400',  glow: 'shadow-[0_0_12px_rgba(192,132,252,0.3)]', dot: 'bg-purple-400' },
-  yellow:  { bg: 'bg-yellow-400/10',  border: 'border-yellow-400/30',  text: 'text-yellow-400',  glow: 'shadow-[0_0_12px_rgba(250,204,21,0.3)]',  dot: 'bg-yellow-400' },
+const C: Record<string, { bg: string; border: string; text: string; glow: string; dot: string }> = {
+  emerald: { bg: 'bg-emerald-400/10', border: 'border-emerald-400/30', text: 'text-emerald-400', glow: 'shadow-[0_0_12px_rgba(52,211,153,0.25)]', dot: 'bg-emerald-400' },
+  blue:    { bg: 'bg-blue-400/10',    border: 'border-blue-400/30',    text: 'text-blue-400',    glow: 'shadow-[0_0_12px_rgba(96,165,250,0.25)]',  dot: 'bg-blue-400' },
+  purple:  { bg: 'bg-purple-400/10',  border: 'border-purple-400/30',  text: 'text-purple-400',  glow: 'shadow-[0_0_12px_rgba(192,132,252,0.25)]', dot: 'bg-purple-400' },
+  yellow:  { bg: 'bg-yellow-400/10',  border: 'border-yellow-400/30',  text: 'text-yellow-400',  glow: 'shadow-[0_0_12px_rgba(250,204,21,0.25)]',  dot: 'bg-yellow-400' },
 };
 
-function timeAgo(iso: string | null): string {
+function timeAgo(iso: string | null) {
   if (!iso) return 'Nunca';
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60_000) return 'Hace unos segundos';
-  if (diff < 3_600_000) return `Hace ${Math.floor(diff / 60_000)} min`;
-  return `Hace ${Math.floor(diff / 3_600_000)} h`;
+  const d = Date.now() - new Date(iso).getTime();
+  if (d < 60_000) return 'hace unos segundos';
+  if (d < 3_600_000) return `hace ${Math.floor(d / 60_000)} min`;
+  return `hace ${Math.floor(d / 3_600_000)} h`;
 }
 
 export default function AgentHubView() {
-  const [state, setState] = useState<AgentState | null>(null);
-  const [messages, setMessages] = useState<WaMessage[]>([]);
+  const [agents, setAgents] = useState<AgentState | null>(null);
+  const [messages, setMessages] = useState<ChannelMsg[]>([]);
+  const [tgStatus, setTgStatus] = useState<TgStatus>({ status: 'disconnected', error: null, botToken: null });
   const [loading, setLoading] = useState<Record<string, boolean>>({});
-  const [manualCapture, setManualCapture] = useState({ open: false, nombres: '', telefono: '', plan: '', canal: 'app' });
+  const [tab, setTab] = useState<'agents' | 'telegram' | 'messages' | 'manual'>('agents');
+  const [tgToken, setTgToken] = useState('');
+  const [tgConnecting, setTgConnecting] = useState(false);
+  const [manual, setManual] = useState({ nombres: '', telefono: '', plan: '', canal: 'app' });
   const [toast, setToast] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'agents' | 'messages' | 'manual'>('agents');
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+  const pop = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
 
-  const loadState = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     try {
-      const r = await fetch('/api/agents/status');
-      if (r.ok) setState(await r.json());
-    } catch {}
-  }, []);
-
-  const loadMessages = useCallback(async () => {
-    try {
-      const r = await fetch('/api/whatsapp/messages');
-      if (r.ok) setMessages(await r.json());
+      const [ar, mr, tgr] = await Promise.all([
+        fetch('/api/agents/status'),
+        fetch('/api/channels/messages'),
+        fetch('/api/telegram/status'),
+      ]);
+      if (ar.ok) setAgents(await ar.json());
+      if (mr.ok) setMessages((await mr.json()).reverse());
+      if (tgr.ok) setTgStatus(await tgr.json());
     } catch {}
   }, []);
 
   useEffect(() => {
-    loadState();
-    loadMessages();
-    const t = setInterval(() => { loadState(); loadMessages(); }, 10_000);
+    loadAll();
+    const t = setInterval(loadAll, 10_000);
     return () => clearInterval(t);
-  }, [loadState, loadMessages]);
+  }, [loadAll]);
 
   const toggleAgent = async (id: string) => {
     setLoading(l => ({ ...l, [id]: true }));
     try {
       const r = await fetch(`/api/agents/${id}/toggle`, { method: 'POST' });
-      if (r.ok) await loadState();
-      showToast(`Agente ${id} ${state?.[id as keyof AgentState]?.active ? 'detenido' : 'activado'}`);
-    } finally {
-      setLoading(l => ({ ...l, [id]: false }));
-    }
+      if (r.ok) { await loadAll(); pop(`Agente ${id} ${agents?.[id as keyof AgentState]?.active ? 'detenido' : 'activado'}`); }
+    } finally { setLoading(l => ({ ...l, [id]: false })); }
   };
 
   const runAgent = async (id: string) => {
-    setLoading(l => ({ ...l, [`run_${id}`]: true }));
+    setLoading(l => ({ ...l, [`r_${id}`]: true }));
     try {
       const r = await fetch(`/api/agents/${id}/run`, { method: 'POST' });
-      if (r.ok) { await loadState(); showToast(`Agente ${id} ejecutado`); }
-    } finally {
-      setLoading(l => ({ ...l, [`run_${id}`]: false }));
-    }
+      if (r.ok) { await loadAll(); pop(`✅ Agente ${id} ejecutado`); }
+    } finally { setLoading(l => ({ ...l, [`r_${id}`]: false })); }
   };
 
-  const submitManualCapture = async () => {
-    const { nombres, telefono, plan, canal } = manualCapture;
-    if (!nombres || !telefono) { showToast('Nombre y teléfono son requeridos'); return; }
+  const connectTelegram = async () => {
+    if (!tgToken.trim()) { pop('Ingresa el token del bot'); return; }
+    setTgConnecting(true);
     try {
-      const r = await fetch('/api/ventas', {
+      const r = await fetch('/api/telegram/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          asesor_id: 'manual_hub', asesor_nombre: 'Captura Manual',
-          nombres, telefono, plan: plan || null, status: 'pendiente',
-          notas: `Canal: ${canal}`,
-          fecha_solicitud: new Date().toISOString().split('T')[0],
-        }),
+        body: JSON.stringify({ token: tgToken.trim() }),
       });
-      if (r.ok) {
-        setManualCapture({ open: false, nombres: '', telefono: '', plan: '', canal: 'app' });
-        showToast('✅ Venta capturada correctamente');
-      }
-    } catch { showToast('Error al guardar la venta'); }
+      const d = await r.json();
+      if (d.ok) { pop(`✅ Telegram conectado como @${d.botName}`); setTgToken(''); await loadAll(); }
+      else pop(`❌ ${d.error}`);
+    } finally { setTgConnecting(false); }
   };
 
-  const agentList = state
-    ? AGENT_META.map(m => ({ ...m, status: state[m.id as keyof AgentState] }))
-    : AGENT_META.map(m => ({ ...m, status: { active: false, lastRun: null, processed: 0, errors: 0 } as AgentStatus }));
+  const disconnectTelegram = async () => {
+    await fetch('/api/telegram/stop', { method: 'POST' });
+    pop('Telegram desconectado');
+    await loadAll();
+  };
+
+  const saveManual = async () => {
+    if (!manual.nombres || !manual.telefono) { pop('Nombre y teléfono son requeridos'); return; }
+    const r = await fetch('/api/ventas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        asesor_id: 'manual_hub', asesor_nombre: 'Captura Manual',
+        nombres: manual.nombres, telefono: manual.telefono,
+        plan: manual.plan || null, status: 'pendiente',
+        notas: `Canal: ${manual.canal}`,
+        fecha_solicitud: new Date().toISOString().split('T')[0],
+      }),
+    });
+    if (r.ok) { setManual({ nombres: '', telefono: '', plan: '', canal: 'app' }); pop('✅ Venta guardada'); }
+  };
+
+  const agentList = AGENT_META.map(m => ({
+    ...m,
+    status: agents?.[m.id as keyof AgentState] ?? { active: false, lastRun: null, processed: 0, errors: 0 },
+  }));
+
+  const TABS = [
+    { id: 'agents', label: 'Agentes' },
+    { id: 'telegram', label: `Telegram${tgStatus.status === 'polling' ? ' 🟢' : ' ⚪'}` },
+    { id: 'messages', label: `Mensajes (${messages.length})` },
+    { id: 'manual', label: 'Captura Manual' },
+  ] as const;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -170,118 +194,101 @@ export default function AgentHubView() {
             Hub de Agentes Autónomos
           </h1>
           <p className="text-slate-500 text-xs mt-1 uppercase tracking-widest">
-            Captura automática por 3 canales · Archivero · Consultor · Validador
+            3 canales · WhatsApp · Telegram · App
           </p>
         </div>
-        <button
-          onClick={() => { loadState(); loadMessages(); }}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-all text-xs font-bold uppercase tracking-widest"
-        >
+        <button onClick={loadAll} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-all text-xs font-bold uppercase tracking-widest">
           <RefreshCw className="w-3.5 h-3.5" /> Actualizar
         </button>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-slate-800">
-        {(['agents', 'messages', 'manual'] as const).map(tab => (
+        {TABS.map(t => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={t.id}
+            onClick={() => setTab(t.id)}
             className={`px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest transition-all border-b-2 -mb-px ${
-              activeTab === tab
-                ? 'border-purple-400 text-purple-400'
-                : 'border-transparent text-slate-500 hover:text-slate-300'
+              tab === t.id ? 'border-purple-400 text-purple-400' : 'border-transparent text-slate-500 hover:text-slate-300'
             }`}
           >
-            {tab === 'agents' ? 'Agentes' : tab === 'messages' ? `Mensajes WA (${messages.length})` : 'Captura Manual'}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* ── AGENTS TAB ── */}
-      {activeTab === 'agents' && (
+      {/* ── AGENTS ── */}
+      {tab === 'agents' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {agentList.map(agent => {
-            const c = COLOR_MAP[agent.color];
-            const Icon = agent.icon;
-            const isOn = agent.status.active;
+          {agentList.map(a => {
+            const c = C[a.color];
+            const Icon = a.icon;
+            const on = a.status.active;
             return (
-              <div
-                key={agent.id}
-                className={`bg-[#0a0d14] rounded-2xl border ${c.border} p-5 space-y-4 ${isOn ? c.glow : ''} transition-all`}
-              >
-                {/* Title row */}
+              <div key={a.id} className={`bg-[#0a0d14] rounded-2xl border ${c.border} p-5 space-y-4 transition-all ${on ? c.glow : ''}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl ${c.bg} ${c.border} border flex items-center justify-center`}>
                       <Icon className={`w-5 h-5 ${c.text}`} />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-white">{agent.name}</p>
+                      <p className="text-sm font-bold text-white">{a.name}</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className={`w-1.5 h-1.5 rounded-full ${isOn ? c.dot + ' animate-pulse' : 'bg-slate-600'}`} />
-                        <span className={`text-[9px] uppercase font-bold tracking-widest ${isOn ? c.text : 'text-slate-500'}`}>
-                          {isOn ? 'ACTIVO' : 'INACTIVO'}
+                        <div className={`w-1.5 h-1.5 rounded-full ${on ? c.dot + ' animate-pulse' : 'bg-slate-600'}`} />
+                        <span className={`text-[9px] uppercase font-bold tracking-widest ${on ? c.text : 'text-slate-500'}`}>
+                          {on ? 'ACTIVO' : 'INACTIVO'}
                         </span>
                       </div>
                     </div>
                   </div>
-                  {/* Toggle */}
                   <button
-                    onClick={() => toggleAgent(agent.id)}
-                    disabled={loading[agent.id]}
+                    onClick={() => toggleAgent(a.id)}
+                    disabled={loading[a.id]}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border transition-all ${
-                      isOn
-                        ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
-                        : `${c.bg} ${c.border} ${c.text} hover:opacity-90`
+                      on ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
+                         : `${c.bg} ${c.border} ${c.text} hover:opacity-90`
                     }`}
                   >
-                    {isOn ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                    {isOn ? 'Detener' : 'Activar'}
+                    {on ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                    {on ? 'Detener' : 'Activar'}
                   </button>
                 </div>
 
-                {/* Description */}
-                <p className="text-slate-400 text-xs leading-relaxed">{agent.desc}</p>
+                <p className="text-slate-400 text-xs leading-relaxed">{a.desc}</p>
 
-                {/* Channels */}
                 <div className="flex flex-wrap gap-1.5">
-                  {agent.channels.map(ch => (
-                    <span key={ch} className={`px-2 py-0.5 rounded-full ${c.bg} ${c.text} text-[9px] font-bold uppercase tracking-widest border ${c.border}`}>
-                      {ch}
-                    </span>
+                  {a.channels.map(ch => (
+                    <span key={ch} className={`px-2 py-0.5 rounded-full ${c.bg} ${c.text} text-[9px] font-bold uppercase tracking-widest border ${c.border}`}>{ch}</span>
                   ))}
                 </div>
 
-                {/* Stats */}
                 <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800">
                   <div className="text-center">
-                    <p className="text-lg font-bold text-white">{agent.status.processed}</p>
+                    <p className="text-lg font-bold text-white">{a.status.processed}</p>
                     <p className="text-[9px] text-slate-500 uppercase tracking-widest">Procesados</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-lg font-bold text-rose-400">{agent.status.errors}</p>
+                    <p className="text-lg font-bold text-rose-400">{a.status.errors}</p>
                     <p className="text-[9px] text-slate-500 uppercase tracking-widest">Errores</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-xs font-bold text-slate-300">{timeAgo(agent.status.lastRun)}</p>
-                    <p className="text-[9px] text-slate-500 uppercase tracking-widest">Última ejecución</p>
+                    <p className="text-xs font-bold text-slate-300">{timeAgo(a.status.lastRun)}</p>
+                    <p className="text-[9px] text-slate-500 uppercase tracking-widest">Última vez</p>
                   </div>
                 </div>
 
-                {/* Run once + hint */}
                 <div className="flex items-center justify-between gap-2">
                   <button
-                    onClick={() => runAgent(agent.id)}
-                    disabled={loading[`run_${agent.id}`]}
+                    onClick={() => runAgent(a.id)}
+                    disabled={loading[`r_${a.id}`]}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 text-[10px] font-bold uppercase tracking-widest transition-all"
                   >
                     <Activity className="w-3 h-3" /> Ejecutar ahora
                   </button>
                   <div className="group relative">
                     <Info className="w-4 h-4 text-slate-600 hover:text-slate-400 cursor-help" />
-                    <div className="absolute right-0 bottom-6 w-64 bg-slate-900 border border-slate-700 rounded-xl p-3 text-[10px] text-slate-300 leading-relaxed whitespace-pre-line hidden group-hover:block z-50">
-                      {agent.hint}
+                    <div className="absolute right-0 bottom-6 w-64 bg-slate-900 border border-slate-700 rounded-xl p-3 text-[10px] text-slate-300 leading-relaxed whitespace-pre-line hidden group-hover:block z-50 shadow-xl">
+                      {a.hint}
                     </div>
                   </div>
                 </div>
@@ -291,30 +298,134 @@ export default function AgentHubView() {
         </div>
       )}
 
-      {/* ── MESSAGES TAB ── */}
-      {activeTab === 'messages' && (
-        <div className="space-y-3">
+      {/* ── TELEGRAM CONFIG ── */}
+      {tab === 'telegram' && (
+        <div className="space-y-4 max-w-lg">
+          {/* Estado actual */}
+          <div className={`rounded-2xl border p-5 space-y-3 ${
+            tgStatus.status === 'polling' ? 'bg-blue-400/5 border-blue-400/30' :
+            tgStatus.status === 'error'   ? 'bg-rose-400/5 border-rose-400/30' :
+                                            'bg-[#0a0d14] border-slate-800'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full ${
+                tgStatus.status === 'polling' ? 'bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]' :
+                tgStatus.status === 'error'   ? 'bg-rose-400' : 'bg-slate-600'
+              }`} />
+              <span className="font-bold text-sm text-white uppercase tracking-widest">
+                Telegram — {tgStatus.status === 'polling' ? 'CONECTADO' : tgStatus.status === 'error' ? 'ERROR' : 'DESCONECTADO'}
+              </span>
+            </div>
+            {tgStatus.status === 'polling' && (
+              <>
+                <p className="text-xs text-blue-300">✅ Bot activo y escuchando mensajes en tiempo real.</p>
+                <p className="text-[10px] text-slate-500">Los agentes Capturista y Consultor procesan mensajes entrantes inmediatamente.</p>
+                <button
+                  onClick={disconnectTelegram}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold uppercase tracking-widest hover:bg-rose-500/20 transition-all"
+                >
+                  <XCircle className="w-4 h-4" /> Desconectar bot
+                </button>
+              </>
+            )}
+            {tgStatus.status === 'error' && (
+              <p className="text-xs text-rose-300">⚠️ {tgStatus.error}</p>
+            )}
+            {tgStatus.status === 'disconnected' && (
+              <p className="text-xs text-slate-400">Configura el token del bot para activar el canal Telegram.</p>
+            )}
+          </div>
+
+          {/* Formulario de conexión */}
+          {tgStatus.status !== 'polling' && (
+            <div className="bg-[#0a0d14] border border-slate-800 rounded-2xl p-5 space-y-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Key className="w-4 h-4 text-blue-400" /> Conectar Bot de Telegram
+              </h3>
+
+              <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-1">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cómo obtener el token</p>
+                <ol className="text-[11px] text-slate-300 space-y-1 list-decimal list-inside">
+                  <li>Abre Telegram y busca <span className="font-mono text-blue-300">@BotFather</span></li>
+                  <li>Envía <span className="font-mono text-yellow-300">/newbot</span> y sigue las instrucciones</li>
+                  <li>Copia el token que te da y pégalo aquí</li>
+                </ol>
+              </div>
+
+              <div>
+                <label className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-1.5">Bot Token *</label>
+                <input
+                  value={tgToken}
+                  onChange={e => setTgToken(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && connectTelegram()}
+                  placeholder="123456789:ABCdef..."
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                />
+              </div>
+
+              <button
+                onClick={connectTelegram}
+                disabled={tgConnecting || !tgToken.trim()}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-bold text-xs uppercase tracking-widest hover:bg-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {tgConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {tgConnecting ? 'Verificando token…' : 'Conectar Telegram'}
+              </button>
+            </div>
+          )}
+
+          {/* Comandos disponibles */}
+          <div className="bg-[#0a0d14] border border-slate-800 rounded-2xl p-5 space-y-3">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Comandos que entiende el bot</h3>
+            <div className="space-y-2">
+              {[
+                { cmd: 'folio 123456', desc: 'Consultar estatus de un folio SIAC (Agente Consultor)' },
+                { cmd: 'consulta 123456', desc: 'Alternativa para consultar folio' },
+                { cmd: 'Nombre: Juan\nTel: 5551234567\nPlan: Internet', desc: 'Registrar venta (Agente Capturista)' },
+              ].map(({ cmd, desc }) => (
+                <div key={cmd} className="flex gap-3 items-start">
+                  <code className="text-[10px] bg-slate-800 text-cyan-300 px-2 py-1 rounded font-mono whitespace-pre flex-shrink-0">{cmd}</code>
+                  <p className="text-[10px] text-slate-400 mt-1">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MESSAGES ── */}
+      {tab === 'messages' && (
+        <div className="space-y-2">
           {messages.length === 0 ? (
             <div className="text-center py-16 text-slate-500">
               <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-20" />
               <p className="font-mono text-sm uppercase tracking-widest">Sin mensajes recientes</p>
-              <p className="text-xs mt-2">Conecta WhatsApp en Integraciones para ver mensajes aquí</p>
+              <p className="text-xs mt-2">Conecta WhatsApp o Telegram para ver los mensajes aquí</p>
             </div>
           ) : (
-            [...messages].reverse().map(msg => (
-              <div key={msg.id} className="bg-[#0a0d14] border border-slate-800 rounded-xl p-4 flex gap-3">
-                <div className="w-9 h-9 rounded-full bg-emerald-400/10 border border-emerald-400/20 flex items-center justify-center flex-shrink-0">
-                  <User className="w-4 h-4 text-emerald-400" />
+            messages.map(msg => (
+              <div key={`${msg.channel}_${msg.id}`} className="bg-[#0a0d14] border border-slate-800 rounded-xl p-4 flex gap-3">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  msg.channel === 'telegram' ? 'bg-blue-400/10 border border-blue-400/20' : 'bg-emerald-400/10 border border-emerald-400/20'
+                }`}>
+                  {msg.channel === 'telegram'
+                    ? <span className="text-sm">✈️</span>
+                    : <User className="w-4 h-4 text-emerald-400" />
+                  }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-xs font-bold text-white truncate">{msg.fromName}</span>
-                    <span className="text-[9px] text-slate-500 flex-shrink-0">
+                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
+                      msg.channel === 'telegram'
+                        ? 'bg-blue-400/10 text-blue-400 border border-blue-400/20'
+                        : 'bg-emerald-400/10 text-emerald-400 border border-emerald-400/20'
+                    }`}>{msg.channel}</span>
+                    <span className="text-[9px] text-slate-500 ml-auto flex-shrink-0">
                       {new Date(msg.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed break-words">{msg.body}</p>
-                  <p className="text-[9px] text-slate-600 mt-1">{msg.from}</p>
                 </div>
               </div>
             ))
@@ -322,59 +433,49 @@ export default function AgentHubView() {
         </div>
       )}
 
-      {/* ── MANUAL CAPTURE TAB ── */}
-      {activeTab === 'manual' && (
+      {/* ── MANUAL CAPTURE ── */}
+      {tab === 'manual' && (
         <div className="bg-[#0a0d14] border border-slate-800 rounded-2xl p-6 max-w-md space-y-4">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-1">
             <Plus className="w-5 h-5 text-cyan-400" />
             <h3 className="text-sm font-bold text-white uppercase tracking-widest">Captura Manual de Venta</h3>
           </div>
-          <p className="text-xs text-slate-500">Registra una venta directamente desde el hub sin usar el formulario completo.</p>
+          <p className="text-xs text-slate-500">Registra una venta directamente indicando el canal de origen.</p>
 
           <div className="space-y-3">
-            <div>
-              <label className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-1.5">Canal *</label>
-              <select
-                value={manualCapture.canal}
-                onChange={e => setManualCapture(s => ({ ...s, canal: e.target.value }))}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
-              >
-                <option value="app">App</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="telegram">Telegram</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-1.5">Nombre del cliente *</label>
-              <input
-                value={manualCapture.nombres}
-                onChange={e => setManualCapture(s => ({ ...s, nombres: e.target.value }))}
-                placeholder="Juan Pérez"
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
-              />
-            </div>
-            <div>
-              <label className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-1.5">Teléfono *</label>
-              <input
-                value={manualCapture.telefono}
-                onChange={e => setManualCapture(s => ({ ...s, telefono: e.target.value }))}
-                placeholder="5551234567"
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
-              />
-            </div>
-            <div>
-              <label className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-1.5">Plan / Servicio</label>
-              <input
-                value={manualCapture.plan}
-                onChange={e => setManualCapture(s => ({ ...s, plan: e.target.value }))}
-                placeholder="Internet 100MB"
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
-              />
-            </div>
-            <button
-              onClick={submitManualCapture}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold text-xs uppercase tracking-widest hover:bg-cyan-500/20 transition-all"
-            >
+            {[
+              { label: 'Canal *', el: (
+                <select value={manual.canal} onChange={e => setManual(s => ({ ...s, canal: e.target.value }))}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40">
+                  <option value="app">App</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="telegram">Telegram</option>
+                </select>
+              )},
+              { label: 'Nombre del cliente *', el: (
+                <input value={manual.nombres} onChange={e => setManual(s => ({ ...s, nombres: e.target.value }))}
+                  placeholder="Juan Pérez"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40" />
+              )},
+              { label: 'Teléfono *', el: (
+                <input value={manual.telefono} onChange={e => setManual(s => ({ ...s, telefono: e.target.value }))}
+                  placeholder="5551234567"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40" />
+              )},
+              { label: 'Plan / Servicio', el: (
+                <input value={manual.plan} onChange={e => setManual(s => ({ ...s, plan: e.target.value }))}
+                  placeholder="Internet 100MB"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40" />
+              )},
+            ].map(({ label, el }) => (
+              <div key={label}>
+                <label className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-1.5">{label}</label>
+                {el}
+              </div>
+            ))}
+
+            <button onClick={saveManual}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold text-xs uppercase tracking-widest hover:bg-cyan-500/20 transition-all">
               <Send className="w-4 h-4" /> Guardar Venta
             </button>
           </div>

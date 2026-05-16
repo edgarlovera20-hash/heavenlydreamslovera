@@ -90,6 +90,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [todaySales, setTodaySales] = useState(0);
   const [monthRevenue, setMonthRevenue] = useState(0);
   const [waStatus, setWaStatus] = useState<'disconnected'|'qr'|'authenticating'|'connected'>('disconnected');
+  const [tgStatus, setTgStatus] = useState<'disconnected'|'polling'|'error'>('disconnected');
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
 
   const loadStats = async () => {
@@ -126,12 +127,14 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
     loadStats();
     const loadChannels = async () => {
       try {
-        const [ws, msgs] = await Promise.all([
+        const [ws, tgs, msgs] = await Promise.all([
           fetch('/api/whatsapp/status').then(r => r.ok ? r.json() : null),
-          fetch('/api/whatsapp/messages').then(r => r.ok ? r.json() : []),
+          fetch('/api/telegram/status').then(r => r.ok ? r.json() : null),
+          fetch('/api/channels/messages').then(r => r.ok ? r.json() : []),
         ]);
         if (ws) setWaStatus(ws.status);
-        setRecentMessages((msgs as any[]).slice(-5).reverse());
+        if (tgs) setTgStatus(tgs.status);
+        setRecentMessages((msgs as any[]).slice(0, 5));
       } catch {}
     };
     loadChannels();
@@ -453,25 +456,35 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                     </button>
                   </div>
 
-                  {/* Telegram placeholder */}
+                  {/* Telegram panel */}
                   <div className="bg-[#0a0d14] border border-slate-800/80 rounded-[14px] p-5 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-slate-600" />
+                        <div className={`w-2 h-2 rounded-full ${tgStatus === 'polling' ? 'bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]' : tgStatus === 'error' ? 'bg-rose-400' : 'bg-slate-600'}`} />
                         <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Telegram</h4>
-                        <span className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">pendiente</span>
+                        <span className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full ${
+                          tgStatus === 'polling' ? 'bg-blue-400/10 text-blue-400' :
+                          tgStatus === 'error'   ? 'bg-rose-400/10 text-rose-400' :
+                                                   'bg-slate-700 text-slate-500'
+                        }`}>{tgStatus}</span>
                       </div>
                       <button
-                        onClick={() => setActiveSection('Config. Llamadas')}
+                        onClick={() => setActiveSection('Hub de Agentes')}
                         className="text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
                       >
-                        Configurar <ChevronRight className="w-3 h-3" />
+                        {tgStatus === 'polling' ? 'Ver mensajes' : 'Configurar'} <ChevronRight className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className="text-xs text-slate-500">Configura el Bot Token de Telegram en Ajustes → Integraciones para recibir mensajes aquí.</p>
-                    <div className="bg-blue-400/5 border border-blue-400/20 rounded-xl p-3">
-                      <p className="text-[10px] text-blue-300 font-mono">@BotFather → /newbot → Token → Ajustes</p>
-                    </div>
+                    {tgStatus === 'polling' ? (
+                      <p className="text-xs text-blue-300">✅ Bot activo — los agentes están escuchando</p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-slate-500">Activa el bot en Hub de Agentes → pestaña Telegram</p>
+                        <div className="bg-blue-400/5 border border-blue-400/20 rounded-xl p-3">
+                          <p className="text-[10px] text-blue-300 font-mono">@BotFather → /newbot → Token → Hub Agentes</p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
