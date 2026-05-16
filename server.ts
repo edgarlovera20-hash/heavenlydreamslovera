@@ -73,7 +73,10 @@ async function startServer() {
   app.get("/api/users", wrap((_req: any, res: any) => res.json(Users.getAll())));
 
   app.post("/api/users", wrap((req: any, res: any) => {
-    const data = { uid: randomUUID(), activo: 1, ...req.body };
+    // Si viene de registro público usa activo=2 (pendiente); si lo crea un admin usa activo=1
+    const defaultActivo = req.body.fromRegistration ? 2 : 1;
+    const { fromRegistration: _fr, ...body } = req.body;
+    const data = { uid: randomUUID(), activo: defaultActivo, ...body };
     Users.create(data);
     AuditLog.insert({ accion: 'CREATE_USER', entidad: 'users', entidad_id: data.uid, user_id: req.body.createdBy || null, user_nombre: data.nombre, detalle: null });
     res.json(Users.getById(data.uid));
@@ -89,14 +92,76 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
-  // Login simple (username + password)
-  app.post("/api/auth/login", wrap((req: any, res: any) => {
+  // ── Verificación de password SHA-256 (compatible con plain text legacy) ──
+  async function checkPassword(plain: string, stored: string): Promise<boolean> {
+    if (!stored) return false;
+    // SHA-256 hash (64 hex chars)
+    if (/^[a-f0-9]{64}$/i.test(stored)) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain));
+      const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+      return hash === stored;
+    }
+    return plain === stored;
+  }
+
+  // Login
+  app.post("/api/auth/login", wrap(async (req: any, res: any) => {
     const { username, password } = req.body;
-    const user = Users.getByUsername(username) as any;
-    if (!user || user.password !== password) return res.status(401).json({ error: 'Credenciales incorrectas' });
+    // Buscar por username o email
+    const user = (Users.getByUsername(username) || Users.getByUsername(username + '@adhdreams.local')) as any;
+    if (!user) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+    if (!(await checkPassword(password, user.password)))
+      return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+    if (user.activo === 2)
+      return res.status(403).json({ error: 'Tu cuenta está pendiente de aprobación por el administrador.', code: 'PENDING' });
+    if (user.activo === 0)
+      return res.status(403).json({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador.', code: 'INACTIVE' });
     AuditLog.insert({ accion: 'LOGIN', entidad: 'users', entidad_id: user.uid, user_id: user.uid, user_nombre: user.nombre, detalle: null });
     const { password: _, ...safe } = user;
     res.json(safe);
+  }));
+
+  // Usuarios pendientes de aprobación
+  app.get("/api/users/pending", wrap((_req: any, res: any) => {
+    res.json(Users.getAll().filter((u: any) => u.activo === 2));
+  }));
+
+  // Aprobar cuenta
+  app.post("/api/users/:uid/approve", wrap((req: any, res: any) => {
+    Users.update(req.params.uid, { activo: 1 });
+    const u = Users.getById(req.params.uid) as any;
+    AuditLog.insert({ accion: 'APPROVE_USER', entidad: 'users', entidad_id: req.params.uid, user_id: req.body.by || null, user_nombre: null, detalle: u?.nombre || null });
+    res.json({ ok: true });
+  }));
+
+  // Rechazar / desactivar cuenta
+  app.post("/api/users/:uid/reject", wrap((req: any, res: any) => {
+    Users.update(req.params.uid, { activo: 0 });
+    const u = Users.getById(req.params.uid) as any;
+    AuditLog.insert({ accion: 'REJECT_USER', entidad: 'users', entidad_id: req.params.uid, user_id: req.body.by || null, user_nombre: null, detalle: u?.nombre || null });
+    res.json({ ok: true });
+  }));
+
+  // Editar datos de usuario
+  app.put("/api/users/:uid", wrap((req: any, res: any) => {
+    const { password, uid: _uid, ...data } = req.body;
+    Users.update(req.params.uid, data);
+    res.json({ ok: true });
+  }));
+
+  // Eliminar cuenta permanentemente
+  app.delete("/api/users/:uid", wrap((req: any, res: any) => {
+    const u = Users.getById(req.params.uid) as any;
+    if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
+    Users.delete(req.params.uid);
+    AuditLog.insert({ accion: 'DELETE_USER', entidad: 'users', entidad_id: req.params.uid, user_id: null, user_nombre: null, detalle: u.nombre || u.username || null });
+    res.json({ ok: true });
+  }));
+
+  // Contar pendientes (para notificaciones)
+  app.get("/api/users/pending-count", wrap((_req: any, res: any) => {
+    const count = Users.getAll().filter((u: any) => u.activo === 2).length;
+    res.json({ count });
   }));
 
   // ── VENTAS ─────────────────────────────────────────────────
@@ -116,12 +181,15 @@ async function startServer() {
     res.json(Ventas.getById(data.id));
   }));
 
-  app.put("/api/ventas/:id", wrap((req: any, res: any) => {
+  const updateVenta = wrap((req: any, res: any) => {
     const update = { ...req.body };
     if (update.metadata && typeof update.metadata === 'object') update.metadata = JSON.stringify(update.metadata);
     Ventas.update(req.params.id, update);
+    AuditLog.insert({ accion: 'UPDATE_VENTA', entidad: 'ventas', entidad_id: req.params.id, user_id: update.by || null, user_nombre: update.byName || null, detalle: update.status || null });
     res.json(Ventas.getById(req.params.id));
-  }));
+  });
+  app.put("/api/ventas/:id", updateVenta);
+  app.patch("/api/ventas/:id", updateVenta);
 
   app.delete("/api/ventas/:id", wrap((req: any, res: any) => {
     Ventas.delete(req.params.id);

@@ -42,6 +42,7 @@ const SIACView = lazy(() => import('./SIACView'));
 const ValidationConfigView = lazy(() => import('./ValidationConfigView'));
 const ValidationRequestsView = lazy(() => import('./ValidationRequestsView'));
 const AgentHubView = lazy(() => import('./AgentHubView'));
+const UserManagementView = lazy(() => import('./UserManagementView'));
 
 const SectionLoader = () => (
   <div className="flex flex-col items-center justify-center h-48 gap-4" role="status" aria-live="polite">
@@ -92,6 +93,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [waStatus, setWaStatus] = useState<'disconnected'|'qr'|'authenticating'|'connected'>('disconnected');
   const [tgStatus, setTgStatus] = useState<'disconnected'|'polling'|'error'>('disconnected');
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
+  const [pendingUsers, setPendingUsers] = useState(0);
 
   const loadStats = async () => {
     try {
@@ -102,7 +104,8 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       const users: any[] = usersRes.ok ? await usersRes.json() : [];
       const sales: any[] = ventasRes.ok ? await ventasRes.json() : [];
 
-      setUserCount(users.length || 0);
+      setUserCount(users.filter((u: any) => u.activo === 1).length || 0);
+      setPendingUsers(users.filter((u: any) => u.activo === 2).length || 0);
       setSaleCount(sales.length || 0);
       setPendingSales(sales.filter((s: any) => (s.status || 'pendiente') === 'pendiente').length);
       setApprovedSales(sales.filter((s: any) => s.status === 'aprobada' || s.status === 'procedio').length);
@@ -147,7 +150,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const userRoleLabel = (currentUser?.role || role) === 'GERENTE'
     ? 'SUPERUSER'
     : (currentUser?.role || role);
-  const notificationCount = pendingSales;
+  const notificationCount = pendingSales + pendingUsers;
 
   return (
     <div className="flex h-[100dvh] w-full text-white relative z-10 overflow-hidden">
@@ -245,6 +248,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
           {role === 'GERENTE' && (
             <NavGroup label="Gerencia">
+              <NavItem icon={Users} color="cyan" label="Gestión de Usuarios" active={activeSection === 'Gestión de Usuarios'} onClick={() => setActiveSection('Gestión de Usuarios')} badge={pendingUsers > 0 ? pendingUsers : undefined} />
               <NavItem icon={MapPin} color="cyan" label="Territorios" active={activeSection === 'Territorios'} onClick={() => setActiveSection('Territorios')} />
               <NavItem icon={Package} color="purple" label="Catálogo" active={activeSection === 'Catálogo'} onClick={() => setActiveSection('Catálogo')} />
               <NavItem icon={Shield} color="yellow" label="Auditoría" active={activeSection === 'Auditoría'} onClick={() => setActiveSection('Auditoría')} />
@@ -520,10 +524,11 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Validaciones' && <ValidationRequestsView />}
             {activeSection === 'Config. Llamadas' && <ValidationConfigView />}
             {activeSection === 'Hub de Agentes' && <AgentHubView />}
+            {activeSection === 'Gestión de Usuarios' && <UserManagementView />}
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Contratos', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Cotizador Rápido', 'Scripts de Venta', 'Historial por Zona', 'Referidos', 'Analytics', 'Equipo y Metas', 'Comisiones', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Contratos', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Cotizador Rápido', 'Scripts de Venta', 'Historial por Zona', 'Referidos', 'Analytics', 'Equipo y Metas', 'Comisiones', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
@@ -568,7 +573,7 @@ function QuickAction({ icon: Icon, label, color, onClick }: { icon: any; label: 
 }
 
 // Subcomponents
-function NavItem({ icon: Icon, label, color, active = false, onClick }: { icon: any, label: string, color: string, active?: boolean, onClick?: () => void }) {
+function NavItem({ icon: Icon, label, color, active = false, onClick, badge }: { icon: any, label: string, color: string, active?: boolean, onClick?: () => void, badge?: number }) {
   const getColorClasses = () => {
     if (color === 'cyan') return active ? 'text-[#0ea5e9] bg-[#0ea5e9]/10 border-[#0ea5e9]/30 shadow-[inset_0_0_12px_rgba(14,165,233,0.1)]' : 'text-slate-400 hover:text-[#0ea5e9] hover:bg-[#0ea5e9]/5';
     if (color === 'blue') return active ? 'text-blue-400 bg-blue-400/10 border-blue-400/30' : 'text-slate-400 hover:text-blue-400 hover:bg-blue-400/5';
@@ -587,7 +592,12 @@ function NavItem({ icon: Icon, label, color, active = false, onClick }: { icon: 
       className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all relative overflow-hidden group border border-transparent ${colorClasses}`}
     >
       <Icon className={`w-4 h-4 transition-transform group-hover:scale-110`} />
-      <span className="text-[12px] font-bold uppercase tracking-widest">{label}</span>
+      <span className="text-[12px] font-bold uppercase tracking-widest flex-1">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="min-w-[18px] h-[18px] px-1 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-black">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
       {active && (
         <div className={`absolute right-3 w-1 h-4 rounded-full ${
           color === 'cyan' ? 'bg-[#0ea5e9]' :

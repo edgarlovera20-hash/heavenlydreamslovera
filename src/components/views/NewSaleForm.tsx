@@ -5,7 +5,9 @@ import { chatUrl } from '../../lib/channels';
 import { cn, formatCurrency } from '../../lib/utils';
 import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
 import { MatrixInput } from '../ui/MatrixInput';
-import { auth } from '../../lib/firebase';
+function getCurrentUserId(): string {
+  try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s).uid : 'anonymous'; } catch { return 'anonymous'; }
+}
 import { toast } from 'sonner';
 import { aiAgent } from '../../services/aiAgent';
 
@@ -379,17 +381,45 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
         }
       }
       
-      // 2. Save to localStorage
+      // 2. Save to server API
       const saleData = {
-        ...form,
-        id: `sale-${Date.now()}`,
-        asesorId: auth.currentUser?.uid || 'anonymous',
-        status: 'PENDIENTE',
-        fechaSolicitud: new Date().toISOString()
+        folio: form.folio,
+        nombres: form.nombres,
+        apellido_paterno: form.apellidoPaterno,
+        apellido_materno: form.apellidoMaterno,
+        curp: form.curp,
+        telefono_titular: form.telefonoTitular,
+        correo: form.correo,
+        calle: form.calle,
+        colonia: form.colonia,
+        ciudad: form.ciudad,
+        codigo_postal: form.codigoPostal,
+        delegacion: form.delegacion,
+        coordenadas: form.coordenadas,
+        package_id: form.packageId,
+        paquete_nombre: form.paqueteNombre,
+        renta_mensual: form.rentaMensual,
+        tipo_cliente: form.tipoCliente,
+        tipo_servicio: form.tipoServicio,
+        categoria_producto: form.categoriaProducto,
+        streaming_elegido: form.streamingElegido,
+        plataformas_adicionales: JSON.stringify(form.plataformasAdicionales || []),
+        numero_a_portar: form.numeroAPortar,
+        compania_actual: form.companiaActual,
+        asesor_id: getCurrentUserId(),
+        status: 'pendiente',
+        fecha_solicitud: new Date().toISOString(),
+        metadata: JSON.stringify(form),
       };
-      const sales: any[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-      sales.push(saleData);
-      localStorage.setItem('adhdreams_sales', JSON.stringify(sales));
+      const apiRes = await fetch('/api/ventas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(saleData),
+      });
+      if (!apiRes.ok) {
+        const err = await apiRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al guardar en el servidor');
+      }
       
       // 3. Export PDF
       await exportToPDF();

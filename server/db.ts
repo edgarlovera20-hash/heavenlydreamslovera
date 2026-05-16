@@ -262,7 +262,7 @@ export const Users = {
     const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
     return db.prepare(`UPDATE users SET ${fields},updated_at=datetime('now') WHERE uid=@uid`).run({ ...data, uid });
   },
-  delete: (uid: string) => db.prepare("UPDATE users SET activo=0 WHERE uid=?").run(uid),
+  delete: (uid: string) => db.prepare("DELETE FROM users WHERE uid=?").run(uid),
 };
 
 export const Ventas = {
