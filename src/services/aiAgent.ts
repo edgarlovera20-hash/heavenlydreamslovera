@@ -306,18 +306,22 @@ export class CRM_AI_Agent {
       if (fields && Object.keys(fields).length > 0) {
         const result: Partial<OcrResult> = {};
         const f = fields;
-        if (f.nombres)         result.nombres         = f.nombres;
-        if (f.apellidoPaterno) result.apellidoPaterno = f.apellidoPaterno;
-        if (f.apellidoMaterno) result.apellidoMaterno = f.apellidoMaterno;
+        // Map all known field names (also handle alternate casing from model)
+        const nombres = f.nombres || f.nombre || f.name || '';
+        const apPat = f.apellidoPaterno || f.apellido_paterno || f.primerApellido || '';
+        const apMat = f.apellidoMaterno || f.apellido_materno || f.segundoApellido || '';
+        if (nombres)   result.nombres         = nombres;
+        if (apPat)     result.apellidoPaterno = apPat;
+        if (apMat)     result.apellidoMaterno = apMat;
         if (f.curp)            result.curp            = f.curp;
-        if (f.folioIne)        result.folioIne        = f.folioIne;
+        if (f.folioIne || f.claveElector) result.folioIne = f.folioIne || f.claveElector;
         if (f.calle)           result.calle           = f.calle;
-        if (f.numeroExterior)  result.numeroExterior  = f.numeroExterior;
-        if (f.numeroInterior)  result.numeroInterior  = f.numeroInterior;
+        if (f.numeroExterior || f.numExterior)  result.numeroExterior  = f.numeroExterior || f.numExterior;
+        if (f.numeroInterior || f.numInterior)  result.numeroInterior  = f.numeroInterior || f.numInterior;
         if (f.colonia)         result.colonia         = f.colonia;
-        if (f.codigoPostal)    result.codigoPostal    = f.codigoPostal;
-        if (f.delegacion)      result.delegacion      = f.delegacion;
-        if (f.ciudad)          result.ciudad          = f.ciudad;
+        if (f.codigoPostal || f.cp || f.postal) result.codigoPostal = f.codigoPostal || f.cp || f.postal;
+        if (f.delegacion || f.municipio || f.alcaldia) result.delegacion = f.delegacion || f.municipio || f.alcaldia;
+        if (f.ciudad || f.estado)  result.ciudad = f.ciudad || f.estado;
         if (Object.keys(result).length > 0) return result;
       }
 

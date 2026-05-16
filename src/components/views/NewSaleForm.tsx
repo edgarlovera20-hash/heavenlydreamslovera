@@ -570,7 +570,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                           <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-blue-300 mb-1">Escaneando con Google Vision…</div>
+                          <div className="text-sm font-bold text-blue-300 mb-1">Escaneando con IA local (LLaVA)…</div>
                           <div className="w-full h-2 bg-blue-500/20 rounded-full overflow-hidden">
                             <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-200" style={{ width: `${Math.max(5, ocrProgress)}%` }} />
                           </div>

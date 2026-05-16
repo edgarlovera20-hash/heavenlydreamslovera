@@ -14,27 +14,39 @@
 const OLLAMA_URL   = process.env.OLLAMA_URL   || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llava';
 
-const OCR_PROMPT = `Eres un sistema OCR especializado en documentos de identidad mexicanos (INE/IFE, CURP, comprobantes de domicilio).
+const OCR_PROMPT = `You are an OCR system for Mexican identity documents (INE/IFE, CURP, voter ID).
 
-Analiza la imagen y responde ÚNICAMENTE con un objeto JSON válido con estos campos (deja vacío "" si no encuentras el dato):
+IMPORTANT: Read ALL text visible in the image carefully.
+
+On an INE (Mexican voter ID), the data is arranged like this:
+- APELLIDO PATERNO (first surname, usually uppercase, printed BEFORE the given name)
+- APELLIDO MATERNO (second surname, usually uppercase)
+- NOMBRE(S) (given name(s), usually uppercase)
+- DOMICILIO section: street address, neighborhood, municipality
+- CURP: 18-character alphanumeric code
+- CLAVE DE ELECTOR: 18-character alphanumeric code (different from CURP)
+- Código postal: 5-digit number near the address
+
+Extract all text from the image and respond ONLY with a valid JSON object using these exact field names (leave "" if not found):
 
 {
-  "nombres": "nombre(s) de pila sin apellidos",
-  "apellidoPaterno": "primer apellido",
-  "apellidoMaterno": "segundo apellido",
-  "curp": "CURP de 18 caracteres",
-  "folioIne": "clave de elector o folio de INE",
-  "calle": "nombre de la calle",
-  "numeroExterior": "número exterior",
-  "numeroInterior": "número interior si existe",
-  "colonia": "colonia o fraccionamiento",
-  "codigoPostal": "código postal de 5 dígitos",
-  "delegacion": "alcaldía, delegación o municipio",
-  "ciudad": "ciudad o estado",
-  "rawText": "todo el texto visible en el documento tal como aparece"
+  "nombres": "given name(s) without surnames",
+  "apellidoPaterno": "first surname (apellido paterno)",
+  "apellidoMaterno": "second surname (apellido materno)",
+  "curp": "18-character CURP code",
+  "folioIne": "CLAVE DE ELECTOR (18-char voter key, NOT the CURP)",
+  "calle": "street name with number, e.g. C ELOY CAVAZOS MZA 3 LT 9",
+  "numeroExterior": "exterior number if separate",
+  "numeroInterior": "interior number if exists",
+  "colonia": "neighborhood/colonia name, e.g. COL SAN MIGUEL TEOTONGO",
+  "codigoPostal": "5-digit postal code",
+  "delegacion": "municipality/alcaldía/delegación",
+  "ciudad": "city or state, e.g. CDMX or Ciudad de México",
+  "rawText": "ALL visible text from the document exactly as it appears"
 }
 
-No incluyas explicaciones, markdown ni texto fuera del JSON.`;
+Do NOT include explanations, markdown, or any text outside the JSON.`;
+
 
 export interface OllamaOCRResult {
   text: string;
