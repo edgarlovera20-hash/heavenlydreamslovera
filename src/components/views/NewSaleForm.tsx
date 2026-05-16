@@ -7,6 +7,7 @@ import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
 import { MatrixInput } from '../ui/MatrixInput';
 import { MapPicker } from '../ui/MapPicker';
 import { PortabilidadAnexo } from './PortabilidadAnexo';
+import { SiacValidator } from '../ui/SiacValidator';
 function getCurrentUserId(): string {
   try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s).uid : 'anonymous'; } catch { return 'anonymous'; }
 }
@@ -1484,8 +1485,20 @@ const exportToPDF = async () => {
                 </div>
               )}
 
-              <button 
-                onClick={handleSaveAndFinish} 
+              {/* Validación SIAC — sube captura y compara contra contrato */}
+              <SiacValidator
+                contract={{
+                  nombres: form.nombres,
+                  apellidoPaterno: form.apellidoPaterno,
+                  apellidoMaterno: form.apellidoMaterno,
+                  telefonoTitular: form.telefonoTitular,
+                  correo: form.correo,
+                }}
+                onValidated={(folio) => updateForm({ folio })}
+              />
+
+              <button
+                onClick={handleSaveAndFinish}
                 disabled={isLoading}
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white p-4 rounded-xl font-bold flex justify-center items-center gap-2 shadow-lg hover:scale-[1.02] transition-transform disabled:opacity-50"
               >
