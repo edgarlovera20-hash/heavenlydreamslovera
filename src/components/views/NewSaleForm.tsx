@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, ProductCategory } from '../../configs/package-catalog';
-import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Crosshair, Loader2, MessageCircle, X, ScanLine, Sparkles } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
 import { chatUrl } from '../../lib/channels';
 import { cn, formatCurrency } from '../../lib/utils';
 import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
 import { MatrixInput } from '../ui/MatrixInput';
+import { MapPicker } from '../ui/MapPicker';
 function getCurrentUserId(): string {
   try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s).uid : 'anonymous'; } catch { return 'anonymous'; }
 }
@@ -100,6 +101,32 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Field validation state
+  type ValidationState = 'idle' | 'checking' | 'ok' | 'error';
+  const [telTitularVal, setTelTitularVal] = useState<ValidationState>('idle');
+  const [telRefVal, setTelRefVal] = useState<ValidationState>('idle');
+  const [emailVal, setEmailVal] = useState<ValidationState>('idle');
+  const [emailMsg, setEmailMsg] = useState('');
+
+  const validatePhone = (val: string): ValidationState =>
+    /^\d{10}$/.test(val.replace(/\D/g, '')) ? 'ok' : 'error';
+
+  const validateEmail = async (email: string) => {
+    if (!email) { setEmailVal('idle'); return; }
+    const basicRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!basicRe.test(email)) { setEmailVal('error'); setEmailMsg('Formato inválido'); return; }
+    setEmailVal('checking');
+    try {
+      const res = await fetch(`/api/validate/email?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      setEmailVal(data.ok ? 'ok' : 'error');
+      setEmailMsg(data.reason || '');
+    } catch {
+      setEmailVal('error');
+      setEmailMsg('No se pudo verificar');
+    }
+  };
   const [docType, setDocType] = useState<'ine' | 'curp'>('ine');
   const [selectedPackage, setSelectedPackage] = useState<PackageCatalogItem | null>(null);
   const [error, setError] = useState<string>('');
@@ -334,16 +361,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     else updateForm({ curpDoc: undefined });
   };
 
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        const { latitude, longitude } = position.coords;
-        updateForm({ coordenadas: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` });
-      });
-    }
-  };
-
-  const exportToPDF = async () => {
+const exportToPDF = async () => {
     if (!receiptRef.current) return;
     try {
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
@@ -626,20 +644,60 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                       value={form.folioIne || ''} onChange={e => updateForm({ folioIne: e.target.value })} />
                   </div>
                 )}
+                {/* Teléfono Titular */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Teléfono Titular</label>
-                  <MatrixInput type="tel" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
-                    value={form.telefonoTitular || ''} onChange={e => updateForm({ telefonoTitular: e.target.value })} />
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
+                    Teléfono Titular
+                    {telTitularVal === 'ok' && <CheckCircle className="w-3.5 h-3.5 text-green-400" />}
+                    {telTitularVal === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+                  </label>
+                  <MatrixInput
+                    type="tel" maxLength={10}
+                    className={cn("w-full bg-slate-950/80 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
+                      telTitularVal === 'ok' ? 'border-green-500/60' : telTitularVal === 'error' ? 'border-red-500/60' : 'border-white/10')}
+                    value={form.telefonoTitular || ''}
+                    onChange={e => { const v = e.target.value.replace(/\D/g,'').slice(0,10); updateForm({ telefonoTitular: v }); }}
+                    onBlur={e => setTelTitularVal(e.target.value ? validatePhone(e.target.value) : 'idle')}
+                  />
+                  {telTitularVal === 'error' && <p className="text-red-400 text-xs mt-1">Debe tener exactamente 10 dígitos</p>}
                 </div>
+
+                {/* Teléfono Referencia */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Teléfono Referencia</label>
-                  <MatrixInput type="tel" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
-                    value={form.telefonoReferencia || ''} onChange={e => updateForm({ telefonoReferencia: e.target.value })} />
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
+                    Teléfono Referencia
+                    {telRefVal === 'ok' && <CheckCircle className="w-3.5 h-3.5 text-green-400" />}
+                    {telRefVal === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+                  </label>
+                  <MatrixInput
+                    type="tel" maxLength={10}
+                    className={cn("w-full bg-slate-950/80 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
+                      telRefVal === 'ok' ? 'border-green-500/60' : telRefVal === 'error' ? 'border-red-500/60' : 'border-white/10')}
+                    value={form.telefonoReferencia || ''}
+                    onChange={e => { const v = e.target.value.replace(/\D/g,'').slice(0,10); updateForm({ telefonoReferencia: v }); }}
+                    onBlur={e => setTelRefVal(e.target.value ? validatePhone(e.target.value) : 'idle')}
+                  />
+                  {telRefVal === 'error' && <p className="text-red-400 text-xs mt-1">Debe tener exactamente 10 dígitos</p>}
                 </div>
+
+                {/* Correo */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Correo Electrónico</label>
-                  <MatrixInput type="email" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
-                    value={form.correo || ''} onChange={e => updateForm({ correo: e.target.value })} />
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
+                    Correo Electrónico
+                    {emailVal === 'checking' && <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />}
+                    {emailVal === 'ok' && <CheckCircle className="w-3.5 h-3.5 text-green-400" />}
+                    {emailVal === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+                  </label>
+                  <MatrixInput
+                    type="email"
+                    className={cn("w-full bg-slate-950/80 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
+                      emailVal === 'ok' ? 'border-green-500/60' : emailVal === 'error' ? 'border-red-500/60' : 'border-white/10')}
+                    value={form.correo || ''}
+                    onChange={e => { updateForm({ correo: e.target.value }); setEmailVal('idle'); }}
+                    onBlur={e => validateEmail(e.target.value)}
+                  />
+                  {emailVal === 'ok' && <p className="text-green-400 text-xs mt-1">✓ Dominio de correo verificado</p>}
+                  {emailVal === 'error' && <p className="text-red-400 text-xs mt-1">✗ {emailMsg}</p>}
                 </div>
               </div>
             </div>
@@ -718,20 +776,16 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
 
-              {/* Mini Mapa */}
+              {/* Mapa interactivo */}
               <div className="bg-slate-950/80 border border-white/10 rounded-xl p-4">
-                <div className="flex justify-between items-center mb-3">
-                  <label className="block text-sm font-medium text-white">Ubicación GPS (Coordenadas)</label>
-                  <button onClick={getCurrentLocation} className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
-                    <Crosshair className="w-3 h-3" /> Obtener Ubicación Actual
-                  </button>
-                </div>
-                <MatrixInput type="text" className="w-full bg-slate-900 border border-white/10 rounded-lg p-2.5 text-white text-sm font-mono mb-3" 
-                  value={form.coordenadas || ''} onChange={e => updateForm({ coordenadas: e.target.value })} placeholder="Latitud, Longitud" />
-                
-                <div className="w-full h-20 bg-slate-800/50 rounded-lg flex items-center justify-center border border-white/5 text-slate-500 text-xs font-mono">
-                  📍 Coordenadas: {form.coordenadas || 'No especificadas'}
-                </div>
+                <label className="block text-sm font-medium text-white mb-3 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-blue-400" /> Ubicación GPS
+                </label>
+                <MapPicker
+                  coords={form.coordenadas || ''}
+                  onCoordsChange={c => updateForm({ coordenadas: c })}
+                  searchAddress={[form.calle, form.colonia, form.delegacion, form.ciudad].filter(Boolean).join(', ')}
+                />
               </div>
             </div>
             

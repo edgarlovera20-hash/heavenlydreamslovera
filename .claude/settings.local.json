@@ -15,7 +15,8 @@
       "Bash(unzip -o gh.zip -d gh_cli)",
       "Bash(cmdkey /list)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d '{\"uid\":\"uid-edgar-gmail\",\"nombre\":\"Edgar Lovera\",\"email\":\"edgarlovera20@gmail.com\",\"username\":\"edgarlovera20\",\"role\":\"GERENTE\",\"password\":\"Elovera1964\",\"zona\":\"CDMX\"}')"
     ]
   }
 }

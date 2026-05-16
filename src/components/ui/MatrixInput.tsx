@@ -5,6 +5,7 @@ interface MatrixInputProps extends InputHTMLAttributes<HTMLInputElement> {
   className?: string;
   value?: any;
   onChange?: (e: any) => void;
+  onBlur?: (e: any) => void;
   type?: string;
   placeholder?: string;
   maxLength?: number;

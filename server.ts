@@ -782,6 +782,27 @@ async function startServer() {
     res.json(status);
   }));
 
+  // ── EMAIL DOMAIN VALIDATION (DNS MX check, no email sent) ──
+  app.get("/api/validate/email", wrap(async (req: any, res: any) => {
+    const email = (req.query.email as string || '').trim().toLowerCase();
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRe.test(email)) return res.json({ ok: false, reason: 'Formato inválido' });
+
+    const domain = email.split('@')[1];
+    // Known disposable / invalid domains
+    const disposable = ['mailinator.com','guerrillamail.com','tempmail.com','10minutemail.com','yopmail.com','throwam.com','trashmail.com','fakeinbox.com'];
+    if (disposable.includes(domain)) return res.json({ ok: false, reason: 'Dominio desechable no permitido' });
+
+    try {
+      const { promises: dns } = await import('dns');
+      const mx = await dns.resolveMx(domain).catch(() => null);
+      if (!mx || mx.length === 0) return res.json({ ok: false, reason: 'El dominio no tiene servidores de correo (MX)' });
+      return res.json({ ok: true, reason: 'Dominio válido' });
+    } catch {
+      return res.json({ ok: false, reason: 'No se pudo verificar el dominio' });
+    }
+  }));
+
   // ── VITE / STATIC ─────────────────────────────────────────
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
