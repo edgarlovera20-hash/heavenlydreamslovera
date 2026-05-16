@@ -5,10 +5,26 @@ import qrcode from 'qrcode';
 
 type Status = 'disconnected' | 'qr' | 'authenticating' | 'connected';
 
+export interface WaMessage {
+  id: string;
+  from: string;
+  fromName: string;
+  body: string;
+  timestamp: number;
+  isGroup: boolean;
+  channel: 'whatsapp';
+}
+
 let client: any = null;
 let currentQR: string | null = null;
 let status: Status = 'disconnected';
 let lastError: string | null = null;
+const messageBuffer: WaMessage[] = [];
+const MAX_MESSAGES = 200;
+
+export function getRecentMessages(limit = 50): WaMessage[] {
+  return messageBuffer.slice(-limit);
+}
 
 export function getWhatsAppStatus() {
   return { status, error: lastError };
@@ -28,6 +44,11 @@ export async function initWhatsApp(): Promise<void> {
 
   client = new Client({
     authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
+    webVersion: '2.3000.1015901307',
+    webVersionCache: {
+      type: 'remote',
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1015901307.html',
+    },
     puppeteer: {
       headless: true,
       args: [
@@ -62,6 +83,23 @@ export async function initWhatsApp(): Promise<void> {
     status = 'connected';
     currentQR = null;
     console.log('[WA] ✅ Conectado y listo para enviar mensajes');
+  });
+
+  client.on('message', async (msg: any) => {
+    try {
+      const contact = await msg.getContact();
+      const entry: WaMessage = {
+        id: msg.id?._serialized || String(Date.now()),
+        from: msg.from,
+        fromName: contact.pushname || contact.name || msg.from.replace('@c.us', ''),
+        body: msg.body,
+        timestamp: msg.timestamp * 1000,
+        isGroup: msg.from?.includes('@g.us') || false,
+        channel: 'whatsapp',
+      };
+      messageBuffer.push(entry);
+      if (messageBuffer.length > MAX_MESSAGES) messageBuffer.shift();
+    } catch { /* ignorar errores de contacto */ }
   });
 
   client.on('disconnected', (reason: string) => {

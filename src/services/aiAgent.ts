@@ -45,60 +45,32 @@ const MOCK_RESPONSES: Record<EventType, (c: CustomerData) => string> = {
 
 // ─────────────────────────────────────────────
 // GOOGLE CLOUD VISION — DOCUMENT_TEXT_DETECTION
-// Llama al REST API con la key guardada en
-// localStorage (adhdreams_google_vision_key).
-// Retorna el texto completo detectado.
+// Llama al endpoint del servidor /api/vision/ocr
+// que autentica con la cuenta de servicio.
 // ─────────────────────────────────────────────
 export async function runGoogleVision(
   base64Image: string,
   onProgress?: (p: number) => void,
 ): Promise<string> {
-  const apiKey =
-    localStorage.getItem('adhdreams_google_vision_key')?.trim() || '';
-
-  if (!apiKey) {
-    throw new Error(
-      'API key de Google Cloud Vision no configurada.\n' +
-      'Ve a Ajustes → Integraciones y APIs → OCR con Google Vision.',
-    );
-  }
-
-  // Quitar prefijo data-URL si viene incluido
-  const base64 = base64Image.replace(/^data:image\/[a-z+]+;base64,/, '');
-
   if (onProgress) onProgress(10);
 
-  const response = await fetch(
-    `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requests: [
-          {
-            image: { content: base64 },
-            features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }],
-            imageContext: { languageHints: ['es', 'es-MX'] },
-          },
-        ],
-      }),
-    },
-  );
+  const response = await fetch('/api/vision/ocr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: base64Image }),
+  });
 
   if (onProgress) onProgress(80);
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({})) as any;
-    const msg = err?.error?.message || response.statusText;
-    throw new Error(`Google Vision API error (${response.status}): ${msg}`);
+    const msg = err?.error || response.statusText;
+    throw new Error(`OCR error (${response.status}): ${msg}`);
   }
 
-  const data = await response.json() as any;
-
+  const data = await response.json() as { text: string };
   if (onProgress) onProgress(100);
-
-  // DOCUMENT_TEXT_DETECTION devuelve el texto en fullTextAnnotation.text
-  return (data?.responses?.[0]?.fullTextAnnotation?.text as string) || '';
+  return data.text || '';
 }
 
 // ─────────────────────────────────────────────

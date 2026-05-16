@@ -161,8 +161,6 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
 
   const zones = [
     { id: '1', name: 'CDMX - Edgar Lovera' },
-    { id: '2', name: 'Edo Mex - Emmanuel Ochoa' },
-    { id: '3', name: 'Tijuana - Anthoni Moreno' },
   ];
 
   const supervisors: Record<string, string[]> = {
