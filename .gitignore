@@ -38,3 +38,10 @@ Thumbs.db
 # WhatsApp Web session
 .wwebjs_auth/
 .wwebjs_cache/
+
+# Private keys (NEVER COMMIT)
+*.pem
+*.key
+
+# Claude worktrees
+.claude/worktrees/
