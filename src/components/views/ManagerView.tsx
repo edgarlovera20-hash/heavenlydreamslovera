@@ -2,9 +2,9 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   BarChart3, Users, DollarSign, Activity, Bell, Search,
   LogOut, TrendingUp, ArrowUpRight, ArrowDownRight,
-  LayoutDashboard, Settings as SettingsIcon, FileText, PieChart, ChevronLeft,
+  LayoutDashboard, Settings as SettingsIcon, FileText, PieChart, ChevronLeft, ChevronRight,
   User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, ImagePlus, Gamepad2, FolderOpen,
-  Cpu, Database, Smartphone, Sun, Moon, X, Crown, Zap, Bot, Home,
+  Cpu, Database, Smartphone, Sun, Moon, X, Crown, Zap, Bot, Home, MessageSquare,
   MapPin, UserPlus, WifiOff, RefreshCw, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall
 } from 'lucide-react';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
@@ -41,6 +41,7 @@ const DataManagerView = lazy(() => import('./DataManagerView'));
 const SIACView = lazy(() => import('./SIACView'));
 const ValidationConfigView = lazy(() => import('./ValidationConfigView'));
 const ValidationRequestsView = lazy(() => import('./ValidationRequestsView'));
+const AgentHubView = lazy(() => import('./AgentHubView'));
 
 const SectionLoader = () => (
   <div className="flex flex-col items-center justify-center h-48 gap-4" role="status" aria-live="polite">
@@ -88,25 +89,34 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [rejectedSales, setRejectedSales] = useState(0);
   const [todaySales, setTodaySales] = useState(0);
   const [monthRevenue, setMonthRevenue] = useState(0);
+  const [waStatus, setWaStatus] = useState<'disconnected'|'qr'|'authenticating'|'connected'>('disconnected');
+  const [recentMessages, setRecentMessages] = useState<any[]>([]);
 
-  const loadStats = () => {
-    const users: any[] = JSON.parse(localStorage.getItem('adhdreams_users') || '[]');
-    const sales: any[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-    setUserCount(users.length || 0);
-    setSaleCount(sales.length || 0);
-    setPendingSales(sales.filter((s: any) => (s.status || 'PENDIENTE') === 'PENDIENTE').length);
-    setApprovedSales(sales.filter((s: any) => s.status === 'APROBADA' || s.status === 'PROCEDIO').length);
-    setRejectedSales(sales.filter((s: any) => s.status === 'RECHAZADA').length);
+  const loadStats = async () => {
+    try {
+      const [usersRes, ventasRes] = await Promise.all([
+        fetch('/api/users'),
+        fetch('/api/ventas'),
+      ]);
+      const users: any[] = usersRes.ok ? await usersRes.json() : [];
+      const sales: any[] = ventasRes.ok ? await ventasRes.json() : [];
 
-    const today = new Date().toISOString().split('T')[0];
-    setTodaySales(sales.filter((s: any) => (s.fechaSolicitud || '').startsWith(today)).length);
+      setUserCount(users.length || 0);
+      setSaleCount(sales.length || 0);
+      setPendingSales(sales.filter((s: any) => (s.status || 'pendiente') === 'pendiente').length);
+      setApprovedSales(sales.filter((s: any) => s.status === 'aprobada' || s.status === 'procedio').length);
+      setRejectedSales(sales.filter((s: any) => s.status === 'rechazada').length);
 
-    const now = new Date();
-    const monthSales = sales.filter((s: any) => {
-      const d = new Date(s.fechaSolicitud || 0);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    });
-    setMonthRevenue(monthSales.reduce((sum: number, s: any) => sum + (Number(s.rentaMensual) || 0), 0));
+      const today = new Date().toISOString().split('T')[0];
+      setTodaySales(sales.filter((s: any) => (s.fecha_solicitud || s.created_at || '').startsWith(today)).length);
+
+      const now = new Date();
+      const monthSales = sales.filter((s: any) => {
+        const d = new Date(s.fecha_solicitud || s.created_at || 0);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      });
+      setMonthRevenue(monthSales.reduce((sum: number, s: any) => sum + (Number(s.renta_mensual) || 0), 0));
+    } catch { /* silencioso - puede estar offline */ }
   };
 
   useEffect(() => {
@@ -114,9 +124,20 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       setTime(new Date().toLocaleTimeString('es-ES', { hour12: false }));
     }, 1000);
     loadStats();
-    // Refresh stats every 5s in case the user makes changes in other views
-    const statsTimer = setInterval(loadStats, 5000);
-    return () => { clearInterval(timer); clearInterval(statsTimer); };
+    const loadChannels = async () => {
+      try {
+        const [ws, msgs] = await Promise.all([
+          fetch('/api/whatsapp/status').then(r => r.ok ? r.json() : null),
+          fetch('/api/whatsapp/messages').then(r => r.ok ? r.json() : []),
+        ]);
+        if (ws) setWaStatus(ws.status);
+        setRecentMessages((msgs as any[]).slice(-5).reverse());
+      } catch {}
+    };
+    loadChannels();
+    const statsTimer = setInterval(loadStats, 8000);
+    const channelTimer = setInterval(loadChannels, 12000);
+    return () => { clearInterval(timer); clearInterval(statsTimer); clearInterval(channelTimer); };
   }, []);
 
   const userName = currentUser?.displayName || 'Usuario';
@@ -128,8 +149,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   return (
     <div className="flex h-[100dvh] w-full text-white relative z-10 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 bg-[#0A0D14] border-r border-slate-800/80 hidden md:flex flex-col relative z-20">
-        <NetworkPattern opacity={0.08} density={45} speed={0.2} color="#FFFFFF" className="z-0" />
+      <aside className="w-64 bg-cyber-black/60 backdrop-blur-sm border-r border-slate-800/80 hidden md:flex flex-col relative z-20">
         
         <div className="h-28 flex flex-col items-center justify-center px-6 relative overflow-hidden border-b border-yellow-400/10 gap-3 z-10">
           <Logo className="w-12 h-12 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] hover:scale-110 transition-transform duration-500" />
@@ -214,6 +234,12 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             </NavGroup>
           )}
 
+          {['GERENTE', 'SUPERVISOR'].includes(role) && (
+            <NavGroup label="Agentes IA">
+              <NavItem icon={Bot} color="purple" label="Hub de Agentes" active={activeSection === 'Hub de Agentes'} onClick={() => setActiveSection('Hub de Agentes')} />
+            </NavGroup>
+          )}
+
           {role === 'GERENTE' && (
             <NavGroup label="Gerencia">
               <NavItem icon={MapPin} color="cyan" label="Territorios" active={activeSection === 'Territorios'} onClick={() => setActiveSection('Territorios')} />
@@ -254,7 +280,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <NetworkPattern opacity={0.04} density={30} speed={0.15} color="#FFFFFF" className="z-0" />
         
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
@@ -380,6 +405,76 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   </>}
                 </div>
               </div>
+
+              {/* ── SYNC RELAYS: Canal Status + Mensajes Recientes ── */}
+              {['GERENTE', 'SUPERVISOR'].includes(role) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* WhatsApp panel */}
+                  <div className="bg-[#0a0d14] border border-slate-800/80 rounded-[14px] p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${waStatus === 'connected' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : waStatus === 'qr' ? 'bg-yellow-400 animate-pulse' : 'bg-slate-600'}`} />
+                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">WhatsApp</h4>
+                        <span className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full ${
+                          waStatus === 'connected' ? 'bg-emerald-400/10 text-emerald-400' :
+                          waStatus === 'qr' ? 'bg-yellow-400/10 text-yellow-400' :
+                          'bg-slate-700 text-slate-500'
+                        }`}>{waStatus}</span>
+                      </div>
+                      <button
+                        onClick={() => setActiveSection('Integraciones')}
+                        className="text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
+                      >
+                        Gestionar <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {recentMessages.length === 0 ? (
+                      <p className="text-xs text-slate-600 italic">Sin mensajes recientes</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {recentMessages.map((m: any) => (
+                          <div key={m.id} className="flex gap-2 items-start">
+                            <div className="w-6 h-6 rounded-full bg-emerald-400/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <MessageSquare className="w-3 h-3 text-emerald-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-bold text-white truncate">{m.fromName}</p>
+                              <p className="text-[10px] text-slate-400 truncate">{m.body}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setActiveSection('Hub de Agentes')}
+                      className="w-full text-[9px] text-emerald-400 border border-emerald-400/20 rounded-lg py-1.5 hover:bg-emerald-400/5 transition-colors font-bold uppercase tracking-widest"
+                    >
+                      Ver en Hub de Agentes
+                    </button>
+                  </div>
+
+                  {/* Telegram placeholder */}
+                  <div className="bg-[#0a0d14] border border-slate-800/80 rounded-[14px] p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-slate-600" />
+                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Telegram</h4>
+                        <span className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-slate-700 text-slate-500">pendiente</span>
+                      </div>
+                      <button
+                        onClick={() => setActiveSection('Config. Llamadas')}
+                        className="text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
+                      >
+                        Configurar <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500">Configura el Bot Token de Telegram en Ajustes → Integraciones para recibir mensajes aquí.</p>
+                    <div className="bg-blue-400/5 border border-blue-400/20 rounded-xl p-3">
+                      <p className="text-[10px] text-blue-300 font-mono">@BotFather → /newbot → Token → Ajustes</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -411,10 +506,11 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Base SIAC' && <SIACView />}
             {activeSection === 'Validaciones' && <ValidationRequestsView />}
             {activeSection === 'Config. Llamadas' && <ValidationConfigView />}
+            {activeSection === 'Hub de Agentes' && <AgentHubView />}
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Contratos', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Cotizador Rápido', 'Scripts de Venta', 'Historial por Zona', 'Referidos', 'Analytics', 'Equipo y Metas', 'Comisiones', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Contratos', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Cotizador Rápido', 'Scripts de Venta', 'Historial por Zona', 'Referidos', 'Analytics', 'Equipo y Metas', 'Comisiones', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>

@@ -82,8 +82,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] w-full max-w-[420px] mx-auto bg-cyber-black/90 backdrop-blur-2xl border-x border-cyber-electric/20 relative z-10 shadow-[0_0_50px_rgba(3,154,220,0.1)] overflow-hidden">
-      <NetworkPattern opacity={0.08} density={40} color="#FFFFFF" className="z-0" />
+    <div className="flex flex-col h-[100dvh] w-full max-w-[420px] mx-auto border-x border-cyber-electric/20 relative z-10 shadow-[0_0_50px_rgba(3,154,220,0.1)] overflow-hidden">
       
       {/* Mobile Header */}
       <header className="px-4 sm:px-6 pt-6 sm:pt-12 pb-3 sm:pb-4 flex justify-between items-center bg-gradient-to-b from-cyber-black to-transparent shrink-0 relative z-20">
@@ -147,8 +146,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
 
       {/* Full Screen Menu Overlay */}
       {showMenu && (
-        <div className="absolute inset-0 z-40 bg-cyber-black/95 backdrop-blur-xl flex flex-col pt-24 px-6 pb-24 animate-in fade-in zoom-in-95 duration-200">
-          <NetworkPattern opacity={0.12} density={60} color="#FFFFFF" className="z-0" />
+        <div className="absolute inset-0 z-40 bg-cyber-black/70 backdrop-blur-xl flex flex-col pt-24 px-6 pb-24 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex justify-between items-center mb-8 relative z-10">
             <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyber-neon to-cyber-electric uppercase tracking-wide">Menú Principal</h2>
             <button onClick={() => setShowMenu(false)} className="p-2 bg-cyber-electric/10 hover:bg-cyber-neon/20 border border-cyber-electric/30 hover:border-cyber-neon/50 rounded text-cyber-neon transition-all">

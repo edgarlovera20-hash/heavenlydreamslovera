@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { migrateLocalStorageToDb } from './services/db';
 import ShaderBackground from './components/ui/shader-background';
 const ManagerView = lazy(() => import('./components/views/ManagerView'));
 const MobileUserView = lazy(() => import('./components/views/MobileUserView'));
@@ -38,6 +39,9 @@ export default function App() {
   const [showProfileWidget, setShowProfileWidget] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  // Migrate localStorage data to DB on first load
+  useEffect(() => { migrateLocalStorageToDb().catch(() => {}); }, []);
 
   // Restore session from localStorage on mount
   useEffect(() => {
@@ -437,7 +441,7 @@ export default function App() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder={pendingRole === 'GERENTE' ? 'admin' : 'vendedor'}
+                  placeholder="usuario"
                 />
               </div>
               

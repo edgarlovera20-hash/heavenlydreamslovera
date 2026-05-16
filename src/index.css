@@ -62,7 +62,7 @@ html.light {
   }
 
   .glass-panel {
-    @apply bg-cyber-dark/40 backdrop-blur-xl border border-cyber-electric/30 shadow-[0_4px_30px_rgba(3,154,220,0.1)];
+    @apply bg-cyber-dark/80 backdrop-blur-xl border border-cyber-electric/30 shadow-[0_4px_30px_rgba(3,154,220,0.1)];
   }
 
   /* Light mode overrides for glass */
@@ -71,7 +71,7 @@ html.light {
   }
 
   .glass-panel-neon {
-    @apply bg-cyber-dark/60 backdrop-blur-xl border border-cyber-neon/50 shadow-[0_0_20px_rgba(0,229,255,0.2)];
+    @apply bg-cyber-dark/85 backdrop-blur-xl border border-cyber-neon/50 shadow-[0_0_20px_rgba(0,229,255,0.2)];
   }
   
   .light .glass-panel-neon {
