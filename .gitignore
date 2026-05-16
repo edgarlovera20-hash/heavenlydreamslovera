@@ -43,5 +43,9 @@ Thumbs.db
 *.pem
 *.key
 
+# SQLite WAL / SHM (runtime files, not source)
+data/*.db-wal
+data/*.db-shm
+
 # Claude worktrees
 .claude/worktrees/

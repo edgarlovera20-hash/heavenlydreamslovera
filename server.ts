@@ -4,7 +4,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { initWhatsApp, getWhatsAppStatus, getWhatsAppQR, sendWhatsAppMessage, logoutWhatsApp, getRecentMessages } from "./server/whatsapp";
 import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
-import { runVisionOCR } from "./server/vision";
+import { runOllamaOCRVerbose, checkOllamaStatus } from "./server/ollama-ocr";
 import db, {
   Users, Ventas, SiacRecords, Tickets, AuditLog, Settings,
   Referrals, Quotas, CommissionRules, PackageCatalog,
@@ -767,11 +767,17 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
-  // ── VISION OCR ─────────────────────────────────────────────
+  // ── OCR LOCAL (Ollama + LLaVA) ─────────────────────────────
   app.post("/api/vision/ocr", wrap(async (req: any, res: any) => {
     const { image } = req.body;
     if (!image) return res.status(400).json({ error: 'Falta el campo image' });
-    res.json({ text: await runVisionOCR(image) });
+    const result = await runOllamaOCRVerbose(image);
+    res.json({ text: result.text, fields: result.fields, durationMs: result.durationMs });
+  }));
+
+  app.get("/api/vision/status", wrap(async (_req: any, res: any) => {
+    const status = await checkOllamaStatus();
+    res.json(status);
   }));
 
   // ── VITE / STATIC ─────────────────────────────────────────
@@ -780,8 +786,13 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
+    // Hashed assets (JS/CSS chunks) can be cached for 1 year; index.html must not be cached
+    app.use('/assets', express.static(path.join(distPath, 'assets'), { maxAge: '1y', immutable: true }));
+    app.use(express.static(distPath, { maxAge: 0 }));
+    app.get('*', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
   }
 
   // Auto-import SIAC CSV on startup if table is empty

@@ -233,6 +233,25 @@ db.exec(`
   );
 `);
 
+// ─── INDEXES ──────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_ventas_asesor    ON ventas (asesor_id);
+  CREATE INDEX IF NOT EXISTS idx_ventas_status    ON ventas (status);
+  CREATE INDEX IF NOT EXISTS idx_ventas_created   ON ventas (created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ventas_zona      ON ventas (zona);
+  CREATE INDEX IF NOT EXISTS idx_siac_estatus     ON siac_records (estatus_siac);
+  CREATE INDEX IF NOT EXISTS idx_siac_promotor    ON siac_records (promotor);
+  CREATE INDEX IF NOT EXISTS idx_audit_created    ON audit_log (created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_audit_user       ON audit_log (user_id);
+  CREATE INDEX IF NOT EXISTS idx_audit_entidad    ON audit_log (entidad, entidad_id);
+  CREATE INDEX IF NOT EXISTS idx_tickets_status   ON tickets (status);
+  CREATE INDEX IF NOT EXISTS idx_tickets_asesor   ON tickets (asesor_id);
+  CREATE INDEX IF NOT EXISTS idx_nominas_asesor   ON nominas (asesor_id);
+  CREATE INDEX IF NOT EXISTS idx_referrals_by     ON referrals (referred_by);
+  CREATE INDEX IF NOT EXISTS idx_valreq_sale      ON validation_requests (sale_id);
+  CREATE INDEX IF NOT EXISTS idx_valreq_status    ON validation_requests (status);
+`);
+
 // Seed admin user if no users exist
 const userCount = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c;
 if (userCount === 0) {
