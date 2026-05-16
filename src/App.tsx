@@ -73,39 +73,6 @@ export default function App() {
     setIsLoading(false);
   }, []);
 
-  // Simulator for critical Push Notifications
-  useEffect(() => {
-    if (!role) return;
-
-    // Simulate different alerts based on role
-    const interval = setInterval(() => {
-      const isTicketEvent = Math.random() > 0.5;
-      
-      if (isTicketEvent && (role === 'SUPERVISOR' || role === 'GERENTE' || role === 'ASESOR')) {
-        const statuses = ['EN PROGRESO', 'RESUELTO', 'CERRADO'];
-        const priorities = ['ALTA', 'URGENTE'];
-        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-        const randomPriority = priorities[Math.floor(Math.random() * priorities.length)];
-        const id = Math.floor(1000 + Math.random() * 9000);
-        
-        sendPushNotification('📝 Actualización de Ticket', {
-          body: `El estado del Ticket TK-${id} (Prioridad ${randomPriority}) cambió a ${randomStatus}.`,
-          type: 'info'
-        });
-      } else if (role === 'SUPERVISOR' || role === 'GERENTE') {
-        const anomalies = ['Firma no coincide', 'Monto sospechoso', 'Documento expirado', 'Texto borroso o ilegible'];
-        const randomAnomaly = anomalies[Math.floor(Math.random() * anomalies.length)];
-        const client = ['María García', 'Juan Pérez', 'Roberto Gómez', 'Ana López'][Math.floor(Math.random() * 4)];
-        
-        sendPushNotification('⚠️ Anomalía Detectada (IA)', {
-          body: `Alerta en documentación del cliente ${client}: ${randomAnomaly}. Requiere validación manual.`,
-          type: 'warning'
-        });
-      }
-    }, 45000); // Trigger every 45 Seconds for demo purposes
-
-    return () => clearInterval(interval);
-  }, [role]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768); // Use md breakpoint for mobile mode

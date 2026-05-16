@@ -16,20 +16,8 @@ interface SupportTicket {
   agente: string;
 }
 
-const initialTickets: SupportTicket[] = [
-  { id: 'TK-1001', cliente: 'María García', telefono: '5512345678', asunto: 'Sin servicio de internet', estado: 'ABIERTO', prioridad: 'ALTA', fecha: '2026-04-15 08:30', agente: 'Sin asignar' },
-  { id: 'TK-1002', cliente: 'Juan Pérez', telefono: '5587654321', asunto: 'Lentitud en navegación', estado: 'EN PROGRESO', prioridad: 'MEDIA', fecha: '2026-04-14 15:45', agente: 'Carlos Ruiz' },
-  { id: 'TK-1003', cliente: 'Ana López', telefono: '5544332211', asunto: 'Cambio de domicilio', estado: 'RESUELTO', prioridad: 'MEDIA', fecha: '2026-04-13 11:20', agente: 'Laura Martínez' },
-  { id: 'TK-1004', cliente: 'Roberto Gómez', telefono: '5599887766', asunto: 'Falla en línea telefónica', estado: 'ABIERTO', prioridad: 'ALTA', fecha: '2026-04-15 09:15', agente: 'Sin asignar' },
-  { id: 'TK-1005', cliente: 'Carmen Sánchez', telefono: '5511223344', asunto: 'Duda sobre facturación', estado: 'CERRADO', prioridad: 'BAJA', fecha: '2026-04-10 10:00', agente: 'Carlos Ruiz' },
-  { id: 'TK-1006', cliente: 'Luis Torres', telefono: '5522334455', asunto: 'Configuración de módem', estado: 'EN PROGRESO', prioridad: 'MEDIA', fecha: '2026-04-14 16:30', agente: 'Laura Martínez' },
-  { id: 'TK-1007', cliente: 'Patricia Díaz', telefono: '5533445566', asunto: 'Intermitencia en el servicio', estado: 'ABIERTO', prioridad: 'ALTA', fecha: '2026-04-15 10:05', agente: 'Sin asignar' },
-  { id: 'TK-1008', cliente: 'Jorge Morales', telefono: '5544556677', asunto: 'Solicitud de Claro Video', estado: 'RESUELTO', prioridad: 'BAJA', fecha: '2026-04-12 14:20', agente: 'Carlos Ruiz' },
-  { id: 'TK-1009', cliente: 'Rosa Vargas', telefono: '5555667788', asunto: 'No reconoce cargo', estado: 'EN PROGRESO', prioridad: 'ALTA', fecha: '2026-04-14 09:10', agente: 'Laura Martínez' },
-  { id: 'TK-1010', cliente: 'Miguel Ángel', telefono: '5566778899', asunto: 'Cambio de contraseña WiFi', estado: 'CERRADO', prioridad: 'BAJA', fecha: '2026-04-11 11:45', agente: 'Carlos Ruiz' },
-  { id: 'TK-1011', cliente: 'Teresa Mendoza', telefono: '5577889900', asunto: 'Cancelación de servicio', estado: 'ABIERTO', prioridad: 'ALTA', fecha: '2026-04-15 11:30', agente: 'Sin asignar' },
-  { id: 'TK-1012', cliente: 'Fernando Ruiz', telefono: '5588990011', asunto: 'Aumento de velocidad', estado: 'RESUELTO', prioridad: 'MEDIA', fecha: '2026-04-13 16:15', agente: 'Laura Martínez' },
-];
+
+const tickets: SupportTicket[] = JSON.parse(localStorage.getItem('adhdreams_tickets') || '[]');
 
 export default function CustomerSupport() {
   const [search, setSearch] = useState('');
@@ -75,7 +63,7 @@ export default function CustomerSupport() {
   };
 
   const filteredData = useMemo(() => {
-    return initialTickets.filter(item => {
+    return tickets.filter(item => {
       const { search: q, estado: e, prioridad: p } = appliedFilters;
       const matchGlobal = item.id.toLowerCase().includes(q) || item.cliente.toLowerCase().includes(q) || item.telefono.includes(q);
       const matchEstado = e === "" || item.estado === e;

@@ -38,20 +38,7 @@ const columnsConfig = [
   { id: 'serv', label: 'TIPO SERVICIO' }
 ];
 
-const initialData: SaleRecord[] = [
-  { estatus: 'POSTEADA', fCap: '2026-04-14', folio: '9876543', proceso: 'Fibra', paquete: '100 MB', tCli: 'Nuevo', estra: 'Promo Primavera', promId: '4552', promNom: 'Juan Pérez', orden: '100293', tel: '5512345678', fPos: '2026-04-15', pisa: 'Terminado', serv: 'Internet' },
-  { estatus: 'PROCESO', fCap: '2026-04-15', folio: '9876550', proceso: 'Cobre', paquete: 'Básico', tCli: 'Existente', estra: 'Retención', promId: '3321', promNom: 'Ana López', orden: '100294', tel: '5587654321', fPos: '', pisa: 'En Curso', serv: 'Telefonía' },
-  { estatus: 'CANCELADA', fCap: '2026-04-10', folio: '9876111', proceso: 'Fibra', paquete: '200 MB', tCli: 'Nuevo', estra: 'Venta Directa', promId: '1102', promNom: 'Carlos Ruiz', orden: '100299', tel: '5544332211', fPos: '', pisa: 'Cancelado', serv: 'Internet' },
-  { estatus: 'PAGADO', fCap: '2026-04-12', folio: '9876222', proceso: 'Fibra', paquete: '500 MB', tCli: 'Nuevo', estra: 'Promo Verano', promId: '4552', promNom: 'Juan Pérez', orden: '100300', tel: '5599887766', fPos: '2026-04-13', pisa: 'Terminado', serv: 'Internet' },
-  { estatus: 'NO ELABORADA', fCap: '2026-04-16', folio: '9876333', proceso: 'Cobre', paquete: '100 MB', tCli: 'Nuevo', estra: 'Venta Directa', promId: '8899', promNom: 'María Gómez', orden: '', tel: '5511223344', fPos: '', pisa: 'Pendiente', serv: 'Internet' },
-  { estatus: 'POSTEADA', fCap: '2026-04-16', folio: '9876444', proceso: 'Fibra', paquete: '300 MB', tCli: 'Portabilidad', estra: 'Promo Primavera', promId: '4552', promNom: 'Juan Pérez', orden: '100301', tel: '5522334455', fPos: '2026-04-17', pisa: 'Terminado', serv: 'Doble Play' },
-  { estatus: 'PROCESO', fCap: '2026-04-17', folio: '9876555', proceso: 'Fibra', paquete: '100 MB', tCli: 'Nuevo', estra: 'Venta Directa', promId: '3321', promNom: 'Ana López', orden: '100302', tel: '5533445566', fPos: '', pisa: 'En Curso', serv: 'Internet' },
-  { estatus: 'PAGADO', fCap: '2026-04-11', folio: '9876666', proceso: 'Cobre', paquete: 'Básico', tCli: 'Existente', estra: 'Retención', promId: '1102', promNom: 'Carlos Ruiz', orden: '100303', tel: '5544556677', fPos: '2026-04-12', pisa: 'Terminado', serv: 'Telefonía' },
-  { estatus: 'CANCELADA', fCap: '2026-04-13', folio: '9876777', proceso: 'Fibra', paquete: '500 MB', tCli: 'Nuevo', estra: 'Promo Verano', promId: '8899', promNom: 'María Gómez', orden: '100304', tel: '5555667788', fPos: '', pisa: 'Cancelado', serv: 'Internet' },
-  { estatus: 'POSTEADA', fCap: '2026-04-14', folio: '9876888', proceso: 'Fibra', paquete: '200 MB', tCli: 'Portabilidad', estra: 'Promo Primavera', promId: '4552', promNom: 'Juan Pérez', orden: '100305', tel: '5566778899', fPos: '2026-04-15', pisa: 'Terminado', serv: 'Doble Play' },
-  { estatus: 'PROCESO', fCap: '2026-04-15', folio: '9876999', proceso: 'Cobre', paquete: '100 MB', tCli: 'Nuevo', estra: 'Venta Directa', promId: '3321', promNom: 'Ana López', orden: '100306', tel: '5577889900', fPos: '', pisa: 'En Curso', serv: 'Internet' },
-  { estatus: 'PAGADO', fCap: '2026-04-16', folio: '9877000', proceso: 'Fibra', paquete: '300 MB', tCli: 'Existente', estra: 'Retención', promId: '1102', promNom: 'Carlos Ruiz', orden: '100307', tel: '5588990011', fPos: '2026-04-17', pisa: 'Terminado', serv: 'Doble Play' }
-];
+const initialData: SaleRecord[] = JSON.parse(localStorage.getItem('adhdreams_siac_records') || '[]');
 
 export default function ConsultasSeguimiento() {
   // Input states

@@ -81,20 +81,12 @@ export default function ContractsManager() {
   const processFiles = (newFiles: File[]) => {
     if (!selectedContract || newFiles.length === 0) return;
     const fileNames = newFiles.map(f => f.name).join(', ');
-    setIsVerifyingFile(true);
+    setIsVerifyingFile(false);
     setUploadError(null);
-    setTimeout(() => {
-      setIsVerifyingFile(false);
-      const isManipulated = Math.random() < 0.15;
-      if (isManipulated) {
-        setUploadError(`Alerta IA: El documento "${fileNames}" contiene anomalías o evidencia de haber sido alterado digitalmente. Sube un documento original.`);
-        return;
-      }
-      setAttachmentsByContract(prev => ({
-        ...prev,
-        [selectedContract.id]: [...(prev[selectedContract.id] || []), ...newFiles],
-      }));
-    }, 2500);
+    setAttachmentsByContract(prev => ({
+      ...prev,
+      [selectedContract.id]: [...(prev[selectedContract.id] || []), ...newFiles],
+    }));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
