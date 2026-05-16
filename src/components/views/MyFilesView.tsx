@@ -677,7 +677,7 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
 // ──────────────────────────────────────────────
 function FolderCard({
   title, subtitle, icon, onClick,
-}: { title: string; subtitle: string; icon: React.ReactNode; onClick: () => void }) {
+}: { key?: React.Key | null; title: string; subtitle: string; icon: React.ReactNode; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -697,7 +697,7 @@ function FolderCard({
 
 function SaleCard({
   sale, promoterName, onClick,
-}: { sale: Sale; promoterName: string; onClick: () => void }) {
+}: { key?: React.Key | null; sale: Sale; promoterName: string; onClick: () => void }) {
   const docs = getDocsForSale(sale);
   const uploaded = docs.filter(d => Boolean(sale[d.id])).length;
   const total = docs.length;
@@ -751,6 +751,7 @@ function SaleCard({
 function DocCard({
   doc, uploaded, analyzing, validation, onUpload,
 }: {
+  key?: React.Key | null;
   doc: DocumentDef;
   uploaded: boolean;
   analyzing: boolean;

@@ -165,7 +165,7 @@ export default function DataManagerView() {
     finally { setClearing(null); }
   };
 
-  const totalRecords = Object.values(stats).reduce((a, b) => a + b, 0);
+  const totalRecords = Object.values(stats).reduce((a: number, b) => a + (b as number), 0);
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">

@@ -107,7 +107,7 @@ async function startServer() {
   app.post("/api/ventas", wrap((req: any, res: any) => {
     const data = {
       id: randomUUID(), status: 'pendiente',
-      metadata: null, folio: null, ...req.body,
+      folio: null, ...req.body,
       metadata: req.body.metadata ? JSON.stringify(req.body.metadata) : null,
     };
     Ventas.create(data);
@@ -448,7 +448,7 @@ async function startServer() {
       if (body.startsWith('folio ') || body.startsWith('consulta ') || body.includes('estatus ')) {
         const folioMatch = msg.body.match(/\b(\d{6,})\b/);
         if (folioMatch) {
-          const record = SiacRecords.getByFolio(folioMatch[1]);
+          const record = SiacRecords.getByFolio(folioMatch[1]) as any;
           const reply = record
             ? `📋 Folio ${record.folio_siac}\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha: ${record.fecha_captura || 'N/D'}`
             : `❌ Folio ${folioMatch[1]} no encontrado en el sistema.`;
