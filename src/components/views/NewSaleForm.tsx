@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, ProductCategory } from '../../configs/package-catalog';
-import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Crosshair, Loader2, MessageCircle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Crosshair, Loader2, MessageCircle, X, ScanLine, Sparkles } from 'lucide-react';
 import { chatUrl } from '../../lib/channels';
 import { cn, formatCurrency } from '../../lib/utils';
 import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
@@ -254,41 +254,82 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     );
   };
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const frenteInputRef = useRef<HTMLInputElement>(null);
+  const reversoInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  // Núcleo del OCR — recibe lista de imágenes (base64) y autorellena.
+  const runOcrOnImages = async (imgs: string[]) => {
+    if (imgs.length === 0) return;
     setIsOcrLoading(true);
     setOcrProgress(0);
     try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64String = reader.result as string;
-        // Save document image in form (base64) so it persists with the sale
-        if (docType === 'ine') {
-          updateForm({ ineFrente: base64String });
-        } else {
-          updateForm({ curpDoc: base64String });
+      const merged: Record<string, string> = {};
+      for (let i = 0; i < imgs.length; i++) {
+        const baseProgress = Math.round((i / imgs.length) * 100);
+        const result = await aiAgent.analyzeDocument(imgs[i], 'image/png', (p) => {
+          setOcrProgress(baseProgress + Math.round(p / imgs.length));
+        });
+        if (result) {
+          for (const [k, v] of Object.entries(result)) {
+            if (v && (!merged[k] || v.length > merged[k].length)) merged[k] = v as string;
+          }
         }
-        const result = await aiAgent.analyzeDocument(base64String, file.type, setOcrProgress);
-        if (result && Object.keys(result).length > 0) {
-          updateForm(result);
-          const found = Object.keys(result).length;
-          toast.success(`OCR completado: ${found} campo${found !== 1 ? 's' : ''} detectado${found !== 1 ? 's' : ''}. Verifica los datos.`);
-        } else {
-          toast.info('No se pudieron extraer datos. Completa los campos manualmente.', { duration: 5000 });
-        }
-        setIsOcrLoading(false);
-        setOcrProgress(0);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error("OCR Error:", err);
-      toast.error('Error al procesar el documento.');
+      }
+      const fields = Object.keys(merged);
+      if (fields.length > 0) {
+        updateForm(merged);
+        toast.success(`OCR completado: ${fields.length} campo${fields.length !== 1 ? 's' : ''} detectado${fields.length !== 1 ? 's' : ''}. Verifica los datos.`);
+      } else {
+        toast.info('No se pudieron extraer datos. Completa los campos manualmente.', { duration: 5000 });
+      }
+    } catch (err: any) {
+      console.error('OCR Error:', err);
+      toast.error(err?.message || 'Error al procesar el documento.', { duration: 7000 });
+    } finally {
       setIsOcrLoading(false);
+      setOcrProgress(0);
     }
+  };
+
+  // Al subir un documento, lo guardamos en el form Y disparamos OCR automáticamente sobre esa imagen.
+  const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => toast.error('No se pudo leer el archivo.');
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+      // Guardar la imagen en el formulario
+      if (slot === 'frente') updateForm({ ineFrente: base64 });
+      else if (slot === 'reverso') updateForm({ ineReverso: base64 });
+      else updateForm({ curpDoc: base64 });
+      // Disparar OCR automático sobre la imagen recién subida
+      await runOcrOnImages([base64]);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  // Botón manual — re-escanea TODAS las imágenes subidas (frente + reverso o curp).
+  const handleScan = async () => {
+    const imgs: string[] = [];
+    if (docType === 'ine') {
+      if (form.ineFrente) imgs.push(form.ineFrente);
+      if (form.ineReverso) imgs.push(form.ineReverso);
+    } else {
+      if (form.curpDoc) imgs.push(form.curpDoc);
+    }
+    if (imgs.length === 0) {
+      toast.error('Sube al menos una imagen antes de escanear.');
+      return;
+    }
+    await runOcrOnImages(imgs);
+  };
+
+  const removeImage = (slot: 'frente' | 'reverso' | 'curp') => {
+    if (slot === 'frente') updateForm({ ineFrente: undefined });
+    else if (slot === 'reverso') updateForm({ ineReverso: undefined });
+    else updateForm({ curpDoc: undefined });
   };
 
   const getCurrentLocation = () => {
@@ -461,43 +502,65 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                 </button>
               </div>
 
-              {isOcrLoading ? (
-                <div className="py-12 flex flex-col items-center justify-center border-2 border-dashed border-blue-500/50 bg-blue-500/10 rounded-xl animate-in fade-in duration-300">
-                  <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4" />
-                  <span className="font-medium text-lg text-blue-400 mb-2">Escaneando documento…</span>
-                  <span className="text-sm text-blue-300/70 text-center px-4">Tesseract analizando los campos del {docType === 'ine' ? 'INE' : 'CURP'}</span>
-                  {ocrProgress > 0 && (
-                    <div className="w-64 h-2 bg-blue-500/20 rounded-full mt-4 overflow-hidden">
-                      <div className="h-full bg-blue-500 transition-all duration-200" style={{ width: `${ocrProgress}%` }} />
-                    </div>
-                  )}
-                  {ocrProgress > 0 && (
-                    <span className="text-xs text-blue-300 mt-2 font-mono">{ocrProgress}%</span>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    onChange={handleFileUpload} 
-                    accept="image/*" 
-                    className="hidden" 
+              {/* Inputs ocultos para cada slot */}
+              <input type="file" ref={frenteInputRef} onChange={handleFileSelect(docType === 'ine' ? 'frente' : 'curp')} accept="image/*" className="hidden" />
+              <input type="file" ref={reversoInputRef} onChange={handleFileSelect('reverso')} accept="image/*" className="hidden" />
+
+              {/* Zonas de carga con preview */}
+              <div className={cn('grid gap-4', docType === 'ine' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1')}>
+                <UploadSlot
+                  title={docType === 'ine' ? 'Frente de INE' : 'Documento CURP'}
+                  image={docType === 'ine' ? form.ineFrente : form.curpDoc}
+                  onPick={() => frenteInputRef.current?.click()}
+                  onRemove={() => removeImage(docType === 'ine' ? 'frente' : 'curp')}
+                  disabled={isOcrLoading}
+                />
+                {docType === 'ine' && (
+                  <UploadSlot
+                    title="Reverso de INE"
+                    image={form.ineReverso}
+                    onPick={() => reversoInputRef.current?.click()}
+                    onRemove={() => removeImage('reverso')}
+                    disabled={isOcrLoading}
                   />
-                  <div className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center hover:bg-slate-900/90 transition-colors cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="w-8 h-8 text-slate-500 mx-auto mb-3" />
-                    <p className="text-sm text-slate-300 font-medium">Subir {docType === 'ine' ? 'Frente de INE' : 'Documento CURP'}</p>
-                    <p className="text-xs text-slate-500 mt-1">Escaneo por IA activa</p>
+                )}
+              </div>
+
+              {/* Botón Escanear / Estado del escaneo */}
+              {(() => {
+                const hasImages = docType === 'ine'
+                  ? Boolean(form.ineFrente || form.ineReverso)
+                  : Boolean(form.curpDoc);
+                if (!hasImages) return null;
+                return (
+                  <div className="mt-5">
+                    {isOcrLoading ? (
+                      <div className="bg-gradient-to-r from-blue-600/20 via-blue-500/15 to-blue-600/20 border border-blue-500/30 rounded-2xl p-5 flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
+                          <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold text-blue-300 mb-1">Escaneando con Google Vision…</div>
+                          <div className="w-full h-2 bg-blue-500/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-200" style={{ width: `${Math.max(5, ocrProgress)}%` }} />
+                          </div>
+                        </div>
+                        <span className="font-mono text-xs text-blue-300 shrink-0">{ocrProgress}%</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleScan}
+                        className="group w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-blue-500/30 ring-1 ring-white/10"
+                      >
+                        <ScanLine className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        <span>Volver a escanear con IA</span>
+                        <Sparkles className="w-4 h-4 opacity-80" />
+                      </button>
+                    )}
                   </div>
-                  {docType === 'ine' && (
-                    <div className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center hover:bg-slate-900/90 transition-colors cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                      <Upload className="w-8 h-8 text-slate-500 mx-auto mb-3" />
-                      <p className="text-sm text-slate-300 font-medium">Subir Reverso de INE</p>
-                      <p className="text-xs text-slate-500 mt-1">Escaneo por IA activa</p>
-                    </div>
-                  )}
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Datos Personales */}
@@ -1281,5 +1344,67 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
 
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// UploadSlot — zona de carga con preview
+// Antes de subir: dropzone con icono
+// Después: miniatura con botón remove + re-subir
+// ─────────────────────────────────────────────
+function UploadSlot({
+  title,
+  image,
+  onPick,
+  onRemove,
+  disabled,
+}: {
+  title: string;
+  image?: string;
+  onPick: () => void;
+  onRemove: () => void;
+  disabled?: boolean;
+}) {
+  if (image) {
+    return (
+      <div className="relative group rounded-xl overflow-hidden border border-emerald-500/30 bg-emerald-500/5">
+        <img src={image} alt={title} className="w-full h-44 object-contain bg-slate-950" />
+        <div className="absolute inset-x-0 top-0 p-2 flex items-start justify-between gap-2 bg-gradient-to-b from-black/80 to-transparent">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+            <CheckCircle2 className="w-3 h-3" />
+            {title}
+          </div>
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={disabled}
+            title="Eliminar"
+            className="p-1.5 bg-black/60 hover:bg-red-500/80 rounded-md text-white transition-colors disabled:opacity-40"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={onPick}
+          disabled={disabled}
+          className="absolute inset-x-0 bottom-0 p-2 text-[11px] font-medium text-slate-200 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
+        >
+          Cambiar imagen
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      disabled={disabled}
+      className="border-2 border-dashed border-slate-700 hover:border-blue-500/60 hover:bg-blue-500/5 rounded-xl p-8 text-center transition-colors flex flex-col items-center justify-center min-h-[176px] disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      <Upload className="w-8 h-8 text-slate-500 mb-3" />
+      <p className="text-sm text-slate-300 font-medium">Subir {title}</p>
+      <p className="text-xs text-slate-500 mt-1">Escaneo por IA activa</p>
+    </button>
   );
 }
