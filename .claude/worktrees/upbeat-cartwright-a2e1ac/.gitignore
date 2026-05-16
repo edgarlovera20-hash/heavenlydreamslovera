@@ -34,7 +34,3 @@ Thumbs.db
 
 # Vite cache
 .vite/
-
-# WhatsApp Web session
-.wwebjs_auth/
-.wwebjs_cache/

@@ -1,13 +1,12 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { initWhatsApp, getWhatsAppStatus, getWhatsAppQR, sendWhatsAppMessage, logoutWhatsApp } from "./server/whatsapp";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json());
 
   // ================= API ROUTES (CRM) =================
   let users = [
@@ -15,7 +14,10 @@ async function startServer() {
     { id: 2, name: "Supervisor 1", role: "Supervisor" },
   ];
 
-  let leads: any[] = [];
+  let leads: any[] = [
+    { id: 101, name: "Juan Pérez", phone: "5512345678", status: "nuevo" },
+    { id: 102, name: "María García", phone: "5598765432", status: "seguimiento" },
+  ];
 
   app.get("/api/users", (req, res) => {
     res.json(users);
@@ -36,46 +38,6 @@ async function startServer() {
       l.id == parseInt(req.params.id) ? { ...l, ...req.body } : l
     );
     res.json({ ok: true });
-  });
-
-  // ================= WHATSAPP ROUTES =================
-  app.get("/api/whatsapp/status", (req, res) => {
-    res.json(getWhatsAppStatus());
-  });
-
-  app.get("/api/whatsapp/qr", (req, res) => {
-    res.json({ qr: getWhatsAppQR(), status: getWhatsAppStatus() });
-  });
-
-  app.post("/api/whatsapp/init", async (req, res) => {
-    try {
-      await initWhatsApp();
-      res.json({ ok: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/whatsapp/send", async (req, res) => {
-    const { phone, message } = req.body;
-    if (!phone || !message) {
-      return res.status(400).json({ error: 'phone y message son requeridos' });
-    }
-    try {
-      const result = await sendWhatsAppMessage(phone, message);
-      res.json(result);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/whatsapp/logout", async (req, res) => {
-    try {
-      await logoutWhatsApp();
-      res.json({ ok: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
   });
 
   // ================= VITE MIDDLEWARE =================
