@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { randomUUID } from "crypto";
 import { initWhatsApp, getWhatsAppStatus, getWhatsAppQR, sendWhatsAppMessage, logoutWhatsApp, getRecentMessages } from "./server/whatsapp";
+import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
 import { runVisionOCR } from "./server/vision";
 import db, {
   Users, Ventas, SiacRecords, Tickets, AuditLog, Settings,
@@ -72,7 +73,10 @@ async function startServer() {
   app.get("/api/users", wrap((_req: any, res: any) => res.json(Users.getAll())));
 
   app.post("/api/users", wrap((req: any, res: any) => {
-    const data = { uid: randomUUID(), activo: 1, ...req.body };
+    // Si viene de registro público usa activo=2 (pendiente); si lo crea un admin usa activo=1
+    const defaultActivo = req.body.fromRegistration ? 2 : 1;
+    const { fromRegistration: _fr, ...body } = req.body;
+    const data = { uid: randomUUID(), activo: defaultActivo, ...body };
     Users.create(data);
     AuditLog.insert({ accion: 'CREATE_USER', entidad: 'users', entidad_id: data.uid, user_id: req.body.createdBy || null, user_nombre: data.nombre, detalle: null });
     res.json(Users.getById(data.uid));
@@ -88,14 +92,76 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
-  // Login simple (username + password)
-  app.post("/api/auth/login", wrap((req: any, res: any) => {
+  // ── Verificación de password SHA-256 (compatible con plain text legacy) ──
+  async function checkPassword(plain: string, stored: string): Promise<boolean> {
+    if (!stored) return false;
+    // SHA-256 hash (64 hex chars)
+    if (/^[a-f0-9]{64}$/i.test(stored)) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain));
+      const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+      return hash === stored;
+    }
+    return plain === stored;
+  }
+
+  // Login
+  app.post("/api/auth/login", wrap(async (req: any, res: any) => {
     const { username, password } = req.body;
-    const user = Users.getByUsername(username) as any;
-    if (!user || user.password !== password) return res.status(401).json({ error: 'Credenciales incorrectas' });
+    // Buscar por username o email
+    const user = (Users.getByUsername(username) || Users.getByUsername(username + '@adhdreams.local')) as any;
+    if (!user) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+    if (!(await checkPassword(password, user.password)))
+      return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+    if (user.activo === 2)
+      return res.status(403).json({ error: 'Tu cuenta está pendiente de aprobación por el administrador.', code: 'PENDING' });
+    if (user.activo === 0)
+      return res.status(403).json({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador.', code: 'INACTIVE' });
     AuditLog.insert({ accion: 'LOGIN', entidad: 'users', entidad_id: user.uid, user_id: user.uid, user_nombre: user.nombre, detalle: null });
     const { password: _, ...safe } = user;
     res.json(safe);
+  }));
+
+  // Usuarios pendientes de aprobación
+  app.get("/api/users/pending", wrap((_req: any, res: any) => {
+    res.json(Users.getAll().filter((u: any) => u.activo === 2));
+  }));
+
+  // Aprobar cuenta
+  app.post("/api/users/:uid/approve", wrap((req: any, res: any) => {
+    Users.update(req.params.uid, { activo: 1 });
+    const u = Users.getById(req.params.uid) as any;
+    AuditLog.insert({ accion: 'APPROVE_USER', entidad: 'users', entidad_id: req.params.uid, user_id: req.body.by || null, user_nombre: null, detalle: u?.nombre || null });
+    res.json({ ok: true });
+  }));
+
+  // Rechazar / desactivar cuenta
+  app.post("/api/users/:uid/reject", wrap((req: any, res: any) => {
+    Users.update(req.params.uid, { activo: 0 });
+    const u = Users.getById(req.params.uid) as any;
+    AuditLog.insert({ accion: 'REJECT_USER', entidad: 'users', entidad_id: req.params.uid, user_id: req.body.by || null, user_nombre: null, detalle: u?.nombre || null });
+    res.json({ ok: true });
+  }));
+
+  // Editar datos de usuario
+  app.put("/api/users/:uid", wrap((req: any, res: any) => {
+    const { password, uid: _uid, ...data } = req.body;
+    Users.update(req.params.uid, data);
+    res.json({ ok: true });
+  }));
+
+  // Eliminar cuenta permanentemente
+  app.delete("/api/users/:uid", wrap((req: any, res: any) => {
+    const u = Users.getById(req.params.uid) as any;
+    if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
+    Users.delete(req.params.uid);
+    AuditLog.insert({ accion: 'DELETE_USER', entidad: 'users', entidad_id: req.params.uid, user_id: null, user_nombre: null, detalle: u.nombre || u.username || null });
+    res.json({ ok: true });
+  }));
+
+  // Contar pendientes (para notificaciones)
+  app.get("/api/users/pending-count", wrap((_req: any, res: any) => {
+    const count = Users.getAll().filter((u: any) => u.activo === 2).length;
+    res.json({ count });
   }));
 
   // ── VENTAS ─────────────────────────────────────────────────
@@ -107,7 +173,7 @@ async function startServer() {
   app.post("/api/ventas", wrap((req: any, res: any) => {
     const data = {
       id: randomUUID(), status: 'pendiente',
-      metadata: null, folio: null, ...req.body,
+      folio: null, ...req.body,
       metadata: req.body.metadata ? JSON.stringify(req.body.metadata) : null,
     };
     Ventas.create(data);
@@ -115,12 +181,15 @@ async function startServer() {
     res.json(Ventas.getById(data.id));
   }));
 
-  app.put("/api/ventas/:id", wrap((req: any, res: any) => {
+  const updateVenta = wrap((req: any, res: any) => {
     const update = { ...req.body };
     if (update.metadata && typeof update.metadata === 'object') update.metadata = JSON.stringify(update.metadata);
     Ventas.update(req.params.id, update);
+    AuditLog.insert({ accion: 'UPDATE_VENTA', entidad: 'ventas', entidad_id: req.params.id, user_id: update.by || null, user_nombre: update.byName || null, detalle: update.status || null });
     res.json(Ventas.getById(req.params.id));
-  }));
+  });
+  app.put("/api/ventas/:id", updateVenta);
+  app.patch("/api/ventas/:id", updateVenta);
 
   app.delete("/api/ventas/:id", wrap((req: any, res: any) => {
     Ventas.delete(req.params.id);
@@ -382,6 +451,44 @@ async function startServer() {
     res.json(getRecentMessages(100));
   }));
 
+  // ── TELEGRAM ──────────────────────────────────────────────
+  app.get("/api/telegram/status", wrap((_req: any, res: any) => {
+    res.json(getTelegramStatus());
+  }));
+
+  app.get("/api/telegram/messages", wrap((_req: any, res: any) => {
+    res.json(getTelegramMessages(100));
+  }));
+
+  app.post("/api/telegram/init", wrap(async (req: any, res: any) => {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'token requerido' });
+    // Persistir token en Settings para sobrevivir reinicios
+    Settings.set('telegram_bot_token', token);
+    const result = await initTelegram(token);
+    res.json(result);
+  }));
+
+  app.post("/api/telegram/stop", wrap((_req: any, res: any) => {
+    stopTelegram();
+    Settings.set('telegram_bot_token', '');
+    res.json({ ok: true });
+  }));
+
+  app.post("/api/telegram/send", wrap(async (req: any, res: any) => {
+    const { chatId, message } = req.body;
+    if (!chatId || !message) return res.status(400).json({ error: 'chatId y message requeridos' });
+    res.json(await sendTelegramMessage(chatId, message));
+  }));
+
+  // Mensajes combinados WA + Telegram (para panel unificado)
+  app.get("/api/channels/messages", wrap((_req: any, res: any) => {
+    const wa = getRecentMessages(100);
+    const tg = getTelegramMessages(100);
+    const all = [...wa, ...tg].sort((a, b) => a.timestamp - b.timestamp);
+    res.json(all.slice(-150));
+  }));
+
   // ── AGENTES AUTÓNOMOS ─────────────────────────────────────
   // Estado de agentes en memoria
   const agentState: Record<string, { active: boolean; lastRun: string | null; processed: number; errors: number }> = {
@@ -395,76 +502,153 @@ async function startServer() {
     capturista: null, archivero: null, consultor: null, validador: null,
   };
 
-  // Procesa mensaje entrante de WhatsApp buscando keywords de captura de venta
+  // ── Helpers compartidos por agentes ──────────────────────
+  const extractField = (text: string, key: string) => {
+    const re = new RegExp(`${key}[:\\s]+([^\\n,]+)`, 'i');
+    return text.match(re)?.[1]?.trim() || null;
+  };
+
+  type AnyChannelMsg = { id: string; from: string; fromName: string; body: string; timestamp: number; channel: string; chatId?: number };
+
+  async function replyToMsg(msg: AnyChannelMsg, text: string) {
+    try {
+      if (msg.channel === 'whatsapp') {
+        await sendWhatsAppMessage(msg.from.replace('@c.us', ''), text);
+      } else if (msg.channel === 'telegram' && (msg as TgMessage).chatId) {
+        await sendTelegramMessage((msg as TgMessage).chatId, text);
+      }
+    } catch { /* canal no disponible */ }
+  }
+
+  // Agente Capturista: detecta ventas en WA + Telegram
   async function runCapturistaAgent() {
-    const msgs = getRecentMessages(50);
-    const unprocessedKey = 'agent_capturista_last_ts';
-    const lastTs = parseInt(Settings.get(unprocessedKey) || '0');
-    const newMsgs = msgs.filter(m => m.timestamp > lastTs);
+    const waMsgs = getRecentMessages(50) as AnyChannelMsg[];
+    const tgMsgs = getTelegramMessages(50) as AnyChannelMsg[];
+    const allMsgs = [...waMsgs, ...tgMsgs];
+    const lastTsKey = 'agent_capturista_last_ts';
+    const lastTs = parseInt(Settings.get(lastTsKey) || '0');
+    const newMsgs = allMsgs.filter(m => m.timestamp > lastTs);
+
     for (const msg of newMsgs) {
       const body = msg.body.toLowerCase();
-      // Detectar patrones de captura: "nombre:", "telefono:", "plan:", "direccion:"
       if (body.includes('nombre:') && (body.includes('telefono:') || body.includes('tel:'))) {
         try {
-          // Extraer campos básicos
-          const extractField = (text: string, key: string) => {
-            const re = new RegExp(`${key}[:\\s]+([^\\n,]+)`, 'i');
-            return text.match(re)?.[1]?.trim() || null;
-          };
           const nombres = extractField(msg.body, 'nombre');
           const telefono = extractField(msg.body, 'tel(?:efono)?');
           const plan = extractField(msg.body, 'plan');
           const direccion = extractField(msg.body, 'direcci[oó]n|domicilio');
           if (nombres && telefono) {
             Ventas.create({
-              id: randomUUID(), folio: null, asesor_id: 'agente_wa',
+              id: randomUUID(), folio: null,
+              asesor_id: `agente_${msg.channel}`,
               asesor_nombre: msg.fromName, status: 'pendiente',
               nombres, apellidos: null, telefono, direccion, colonia: null, municipio: null,
               tipo_cliente: null, tipo_servicio: null, plan, renta_mensual: null, zona: null,
-              notas: `Capturado por Agente vía WhatsApp: ${msg.from}`,
+              notas: `Capturado por Agente vía ${msg.channel}: ${msg.from}`,
               fecha_solicitud: new Date().toISOString().split('T')[0],
               fecha_instalacion: null, contrato_pdf: null, ine_pdf: null, comprobante_pdf: null,
-              metadata: JSON.stringify({ source: 'whatsapp', raw: msg.body }),
+              metadata: JSON.stringify({ source: msg.channel, raw: msg.body }),
             });
+            await replyToMsg(msg, `✅ Venta registrada para <b>${nombres}</b>. El equipo la procesará pronto.`);
             agentState.capturista.processed++;
           }
         } catch { agentState.capturista.errors++; }
       }
     }
     if (newMsgs.length > 0) {
-      Settings.set(unprocessedKey, String(Math.max(...newMsgs.map(m => m.timestamp))));
+      Settings.set(lastTsKey, String(Math.max(...newMsgs.map(m => m.timestamp))));
     }
     agentState.capturista.lastRun = new Date().toISOString();
   }
 
-  // Agente consultor: responde consultas SIAC por WhatsApp
+  // Agente Consultor: responde consultas de folio SIAC en WA + Telegram
   async function runConsultorAgent() {
-    const msgs = getRecentMessages(50);
+    const waMsgs = getRecentMessages(50) as AnyChannelMsg[];
+    const tgMsgs = getTelegramMessages(50) as AnyChannelMsg[];
+    const allMsgs = [...waMsgs, ...tgMsgs];
     const lastTsKey = 'agent_consultor_last_ts';
     const lastTs = parseInt(Settings.get(lastTsKey) || '0');
-    const newMsgs = msgs.filter(m => m.timestamp > lastTs);
+    const newMsgs = allMsgs.filter(m => m.timestamp > lastTs);
+
     for (const msg of newMsgs) {
       const body = msg.body.toLowerCase().trim();
-      if (body.startsWith('folio ') || body.startsWith('consulta ') || body.includes('estatus ')) {
-        const folioMatch = msg.body.match(/\b(\d{6,})\b/);
-        if (folioMatch) {
-          const record = SiacRecords.getByFolio(folioMatch[1]);
-          const reply = record
-            ? `📋 Folio ${record.folio_siac}\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha: ${record.fecha_captura || 'N/D'}`
-            : `❌ Folio ${folioMatch[1]} no encontrado en el sistema.`;
-          try {
-            const { sendWhatsAppMessage: send } = await import('./server/whatsapp.js');
-            await send(msg.from.replace('@c.us', ''), reply);
-          } catch { /* si no está conectado, no responde */ }
-        }
-        agentState.consultor.processed++;
+      const isQuery = body.startsWith('folio ') || body.startsWith('consulta ')
+        || body.startsWith('estatus ') || body.includes('mi folio');
+      if (!isQuery) continue;
+
+      const folioMatch = msg.body.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i);
+      if (folioMatch) {
+        const record = SiacRecords.getByFolio(folioMatch[1]) as any;
+        const reply = record
+          ? `📋 <b>Folio ${record.folio_siac}</b>\n` +
+            `Estatus: ${record.estatus_siac || 'N/D'}\n` +
+            `Promotora: ${record.promotor || 'N/D'}\n` +
+            `Fecha captura: ${record.fecha_captura || 'N/D'}\n` +
+            `Paquete: ${record.paquete || 'N/D'}`
+          : `❌ Folio <b>${folioMatch[1]}</b> no encontrado.\n¿Deseas que un asesor te contacte?`;
+        await replyToMsg(msg, reply);
+      } else {
+        await replyToMsg(msg, '🔍 Envía el número de folio para consultar. Ej: <b>folio 123456</b>');
       }
+      agentState.consultor.processed++;
     }
     if (newMsgs.length > 0) {
       Settings.set(lastTsKey, String(Math.max(...newMsgs.map(m => m.timestamp))));
     }
     agentState.consultor.lastRun = new Date().toISOString();
   }
+
+  // Registrar handler en tiempo real para Telegram (respuesta inmediata sin esperar el poll de 30s)
+  setTelegramMessageHandler(async (msg: TgMessage) => {
+    if (agentState.capturista.active) {
+      const body = msg.body.toLowerCase();
+      if (body.includes('nombre:') && (body.includes('telefono:') || body.includes('tel:'))) {
+        const nombres = extractField(msg.body, 'nombre');
+        const telefono = extractField(msg.body, 'tel(?:efono)?');
+        const plan = extractField(msg.body, 'plan');
+        const direccion = extractField(msg.body, 'direcci[oó]n|domicilio');
+        if (nombres && telefono) {
+          try {
+            Ventas.create({
+              id: randomUUID(), folio: null, asesor_id: 'agente_telegram',
+              asesor_nombre: msg.fromName, status: 'pendiente',
+              nombres, apellidos: null, telefono, direccion, colonia: null, municipio: null,
+              tipo_cliente: null, tipo_servicio: null, plan, renta_mensual: null, zona: null,
+              notas: `Capturado por Agente vía Telegram: ${msg.chatId}`,
+              fecha_solicitud: new Date().toISOString().split('T')[0],
+              fecha_instalacion: null, contrato_pdf: null, ine_pdf: null, comprobante_pdf: null,
+              metadata: JSON.stringify({ source: 'telegram', raw: msg.body }),
+            });
+            await sendTelegramMessage(msg.chatId, `✅ Venta registrada para <b>${nombres}</b>. El equipo la procesará pronto.`);
+            agentState.capturista.processed++;
+            agentState.capturista.lastRun = new Date().toISOString();
+          } catch { agentState.capturista.errors++; }
+        }
+        return;
+      }
+    }
+    if (agentState.consultor.active) {
+      const body = msg.body.toLowerCase().trim();
+      const isQuery = body.startsWith('folio ') || body.startsWith('consulta ')
+        || body.startsWith('estatus ') || body.includes('mi folio');
+      if (isQuery) {
+        const folioMatch = msg.body.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i);
+        if (folioMatch) {
+          const record = SiacRecords.getByFolio(folioMatch[1]) as any;
+          const reply = record
+            ? `📋 <b>Folio ${record.folio_siac}</b>\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha: ${record.fecha_captura || 'N/D'}`
+            : `❌ Folio <b>${folioMatch[1]}</b> no encontrado.`;
+          try {
+            await sendTelegramMessage(msg.chatId, reply);
+            agentState.consultor.processed++;
+            agentState.consultor.lastRun = new Date().toISOString();
+          } catch { agentState.consultor.errors++; }
+        } else {
+          await sendTelegramMessage(msg.chatId, '🔍 Envía el número de folio. Ej: <b>folio 123456</b>');
+        }
+      }
+    }
+  });
 
   const AGENT_RUNNERS: Record<string, () => Promise<void>> = {
     capturista: runCapturistaAgent,
@@ -603,6 +787,16 @@ async function startServer() {
   // Auto-import SIAC CSV on startup if table is empty
   if (SiacRecords.count() === 0) {
     importSiacCSV();
+  }
+
+  // Auto-reconectar Telegram si había token guardado
+  const savedToken = Settings.get('telegram_bot_token');
+  if (savedToken) {
+    initTelegram(savedToken)
+      .then(r => r.ok
+        ? console.log(`[TG] Auto-reconectado como @${r.botName}`)
+        : console.warn('[TG] Token guardado inválido:', r.error))
+      .catch(e => console.warn('[TG] Error auto-reconectando:', e.message));
   }
 
   app.listen(PORT, "0.0.0.0", () => {

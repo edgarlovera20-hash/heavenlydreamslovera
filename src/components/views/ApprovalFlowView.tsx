@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, XCircle, Clock, MessageSquare, Filter, Search, ChevronDown, ChevronUp, Download, User, PhoneCall, Bot, Users } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
 import { logAudit } from '../../lib/auditLog';
-import { auth } from '../../lib/firebase';
+function getCurrentUser() { try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s) : null; } catch { return null; } }
 import { exportToCSV } from '../../lib/exportUtils';
 import { requestValidation, getValidationConfig, getValidationRequests } from '../../lib/validationService';
 import { toast } from 'sonner';
@@ -39,13 +39,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   RECHAZADA:    { label: 'Rechazada',    color: 'bg-red-500/20 text-red-400 border-red-500/30',          icon: <XCircle className="w-3 h-3" /> },
 };
 
-function loadSales(): Sale[] {
-  try { return JSON.parse(localStorage.getItem('adhdreams_sales') || '[]'); } catch { return []; }
-}
-function saveSales(sales: Sale[]) { localStorage.setItem('adhdreams_sales', JSON.stringify(sales)); }
-
 export default function ApprovalFlowView() {
-  const [sales, setSales] = useState<Sale[]>(loadSales());
+  const [sales, setSales] = useState<Sale[]>([]);
   const [filterStatus, setFilterStatus] = useState('PENDIENTE');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -58,8 +53,9 @@ export default function ApprovalFlowView() {
   const handleRequestValidation = async (s: Sale) => {
     setValidating(s.id);
     try {
-      const uid = auth.currentUser?.uid || 'sistema';
-      const uName = auth.currentUser?.displayName || auth.currentUser?.email || 'Sistema';
+      const cu = getCurrentUser();
+      const uid = cu?.uid || 'sistema';
+      const uName = cu?.displayName || cu?.email || 'Sistema';
       const req = await requestValidation(s, uid, uName);
       if (req.status === 'ERROR') {
         toast.error(`Error al iniciar llamada: ${req.callStatusDetail}`);
@@ -75,8 +71,24 @@ export default function ApprovalFlowView() {
     }
   };
 
-  const refresh = () => setSales(loadSales());
-  useEffect(() => { const t = setInterval(refresh, 5000); return () => clearInterval(t); }, []);
+  const refresh = async () => {
+    try {
+      const res = await fetch('/api/ventas');
+      if (res.ok) {
+        const data: any[] = await res.json();
+        setSales(data.map(s => ({
+          id: s.id, folio: s.folio, nombres: s.nombres,
+          apellidoPaterno: s.apellido_paterno, apellidoMaterno: s.apellido_materno,
+          telefonoTitular: s.telefono_titular, paqueteNombre: s.paquete_nombre,
+          rentaMensual: s.renta_mensual, status: (s.status || 'PENDIENTE').toUpperCase(),
+          fechaSolicitud: s.fecha_solicitud || s.created_at,
+          asesorId: s.asesor_id, colonia: s.colonia,
+          approvalHistory: s.approval_history ? JSON.parse(s.approval_history) : [],
+        })));
+      }
+    } catch {}
+  };
+  useEffect(() => { refresh(); const t = setInterval(refresh, 8000); return () => clearInterval(t); }, []);
 
   const filtered = useMemo(() => {
     return sales.filter(s => {
@@ -89,22 +101,26 @@ export default function ApprovalFlowView() {
     });
   }, [sales, filterStatus, search]);
 
-  const changeStatus = (id: string, action: ApprovalEvent['action'], comment?: string) => {
-    const uid = auth.currentUser?.uid || 'sistema';
-    const uName = auth.currentUser?.displayName || auth.currentUser?.email || 'Sistema';
-    const event: ApprovalEvent = { timestamp: new Date().toISOString(), action, by: uid, byName: uName, comment };
-    const updated = sales.map(s => {
-      if (s.id !== id) return s;
-      const history = [...(s.approvalHistory || []), event];
-      return { ...s, status: action, approvalHistory: history };
-    });
-    saveSales(updated);
-    setSales(updated);
-    const auditMap: Record<string, any> = { APROBADA: 'VENTA_APROBADA', RECHAZADA: 'VENTA_RECHAZADA', PENDIENTE: 'VENTA_EDITADA', EN_REVISION: 'VENTA_EDITADA' };
-    logAudit(auditMap[action], uid, uName, { targetId: id, details: comment });
-    toast.success(`Venta marcada como ${action.toLowerCase()}.`);
-    setCommenting(null);
-    setComment('');
+  const changeStatus = async (id: string, action: ApprovalEvent['action'], comment?: string) => {
+    const cu = getCurrentUser();
+    const uid = cu?.uid || 'sistema';
+    const uName = cu?.displayName || cu?.email || 'Sistema';
+    try {
+      const res = await fetch(`/api/ventas/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: action.toLowerCase(), comment, by: uid, byName: uName }),
+      });
+      if (!res.ok) throw new Error('Error al actualizar');
+      const auditMap: Record<string, any> = { APROBADA: 'VENTA_APROBADA', RECHAZADA: 'VENTA_RECHAZADA', PENDIENTE: 'VENTA_EDITADA', EN_REVISION: 'VENTA_EDITADA' };
+      logAudit(auditMap[action], uid, uName, { targetId: id, details: comment });
+      toast.success(`Venta marcada como ${action.toLowerCase()}.`);
+      setCommenting(null);
+      setComment('');
+      refresh();
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    }
   };
 
   const pendingCount = sales.filter(s => (s.status||'PENDIENTE').toUpperCase() === 'PENDIENTE').length;
