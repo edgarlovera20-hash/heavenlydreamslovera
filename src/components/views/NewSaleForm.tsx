@@ -550,9 +550,11 @@ const exportToPDF = async () => {
                 </button>
               </div>
 
-              {/* Inputs ocultos para cada slot */}
+              {/* Inputs ocultos — archivo y cámara para cada slot */}
               <input type="file" ref={frenteInputRef} onChange={handleFileSelect(docType === 'ine' ? 'frente' : 'curp')} accept="image/*" className="hidden" />
+              <input type="file" id="frente-cam" onChange={handleFileSelect(docType === 'ine' ? 'frente' : 'curp')} accept="image/*" capture="environment" className="hidden" />
               <input type="file" ref={reversoInputRef} onChange={handleFileSelect('reverso')} accept="image/*" className="hidden" />
+              <input type="file" id="reverso-cam" onChange={handleFileSelect('reverso')} accept="image/*" capture="environment" className="hidden" />
 
               {/* Zonas de carga con preview */}
               <div className={cn('grid gap-4', docType === 'ine' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1')}>
@@ -560,6 +562,7 @@ const exportToPDF = async () => {
                   title={docType === 'ine' ? 'Frente de INE' : 'Documento CURP'}
                   image={docType === 'ine' ? form.ineFrente : form.curpDoc}
                   onPick={() => frenteInputRef.current?.click()}
+                  onCamera={() => document.getElementById('frente-cam')?.click()}
                   onRemove={() => removeImage(docType === 'ine' ? 'frente' : 'curp')}
                   disabled={isOcrLoading}
                 />
@@ -568,6 +571,7 @@ const exportToPDF = async () => {
                     title="Reverso de INE"
                     image={form.ineReverso}
                     onPick={() => reversoInputRef.current?.click()}
+                    onCamera={() => document.getElementById('reverso-cam')?.click()}
                     onRemove={() => removeImage('reverso')}
                     disabled={isOcrLoading}
                   />
@@ -716,12 +720,48 @@ const exportToPDF = async () => {
                 />
                 
                 {!form.mismaDireccionIne && (
-                  <div className="mt-4 pt-4 border-t border-cyber-electric/20">
-                    <div className="border-2 border-dashed border-amber-500/30 bg-amber-500/10 rounded-xl p-6 text-center hover:bg-amber-500/20 transition-colors cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.1)]">
-                      <Upload className="w-6 h-6 text-amber-400 mx-auto mb-2 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" />
-                      <p className="text-sm text-amber-400 font-bold uppercase tracking-wider">Subir Comprobante de Domicilio</p>
-                      <p className="text-[10px] text-amber-400/60 mt-1 uppercase tracking-widest font-mono">Requerido ya que la dirección no coincide</p>
-                    </div>
+                  <div className="mt-4 pt-4 border-t border-cyber-electric/20 space-y-3">
+                    {form.comprobanteDomicilio ? (
+                      <div className="relative rounded-xl overflow-hidden border border-amber-500/40">
+                        <img src={form.comprobanteDomicilio} alt="Comprobante" className="w-full max-h-56 object-contain bg-black" />
+                        <button type="button" onClick={() => updateForm({ comprobanteDomicilio: undefined })}
+                          className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-500 text-white rounded-full p-1">
+                          <X className="w-4 h-4" />
+                        </button>
+                        <p className="text-center text-xs text-green-400 py-2 bg-black/60">✓ Comprobante cargado</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Subir archivo */}
+                        <label className="border-2 border-dashed border-amber-500/40 bg-amber-500/10 rounded-xl p-5 text-center hover:bg-amber-500/20 transition-colors cursor-pointer flex flex-col items-center gap-2">
+                          <input type="file" accept="image/*,application/pdf" className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onloadend = () => updateForm({ comprobanteDomicilio: reader.result as string });
+                              reader.readAsDataURL(file);
+                            }} />
+                          <Upload className="w-6 h-6 text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" />
+                          <p className="text-xs text-amber-400 font-bold uppercase tracking-wide">Subir archivo</p>
+                          <p className="text-[10px] text-amber-400/60">JPG, PNG, PDF</p>
+                        </label>
+                        {/* Tomar foto con cámara */}
+                        <label className="border-2 border-dashed border-blue-500/40 bg-blue-500/10 rounded-xl p-5 text-center hover:bg-blue-500/20 transition-colors cursor-pointer flex flex-col items-center gap-2">
+                          <input type="file" accept="image/*" capture="environment" className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onloadend = () => updateForm({ comprobanteDomicilio: reader.result as string });
+                              reader.readAsDataURL(file);
+                            }} />
+                          <Phone className="w-6 h-6 text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.5)]" />
+                          <p className="text-xs text-blue-400 font-bold uppercase tracking-wide">Tomar foto</p>
+                          <p className="text-[10px] text-blue-400/60">Cámara del dispositivo</p>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1440,12 +1480,14 @@ function UploadSlot({
   title,
   image,
   onPick,
+  onCamera,
   onRemove,
   disabled,
 }: {
   title: string;
   image?: string;
   onPick: () => void;
+  onCamera?: () => void;
   onRemove: () => void;
   disabled?: boolean;
 }) {
@@ -1458,37 +1500,41 @@ function UploadSlot({
             <CheckCircle2 className="w-3 h-3" />
             {title}
           </div>
-          <button
-            type="button"
-            onClick={onRemove}
-            disabled={disabled}
-            title="Eliminar"
-            className="p-1.5 bg-black/60 hover:bg-red-500/80 rounded-md text-white transition-colors disabled:opacity-40"
-          >
+          <button type="button" onClick={onRemove} disabled={disabled} title="Eliminar"
+            className="p-1.5 bg-black/60 hover:bg-red-500/80 rounded-md text-white transition-colors disabled:opacity-40">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
-        <button
-          type="button"
-          onClick={onPick}
-          disabled={disabled}
-          className="absolute inset-x-0 bottom-0 p-2 text-[11px] font-medium text-slate-200 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
-        >
-          Cambiar imagen
-        </button>
+        <div className="absolute inset-x-0 bottom-0 flex gap-2 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+          <button type="button" onClick={onPick} disabled={disabled}
+            className="flex-1 text-[11px] font-medium text-slate-200 bg-slate-700/80 hover:bg-slate-600 rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors">
+            <Upload className="w-3 h-3" /> Cambiar archivo
+          </button>
+          {onCamera && (
+            <button type="button" onClick={onCamera} disabled={disabled}
+              className="flex-1 text-[11px] font-medium text-blue-200 bg-blue-700/80 hover:bg-blue-600 rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors">
+              <Phone className="w-3 h-3" /> Tomar foto
+            </button>
+          )}
+        </div>
       </div>
     );
   }
   return (
-    <button
-      type="button"
-      onClick={onPick}
-      disabled={disabled}
-      className="border-2 border-dashed border-slate-700 hover:border-blue-500/60 hover:bg-blue-500/5 rounded-xl p-8 text-center transition-colors flex flex-col items-center justify-center min-h-[176px] disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <Upload className="w-8 h-8 text-slate-500 mb-3" />
-      <p className="text-sm text-slate-300 font-medium">Subir {title}</p>
-      <p className="text-xs text-slate-500 mt-1">Escaneo por IA activa</p>
-    </button>
+    <div className="flex flex-col gap-2 min-h-[176px]">
+      <button type="button" onClick={onPick} disabled={disabled}
+        className="flex-1 border-2 border-dashed border-slate-700 hover:border-blue-500/60 hover:bg-blue-500/5 rounded-xl p-6 text-center transition-colors flex flex-col items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+        <Upload className="w-7 h-7 text-slate-500 mb-2" />
+        <p className="text-sm text-slate-300 font-medium">Subir {title}</p>
+        <p className="text-xs text-slate-500 mt-0.5">JPG, PNG, PDF — IA activa</p>
+      </button>
+      {onCamera && (
+        <button type="button" onClick={onCamera} disabled={disabled}
+          className="border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded-xl px-4 py-2.5 text-center transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          <Phone className="w-4 h-4 text-blue-400" />
+          <span className="text-sm text-blue-300 font-medium">Tomar foto con cámara</span>
+        </button>
+      )}
+    </div>
   );
 }
