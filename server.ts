@@ -772,6 +772,8 @@ async function startServer() {
     const { image } = req.body;
     if (!image) return res.status(400).json({ error: 'Falta el campo image' });
     const result = await runOllamaOCRVerbose(image);
+    console.log('[OCR] fields:', JSON.stringify(result.fields));
+    console.log('[OCR] rawText preview:', result.text?.slice(0, 300));
     res.json({ text: result.text, fields: result.fields, durationMs: result.durationMs });
   }));
 
