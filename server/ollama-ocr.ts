@@ -136,6 +136,42 @@ Respond ONLY with a valid JSON object (use "" if not found):
 
 Do NOT include explanations, markdown, or text outside the JSON.`;
 
+// Prompt para captura de confirmación SIAC (Telmex)
+const SIAC_PROMPT = `You are an OCR system reading a SIAC (Telmex internal system) confirmation screenshot.
+
+This screen confirms that a sale was registered. Typical fields shown:
+- "Folio SIAC:" followed by 8-10 digit number
+- "Servicio solicitado:" followed by a 3-4 digit code
+- "Datos de contacto" with the customer's full name
+- "Celular de contacto" with 10-digit phone
+- "Correo electrónico" with an email address
+- "Gastos de instalación" describing initial payment and monthly fees
+
+Extract ONLY these fields. Respond with valid JSON (use "" if not found):
+
+{
+  "folioSiac": "Folio SIAC number, e.g. 151500304",
+  "servicio": "service code, e.g. 389",
+  "nombreCompleto": "customer full name as shown",
+  "celular": "10-digit phone number",
+  "correo": "email address",
+  "gastosInstalacion": "installation fees text, e.g. 'Pago inicial de $400 y 12 meses de $100'",
+  "rawText": "all visible text"
+}
+
+Do NOT include explanations, markdown, or text outside the JSON.`;
+
+export async function runSiacOCR(base64Image: string): Promise<OllamaOCRResult> {
+  const base64 = base64Image.replace(/^data:image\/[a-z+]+;base64,/, '');
+  const t0 = Date.now();
+  const raw = await callOllama(SIAC_PROMPT, base64);
+  if (!raw) throw new Error('Ollama devolvió respuesta vacía.');
+  const fields = parseJsonResponse(raw);
+  const text = fields.rawText || raw;
+  delete fields.rawText;
+  return { text, fields, model: OLLAMA_MODEL, durationMs: Date.now() - t0 };
+}
+
 export async function runComprobanteOCR(base64Image: string): Promise<OllamaOCRResult> {
   const base64 = base64Image.replace(/^data:image\/[a-z+]+;base64,/, '');
   const t0 = Date.now();
