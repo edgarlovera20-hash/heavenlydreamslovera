@@ -768,26 +768,30 @@ async function startServer() {
   }));
 
   // ── OCR MULTI-PROVEEDOR (GPT-4o-mini → Claude Haiku 4.5 → Tesseract) ──────
+  // Acepta { image: "..." } o { images: ["frente","reverso"] } — múltiples mejoran precisión.
   app.post("/api/vision/ocr", wrap(async (req: any, res: any) => {
-    const { image } = req.body;
-    if (!image) return res.status(400).json({ error: 'Falta el campo image' });
-    const result = await runIneOcr(image);
-    console.log('[OCR-ine]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
+    const { image, images } = req.body;
+    const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
+    if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
+    const result = await runIneOcr(imgs);
+    console.log('[OCR-ine]', result.provider, `${result.durationMs}ms`, `${imgs.length}img`, JSON.stringify(result.fields));
     res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
   app.post("/api/vision/siac", wrap(async (req: any, res: any) => {
-    const { image } = req.body;
-    if (!image) return res.status(400).json({ error: 'Falta el campo image' });
-    const result = await runSiacOcr(image);
+    const { image, images } = req.body;
+    const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
+    if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
+    const result = await runSiacOcr(imgs);
     console.log('[OCR-siac]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
     res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
   app.post("/api/vision/comprobante", wrap(async (req: any, res: any) => {
-    const { image } = req.body;
-    if (!image) return res.status(400).json({ error: 'Falta el campo image' });
-    const result = await runComprobanteOcr(image);
+    const { image, images } = req.body;
+    const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
+    if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
+    const result = await runComprobanteOcr(imgs);
     console.log('[OCR-comprobante]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
     res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));

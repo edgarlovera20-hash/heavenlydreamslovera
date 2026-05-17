@@ -62,15 +62,19 @@ export async function runGoogleVision(
 }
 
 export async function callVisionOCR(
-  base64Image: string,
+  imageOrImages: string | string[],
   onProgress?: (p: number) => void,
 ): Promise<VisionOCRResponse> {
   if (onProgress) onProgress(10);
 
+  const body = Array.isArray(imageOrImages)
+    ? { images: imageOrImages }
+    : { image: imageOrImages };
+
   const response = await fetch('/api/vision/ocr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: base64Image }),
+    body: JSON.stringify(body),
   });
 
   if (onProgress) onProgress(80);
@@ -295,12 +299,12 @@ export class CRM_AI_Agent {
   }
 
   public async analyzeDocument(
-    base64Image: string,
+    imageOrImages: string | string[],
     _mimeType: string,
     onProgress?: (p: number) => void,
   ): Promise<Partial<OcrResult> | null> {
     try {
-      const { text: rawText, fields } = await callVisionOCR(base64Image, onProgress);
+      const { text: rawText, fields } = await callVisionOCR(imageOrImages, onProgress);
 
       // Si Ollama devolvió campos estructurados, úsalos directamente
       if (fields && Object.keys(fields).length > 0) {

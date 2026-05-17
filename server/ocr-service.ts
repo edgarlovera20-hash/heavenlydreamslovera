@@ -38,38 +38,48 @@ export interface OcrResult {
 
 // ─── PROMPTS (compartidos entre GPT y Claude) ────────────────────────────────
 
-const INE_PROMPT = `You are an OCR system for Mexican identity documents (INE/IFE, CURP, voter ID).
+const INE_PROMPT = `You are a precise OCR system for Mexican INE/IFE identity cards. You may receive 1-2 images (front and/or back of the same card).
 
-IMPORTANT: Read ALL text visible in the image carefully.
+CRITICAL — read text EXACTLY as printed. Do not invent, guess, or auto-correct names.
 
-On an INE (Mexican voter ID), the data is arranged like this:
-- APELLIDO PATERNO (first surname, usually uppercase, printed BEFORE the given name)
-- APELLIDO MATERNO (second surname, usually uppercase)
-- NOMBRE(S) (given name(s), usually uppercase)
-- DOMICILIO section: street address, neighborhood, municipality
-- CURP: 18-character alphanumeric code
-- CLAVE DE ELECTOR: 18-character alphanumeric code (different from CURP)
-- Código postal: 5-digit number near the address
+STRUCTURE of an INE card (front side):
+- Top: "INSTITUTO NACIONAL ELECTORAL — CREDENCIAL PARA VOTAR"
+- "NOMBRE" label, then 3 lines in this exact order:
+    line 1 = APELLIDO PATERNO (first surname, all uppercase)
+    line 2 = APELLIDO MATERNO (second surname, all uppercase)
+    line 3 = NOMBRE(S) (given names, all uppercase)
+- "DOMICILIO" label, then 3-4 lines:
+    line 1 = street + number (e.g. "C ELOY CAVAZOS MZA 12 LT 9")
+    line 2 = colonia/neighborhood with CP (e.g. "57710 COL SAN MIGUEL TEOTONGO")
+    line 3 = municipio + state (e.g. "IZTAPALAPA, CDMX")
+- "CLAVE DE ELECTOR" — 18 alphanumeric chars (mix of letters + numbers)
+- "CURP" — 18 chars: 4 LETTERS + 6 DIGITS + 1 LETTER (H or M for sex) + 5 LETTERS + 1 alphanumeric + 1 DIGIT
+- "FECHA DE NACIMIENTO" — DD/MM/YYYY
+- "SEXO" — H or M
 
-Extract all text and respond ONLY with a valid JSON object using these exact field names (leave "" if not found):
+VALIDATION rules — apply BEFORE outputting:
+1. CURP MUST match pattern: [A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9][0-9]
+2. CLAVE DE ELECTOR is DIFFERENT from CURP (do not confuse them)
+3. Surnames and names are in UPPERCASE Spanish letters only (A-Z, Ñ, accents)
+4. If a field is unreadable, leave it as "" — DO NOT fabricate
+
+Respond ONLY with this exact JSON (no markdown, no commentary):
 
 {
-  "nombres": "given name(s) without surnames",
-  "apellidoPaterno": "first surname (apellido paterno)",
-  "apellidoMaterno": "second surname (apellido materno)",
-  "curp": "18-character CURP code",
-  "folioIne": "CLAVE DE ELECTOR (18-char voter key, NOT the CURP)",
-  "calle": "street name with number, e.g. C ELOY CAVAZOS MZA 3 LT 9",
-  "numeroExterior": "exterior number if separate",
-  "numeroInterior": "interior number if exists",
-  "colonia": "neighborhood/colonia name, e.g. COL SAN MIGUEL TEOTONGO",
-  "codigoPostal": "5-digit postal code",
-  "delegacion": "municipality/alcaldía/delegación",
-  "ciudad": "city or state, e.g. CDMX or Ciudad de México",
-  "rawText": "ALL visible text from the document exactly as it appears"
-}
-
-Do NOT include explanations, markdown, or any text outside the JSON.`;
+  "nombres": "",
+  "apellidoPaterno": "",
+  "apellidoMaterno": "",
+  "curp": "",
+  "folioIne": "",
+  "calle": "",
+  "numeroExterior": "",
+  "numeroInterior": "",
+  "colonia": "",
+  "codigoPostal": "",
+  "delegacion": "",
+  "ciudad": "",
+  "rawText": "every line of text you can read, separated by \\n"
+}`;
 
 const COMPROBANTE_PROMPT = `You are an OCR system for Mexican utility bills / proof of address documents (CFE electricity, Izzi cable, Totalplay, Telmex, water, gas).
 
@@ -156,14 +166,61 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
+// ─── VALIDACIÓN DE OUTPUT (rechaza basura, fuerza fallback) ──────────────────
+
+const CURP_RE        = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+const CP_RE          = /^\d{5}$/;
+const PHONE_RE       = /^\d{10}$/;
+const FOLIO_SIAC_RE  = /^\d{6,12}$/;
+
+/**
+ * Devuelve true si el output del modelo parece coherente con el tipo de documento.
+ * Si devuelve false, el orquestador descarta el resultado y prueba el siguiente proveedor.
+ */
+function validateFields(docType: OcrDocType, fields: Record<string, string>): { ok: boolean; reason?: string } {
+  if (docType === 'ine') {
+    // CURP es el campo más fácil de validar — si está mal o ausente, casi seguro el OCR falló
+    if (fields.curp && !CURP_RE.test(fields.curp.toUpperCase())) {
+      return { ok: false, reason: `CURP inválido: "${fields.curp}"` };
+    }
+    if (fields.codigoPostal && !CP_RE.test(fields.codigoPostal)) {
+      return { ok: false, reason: `CP inválido: "${fields.codigoPostal}"` };
+    }
+    // Al menos uno de los campos de nombre debe existir
+    const hasName = fields.nombres || fields.apellidoPaterno || fields.apellidoMaterno;
+    if (!hasName && !fields.curp) {
+      return { ok: false, reason: 'Sin nombres ni CURP detectados' };
+    }
+  }
+  if (docType === 'siac') {
+    if (fields.folioSiac && !FOLIO_SIAC_RE.test(fields.folioSiac)) {
+      return { ok: false, reason: `Folio SIAC inválido: "${fields.folioSiac}"` };
+    }
+    if (fields.celular && !PHONE_RE.test(fields.celular)) {
+      return { ok: false, reason: `Celular inválido: "${fields.celular}"` };
+    }
+  }
+  if (docType === 'comprobante') {
+    if (fields.codigoPostal && !CP_RE.test(fields.codigoPostal)) {
+      return { ok: false, reason: `CP inválido: "${fields.codigoPostal}"` };
+    }
+  }
+  return { ok: true };
+}
+
 // ─── PROVIDER 1: GPT-4o-mini ─────────────────────────────────────────────────
 
-async function callOpenAi(prompt: string, base64Original: string): Promise<string> {
+async function callOpenAi(prompt: string, base64Images: string[]): Promise<string> {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY no configurada');
 
-  const mediaType = detectMediaType(base64Original);
-  const base64    = stripDataUrl(base64Original);
-  const dataUrl   = `data:${mediaType};base64,${base64}`;
+  const imageBlocks = base64Images.map(b64 => {
+    const mediaType = detectMediaType(b64);
+    const data      = stripDataUrl(b64);
+    return {
+      type: 'image_url' as const,
+      image_url: { url: `data:${mediaType};base64,${data}`, detail: 'high' as const },
+    };
+  });
 
   const res = await withTimeout(
     fetch('https://api.openai.com/v1/chat/completions', {
@@ -176,13 +233,10 @@ async function callOpenAi(prompt: string, base64Original: string): Promise<strin
         model: OPENAI_MODEL,
         messages: [{
           role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: dataUrl } },
-          ],
+          content: [{ type: 'text', text: prompt }, ...imageBlocks],
         }],
         response_format: { type: 'json_object' },
-        temperature: 0.05,
+        temperature: 0.0,
         max_tokens: 2000,
       }),
     }),
@@ -201,11 +255,17 @@ async function callOpenAi(prompt: string, base64Original: string): Promise<strin
 
 // ─── PROVIDER 2: Claude Haiku 4.5 ────────────────────────────────────────────
 
-async function callAnthropic(prompt: string, base64Original: string): Promise<string> {
+async function callAnthropic(prompt: string, base64Images: string[]): Promise<string> {
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY no configurada');
 
-  const mediaType = detectMediaType(base64Original);
-  const base64    = stripDataUrl(base64Original);
+  const imageBlocks = base64Images.map(b64 => ({
+    type: 'image' as const,
+    source: {
+      type: 'base64' as const,
+      media_type: detectMediaType(b64),
+      data: stripDataUrl(b64),
+    },
+  }));
 
   const res = await withTimeout(
     fetch('https://api.anthropic.com/v1/messages', {
@@ -218,13 +278,10 @@ async function callAnthropic(prompt: string, base64Original: string): Promise<st
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
         max_tokens: 2048,
-        temperature: 0.05,
+        temperature: 0.0,
         messages: [{
           role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-            { type: 'text', text: prompt },
-          ],
+          content: [...imageBlocks, { type: 'text', text: prompt }],
         }],
       }),
     }),
@@ -244,14 +301,24 @@ async function callAnthropic(prompt: string, base64Original: string): Promise<st
 
 // ─── PROVIDER 3: Tesseract.js (delegado a ocr-tesseract.ts) ──────────────────
 
-async function callTesseract(docType: OcrDocType, base64Original: string): Promise<{ text: string; fields: Record<string, string> }> {
-  const base64 = stripDataUrl(base64Original);
+async function callTesseract(docType: OcrDocType, base64Images: string[]): Promise<{ text: string; fields: Record<string, string> }> {
+  // Tesseract solo procesa 1 imagen a la vez — recorremos y mergeamos los campos
+  const merged: Record<string, string> = {};
+  const texts: string[] = [];
   const runner = docType === 'ine'
     ? runTesseractIne
     : docType === 'comprobante'
       ? runTesseractComprobante
       : runTesseractSiac;
-  return withTimeout(runner(base64), TIMEOUT_MS_TESSERACT, 'Tesseract');
+  for (const b64 of base64Images) {
+    const stripped = stripDataUrl(b64);
+    const r = await withTimeout(runner(stripped), TIMEOUT_MS_TESSERACT, 'Tesseract');
+    texts.push(r.text);
+    for (const [k, v] of Object.entries(r.fields)) {
+      if (v && (!merged[k] || v.length > merged[k].length)) merged[k] = v;
+    }
+  }
+  return { text: texts.join('\n---\n'), fields: merged };
 }
 
 // ─── ORQUESTADOR CON FALLBACK ────────────────────────────────────────────────
@@ -264,12 +331,12 @@ const PROVIDER_ORDER: OcrProvider[] = (() => {
   return all; // default: openai → anthropic → tesseract
 })();
 
-async function tryProvider(provider: OcrProvider, docType: OcrDocType, base64: string): Promise<OcrResult> {
+async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: string[]): Promise<OcrResult> {
   const t0 = Date.now();
   const prompt = PROMPTS[docType];
 
   if (provider === 'openai') {
-    const raw = await callOpenAi(prompt, base64);
+    const raw = await callOpenAi(prompt, images);
     if (!raw) throw new Error('OpenAI devolvió respuesta vacía');
     const fields = parseJsonResponse(raw);
     const text = fields.rawText || raw;
@@ -278,7 +345,7 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, base64: s
   }
 
   if (provider === 'anthropic') {
-    const raw = await callAnthropic(prompt, base64);
+    const raw = await callAnthropic(prompt, images);
     if (!raw) throw new Error('Anthropic devolvió respuesta vacía');
     const fields = parseJsonResponse(raw);
     const text = fields.rawText || raw;
@@ -287,20 +354,31 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, base64: s
   }
 
   // tesseract
-  const { text, fields } = await callTesseract(docType, base64);
+  const { text, fields } = await callTesseract(docType, images);
   return { text, fields, provider, model: 'tesseract-spa', durationMs: Date.now() - t0 };
 }
 
-export async function runOcrWithFallback(docType: OcrDocType, base64Image: string): Promise<OcrResult> {
+export async function runOcrWithFallback(docType: OcrDocType, images: string | string[]): Promise<OcrResult> {
+  const imgs = Array.isArray(images) ? images : [images];
+  if (imgs.length === 0) throw new Error('No se proporcionaron imágenes');
+
   const errors: string[] = [];
 
   for (const provider of PROVIDER_ORDER) {
-    // Salta proveedores LLM sin API key configurada
     if (provider === 'openai' && !OPENAI_API_KEY) { errors.push('openai: sin API key'); continue; }
     if (provider === 'anthropic' && !ANTHROPIC_API_KEY) { errors.push('anthropic: sin API key'); continue; }
 
     try {
-      const result = await tryProvider(provider, docType, base64Image);
+      const result = await tryProvider(provider, docType, imgs);
+
+      // Validación de output — si parece basura, intentamos el siguiente proveedor
+      const valid = validateFields(docType, result.fields);
+      if (!valid.ok) {
+        console.warn(`[OCR-${docType}] ${provider} output rechazado: ${valid.reason}`);
+        errors.push(`${provider} output inválido (${valid.reason})`);
+        continue;
+      }
+
       if (errors.length) result.fallbackReason = errors.join(' | ');
       console.log(`[OCR-${docType}] ${provider} OK in ${result.durationMs}ms (${Object.keys(result.fields).length} fields)`);
       return result;
@@ -314,18 +392,18 @@ export async function runOcrWithFallback(docType: OcrDocType, base64Image: strin
   throw new Error(`Todos los proveedores OCR fallaron — ${errors.join(' | ')}`);
 }
 
-// ─── API PÚBLICA (compatible con el código existente en server.ts) ──────────
+// ─── API PÚBLICA ─────────────────────────────────────────────────────────────
 
-export async function runIneOcr(base64: string): Promise<OcrResult> {
-  return runOcrWithFallback('ine', base64);
+export async function runIneOcr(images: string | string[]): Promise<OcrResult> {
+  return runOcrWithFallback('ine', images);
 }
 
-export async function runComprobanteOcr(base64: string): Promise<OcrResult> {
-  return runOcrWithFallback('comprobante', base64);
+export async function runComprobanteOcr(images: string | string[]): Promise<OcrResult> {
+  return runOcrWithFallback('comprobante', images);
 }
 
-export async function runSiacOcr(base64: string): Promise<OcrResult> {
-  return runOcrWithFallback('siac', base64);
+export async function runSiacOcr(images: string | string[]): Promise<OcrResult> {
+  return runOcrWithFallback('siac', images);
 }
 
 export async function checkOcrStatus() {

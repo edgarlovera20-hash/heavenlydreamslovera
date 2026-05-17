@@ -311,21 +311,18 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const reversoInputRef = useRef<HTMLInputElement>(null);
 
   // Núcleo del OCR — recibe lista de imágenes (base64) y autorellena.
+  // Envía TODAS las imágenes en UNA sola llamada al backend — el modelo combina
+  // info de frente + reverso en un solo prompt, mejor precisión y menos tokens.
   const runOcrOnImages = async (imgs: string[]) => {
     if (imgs.length === 0) return;
     setIsOcrLoading(true);
-    setOcrProgress(0);
+    setOcrProgress(10);
     try {
+      const result = await aiAgent.analyzeDocument(imgs, 'image/png', setOcrProgress);
       const merged: Record<string, string> = {};
-      for (let i = 0; i < imgs.length; i++) {
-        const baseProgress = Math.round((i / imgs.length) * 100);
-        const result = await aiAgent.analyzeDocument(imgs[i], 'image/png', (p) => {
-          setOcrProgress(baseProgress + Math.round(p / imgs.length));
-        });
-        if (result) {
-          for (const [k, v] of Object.entries(result)) {
-            if (v && (!merged[k] || v.length > merged[k].length)) merged[k] = v as string;
-          }
+      if (result) {
+        for (const [k, v] of Object.entries(result)) {
+          if (v) merged[k] = v as string;
         }
       }
       const fields = Object.keys(merged);
@@ -344,64 +341,74 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
-  // OCR de comprobante de domicilio (CFE/Izzi/Totalplay/Telmex) — auto-llena calle, colonia, CP, etc.
-  const handleComprobanteUpload = async (file: File | undefined) => {
+  // Subir comprobante de domicilio (CFE/Izzi/Totalplay/Telmex) — SOLO guarda la imagen.
+  // El usuario pulsa "Escanear con IA" cuando esté listo.
+  const handleComprobanteUpload = (file: File | undefined) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = async () => {
+    reader.onerror = () => toast.error('No se pudo leer el archivo.');
+    reader.onloadend = () => {
       const base64 = reader.result as string;
       updateForm({ comprobanteDomicilio: base64 });
-      setIsOcrLoading(true);
-      setOcrProgress(20);
-      try {
-        const res = await fetch('/api/vision/comprobante', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64 }),
-        });
-        setOcrProgress(80);
-        if (!res.ok) throw new Error(`OCR error (${res.status})`);
-        const data = await res.json();
-        const f = data.fields || {};
-        const updates: any = {};
-        if (f.calle)         updates.calle = f.calle;
-        if (f.numeroExterior) updates.numeroExterior = f.numeroExterior;
-        if (f.numeroInterior) updates.numeroInterior = f.numeroInterior;
-        if (f.colonia)       updates.colonia = f.colonia;
-        if (f.codigoPostal)  updates.codigoPostal = f.codigoPostal;
-        if (f.delegacion)    updates.delegacion = f.delegacion;
-        if (f.ciudad)        updates.ciudad = f.ciudad;
-        const count = Object.keys(updates).length;
-        if (count > 0) {
-          updateForm(updates);
-          toast.success(`Comprobante escaneado: ${count} campo${count !== 1 ? 's' : ''} de domicilio detectado${count !== 1 ? 's' : ''}.`);
-        } else {
-          toast.info('No se extrajo domicilio del comprobante. Llena los campos manualmente.', { duration: 5000 });
-        }
-      } catch (err: any) {
-        toast.error(err?.message || 'Error al procesar el comprobante.');
-      } finally {
-        setIsOcrLoading(false);
-        setOcrProgress(0);
-      }
+      toast.info('Comprobante listo. Pulsa "Escanear con IA" para auto-llenar el domicilio.', { duration: 3500 });
     };
     reader.readAsDataURL(file);
   };
 
-  // Al subir un documento, lo guardamos en el form Y disparamos OCR automáticamente sobre esa imagen.
+  // Ejecutar OCR sobre el comprobante ya subido — disparado por botón explícito.
+  const handleScanComprobante = async () => {
+    if (!form.comprobanteDomicilio) {
+      toast.error('Sube primero un comprobante de domicilio.');
+      return;
+    }
+    setIsOcrLoading(true);
+    setOcrProgress(20);
+    try {
+      const res = await fetch('/api/vision/comprobante', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: form.comprobanteDomicilio }),
+      });
+      setOcrProgress(80);
+      if (!res.ok) throw new Error(`OCR error (${res.status})`);
+      const data = await res.json();
+      const f = data.fields || {};
+      const updates: any = {};
+      if (f.calle)         updates.calle = f.calle;
+      if (f.numeroExterior) updates.numeroExterior = f.numeroExterior;
+      if (f.numeroInterior) updates.numeroInterior = f.numeroInterior;
+      if (f.colonia)       updates.colonia = f.colonia;
+      if (f.codigoPostal)  updates.codigoPostal = f.codigoPostal;
+      if (f.delegacion)    updates.delegacion = f.delegacion;
+      if (f.ciudad)        updates.ciudad = f.ciudad;
+      const count = Object.keys(updates).length;
+      if (count > 0) {
+        updateForm(updates);
+        toast.success(`Comprobante escaneado: ${count} campo${count !== 1 ? 's' : ''} de domicilio detectado${count !== 1 ? 's' : ''}.`);
+      } else {
+        toast.info('No se extrajo domicilio del comprobante. Llena los campos manualmente.', { duration: 5000 });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al procesar el comprobante.');
+    } finally {
+      setIsOcrLoading(false);
+      setOcrProgress(0);
+    }
+  };
+
+  // Al subir un documento, SOLO lo guardamos. El usuario decide cuándo escanear con IA
+  // mediante el botón "Escanear con IA" que aparece debajo de las imágenes.
   const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onerror = () => toast.error('No se pudo leer el archivo.');
-    reader.onloadend = async () => {
+    reader.onloadend = () => {
       const base64 = reader.result as string;
-      // Guardar la imagen en el formulario
       if (slot === 'frente') updateForm({ ineFrente: base64 });
       else if (slot === 'reverso') updateForm({ ineReverso: base64 });
       else updateForm({ curpDoc: base64 });
-      // Disparar OCR automático sobre la imagen recién subida
-      await runOcrOnImages([base64]);
+      toast.info('Imagen lista. Pulsa "Escanear con IA" para extraer los datos.', { duration: 3500 });
     };
     reader.readAsDataURL(file);
     event.target.value = '';
@@ -663,7 +670,7 @@ const exportToPDF = async () => {
                           <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-blue-300 mb-1">Escaneando con IA local (LLaVA)…</div>
+                          <div className="text-sm font-bold text-blue-300 mb-1">Escaneando con IA…</div>
                           <div className="w-full h-2 bg-blue-500/20 rounded-full overflow-hidden">
                             <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-200" style={{ width: `${Math.max(5, ocrProgress)}%` }} />
                           </div>
@@ -677,7 +684,7 @@ const exportToPDF = async () => {
                         className="group w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-blue-500/30 ring-1 ring-white/10"
                       >
                         <ScanLine className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        <span>Volver a escanear con IA</span>
+                        <span>{form.curp || form.nombres ? 'Volver a escanear con IA' : 'Escanear con IA'}</span>
                         <Sparkles className="w-4 h-4 opacity-80" />
                       </button>
                     )}
@@ -824,15 +831,28 @@ const exportToPDF = async () => {
                 {!form.mismaDireccionIne && (
                   <div className="mt-4 pt-4 border-t border-cyber-electric/20 space-y-3">
                     {form.comprobanteDomicilio ? (
-                      <div className="relative rounded-xl overflow-hidden border border-amber-500/40">
-                        <img src={form.comprobanteDomicilio} alt="Comprobante" className="w-full max-h-56 object-contain bg-black" />
-                        <button type="button" onClick={() => updateForm({ comprobanteDomicilio: undefined })}
-                          className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-500 text-white rounded-full p-1">
-                          <X className="w-4 h-4" />
-                        </button>
-                        <p className="text-center text-xs text-green-400 py-2 bg-black/60">
-                          {isOcrLoading ? '⏳ Escaneando comprobante con IA…' : '✓ Comprobante cargado'}
-                        </p>
+                      <div className="space-y-3">
+                        <div className="relative rounded-xl overflow-hidden border border-amber-500/40">
+                          <img src={form.comprobanteDomicilio} alt="Comprobante" className="w-full max-h-56 object-contain bg-black" />
+                          <button type="button" onClick={() => updateForm({ comprobanteDomicilio: undefined })}
+                            className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-500 text-white rounded-full p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                          <p className="text-center text-xs text-green-400 py-2 bg-black/60">
+                            {isOcrLoading ? '⏳ Escaneando comprobante con IA…' : '✓ Comprobante cargado'}
+                          </p>
+                        </div>
+                        {!isOcrLoading && (
+                          <button
+                            type="button"
+                            onClick={handleScanComprobante}
+                            className="group w-full bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-amber-500/30 ring-1 ring-white/10"
+                          >
+                            <ScanLine className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                            <span>{form.calle ? 'Volver a escanear con IA' : 'Escanear con IA'}</span>
+                            <Sparkles className="w-4 h-4 opacity-80" />
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <div className="grid grid-cols-2 gap-3">
