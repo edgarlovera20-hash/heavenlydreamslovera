@@ -10,6 +10,7 @@ interface MatrixInputProps extends InputHTMLAttributes<HTMLInputElement> {
   placeholder?: string;
   maxLength?: number;
   required?: boolean;
+  inputMode?: 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
 }
 
 export function MatrixInput({ className, value, onChange, type = "text", ...props }: MatrixInputProps) {
