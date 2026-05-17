@@ -37,6 +37,7 @@
     "recharts": "^3.8.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
+    "tesseract.js": "^5.1.1",
     "tsx": "^4.21.0",
     "vite": "^6.2.0",
     "whatsapp-web.js": "^1.34.7"

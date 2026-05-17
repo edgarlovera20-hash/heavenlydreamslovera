@@ -4,7 +4,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { initWhatsApp, getWhatsAppStatus, getWhatsAppQR, sendWhatsAppMessage, logoutWhatsApp, getRecentMessages } from "./server/whatsapp";
 import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
-import { runOllamaOCRVerbose, runComprobanteOCR, runSiacOCR, checkOllamaStatus } from "./server/ollama-ocr";
+import { runIneOcr, runComprobanteOcr, runSiacOcr, checkOcrStatus } from "./server/ocr-service";
 import db, {
   Users, Ventas, SiacRecords, Tickets, AuditLog, Settings,
   Referrals, Quotas, CommissionRules, PackageCatalog,
@@ -767,34 +767,33 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
-  // ── OCR LOCAL (Ollama + LLaVA) ─────────────────────────────
+  // ── OCR MULTI-PROVEEDOR (GPT-4o-mini → Claude Haiku 4.5 → Tesseract) ──────
   app.post("/api/vision/ocr", wrap(async (req: any, res: any) => {
     const { image } = req.body;
     if (!image) return res.status(400).json({ error: 'Falta el campo image' });
-    const result = await runOllamaOCRVerbose(image);
-    console.log('[OCR] fields:', JSON.stringify(result.fields));
-    console.log('[OCR] rawText preview:', result.text?.slice(0, 300));
-    res.json({ text: result.text, fields: result.fields, durationMs: result.durationMs });
+    const result = await runIneOcr(image);
+    console.log('[OCR-ine]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
+    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
   app.post("/api/vision/siac", wrap(async (req: any, res: any) => {
     const { image } = req.body;
     if (!image) return res.status(400).json({ error: 'Falta el campo image' });
-    const result = await runSiacOCR(image);
-    console.log('[OCR-siac] fields:', JSON.stringify(result.fields));
-    res.json({ text: result.text, fields: result.fields, durationMs: result.durationMs });
+    const result = await runSiacOcr(image);
+    console.log('[OCR-siac]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
+    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
   app.post("/api/vision/comprobante", wrap(async (req: any, res: any) => {
     const { image } = req.body;
     if (!image) return res.status(400).json({ error: 'Falta el campo image' });
-    const result = await runComprobanteOCR(image);
-    console.log('[OCR-comprobante] fields:', JSON.stringify(result.fields));
-    res.json({ text: result.text, fields: result.fields, durationMs: result.durationMs });
+    const result = await runComprobanteOcr(image);
+    console.log('[OCR-comprobante]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
+    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
   app.get("/api/vision/status", wrap(async (_req: any, res: any) => {
-    const status = await checkOllamaStatus();
+    const status = await checkOcrStatus();
     res.json(status);
   }));
 
