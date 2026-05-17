@@ -16,6 +16,9 @@ import { aiAgent } from '../../services/aiAgent';
 
 interface CustomerCaptureData {
   folio: string;
+  folioSiac?: string;
+  servicioSiac?: string;
+  capturaSiac?: string;
   tipoCliente: ClientType;
   tipoServicio: ServiceSegment;
   categoriaProducto: ProductCategory;
@@ -450,6 +453,8 @@ const exportToPDF = async () => {
       // 2. Save to server API
       const saleData = {
         folio: form.folio,
+        folio_siac: form.folioSiac,
+        servicio_siac: form.servicioSiac,
         nombres: form.nombres,
         apellido_paterno: form.apellidoPaterno,
         apellido_materno: form.apellidoMaterno,
@@ -1494,7 +1499,9 @@ const exportToPDF = async () => {
                   telefonoTitular: form.telefonoTitular,
                   correo: form.correo,
                 }}
-                onValidated={(folio) => updateForm({ folio })}
+                onValidated={({ folioSiac, servicio, image }) =>
+                  updateForm({ folioSiac, servicioSiac: servicio, capturaSiac: image })
+                }
               />
 
               <button
