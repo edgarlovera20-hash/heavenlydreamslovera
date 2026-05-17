@@ -247,7 +247,24 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const handleNext = () => setStep(s => Math.min(s + 1, 5));
+  const isPhone10 = (v?: string) => !!v && /^\d{10}$/.test(v.replace(/\D/g, ''));
+
+  const handleNext = () => {
+    // Bloqueo paso 1: teléfono titular obligatorio y 10 dígitos exactos
+    if (step === 1) {
+      if (!isPhone10(form.telefonoTitular)) {
+        setTelTitularVal('error');
+        toast.error('El Teléfono Titular debe tener exactamente 10 dígitos.');
+        return;
+      }
+      if (form.telefonoReferencia && !isPhone10(form.telefonoReferencia)) {
+        setTelRefVal('error');
+        toast.error('El Teléfono Referencia debe tener exactamente 10 dígitos.');
+        return;
+      }
+    }
+    setStep(s => Math.min(s + 1, 5));
+  };
   const handlePrev = () => setStep(s => Math.max(s - 1, 1));
 
   const updateForm = (updates: Partial<CustomerCaptureData>) => {
@@ -702,40 +719,71 @@ const exportToPDF = async () => {
                       value={form.folioIne || ''} onChange={e => updateForm({ folioIne: e.target.value })} />
                   </div>
                 )}
-                {/* Teléfono Titular */}
+                {/* Teléfono Titular — validación EN VIVO 10 dígitos */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
-                    Teléfono Titular
+                  <label className="text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
+                    Teléfono Titular <span className="text-red-400">*</span>
                     {telTitularVal === 'ok' && <CheckCircle className="w-3.5 h-3.5 text-green-400" />}
                     {telTitularVal === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+                    <span className={cn("ml-auto text-[10px] font-mono",
+                      (form.telefonoTitular?.length || 0) === 10 ? 'text-green-400' : 'text-slate-500')}>
+                      {form.telefonoTitular?.length || 0}/10
+                    </span>
                   </label>
                   <MatrixInput
-                    type="tel" maxLength={10}
+                    type="tel" inputMode="numeric" maxLength={10}
+                    placeholder="10 dígitos"
                     className={cn("w-full bg-slate-950/80 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
                       telTitularVal === 'ok' ? 'border-green-500/60' : telTitularVal === 'error' ? 'border-red-500/60' : 'border-white/10')}
                     value={form.telefonoTitular || ''}
-                    onChange={e => { const v = e.target.value.replace(/\D/g,'').slice(0,10); updateForm({ telefonoTitular: v }); }}
+                    onChange={e => {
+                      const v = e.target.value.replace(/\D/g,'').slice(0,10);
+                      updateForm({ telefonoTitular: v });
+                      // Validación en vivo
+                      if (v.length === 0) setTelTitularVal('idle');
+                      else if (v.length === 10) setTelTitularVal('ok');
+                      else setTelTitularVal('error');
+                    }}
                     onBlur={e => setTelTitularVal(e.target.value ? validatePhone(e.target.value) : 'idle')}
                   />
-                  {telTitularVal === 'error' && <p className="text-red-400 text-xs mt-1">Debe tener exactamente 10 dígitos</p>}
+                  {telTitularVal === 'error' && (form.telefonoTitular?.length || 0) > 0 && (
+                    <p className="text-red-400 text-xs mt-1">
+                      Faltan {10 - (form.telefonoTitular?.length || 0)} dígito{10 - (form.telefonoTitular?.length || 0) !== 1 ? 's' : ''}
+                    </p>
+                  )}
                 </div>
 
                 {/* Teléfono Referencia */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
+                  <label className="text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
                     Teléfono Referencia
                     {telRefVal === 'ok' && <CheckCircle className="w-3.5 h-3.5 text-green-400" />}
                     {telRefVal === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+                    <span className={cn("ml-auto text-[10px] font-mono",
+                      (form.telefonoReferencia?.length || 0) === 10 ? 'text-green-400' : 'text-slate-500')}>
+                      {form.telefonoReferencia?.length || 0}/10
+                    </span>
                   </label>
                   <MatrixInput
-                    type="tel" maxLength={10}
+                    type="tel" inputMode="numeric" maxLength={10}
+                    placeholder="10 dígitos (opcional)"
                     className={cn("w-full bg-slate-950/80 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
                       telRefVal === 'ok' ? 'border-green-500/60' : telRefVal === 'error' ? 'border-red-500/60' : 'border-white/10')}
                     value={form.telefonoReferencia || ''}
-                    onChange={e => { const v = e.target.value.replace(/\D/g,'').slice(0,10); updateForm({ telefonoReferencia: v }); }}
+                    onChange={e => {
+                      const v = e.target.value.replace(/\D/g,'').slice(0,10);
+                      updateForm({ telefonoReferencia: v });
+                      if (v.length === 0) setTelRefVal('idle');
+                      else if (v.length === 10) setTelRefVal('ok');
+                      else setTelRefVal('error');
+                    }}
                     onBlur={e => setTelRefVal(e.target.value ? validatePhone(e.target.value) : 'idle')}
                   />
-                  {telRefVal === 'error' && <p className="text-red-400 text-xs mt-1">Debe tener exactamente 10 dígitos</p>}
+                  {telRefVal === 'error' && (form.telefonoReferencia?.length || 0) > 0 && (
+                    <p className="text-red-400 text-xs mt-1">
+                      Faltan {10 - (form.telefonoReferencia?.length || 0)} dígito{10 - (form.telefonoReferencia?.length || 0) !== 1 ? 's' : ''}
+                    </p>
+                  )}
                 </div>
 
                 {/* Correo */}
