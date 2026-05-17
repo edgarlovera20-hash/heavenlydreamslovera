@@ -43,7 +43,6 @@ function ClickHandler({ onClick }: { onClick: (lng: number, lat: number) => void
 export function MapPicker({ coords, onCoordsChange, searchAddress }: MapPickerProps) {
   const initial = parseCoords(coords) ?? { lat: 19.4326, lng: -99.1332 };
   const [position, setPosition] = useState(initial);
-  const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
   const lastAutoSearch = useRef<string>('');
@@ -72,21 +71,25 @@ export function MapPicker({ coords, onCoordsChange, searchAddress }: MapPickerPr
         headers: { 'Accept-Language': 'es' },
       });
       const data = await res.json();
-      if (!data.length) { setError('No se encontró la dirección'); return; }
+      if (!data.length) { setError('No se encontró la dirección — verifica los campos'); return; }
       updateCoords(parseFloat(data[0].lat), parseFloat(data[0].lon));
     } catch {
-      setError('Error al buscar');
+      setError('Error al buscar la dirección');
     } finally {
       setSearching(false);
     }
   };
 
-  // Auto-search when external address prop changes (e.g. from OCR)
+  // Auto-search cuando los campos del formulario cambian (calle, colonia, CP, etc.).
+  // Debounce 800ms para no atacar Nominatim con cada keystroke.
   useEffect(() => {
     if (!searchAddress || searchAddress.length < 5) return;
     if (lastAutoSearch.current === searchAddress) return;
-    lastAutoSearch.current = searchAddress;
-    geocode(searchAddress);
+    const handle = setTimeout(() => {
+      lastAutoSearch.current = searchAddress;
+      geocode(searchAddress);
+    }, 800);
+    return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchAddress]);
 
@@ -102,31 +105,29 @@ export function MapPicker({ coords, onCoordsChange, searchAddress }: MapPickerPr
 
   return (
     <div className="space-y-3">
-      {/* Search bar */}
-      <div className="flex gap-2">
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            placeholder="Buscar dirección del cliente…"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && geocode(searchQuery)}
-            className="w-full bg-slate-900 border border-emerald-500/20 rounded-xl px-4 py-2.5 text-white text-sm pr-10 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-500"
-          />
-          {searching && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 text-emerald-400 animate-spin" />}
+      {/* Estado del auto-geocoding + botón de ubicación actual */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/60 border border-emerald-500/20 text-xs text-slate-400">
+          {searching ? (
+            <>
+              <Loader2 className="w-4 h-4 text-emerald-400 animate-spin shrink-0" />
+              <span className="text-emerald-300">Localizando dirección…</span>
+            </>
+          ) : (
+            <>
+              <Search className="w-4 h-4 text-emerald-400/70 shrink-0" />
+              <span className="truncate">
+                {searchAddress && searchAddress.length >= 5
+                  ? <>Auto-localizando: <span className="text-emerald-300/90">{searchAddress}</span></>
+                  : 'Escribe la dirección arriba para localizar en el mapa.'}
+              </span>
+            </>
+          )}
         </div>
         <button
           type="button"
-          onClick={() => geocode(searchQuery)}
-          disabled={searching}
-          className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl flex items-center gap-1.5 text-sm font-medium transition-colors"
-        >
-          <Search className="w-4 h-4" /> Buscar
-        </button>
-        <button
-          type="button"
           onClick={getCurrentLocation}
-          className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-1.5 text-sm font-medium transition-colors"
+          className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-1.5 text-sm font-medium transition-colors shrink-0"
         >
           <Crosshair className="w-4 h-4" /> Ubicación actual
         </button>
