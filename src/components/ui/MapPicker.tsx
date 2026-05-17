@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MapPin, Search, Crosshair, Loader2 } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface MapPickerProps {
   coords: string;
@@ -125,7 +126,7 @@ export function MapPicker({ coords, onCoordsChange, searchAddress }: MapPickerPr
 
   return (
     <div className="space-y-3">
-      {/* Search bar */}
+      {/* Search bar — emerald theme */}
       <div className="flex gap-2">
         <div className="flex-1 relative">
           <input
@@ -134,15 +135,15 @@ export function MapPicker({ coords, onCoordsChange, searchAddress }: MapPickerPr
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && geocode(searchQuery)}
-            className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm pr-10 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-500"
+            className="w-full bg-slate-900 border border-emerald-500/20 rounded-xl px-4 py-2.5 text-white text-sm pr-10 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-500"
           />
-          {searching && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 text-blue-400 animate-spin" />}
+          {searching && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 text-emerald-400 animate-spin" />}
         </div>
         <button
           type="button"
           onClick={() => geocode(searchQuery)}
           disabled={searching}
-          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl flex items-center gap-1.5 text-sm font-medium transition-colors"
+          className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl flex items-center gap-1.5 text-sm font-medium transition-colors"
         >
           <Search className="w-4 h-4" /> Buscar
         </button>
@@ -159,22 +160,79 @@ export function MapPicker({ coords, onCoordsChange, searchAddress }: MapPickerPr
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
-      {/* Coords display */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg">
-        <MapPin className="w-4 h-4 text-blue-400 shrink-0" />
-        <span className="font-mono text-xs text-slate-300">{coords || 'Sin coordenadas'}</span>
-        <span className="text-slate-500 text-xs ml-auto">Haz clic en el mapa o arrastra el pin</span>
-      </div>
+      {/* Coords card — animated, emerald accent, live badge */}
+      <motion.div
+        className="relative overflow-hidden rounded-xl bg-slate-950/80 border border-emerald-500/20 px-4 py-3"
+        whileHover={{ scale: 1.005 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          {/* Map icon w/ glow */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            whileHover={{
+              filter: 'drop-shadow(0 0 8px rgba(52, 211, 153, 0.6))',
+            }}
+            className="shrink-0"
+          >
+            <svg
+              width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className="text-emerald-400"
+              style={{ filter: 'drop-shadow(0 0 4px rgba(52, 211, 153, 0.3))' }}
+            >
+              <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
+              <line x1="9" x2="9" y1="3" y2="18" />
+              <line x1="15" x2="15" y1="6" y2="21" />
+            </svg>
+          </motion.div>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-sm font-medium tracking-tight">Ubicación GPS</p>
+            <p className="text-emerald-300/80 text-xs font-mono mt-0.5 truncate">
+              {coords || 'Sin coordenadas — haz clic en el mapa o usa los botones de arriba'}
+            </p>
+            {/* Animated underline */}
+            <motion.div
+              className="h-px mt-2 bg-gradient-to-r from-emerald-500/50 via-emerald-400/30 to-transparent"
+              initial={{ scaleX: 0, originX: 0 }}
+              animate={{ scaleX: coords ? 1 : 0.3 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+            />
+          </div>
+
+          {/* Live badge */}
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 backdrop-blur-sm border border-emerald-500/20 shrink-0">
+            <motion.div
+              className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+              animate={{ opacity: [1, 0.4, 1] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <span className="text-[10px] font-medium text-emerald-300 tracking-wide uppercase">Live</span>
+          </div>
+        </div>
+      </motion.div>
 
       {/* Leaflet CSS */}
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-      {/* Map container */}
-      <div
-        ref={containerRef}
-        className="w-full rounded-xl overflow-hidden border border-white/10"
-        style={{ height: 320 }}
-      />
+      {/* Map container — emerald border + glow */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="relative rounded-2xl overflow-hidden border border-emerald-500/20"
+        style={{ boxShadow: '0 0 30px rgba(52, 211, 153, 0.08)' }}
+      >
+        {/* Subtle gradient overlay (pointer-events-none so it doesn't block map clicks) */}
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.02] via-transparent to-emerald-500/[0.05] pointer-events-none z-[400]" />
+        <div
+          ref={containerRef}
+          className="w-full"
+          style={{ height: 360 }}
+        />
+      </motion.div>
     </div>
   );
 }
