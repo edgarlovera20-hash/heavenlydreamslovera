@@ -26,6 +26,8 @@ interface DocumentDef {
 interface Sale {
   id?: string;
   folio?: string;
+  folioSiac?: string;
+  servicioSiac?: string;
   asesorId?: string;
   nombres?: string;
   apellidoPaterno?: string;
@@ -115,6 +117,21 @@ function isComplete(s: Sale): boolean {
 function fullName(s: Sale): string {
   const n = [s.nombres, s.apellidoPaterno, s.apellidoMaterno].filter(Boolean).join(' ').trim();
   return n || 'Cliente sin nombre';
+}
+
+// Nombre de la carpeta:
+//  - Sin captura SIAC: nombre del cliente
+//  - Con captura SIAC: "SIAC <folio> · <Nombre>"
+function folderName(s: Sale): string {
+  const name = fullName(s);
+  if (s.folioSiac) return `SIAC ${s.folioSiac} · ${name}`;
+  return name;
+}
+
+function folderSecondary(s: Sale): string {
+  if (s.folioSiac && s.servicioSiac) return `Servicio ${s.servicioSiac}`;
+  if (s.folioSiac) return `Folio SIAC confirmado`;
+  return 'Sin folio SIAC';
 }
 
 function persistSales(updater: (sales: Sale[]) => Sale[]): Sale[] {
@@ -236,7 +253,8 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     if (!q) return sales;
     return sales.filter(s =>
       fullName(s).toLowerCase().includes(q) ||
-      (s.folio || '').toLowerCase().includes(q),
+      (s.folio || '').toLowerCase().includes(q) ||
+      (s.folioSiac || '').toLowerCase().includes(q),
     );
   }, [sales, searchTerm]);
 
@@ -583,6 +601,11 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
                 <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold border border-blue-500/30">
                   Folio: {sale.folio || sale.id}
                 </span>
+                {sale.folioSiac && (
+                  <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-200 text-xs font-bold border border-purple-500/40 font-mono">
+                    SIAC {sale.folioSiac}
+                  </span>
+                )}
                 {complete ? (
                   <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30 flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" /> Completado
@@ -598,7 +621,8 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
                   </span>
                 )}
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold text-white">{fullName(sale)}</h2>
+              <h2 className="text-2xl md:text-3xl font-bold text-white">{folderName(sale)}</h2>
+              <p className="text-xs text-slate-500 font-mono mt-0.5">{folderSecondary(sale)}</p>
               <p className="text-slate-400 text-sm mt-1">
                 Promotor: <span className="text-slate-200">{promoterName}</span> · Tel: <span className="text-slate-200">{promoterPhone}</span>
               </p>
@@ -725,8 +749,20 @@ function SaleCard({
               </span>
             )}
           </div>
-          <h3 className="text-lg font-bold text-white group-hover:text-blue-300 transition-colors truncate">{fullName(sale)}</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Promotor: {promoterName}</p>
+          <h3 className="text-lg font-bold text-white group-hover:text-blue-300 transition-colors truncate flex items-center gap-2">
+            {sale.folioSiac && (
+              <span className="px-2 py-0.5 rounded-md bg-purple-500/20 border border-purple-500/40 text-purple-200 text-xs font-mono shrink-0">
+                SIAC {sale.folioSiac}
+              </span>
+            )}
+            <span className="truncate">{fullName(sale)}</span>
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Promotor: {promoterName}
+            {sale.folioSiac && sale.servicioSiac && (
+              <span className="ml-2 text-purple-300">· Servicio {sale.servicioSiac}</span>
+            )}
+          </p>
         </div>
         <div className="flex-1 max-w-xs w-full">
           <div className="flex justify-between text-xs text-slate-400 mb-1.5">

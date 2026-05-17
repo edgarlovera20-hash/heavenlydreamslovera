@@ -32,7 +32,7 @@ interface MatchRow {
 
 interface Props {
   contract: ContractData;
-  onValidated?: (folioSiac: string) => void;
+  onValidated?: (data: { folioSiac: string; servicio?: string; image: string }) => void;
 }
 
 function normalize(s: string = ''): string {
@@ -102,7 +102,10 @@ export function SiacValidator({ contract, onValidated }: Props) {
         const total = checks.filter(r => r.siac || r.contract).length;
         if (matched === total && f.folioSiac) {
           toast.success(`✓ Todos los datos coinciden. Folio SIAC: ${f.folioSiac}`);
-          onValidated?.(f.folioSiac);
+          onValidated?.({ folioSiac: f.folioSiac, servicio: f.servicio, image: base64 });
+        } else if (f.folioSiac) {
+          toast.warning(`${matched}/${total} datos coinciden. Folio SIAC ${f.folioSiac} guardado igual.`, { duration: 6000 });
+          onValidated?.({ folioSiac: f.folioSiac, servicio: f.servicio, image: base64 });
         } else {
           toast.warning(`${matched}/${total} datos coinciden. Revisa las diferencias.`, { duration: 6000 });
         }
