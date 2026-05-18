@@ -1,30 +1,31 @@
 /**
  * OCR multi-proveedor con fallback en cascada:
- *   1. GPT-4o-mini (OpenAI)  — rápido, ~3-5s, requiere OPENAI_API_KEY
- *   2. Claude Haiku 4.5      — fallback, ~2-4s, requiere ANTHROPIC_API_KEY
- *   3. Tesseract.js          — fallback offline, ~5-10s, sin red ni API key
+ *   1. Gemini 1.5 Pro (Google) — potente, ~3-5s, requiere GEMINI_API_KEY
+ *   2. GPT-4o-mini (OpenAI)    — rápido, ~3-5s, requiere OPENAI_API_KEY
+ *   3. Tesseract.js            — fallback offline, ~5-10s, sin red ni API key
  *
  * Si los tres fallan, lanza error.
  *
  * Variables de entorno:
+ *   GEMINI_API_KEY     — clave para Gemini 1.5 Pro
  *   OPENAI_API_KEY     — clave para GPT-4o-mini
- *   ANTHROPIC_API_KEY  — clave para Claude Haiku 4.5
- *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'openai' | 'anthropic' | 'tesseract'
+ *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'gemini' | 'openai' | 'tesseract'
  */
 
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { runTesseractIne, runTesseractComprobante, runTesseractSiac } from './ocr-tesseract';
 
+const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY || '';
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'openai').toLowerCase();
+const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'gemini').toLowerCase();
 
+const GEMINI_MODEL    = 'gemini-1.5-pro-latest';
 const OPENAI_MODEL    = 'gpt-4o-mini';
-const ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001';
 
 const TIMEOUT_MS_LLM       = 45_000;  // 45s para GPT/Claude
 const TIMEOUT_MS_TESSERACT = 60_000;  // 60s para tesseract local
 
-export type OcrProvider = 'openai' | 'anthropic' | 'tesseract';
+export type OcrProvider = 'gemini' | 'openai' | 'tesseract';
 export type OcrDocType  = 'ine' | 'comprobante' | 'siac';
 
 export interface OcrResult {
@@ -253,50 +254,46 @@ async function callOpenAi(prompt: string, base64Images: string[]): Promise<strin
   return data?.choices?.[0]?.message?.content || '';
 }
 
-// ─── PROVIDER 2: Claude Haiku 4.5 ────────────────────────────────────────────
+// ─── PROVIDER 2: Gemini 1.5 Pro ──────────────────────────────────────────────
 
-async function callAnthropic(prompt: string, base64Images: string[]): Promise<string> {
-  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY no configurada');
+async function callGemini(prompt: string, base64Images: string[]): Promise<string> {
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY no configurada');
 
-  const imageBlocks = base64Images.map(b64 => ({
-    type: 'image' as const,
-    source: {
-      type: 'base64' as const,
-      media_type: detectMediaType(b64),
-      data: stripDataUrl(b64),
-    },
-  }));
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
-  const res = await withTimeout(
-    fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
+  // Convertir base64 a formato que Gemini espera
+  const parts: any[] = [];
+
+  for (const b64 of base64Images) {
+    const mediaType = detectMediaType(b64);
+    const data = stripDataUrl(b64);
+    parts.push({
+      inlineData: {
+        mimeType: mediaType,
+        data: data,
       },
-      body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
-        max_tokens: 2048,
-        temperature: 0.0,
-        messages: [{
-          role: 'user',
-          content: [...imageBlocks, { type: 'text', text: prompt }],
-        }],
-      }),
-    }),
-    TIMEOUT_MS_LLM,
-    'Anthropic'
-  );
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Anthropic ${res.status}: ${body.slice(0, 200)}`);
+    });
   }
 
-  const data = await res.json() as any;
-  const block = (data?.content || []).find((b: any) => b.type === 'text');
-  return block?.text || '';
+  // Agregar el prompt al final
+  parts.push({ text: prompt });
+
+  const res = await withTimeout(
+    model.generateContent({
+      contents: [{ role: 'user', parts }],
+      generationConfig: {
+        temperature: 0.0,
+        maxOutputTokens: 2000,
+      },
+    }),
+    TIMEOUT_MS_LLM,
+    'Gemini'
+  );
+
+  const text = res.response.text();
+  if (!text) throw new Error('Gemini devolvió respuesta vacía');
+  return text;
 }
 
 // ─── PROVIDER 3: Tesseract.js (delegado a ocr-tesseract.ts) ──────────────────
@@ -325,15 +322,24 @@ async function callTesseract(docType: OcrDocType, base64Images: string[]): Promi
 
 const PROVIDER_ORDER: OcrProvider[] = (() => {
   // Permite forzar el orden vía OCR_PRIMARY
-  const all: OcrProvider[] = ['openai', 'anthropic', 'tesseract'];
-  if (OCR_PRIMARY === 'anthropic') return ['anthropic', 'openai', 'tesseract'];
-  if (OCR_PRIMARY === 'tesseract') return ['tesseract', 'openai', 'anthropic'];
-  return all; // default: openai → anthropic → tesseract
+  const all: OcrProvider[] = ['gemini', 'openai', 'tesseract'];
+  if (OCR_PRIMARY === 'openai') return ['openai', 'gemini', 'tesseract'];
+  if (OCR_PRIMARY === 'tesseract') return ['tesseract', 'gemini', 'openai'];
+  return all; // default: gemini → openai → tesseract
 })();
 
 async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: string[]): Promise<OcrResult> {
   const t0 = Date.now();
   const prompt = PROMPTS[docType];
+
+  if (provider === 'gemini') {
+    const raw = await callGemini(prompt, images);
+    if (!raw) throw new Error('Gemini devolvió respuesta vacía');
+    const fields = parseJsonResponse(raw);
+    const text = fields.rawText || raw;
+    delete fields.rawText;
+    return { text, fields, provider, model: GEMINI_MODEL, durationMs: Date.now() - t0 };
+  }
 
   if (provider === 'openai') {
     const raw = await callOpenAi(prompt, images);
@@ -342,15 +348,6 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
     const text = fields.rawText || raw;
     delete fields.rawText;
     return { text, fields, provider, model: OPENAI_MODEL, durationMs: Date.now() - t0 };
-  }
-
-  if (provider === 'anthropic') {
-    const raw = await callAnthropic(prompt, images);
-    if (!raw) throw new Error('Anthropic devolvió respuesta vacía');
-    const fields = parseJsonResponse(raw);
-    const text = fields.rawText || raw;
-    delete fields.rawText;
-    return { text, fields, provider, model: ANTHROPIC_MODEL, durationMs: Date.now() - t0 };
   }
 
   // tesseract
@@ -365,8 +362,8 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
   const errors: string[] = [];
 
   for (const provider of PROVIDER_ORDER) {
+    if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin API key'); continue; }
     if (provider === 'openai' && !OPENAI_API_KEY) { errors.push('openai: sin API key'); continue; }
-    if (provider === 'anthropic' && !ANTHROPIC_API_KEY) { errors.push('anthropic: sin API key'); continue; }
 
     try {
       const result = await tryProvider(provider, docType, imgs);
@@ -411,8 +408,8 @@ export async function checkOcrStatus() {
     primary: PROVIDER_ORDER[0],
     order: PROVIDER_ORDER,
     providers: {
+      gemini:    { configured: !!GEMINI_API_KEY,   model: GEMINI_MODEL },
       openai:    { configured: !!OPENAI_API_KEY,    model: OPENAI_MODEL },
-      anthropic: { configured: !!ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL },
       tesseract: { configured: true,                model: 'tesseract-spa (local)' },
     },
   };
