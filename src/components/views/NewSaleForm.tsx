@@ -105,6 +105,10 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
+  // OCR en background — NO bloquea la UI, el usuario puede avanzar libremente
+  const [ocrBgStatus, setOcrBgStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [ocrBgMessage, setOcrBgMessage] = useState<string>('');
+  const [ocrBgFieldsCount, setOcrBgFieldsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
   const [showAnexo, setShowAnexo] = useState(false);
@@ -313,6 +317,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   // Núcleo del OCR — recibe lista de imágenes (base64) y autorellena.
   // Envía TODAS las imágenes en UNA sola llamada al backend — el modelo combina
   // info de frente + reverso en un solo prompt, mejor precisión y menos tokens.
+  // (Versión LEGACY síncrona — kept para botón manual "Re-escanear")
   const runOcrOnImages = async (imgs: string[]) => {
     if (imgs.length === 0) return;
     setIsOcrLoading(true);
@@ -341,8 +346,62 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
-  // Subir comprobante de domicilio (CFE/Izzi/Totalplay/Telmex) — SOLO guarda la imagen.
-  // El usuario pulsa "Escanear con IA" cuando esté listo.
+  // NUEVO: OCR en background — NO bloquea la UI.
+  // El usuario puede avanzar de paso mientras se procesa.
+  // Smart merge: solo rellena campos VACÍOS (respeta lo que el usuario escribió).
+  const runOcrInBackground = (imgs: string[]) => {
+    if (imgs.length === 0) return;
+    setOcrBgStatus('running');
+    setOcrBgMessage('Procesando documento con IA…');
+    setOcrBgFieldsCount(0);
+
+    // Disparamos sin await — corre en background
+    (async () => {
+      try {
+        const result = await aiAgent.analyzeDocument(imgs, 'image/png');
+        // Smart merge: usamos un setForm con función para acceder al estado MÁS RECIENTE
+        // y solo rellenar campos vacíos (no sobrescribir lo que el usuario escribió)
+        let filledCount = 0;
+        setForm(prev => {
+          const updates: Record<string, any> = {};
+          if (result) {
+            for (const [k, v] of Object.entries(result)) {
+              const current = (prev as any)[k];
+              // Solo rellenar si el campo está vacío
+              if (v && (!current || String(current).trim() === '')) {
+                updates[k] = v;
+                filledCount++;
+              }
+            }
+          }
+          return { ...prev, ...updates };
+        });
+
+        setTimeout(() => {
+          setOcrBgFieldsCount(filledCount);
+          if (filledCount > 0) {
+            setOcrBgStatus('success');
+            setOcrBgMessage(`IA completó ${filledCount} campo${filledCount !== 1 ? 's' : ''}`);
+            toast.success(`✨ OCR autocompletó ${filledCount} campo${filledCount !== 1 ? 's' : ''}`, { duration: 4000 });
+            // Auto-ocultar después de 8s
+            setTimeout(() => setOcrBgStatus(s => s === 'success' ? 'idle' : s), 8000);
+          } else {
+            setOcrBgStatus('idle');
+            setOcrBgMessage('');
+            toast.info('Los datos ya estaban llenos o no fueron detectados.', { duration: 4000 });
+          }
+        }, 0);
+      } catch (err: any) {
+        console.error('OCR Background Error:', err);
+        setOcrBgStatus('error');
+        setOcrBgMessage('Error de OCR — completa manualmente');
+        toast.error('OCR en background falló. Puedes completar los campos manualmente.', { duration: 6000 });
+        setTimeout(() => setOcrBgStatus(s => s === 'error' ? 'idle' : s), 10000);
+      }
+    })();
+  };
+
+  // Subir comprobante de domicilio (CFE/Izzi/Totalplay/Telmex) — guarda y dispara OCR en background.
   const handleComprobanteUpload = (file: File | undefined) => {
     if (!file) return;
     const reader = new FileReader();
@@ -350,9 +409,64 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     reader.onloadend = () => {
       const base64 = reader.result as string;
       updateForm({ comprobanteDomicilio: base64 });
-      toast.info('Comprobante listo. Pulsa "Escanear con IA" para auto-llenar el domicilio.', { duration: 3500 });
+      toast.info('📸 Comprobante cargado — IA extrayendo domicilio en segundo plano. Puedes seguir avanzando.', { duration: 4000 });
+      // Disparar OCR de comprobante en background (no bloquea)
+      runComprobanteOcrInBackground(base64);
     };
     reader.readAsDataURL(file);
+  };
+
+  // OCR del comprobante en background — no bloquea la UI
+  const runComprobanteOcrInBackground = (image: string) => {
+    setOcrBgStatus('running');
+    setOcrBgMessage('Extrayendo domicilio con IA…');
+    (async () => {
+      try {
+        const res = await fetch('/api/vision/comprobante', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image }),
+        });
+        if (!res.ok) throw new Error(`OCR error (${res.status})`);
+        const data = await res.json();
+        const f = data.fields || {};
+        let filled = 0;
+        setForm(prev => {
+          const updates: any = {};
+          // Smart merge: solo llenar campos vacíos
+          const tryFill = (key: keyof typeof prev, val: any) => {
+            if (val && (!prev[key] || String(prev[key]).trim() === '')) {
+              updates[key] = val;
+              filled++;
+            }
+          };
+          tryFill('calle', f.calle);
+          tryFill('numeroExterior', f.numeroExterior);
+          tryFill('numeroInterior', f.numeroInterior);
+          tryFill('colonia', f.colonia);
+          tryFill('codigoPostal', f.codigoPostal);
+          tryFill('delegacion', f.delegacion);
+          tryFill('ciudad', f.ciudad);
+          return { ...prev, ...updates };
+        });
+        setTimeout(() => {
+          if (filled > 0) {
+            setOcrBgStatus('success');
+            setOcrBgMessage(`IA completó ${filled} campo${filled !== 1 ? 's' : ''} de domicilio`);
+            toast.success(`✨ Domicilio autocompletado: ${filled} campo${filled !== 1 ? 's' : ''}`);
+            setTimeout(() => setOcrBgStatus(s => s === 'success' ? 'idle' : s), 8000);
+          } else {
+            setOcrBgStatus('idle');
+            toast.info('Los datos de domicilio ya estaban llenos o no se extrajeron.');
+          }
+        }, 0);
+      } catch (err: any) {
+        setOcrBgStatus('error');
+        setOcrBgMessage('Error escaneando comprobante');
+        toast.error('OCR del comprobante falló. Completa el domicilio manualmente.');
+        setTimeout(() => setOcrBgStatus(s => s === 'error' ? 'idle' : s), 10000);
+      }
+    })();
   };
 
   // Ejecutar OCR sobre el comprobante ya subido — disparado por botón explícito.
@@ -396,8 +510,8 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
-  // Al subir un documento, SOLO lo guardamos. El usuario decide cuándo escanear con IA
-  // mediante el botón "Escanear con IA" que aparece debajo de las imágenes.
+  // Al subir un documento, se guarda Y se dispara OCR en background automáticamente.
+  // El usuario puede seguir avanzando con el formulario mientras la IA procesa.
   const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -405,10 +519,22 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     reader.onerror = () => toast.error('No se pudo leer el archivo.');
     reader.onloadend = () => {
       const base64 = reader.result as string;
-      if (slot === 'frente') updateForm({ ineFrente: base64 });
-      else if (slot === 'reverso') updateForm({ ineReverso: base64 });
-      else updateForm({ curpDoc: base64 });
-      toast.info('Imagen lista. Pulsa "Escanear con IA" para extraer los datos.', { duration: 3500 });
+      // Calculamos las imágenes que estarán disponibles después de actualizar
+      let imgsForOcr: string[] = [];
+      if (slot === 'frente') {
+        updateForm({ ineFrente: base64 });
+        imgsForOcr = [base64];
+        if (form.ineReverso) imgsForOcr.push(form.ineReverso);
+      } else if (slot === 'reverso') {
+        updateForm({ ineReverso: base64 });
+        imgsForOcr = form.ineFrente ? [form.ineFrente, base64] : [base64];
+      } else {
+        updateForm({ curpDoc: base64 });
+        imgsForOcr = [base64];
+      }
+      toast.info('📸 Imagen cargada — la IA está extrayendo los datos en segundo plano. Puedes seguir avanzando.', { duration: 4000 });
+      // Disparar OCR en background SIN await — no bloquea la UI
+      runOcrInBackground(imgsForOcr);
     };
     reader.readAsDataURL(file);
     event.target.value = '';
@@ -642,7 +768,7 @@ const exportToPDF = async () => {
                   onPick={() => frenteInputRef.current?.click()}
                   onCamera={() => document.getElementById('frente-cam')?.click()}
                   onRemove={() => removeImage(docType === 'ine' ? 'frente' : 'curp')}
-                  disabled={isOcrLoading}
+                  disabled={false}
                 />
                 {docType === 'ine' && (
                   <UploadSlot
@@ -651,27 +777,55 @@ const exportToPDF = async () => {
                     onPick={() => reversoInputRef.current?.click()}
                     onCamera={() => document.getElementById('reverso-cam')?.click()}
                     onRemove={() => removeImage('reverso')}
-                    disabled={isOcrLoading}
+                    disabled={false}
                   />
                 )}
               </div>
 
-              {/* Botón Escanear / Estado del escaneo */}
+              {/* Indicador NO-BLOQUEANTE de OCR en background + botón re-escanear */}
               {(() => {
                 const hasImages = docType === 'ine'
                   ? Boolean(form.ineFrente || form.ineReverso)
                   : Boolean(form.curpDoc);
                 if (!hasImages) return null;
                 return (
-                  <div className="mt-5">
-                    {isOcrLoading ? (
-                      <div className="bg-gradient-to-r from-blue-600/20 via-blue-500/15 to-blue-600/20 border border-blue-500/30 rounded-2xl p-5 flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
-                          <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-                        </div>
+                  <div className="mt-5 space-y-3">
+                    {/* Indicador discreto de OCR background */}
+                    {ocrBgStatus === 'running' && (
+                      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 flex items-center gap-3">
+                        <Loader2 className="w-5 h-5 text-blue-400 animate-spin shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-blue-300 mb-1">Escaneando con IA…</div>
-                          <div className="w-full h-2 bg-blue-500/20 rounded-full overflow-hidden">
+                          <div className="text-xs font-semibold text-blue-300">🤖 IA procesando en segundo plano…</div>
+                          <div className="text-[11px] text-blue-300/70">Puedes seguir llenando el formulario o avanzar de paso</div>
+                        </div>
+                      </div>
+                    )}
+                    {ocrBgStatus === 'success' && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 flex items-center gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-emerald-300">✓ {ocrBgMessage}</div>
+                          <div className="text-[11px] text-emerald-300/70">Revisa que los datos sean correctos</div>
+                        </div>
+                      </div>
+                    )}
+                    {ocrBgStatus === 'error' && (
+                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-center gap-3">
+                        <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-amber-300">{ocrBgMessage}</div>
+                          <div className="text-[11px] text-amber-300/70">Completa los campos manualmente</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botón de re-escanear manual (siempre disponible) */}
+                    {isOcrLoading ? (
+                      <div className="bg-gradient-to-r from-blue-600/20 via-blue-500/15 to-blue-600/20 border border-blue-500/30 rounded-2xl p-4 flex items-center gap-4">
+                        <Loader2 className="w-5 h-5 text-blue-400 animate-spin shrink-0" />
+                        <div className="flex-1">
+                          <div className="text-sm font-bold text-blue-300">Re-escaneando con IA…</div>
+                          <div className="w-full h-1.5 bg-blue-500/20 rounded-full overflow-hidden mt-1">
                             <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-200" style={{ width: `${Math.max(5, ocrProgress)}%` }} />
                           </div>
                         </div>
@@ -681,11 +835,12 @@ const exportToPDF = async () => {
                       <button
                         type="button"
                         onClick={handleScan}
-                        className="group w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-blue-500/30 ring-1 ring-white/10"
+                        disabled={ocrBgStatus === 'running'}
+                        className="group w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/30 ring-1 ring-white/10"
                       >
-                        <ScanLine className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        <span>{form.curp || form.nombres ? 'Volver a escanear con IA' : 'Escanear con IA'}</span>
-                        <Sparkles className="w-4 h-4 opacity-80" />
+                        <ScanLine className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                        <span>{form.curp || form.nombres ? 'Volver a escanear (sobrescribe)' : 'Forzar escaneo manual'}</span>
+                        <Sparkles className="w-3.5 h-3.5 opacity-80" />
                       </button>
                     )}
                   </div>

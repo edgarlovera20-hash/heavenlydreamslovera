@@ -2,14 +2,17 @@
  * OCR multi-proveedor con fallback en cascada:
  *   1. Gemini 1.5 Pro (Google) — potente, ~3-5s, requiere GEMINI_API_KEY
  *   2. GPT-4o-mini (OpenAI)    — rápido, ~3-5s, requiere OPENAI_API_KEY
- *   3. Tesseract.js            — fallback offline, ~5-10s, sin red ni API key
+ *   3. Ollama (local/remoto)   — flexible, ~5-10s, requiere OLLAMA_URL
+ *   4. Tesseract.js            — fallback offline, ~5-10s, sin red ni API key
  *
- * Si los tres fallan, lanza error.
+ * Si los cuatro fallan, lanza error.
  *
  * Variables de entorno:
  *   GEMINI_API_KEY     — clave para Gemini 1.5 Pro
  *   OPENAI_API_KEY     — clave para GPT-4o-mini
- *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'gemini' | 'openai' | 'tesseract'
+ *   OLLAMA_URL         — URL del servidor Ollama (ej: http://localhost:11434)
+ *   OLLAMA_API_KEY     — opcional, clave de autenticación para Ollama
+ *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'gemini' | 'openai' | 'ollama' | 'tesseract'
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -17,15 +20,18 @@ import { runTesseractIne, runTesseractComprobante, runTesseractSiac } from './oc
 
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY || '';
+const OLLAMA_URL        = process.env.OLLAMA_URL || '';
+const OLLAMA_API_KEY    = process.env.OLLAMA_API_KEY || '';
 const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'gemini').toLowerCase();
 
-const GEMINI_MODEL    = 'gemini-1.5-pro-latest';
+const GEMINI_MODEL    = 'gemini-2.5-flash';
 const OPENAI_MODEL    = 'gpt-4o-mini';
+const OLLAMA_MODEL    = 'glm-ocr';
 
 const TIMEOUT_MS_LLM       = 45_000;  // 45s para GPT/Claude
 const TIMEOUT_MS_TESSERACT = 60_000;  // 60s para tesseract local
 
-export type OcrProvider = 'gemini' | 'openai' | 'tesseract';
+export type OcrProvider = 'gemini' | 'openai' | 'ollama' | 'tesseract';
 export type OcrDocType  = 'ine' | 'comprobante' | 'siac';
 
 export interface OcrResult {
@@ -296,7 +302,48 @@ async function callGemini(prompt: string, base64Images: string[]): Promise<strin
   return text;
 }
 
-// ─── PROVIDER 3: Tesseract.js (delegado a ocr-tesseract.ts) ──────────────────
+// ─── PROVIDER 3: Ollama (local/remoto) ──────────────────────────────────────
+
+async function callOllama(prompt: string, base64Images: string[]): Promise<string> {
+  if (!OLLAMA_URL) throw new Error('OLLAMA_URL no configurada');
+
+  // Ollama espera el base64 PURO (sin prefijo data:image/...;base64,)
+  const imageBlocks = base64Images.map(b64 => stripDataUrl(b64));
+
+  const payload: any = {
+    model: OLLAMA_MODEL,
+    prompt: prompt,
+    stream: false,
+    images: imageBlocks,
+    options: {
+      temperature: 0.0,
+      num_predict: 2000,
+    },
+  };
+
+  const res = await withTimeout(
+    fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(OLLAMA_API_KEY && { 'Authorization': `Bearer ${OLLAMA_API_KEY}` }),
+      },
+      body: JSON.stringify(payload),
+    }),
+    TIMEOUT_MS_LLM * 3, // Ollama local puede tardar más en primera ejecución
+    'Ollama'
+  );
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Ollama ${res.status}: ${body.slice(0, 200)}`);
+  }
+
+  const data = await res.json() as any;
+  return data?.response || '';
+}
+
+// ─── PROVIDER 4: Tesseract.js (delegado a ocr-tesseract.ts) ──────────────────
 
 async function callTesseract(docType: OcrDocType, base64Images: string[]): Promise<{ text: string; fields: Record<string, string> }> {
   // Tesseract solo procesa 1 imagen a la vez — recorremos y mergeamos los campos
@@ -322,10 +369,11 @@ async function callTesseract(docType: OcrDocType, base64Images: string[]): Promi
 
 const PROVIDER_ORDER: OcrProvider[] = (() => {
   // Permite forzar el orden vía OCR_PRIMARY
-  const all: OcrProvider[] = ['gemini', 'openai', 'tesseract'];
-  if (OCR_PRIMARY === 'openai') return ['openai', 'gemini', 'tesseract'];
-  if (OCR_PRIMARY === 'tesseract') return ['tesseract', 'gemini', 'openai'];
-  return all; // default: gemini → openai → tesseract
+  const all: OcrProvider[] = ['gemini', 'openai', 'ollama', 'tesseract'];
+  if (OCR_PRIMARY === 'openai') return ['openai', 'gemini', 'ollama', 'tesseract'];
+  if (OCR_PRIMARY === 'ollama') return ['ollama', 'gemini', 'openai', 'tesseract'];
+  if (OCR_PRIMARY === 'tesseract') return ['tesseract', 'gemini', 'openai', 'ollama'];
+  return all; // default: gemini → openai → ollama → tesseract
 })();
 
 async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: string[]): Promise<OcrResult> {
@@ -350,6 +398,15 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
     return { text, fields, provider, model: OPENAI_MODEL, durationMs: Date.now() - t0 };
   }
 
+  if (provider === 'ollama') {
+    const raw = await callOllama(prompt, images);
+    if (!raw) throw new Error('Ollama devolvió respuesta vacía');
+    const fields = parseJsonResponse(raw);
+    const text = fields.rawText || raw;
+    delete fields.rawText;
+    return { text, fields, provider, model: OLLAMA_MODEL, durationMs: Date.now() - t0 };
+  }
+
   // tesseract
   const { text, fields } = await callTesseract(docType, images);
   return { text, fields, provider, model: 'tesseract-spa', durationMs: Date.now() - t0 };
@@ -364,6 +421,7 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
   for (const provider of PROVIDER_ORDER) {
     if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin API key'); continue; }
     if (provider === 'openai' && !OPENAI_API_KEY) { errors.push('openai: sin API key'); continue; }
+    if (provider === 'ollama' && !OLLAMA_URL) { errors.push('ollama: sin URL configurada'); continue; }
 
     try {
       const result = await tryProvider(provider, docType, imgs);
@@ -410,6 +468,7 @@ export async function checkOcrStatus() {
     providers: {
       gemini:    { configured: !!GEMINI_API_KEY,   model: GEMINI_MODEL },
       openai:    { configured: !!OPENAI_API_KEY,    model: OPENAI_MODEL },
+      ollama:    { configured: !!OLLAMA_URL,        model: OLLAMA_MODEL, url: OLLAMA_URL },
       tesseract: { configured: true,                model: 'tesseract-spa (local)' },
     },
   };
