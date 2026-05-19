@@ -1,0 +1,13 @@
+# Workflow States
+
+CAPTURED
+OCR_PENDING
+OCR_COMPLETE
+VALIDATED
+SUPERVISOR_APPROVED
+SUBMITTED
+ACTIVATED
+POST_SALE
+COLLECTION
+
+Transitions must be handled only in backend services.
