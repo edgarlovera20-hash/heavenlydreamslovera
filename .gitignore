@@ -49,3 +49,28 @@ data/*.db-shm
 
 # Claude worktrees
 .claude/worktrees/
+
+# Turbo cache
+.turbo/
+
+# Next.js build
+apps/web/.next/
+apps/web/out/
+
+# WhatsApp Baileys sessions
+apps/whatsapp-service/sessions/
+
+# Prisma generated client (rebuild via db:generate)
+packages/database/node_modules/
+
+# Coverage
+coverage/
+
+# Docker volumes
+infrastructure/docker/volumes/
+
+# Ollama models (large binaries)
+infrastructure/ollama/
+
+# Google Vision credentials (sensitive)
+server/google-vision-credentials.json
