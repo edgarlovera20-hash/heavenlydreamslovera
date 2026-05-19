@@ -64,6 +64,9 @@ const ALLOWED_TABLES = [
   'commission_rules', 'quotas', 'validation_requests',
 ];
 
+// In-memory OTP store: phone → { code, expiresAt }
+const otpStore = new Map<string, { code: string; expiresAt: number }>();
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -117,6 +120,84 @@ async function startServer() {
     if (user.activo === 0)
       return res.status(403).json({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador.', code: 'INACTIVE' });
     AuditLog.insert({ accion: 'LOGIN', entidad: 'users', entidad_id: user.uid, user_id: user.uid, user_nombre: user.nombre, detalle: null });
+    const { password: _, ...safe } = user;
+    res.json(safe);
+  }));
+
+  // Obtener un usuario por uid (para biométrico y validaciones)
+  app.get("/api/users/:uid", wrap((req: any, res: any) => {
+    const user = Users.getById(req.params.uid) as any;
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const { password: _, ...safe } = user;
+    res.json(safe);
+  }));
+
+  // OAuth social login (Google / Microsoft)
+  app.post("/api/auth/oauth", wrap(async (req: any, res: any) => {
+    const { provider, idToken, email: rawEmail, name: rawName } = req.body;
+    let verifiedEmail = rawEmail as string;
+    let verifiedName = rawName as string;
+
+    if (provider === 'google' && idToken) {
+      try {
+        const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+        if (!r.ok) return res.status(401).json({ error: 'Token de Google inválido. Intenta de nuevo.' });
+        const info = await r.json() as any;
+        verifiedEmail = info.email;
+        verifiedName = info.name;
+      } catch {
+        return res.status(401).json({ error: 'No se pudo verificar el token de Google.' });
+      }
+    }
+
+    if (!verifiedEmail) return res.status(400).json({ error: 'Email requerido.' });
+
+    const user = db.prepare('SELECT * FROM users WHERE email=?').get(verifiedEmail) as any;
+    if (!user) return res.status(404).json({ error: 'No existe una cuenta con ese correo. Contacta al administrador.', code: 'NOT_FOUND' });
+    if (user.activo === 2) return res.status(403).json({ error: 'Tu cuenta está pendiente de aprobación.', code: 'PENDING' });
+    if (user.activo === 0) return res.status(403).json({ error: 'Tu cuenta ha sido desactivada.', code: 'INACTIVE' });
+
+    AuditLog.insert({ accion: `LOGIN_${String(provider).toUpperCase()}`, entidad: 'users', entidad_id: user.uid, user_id: user.uid, user_nombre: user.nombre, detalle: null });
+    const { password: _, ...safe } = user;
+    res.json(safe);
+  }));
+
+  // Enviar OTP por número de teléfono
+  app.post("/api/auth/phone/send", wrap(async (req: any, res: any) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Número de teléfono requerido.' });
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length < 10) return res.status(400).json({ error: 'Número inválido (mínimo 10 dígitos).' });
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    otpStore.set(cleanPhone, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+
+    // ── Producción: sustituye este console.log por tu integración SMS / WhatsApp ──
+    console.log(`[OTP] +${cleanPhone} → ${code}  (válido 10 min)`);
+    // Ejemplo Twilio: await twilioClient.messages.create({ to: `+${cleanPhone}`, from: '+15..', body: `Tu código HD: ${code}` })
+
+    res.json({ ok: true });
+  }));
+
+  // Verificar OTP y devolver sesión
+  app.post("/api/auth/phone/verify", wrap(async (req: any, res: any) => {
+    const { phone, code } = req.body;
+    if (!phone || !code) return res.status(400).json({ error: 'Teléfono y código requeridos.' });
+    const cleanPhone = phone.replace(/\D/g, '');
+
+    const stored = otpStore.get(cleanPhone);
+    if (!stored) return res.status(400).json({ error: 'No hay código activo. Solicita uno nuevo.' });
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(cleanPhone);
+      return res.status(400).json({ error: 'El código expiró. Solicita uno nuevo.' });
+    }
+    if (stored.code !== String(code).trim()) return res.status(400).json({ error: 'Código incorrecto.' });
+    otpStore.delete(cleanPhone);
+
+    const user = db.prepare('SELECT * FROM users WHERE telefono=? AND activo=1').get(cleanPhone) as any;
+    if (!user) return res.status(404).json({ error: 'No hay cuenta registrada con ese número. Contacta al administrador.', code: 'NOT_FOUND' });
+
+    AuditLog.insert({ accion: 'LOGIN_PHONE', entidad: 'users', entidad_id: user.uid, user_id: user.uid, user_nombre: user.nombre, detalle: null });
     const { password: _, ...safe } = user;
     res.json(safe);
   }));

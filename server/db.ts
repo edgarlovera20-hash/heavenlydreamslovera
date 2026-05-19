@@ -252,6 +252,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_valreq_status    ON validation_requests (status);
 `);
 
+// Safe migration: add telefono column if not exists
+try { db.exec('ALTER TABLE users ADD COLUMN telefono TEXT'); } catch {}
+
 // Seed admin user if no users exist
 const userCount = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c;
 if (userCount === 0) {
@@ -272,11 +275,12 @@ export const Users = {
   getByUsername: (username: string) => db.prepare('SELECT * FROM users WHERE username=?').get(username),
   create: (data: any) => {
     const stmt = db.prepare(`
-      INSERT INTO users (uid,nombre,email,username,role,password,zona,puesto,activo)
-      VALUES (@uid,@nombre,@email,@username,@role,@password,@zona,@puesto,1)
+      INSERT INTO users (uid,nombre,email,username,role,password,zona,puesto,activo,telefono)
+      VALUES (@uid,@nombre,@email,@username,@role,@password,@zona,@puesto,@activo,@telefono)
     `);
-    return stmt.run(data);
+    return stmt.run({ activo: 1, telefono: null, ...data });
   },
+  getByPhone: (phone: string) => db.prepare('SELECT * FROM users WHERE telefono=? AND activo=1').get(phone),
   update: (uid: string, data: any) => {
     const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
     return db.prepare(`UPDATE users SET ${fields},updated_at=datetime('now') WHERE uid=@uid`).run({ ...data, uid });
