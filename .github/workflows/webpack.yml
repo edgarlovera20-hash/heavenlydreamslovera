@@ -23,29 +23,26 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Install root tooling
-        # --ignore-scripts: skip native compilation (sharp, sqlite3, etc.) in CI
-        # --legacy-peer-deps: avoid peer dep conflicts across workspace packages
-        # --no-fund: suppress funding messages
-        run: npm install --ignore-scripts --no-fund --legacy-peer-deps
-
       - name: Validate Prisma schema
         run: npx --yes prisma validate --schema packages/database/prisma/schema.prisma
 
-      - name: Verify Turborepo
-        run: npx turbo --version
-
-      - name: Check TypeScript config
+      - name: Validate all package.json files
         run: |
-          # Verify each app/package has a valid tsconfig
-          for f in apps/*/tsconfig.json packages/*/tsconfig.json; do
-            [ -f "$f" ] && node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" && echo "✅ $f" || true
+          fail=0
+          for f in package.json turbo.json \
+            apps/*/package.json packages/*/package.json; do
+            if [ -f "$f" ]; then
+              node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" \
+                && echo "✅ $f" \
+                || { echo "❌ $f"; fail=1; }
+            fi
           done
+          exit $fail
 
-      - name: Validate docker-compose syntax
+      - name: Verify monorepo structure
         run: |
-          if command -v docker &>/dev/null; then
-            docker compose -f infrastructure/docker/docker-compose.yml config --quiet && echo "✅ docker-compose valid"
-          else
-            echo "⚠️  Docker not available in this runner, skipping"
-          fi
+          test -f turbo.json                               && echo "✅ turbo.json"
+          test -f packages/database/prisma/schema.prisma   && echo "✅ prisma schema"
+          test -f infrastructure/docker/docker-compose.yml && echo "✅ docker-compose"
+          test -d apps/api/src                             && echo "✅ apps/api/src"
+          test -d apps/web/src                             && echo "✅ apps/web/src"

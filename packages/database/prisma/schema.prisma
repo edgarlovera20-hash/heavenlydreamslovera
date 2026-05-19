@@ -467,7 +467,7 @@ model KnowledgeBase {
   content     String
   category    String?  // PROMOCION | BENEFICIO | FAQ | MANUAL | ONBOARDING | COBRANZA
   tags        String[] @default([])
-  embedding   Float[]  // vector for semantic search
+  embedding   Float[] @default([])  // vector for semantic search (ai-service populates this)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -754,6 +754,6 @@ model AuditLog {
   @@index([companyId])
   @@index([userId])
   @@index([entidad, entidadId])
-  @@index([createdAt(sort: Desc)])
+  @@index([createdAt])
   @@map("audit_log")
 }
