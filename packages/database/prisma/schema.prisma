@@ -41,7 +41,6 @@ model Company {
   packageCatalog        PackageCatalog[]
   commissionRules       CommissionRule[]
   territories           Territory[]
-  siacRecords           SiacRecord[]
   collectionCases       CollectionCase[]
   customerSuccessCases  CustomerSuccessCase[]
 
@@ -581,46 +580,6 @@ model CustomerSuccessCase {
   @@index([companyId])
   @@index([customerId])
   @@map("customer_success_cases")
-}
-
-// ─── LEGACY / OPERATIONS ──────────────────────────────────────────────────────
-
-model SiacRecord {
-  id                   String   @id @default(uuid())
-  companyId            String   @map("company_id")
-  folioSiac            String   @unique @map("folio_siac")
-  fechaCaptura         DateTime? @map("fecha_captura")
-  estrategia           String?
-  promotor             String?
-  estatusSiac          String?  @map("estatus_siac")
-  tipoLinea            String?  @map("tipo_linea")
-  lineaContratada      String?  @map("linea_contratada")
-  area                 String?
-  division             String?
-  tienda               String?
-  paquete              String?
-  observaciones        String?
-  respuestaTelmex      String?  @map("respuesta_telmex")
-  motivoRechazo        String?  @map("motivo_rechazo")
-  telefonoAsignado     String?  @map("telefono_asignado")
-  telefonoPortado      String?  @map("telefono_portado")
-  osAlta               String?  @map("os_alta")
-  fechaOsAlta          DateTime? @map("fecha_os_alta")
-  estatusPisa          String?  @map("estatus_pisa")
-  fechaCambioEstatus   DateTime? @map("fecha_cambio_estatus")
-  tipoCliente          String?  @map("tipo_cliente")
-  tipoServicio         String?  @map("tipo_servicio")
-  correo               String?
-  estatusEtapa         String?  @map("estatus_etapa")
-  campana              String?
-  createdAt            DateTime @default(now()) @map("created_at")
-
-  company Company @relation(fields: [companyId], references: [id])
-
-  @@index([companyId])
-  @@index([estatusSiac])
-  @@index([promotor])
-  @@map("siac_records")
 }
 
 model Nomina {

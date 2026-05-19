@@ -7,7 +7,6 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  ollama_data:
   wa_sessions:
 
 services:
@@ -54,25 +53,6 @@ services:
       timeout: 5s
       retries: 5
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: hd-ollama
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    networks:
-      - heavenly
-    # Enable GPU if available: uncomment deploy section
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
   # ─── CORE PLATFORM ───────────────────────────────────────────
   api:
     build:
@@ -93,7 +73,6 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
       WA_SERVICE_URL: http://whatsapp-service:4001
       OCR_SERVICE_URL: http://ocr-service:4002
-      AI_SERVICE_URL: http://ai-service:4003
       TELEGRAM_SERVICE_URL: http://telegram-service:4004
       PHONE_SERVICE_URL: http://phone-validation-service:4005
       EMAIL_SERVICE_URL: http://email-validation-service:4006
@@ -168,24 +147,6 @@ services:
     networks:
       - heavenly
 
-  ai-service:
-    build:
-      context: ../..
-      dockerfile: apps/ai-service/Dockerfile
-    container_name: hd-ai
-    restart: unless-stopped
-    environment:
-      OLLAMA_URL: http://ollama:11434
-      AI_SERVICE_PORT: 4003
-      PHI3_MODEL: phi3
-      MISTRAL_MODEL: mistral:7b
-    depends_on:
-      - ollama
-    ports:
-      - "4003:4003"
-    networks:
-      - heavenly
-
   worker-service:
     build:
       context: ../..
@@ -197,12 +158,10 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
       API_URL: http://api:3000
-      AI_SERVICE_URL: http://ai-service:4003
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       - redis
       - api
-      - ai-service
     networks:
       - heavenly
 

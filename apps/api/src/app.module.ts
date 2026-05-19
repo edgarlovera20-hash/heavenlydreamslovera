@@ -14,7 +14,6 @@ import { TasksModule } from './tasks/tasks.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { OcrModule } from './ocr/ocr.module';
-import { AiModule } from './ai/ai.module';
 import { FraudModule } from './fraud/fraud.module';
 import { PhoneValidationModule } from './phone-validation/phone-validation.module';
 import { EmailValidationModule } from './email-validation/email-validation.module';
@@ -55,7 +54,6 @@ import { AuditModule } from './audit/audit.module';
     WhatsAppModule,
     TelegramModule,
     OcrModule,
-    AiModule,
     FraudModule,
     PhoneValidationModule,
     EmailValidationModule,
