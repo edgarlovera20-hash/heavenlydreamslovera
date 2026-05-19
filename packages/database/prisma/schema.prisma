@@ -1,0 +1,718 @@
+// Heavenly Dreams Enterprise Platform — Prisma Schema
+// Every table includes company_id for multi-tenant isolation.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── MULTI-TENANT ─────────────────────────────────────────────────────────────
+
+model Company {
+  id          String   @id @default(uuid())
+  name        String
+  rfc         String?  @unique
+  logo        String?
+  plan        String   @default("starter") // starter | professional | enterprise
+  active      Boolean  @default(true)
+  settings    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users                 User[]
+  sales                 Sale[]
+  customers             Customer[]
+  leads                 Lead[]
+  tasks                 Task[]
+  whatsappSessions      WhatsAppSession[]
+  telegramSessions      TelegramSession[]
+  conversations         Conversation[]
+  fraudFlags            FraudFlag[]
+  phoneValidations      PhoneValidation[]
+  emailValidations      EmailValidation[]
+  knowledgeBase         KnowledgeBase[]
+  automationFlows       AutomationFlow[]
+  auditLogs             AuditLog[]
+  announcements         Announcement[]
+  packageCatalog        PackageCatalog[]
+  commissionRules       CommissionRule[]
+  territories           Territory[]
+  collectionCases       CollectionCase[]
+  customerSuccessCases  CustomerSuccessCase[]
+
+  @@map("companies")
+}
+
+// ─── USERS & RBAC ─────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  GERENTE
+  ADMINISTRACION
+  SUPERVISOR
+  PROMOTOR
+  COBRANZA
+  SOPORTE
+}
+
+model User {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  nombre      String
+  email       String   @unique
+  username    String   @unique
+  password    String
+  role        Role     @default(PROMOTOR)
+  zona        String?
+  puesto      String?
+  avatar      String?
+  biometricId String?  @map("biometric_id")
+  active      Boolean  @default(true)
+  lastLoginAt DateTime? @map("last_login_at")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company               Company              @relation(fields: [companyId], references: [id])
+  sales                 Sale[]
+  assignedTasks         Task[]               @relation("TaskAssignee")
+  createdTasks          Task[]               @relation("TaskCreator")
+  auditLogs             AuditLog[]
+  quota                 Quota?
+  nominas               Nomina[]
+  referralsGiven        Referral[]
+  refreshTokens         RefreshToken[]
+  conversationMessages  ConversationMessage[]
+  collectionActions     CollectionAction[]
+
+  @@index([companyId])
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── SALES ────────────────────────────────────────────────────────────────────
+
+enum SaleStatus {
+  PENDIENTE
+  EN_PROCESO
+  VALIDACION
+  APROBADA
+  RECHAZADA
+  INSTALADA
+  CANCELADA
+}
+
+model Sale {
+  id                String     @id @default(uuid())
+  companyId         String     @map("company_id")
+  folio             String?    @unique
+  asesorId          String     @map("asesor_id")
+  asesorNombre      String?    @map("asesor_nombre")
+  status            SaleStatus @default(PENDIENTE)
+  nombres           String?
+  apellidos         String?
+  telefono          String?
+  email             String?
+  curp              String?
+  direccion         String?
+  colonia           String?
+  municipio         String?
+  estado            String?
+  codigoPostal      String?    @map("codigo_postal")
+  tipoCliente       String?    @map("tipo_cliente")
+  tipoServicio      String?    @map("tipo_servicio")
+  plan              String?
+  rentaMensual      Float?     @map("renta_mensual")
+  zona              String?
+  notas             String?
+  fechaSolicitud    DateTime?  @map("fecha_solicitud")
+  fechaInstalacion  DateTime?  @map("fecha_instalacion")
+  contratoPdf       String?    @map("contrato_pdf")
+  inePdf            String?    @map("ine_pdf")
+  comprobantePdf    String?    @map("comprobante_pdf")
+  fraudScore        Int?       @map("fraud_score") @default(0)
+  metadata          Json?
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  company           Company    @relation(fields: [companyId], references: [id])
+  asesor            User       @relation(fields: [asesorId], references: [id])
+  documents         Document[]
+  phoneValidation   PhoneValidation?
+  emailValidation   EmailValidation?
+  fraudFlags        FraudFlag[]
+  collectionCase    CollectionCase?
+  tasks             Task[]
+
+  @@index([companyId])
+  @@index([asesorId])
+  @@index([status])
+  @@index([telefono])
+  @@index([curp])
+  @@map("sales")
+}
+
+model Document {
+  id           String   @id @default(uuid())
+  saleId       String   @map("sale_id")
+  type         String   // INE | COMPROBANTE | CONTRATO | CURP | RFC
+  url          String
+  ocrData      Json?    @map("ocr_data")
+  ocrConfidence Float?  @map("ocr_confidence")
+  validated    Boolean  @default(false)
+  fraudRisk    String?  @map("fraud_risk") // LOW | MEDIUM | HIGH
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@map("documents")
+}
+
+// ─── CUSTOMERS ────────────────────────────────────────────────────────────────
+
+model Customer {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  nombres     String
+  apellidos   String
+  telefono    String?
+  email       String?
+  curp        String?
+  rfc         String?
+  direccion   String?
+  colonia     String?
+  municipio   String?
+  estado      String?
+  plan        String?
+  noCuenta    String?  @map("no_cuenta")
+  status      String   @default("ACTIVO") // ACTIVO | INACTIVO | MOROSO | SUSPENDIDO
+  score       Int      @default(100) // Satisfaction score 0-100
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company              Company              @relation(fields: [companyId], references: [id])
+  customerSuccessCases CustomerSuccessCase[]
+  collectionCases      CollectionCase[]
+  conversations        Conversation[]
+
+  @@index([companyId])
+  @@index([telefono])
+  @@index([email])
+  @@map("customers")
+}
+
+// ─── LEADS ────────────────────────────────────────────────────────────────────
+
+model Lead {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  nombres     String?
+  apellidos   String?
+  telefono    String?
+  email       String?
+  fuente      String?  // WHATSAPP | TELEGRAM | WEB | REFERIDO | CAMPAÑA
+  status      String   @default("NUEVO") // NUEVO | CONTACTADO | INTERESADO | CALIFICADO | PERDIDO
+  interes     String?
+  notas       String?
+  asignadoA   String?  @map("asignado_a")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([status])
+  @@map("leads")
+}
+
+// ─── TASKS ────────────────────────────────────────────────────────────────────
+
+model Task {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  title       String
+  description String?
+  status      String   @default("PENDIENTE") // PENDIENTE | EN_PROCESO | COMPLETADA | CANCELADA
+  priority    String   @default("MEDIA") // BAJA | MEDIA | ALTA | URGENTE
+  saleId      String?  @map("sale_id")
+  assigneeId  String?  @map("assignee_id")
+  creatorId   String   @map("creator_id")
+  dueDate     DateTime? @map("due_date")
+  completedAt DateTime? @map("completed_at")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company  Company @relation(fields: [companyId], references: [id])
+  sale     Sale?   @relation(fields: [saleId], references: [id])
+  assignee User?   @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator  User    @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  @@index([companyId])
+  @@index([assigneeId])
+  @@index([status])
+  @@map("tasks")
+}
+
+// ─── WHATSAPP & TELEGRAM SESSIONS ─────────────────────────────────────────────
+
+model WhatsAppSession {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  name        String
+  phoneNumber String?  @map("phone_number")
+  purpose     String   @default("OPERACIONES") // OPERACIONES | CUSTOMER_SUCCESS | COBRANZA
+  status      String   @default("DISCONNECTED") // CONNECTED | DISCONNECTED | CONNECTING | QR_READY
+  qrCode      String?  @map("qr_code")
+  sessionData Json?    @map("session_data")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  conversations Conversation[]
+
+  @@index([companyId])
+  @@map("whatsapp_sessions")
+}
+
+model TelegramSession {
+  id        String   @id @default(uuid())
+  companyId String   @map("company_id")
+  botName   String   @map("bot_name")
+  botToken  String   @map("bot_token")
+  purpose   String   @default("CAPTACION") // CAPTACION | SOPORTE | COMUNIDAD
+  status    String   @default("INACTIVE") // ACTIVE | INACTIVE
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  conversations Conversation[]
+
+  @@index([companyId])
+  @@map("telegram_sessions")
+}
+
+// ─── CONVERSATIONS & FLOW ENGINE ──────────────────────────────────────────────
+
+enum ConversationState {
+  WAITING_NAME
+  WAITING_CURP
+  WAITING_PHONE
+  WAITING_EMAIL
+  WAITING_ADDRESS
+  WAITING_INE
+  WAITING_COMPROBANTE
+  WAITING_CONFIRMATION
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  TRANSFERRED
+}
+
+model Conversation {
+  id                String            @id @default(uuid())
+  companyId         String            @map("company_id")
+  channel           String            // WHATSAPP | TELEGRAM | APP
+  whatsappSessionId String?           @map("whatsapp_session_id")
+  telegramSessionId String?           @map("telegram_session_id")
+  customerId        String?           @map("customer_id")
+  externalId        String?           @map("external_id") // phone number, chat_id
+  state             ConversationState @default(IN_PROGRESS)
+  flowId            String?           @map("flow_id")
+  context           Json?             // accumulated data during flow
+  assignedAgentId   String?           @map("assigned_agent_id")
+  resolvedAt        DateTime?         @map("resolved_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  company          Company             @relation(fields: [companyId], references: [id])
+  whatsappSession  WhatsAppSession?    @relation(fields: [whatsappSessionId], references: [id])
+  telegramSession  TelegramSession?    @relation(fields: [telegramSessionId], references: [id])
+  customer         Customer?           @relation(fields: [customerId], references: [id])
+  messages         ConversationMessage[]
+
+  @@index([companyId])
+  @@index([channel])
+  @@index([state])
+  @@index([externalId])
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  fromAgent      Boolean  @default(false) @map("from_agent")
+  agentId        String?  @map("agent_id")
+  content        String
+  type           String   @default("TEXT") // TEXT | IMAGE | DOCUMENT | AUDIO | VIDEO
+  mediaUrl       String?  @map("media_url")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agent        User?        @relation(fields: [agentId], references: [id])
+
+  @@index([conversationId])
+  @@map("conversation_messages")
+}
+
+// ─── VALIDATIONS ──────────────────────────────────────────────────────────────
+
+model PhoneValidation {
+  id            String   @id @default(uuid())
+  companyId     String   @map("company_id")
+  saleId        String?  @unique @map("sale_id")
+  phoneNumber   String   @map("phone_number")
+  valid         Boolean?
+  carrier       String?
+  lineType      String?  @map("line_type") // MOVIL | FIJA
+  portedFrom    String?  @map("ported_from")
+  portability   Boolean?
+  fraudScore    Int?     @default(0) @map("fraud_score")
+  riskLevel     String?  @map("risk_level") // LOW | MEDIUM | HIGH
+  rawResponse   Json?    @map("raw_response")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+  sale    Sale?   @relation(fields: [saleId], references: [id])
+
+  @@index([companyId])
+  @@index([phoneNumber])
+  @@map("phone_validations")
+}
+
+model EmailValidation {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  saleId      String?  @unique @map("sale_id")
+  email       String
+  valid       Boolean?
+  mxValid     Boolean? @map("mx_valid")
+  smtpValid   Boolean? @map("smtp_valid")
+  disposable  Boolean?
+  domainValid Boolean? @map("domain_valid")
+  riskScore   Int?     @default(0) @map("risk_score")
+  riskLevel   String?  @map("risk_level") // LOW | MEDIUM | HIGH
+  rawResponse Json?    @map("raw_response")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+  sale    Sale?   @relation(fields: [saleId], references: [id])
+
+  @@index([companyId])
+  @@index([email])
+  @@map("email_validations")
+}
+
+// ─── FRAUD ENGINE ─────────────────────────────────────────────────────────────
+
+enum FraudRisk {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model FraudFlag {
+  id          String    @id @default(uuid())
+  companyId   String    @map("company_id")
+  saleId      String    @map("sale_id")
+  type        String    // CURP_DUPLICADO | TELEFONO_REPETIDO | EMAIL_SOSPECHOSO | OCR_INCONSISTENTE | DOCUMENTO_ALTERADO | PATRON_MASIVO
+  description String?
+  riskLevel   FraudRisk @map("risk_level")
+  score       Int       @default(0)
+  resolved    Boolean   @default(false)
+  resolvedAt  DateTime? @map("resolved_at")
+  metadata    Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+  sale    Sale    @relation(fields: [saleId], references: [id])
+
+  @@index([companyId])
+  @@index([saleId])
+  @@index([type])
+  @@map("fraud_flags")
+}
+
+// ─── KNOWLEDGE BASE (RAG) ─────────────────────────────────────────────────────
+
+model KnowledgeBase {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  title       String
+  content     String
+  category    String?  // PROMOCION | BENEFICIO | FAQ | MANUAL | ONBOARDING | COBRANZA
+  tags        String[] @default([])
+  embedding   Float[] @default([])  // vector for semantic search (ai-service populates this)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([category])
+  @@map("knowledge_base")
+}
+
+// ─── AUTOMATION ENGINE ────────────────────────────────────────────────────────
+
+model AutomationFlow {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  name        String
+  description String?
+  trigger     String   // INACTIVITY_48H | NEW_SALE | PAYMENT_DUE | CUSTOM
+  channel     String   // WHATSAPP | TELEGRAM | EMAIL | MULTI
+  steps       Json     // array of automation steps
+  active      Boolean  @default(true)
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company Company         @relation(fields: [companyId], references: [id])
+  logs    AutomationLog[]
+
+  @@index([companyId])
+  @@map("automation_flows")
+}
+
+model AutomationLog {
+  id           String   @id @default(uuid())
+  flowId       String   @map("flow_id")
+  targetId     String?  @map("target_id") // customer or sale id
+  targetType   String?  @map("target_type")
+  status       String   // SUCCESS | FAILED | SKIPPED
+  stepExecuted String?  @map("step_executed")
+  result       Json?
+  error        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  flow AutomationFlow @relation(fields: [flowId], references: [id])
+
+  @@index([flowId])
+  @@map("automation_logs")
+}
+
+// ─── COLLECTIONS & CUSTOMER SUCCESS ───────────────────────────────────────────
+
+model CollectionCase {
+  id           String   @id @default(uuid())
+  companyId    String   @map("company_id")
+  saleId       String?  @unique @map("sale_id")
+  customerId   String?  @map("customer_id")
+  amountDue    Float    @map("amount_due")
+  monthsOverdue Int     @default(0) @map("months_overdue")
+  status       String   @default("ACTIVO") // ACTIVO | NEGOCIACION | PAGADO | PERDIDO
+  priority     String   @default("MEDIA")
+  nextAction   DateTime? @map("next_action")
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  company  Company           @relation(fields: [companyId], references: [id])
+  sale     Sale?             @relation(fields: [saleId], references: [id])
+  customer Customer?         @relation(fields: [customerId], references: [id])
+  actions  CollectionAction[]
+
+  @@index([companyId])
+  @@index([status])
+  @@map("collection_cases")
+}
+
+model CollectionAction {
+  id         String   @id @default(uuid())
+  caseId     String   @map("case_id")
+  agentId    String   @map("agent_id")
+  type       String   // LLAMADA | WHATSAPP | VISITA | ACUERDO | PAGO
+  notes      String?
+  result     String?
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  case  CollectionCase @relation(fields: [caseId], references: [id])
+  agent User           @relation(fields: [agentId], references: [id])
+
+  @@index([caseId])
+  @@map("collection_actions")
+}
+
+model CustomerSuccessCase {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  customerId  String   @map("customer_id")
+  type        String   // SOPORTE | RETENCION | UPSELL | RECUPERACION
+  status      String   @default("ABIERTO") // ABIERTO | EN_PROCESO | RESUELTO | ESCALADO
+  priority    String   @default("MEDIA")
+  description String?
+  resolution  String?
+  satisfScore Int?     @map("satisf_score") // 1-5
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([companyId])
+  @@index([customerId])
+  @@map("customer_success_cases")
+}
+
+model Nomina {
+  id          String   @id @default(uuid())
+  companyId   String?  @map("company_id")
+  asesorId    String   @map("asesor_id")
+  periodo     String
+  ventasCount Int      @default(0) @map("ventas_count")
+  montoBase   Float    @default(0) @map("monto_base")
+  comisiones  Float    @default(0)
+  bonos       Float    @default(0)
+  total       Float    @default(0)
+  status      String   @default("BORRADOR") // BORRADOR | APROBADA | PAGADA
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  asesor User @relation(fields: [asesorId], references: [id])
+
+  @@index([asesorId])
+  @@map("nominas")
+}
+
+model Quota {
+  userId    String   @id @map("user_id")
+  meta      Int      @default(0)
+  periodo   String?
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("quotas")
+}
+
+model CommissionRule {
+  id         String   @id @default(uuid())
+  companyId  String   @map("company_id")
+  minVentas  Int      @map("min_ventas")
+  maxVentas  Int?     @map("max_ventas")
+  tasa       Float
+  bonusMeta  Float    @default(0) @map("bonus_meta")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("commission_rules")
+}
+
+model PackageCatalog {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  nombre      String
+  megas       Int?
+  precio      Float?
+  descripcion String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("package_catalog")
+}
+
+model Territory {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  nombre      String
+  descripcion String?
+  asesorId    String?  @map("asesor_id")
+  color       String?
+  poligono    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("territories")
+}
+
+model Referral {
+  id          String   @id @default(uuid())
+  referredBy  String   @map("referred_by")
+  nombre      String?
+  telefono    String?
+  status      String   @default("PENDIENTE")
+  convertido  Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  referrer User @relation(fields: [referredBy], references: [id])
+
+  @@index([referredBy])
+  @@map("referrals")
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  companyId String   @map("company_id")
+  titulo    String
+  contenido String?
+  tipo      String   @default("INFO") // INFO | ALERTA | URGENTE
+  autorId   String?  @map("autor_id")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("announcements")
+}
+
+// ─── AUDIT ────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  companyId   String?  @map("company_id")
+  accion      String
+  entidad     String?
+  entidadId   String?  @map("entidad_id")
+  userId      String?  @map("user_id")
+  userNombre  String?  @map("user_nombre")
+  detalle     Json?
+  ip          String?
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  company Company? @relation(fields: [companyId], references: [id])
+  user    User?    @relation(fields: [userId], references: [id])
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([entidad, entidadId])
+  @@index([createdAt])
+  @@map("audit_log")
+}

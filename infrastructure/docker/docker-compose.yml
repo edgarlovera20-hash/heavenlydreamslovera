@@ -1,0 +1,229 @@
+version: '3.9'
+
+networks:
+  heavenly:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  wa_sessions:
+
+services:
+  # ─── INFRASTRUCTURE ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: hd-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-heavenlydreams}
+      POSTGRES_USER: ${POSTGRES_USER:-hd_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hd_secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - heavenly
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hd_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: hd-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-redis_secret}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - heavenly
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── CORE PLATFORM ───────────────────────────────────────────
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: hd-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hd_user}:${POSTGRES_PASSWORD:-hd_secret}@postgres:5432/${POSTGRES_DB:-heavenlydreams}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_EXPIRES_IN: 15m
+      NODE_ENV: production
+      PORT: 3000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      WA_SERVICE_URL: http://whatsapp-service:4001
+      OCR_SERVICE_URL: http://ocr-service:4002
+      TELEGRAM_SERVICE_URL: http://telegram-service:4004
+      PHONE_SERVICE_URL: http://phone-validation-service:4005
+      EMAIL_SERVICE_URL: http://email-validation-service:4006
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    networks:
+      - heavenly
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: hd-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000/api/v1}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:3000}
+    depends_on:
+      - api
+    ports:
+      - "3001:3001"
+    networks:
+      - heavenly
+
+  # ─── MICROSERVICES ─────────────────────────────────────────
+  whatsapp-service:
+    build:
+      context: ../..
+      dockerfile: apps/whatsapp-service/Dockerfile
+    container_name: hd-whatsapp
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      API_URL: http://api:3000
+      WA_SERVICE_PORT: 4001
+    volumes:
+      - wa_sessions:/app/sessions
+    depends_on:
+      - redis
+      - api
+    ports:
+      - "4001:4001"
+    networks:
+      - heavenly
+
+  ocr-service:
+    build:
+      context: ../..
+      dockerfile: apps/ocr-service/Dockerfile
+    container_name: hd-ocr
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      API_URL: http://api:3000
+      OCR_SERVICE_PORT: 4002
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    depends_on:
+      - redis
+      - api
+    ports:
+      - "4002:4002"
+    networks:
+      - heavenly
+
+  worker-service:
+    build:
+      context: ../..
+      dockerfile: apps/worker-service/Dockerfile
+    container_name: hd-workers
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      API_URL: http://api:3000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+    depends_on:
+      - redis
+      - api
+    networks:
+      - heavenly
+
+  telegram-service:
+    build:
+      context: ../..
+      dockerfile: apps/telegram-service/Dockerfile
+    container_name: hd-telegram
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      API_URL: http://api:3000
+      TG_SERVICE_PORT: 4004
+    depends_on:
+      - redis
+      - api
+    ports:
+      - "4004:4004"
+    networks:
+      - heavenly
+
+  phone-validation-service:
+    build:
+      context: ../..
+      dockerfile: apps/phone-validation-service/Dockerfile
+    container_name: hd-phone-validation
+    restart: unless-stopped
+    environment:
+      PHONE_SERVICE_PORT: 4005
+      NUMVERIFY_API_KEY: ${NUMVERIFY_API_KEY}
+    ports:
+      - "4005:4005"
+    networks:
+      - heavenly
+
+  email-validation-service:
+    build:
+      context: ../..
+      dockerfile: apps/email-validation-service/Dockerfile
+    container_name: hd-email-validation
+    restart: unless-stopped
+    environment:
+      EMAIL_SERVICE_PORT: 4006
+    ports:
+      - "4006:4006"
+    networks:
+      - heavenly
+
+  # ─── PROXY ────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: hd-nginx
+    restart: unless-stopped
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+      - web
+    networks:
+      - heavenly

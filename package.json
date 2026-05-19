@@ -1,56 +1,36 @@
 {
-  "name": "react-example",
+  "name": "heavenly-dreams-platform",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "tsx server.ts",
-    "start": "NODE_ENV=production tsx server.ts",
-    "build": "vite build",
-    "preview": "vite preview",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
-  },
-  "engines": {
-    "node": ">=20.0.0"
-  },
-  "dependencies": {
-    "@google/generative-ai": "^0.20.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@types/leaflet": "^1.9.21",
-    "@vitejs/plugin-react": "^5.0.4",
-    "better-sqlite3": "^12.10.0",
-    "clsx": "^2.1.1",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
-    "google-auth-library": "^10.6.2",
-    "html2canvas": "^1.4.1",
-    "jspdf": "^4.2.1",
-    "jszip": "^3.10.1",
-    "leaflet": "^1.9.4",
-    "lucide-react": "^0.546.0",
-    "maplibre-gl": "^5.24.0",
-    "motion": "^12.38.0",
-    "qrcode": "^1.5.4",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-leaflet": "^5.0.0",
-    "recharts": "^3.8.1",
-    "sonner": "^2.0.7",
-    "tailwind-merge": "^3.5.0",
-    "tesseract.js": "^5.1.1",
-    "tsx": "^4.21.0",
-    "vite": "^6.2.0",
-    "whatsapp-web.js": "^1.34.7"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "dev:api": "turbo run dev --filter=@heavenly/api",
+    "dev:web": "turbo run dev --filter=@heavenly/web",
+    "dev:whatsapp": "turbo run dev --filter=@heavenly/whatsapp-service",
+    "dev:worker": "turbo run dev --filter=@heavenly/worker-service",
+    "db:generate": "turbo run db:generate --filter=@heavenly/database",
+    "db:migrate": "turbo run db:migrate --filter=@heavenly/database",
+    "db:studio": "turbo run db:studio --filter=@heavenly/database",
+    "db:clean-siac": "turbo run db:clean-siac --filter=@heavenly/database",
+    "db:import-siac": "turbo run db:import-siac --filter=@heavenly/database",
+    "docker:up": "docker-compose -f infrastructure/docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f infrastructure/docker/docker-compose.yml down",
+    "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {
-    "@firebase/eslint-plugin-security-rules": "^0.0.2",
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.14.0",
-    "autoprefixer": "^10.4.21",
-    "tailwindcss": "^4.1.14",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
-  }
+    "turbo": "^2.3.3",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "packageManager": "npm@10.0.0"
 }
