@@ -1,3 +1,5 @@
+'use client';
+
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 
 // ============================================================

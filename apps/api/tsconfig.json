@@ -10,9 +10,7 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": "src",
-    "paths": {
-      "@heavenly/database": ["../../packages/database/node_modules/@prisma/client"]
-    }
+    "paths": {}
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

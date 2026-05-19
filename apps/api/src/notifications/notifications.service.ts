@@ -18,7 +18,7 @@ export class NotificationsService {
     type: NotificationType,
     companyId?: string,
   ) {
-    this.realtimeService['gateway'].broadcast(
+    this.realtimeService.broadcast(
       'notification',
       { userId, title, message, type },
       userId,
@@ -41,7 +41,7 @@ export class NotificationsService {
     message: string,
     type: NotificationType,
   ) {
-    this.realtimeService['gateway'].broadcast(
+    this.realtimeService.broadcast(
       'notification',
       { title, message, type },
       companyId,

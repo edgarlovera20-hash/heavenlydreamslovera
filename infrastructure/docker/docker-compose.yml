@@ -94,6 +94,9 @@ services:
       WA_SERVICE_URL: http://whatsapp-service:4001
       OCR_SERVICE_URL: http://ocr-service:4002
       AI_SERVICE_URL: http://ai-service:4003
+      TELEGRAM_SERVICE_URL: http://telegram-service:4004
+      PHONE_SERVICE_URL: http://phone-validation-service:4005
+      EMAIL_SERVICE_URL: http://email-validation-service:4006
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:
@@ -200,6 +203,53 @@ services:
       - redis
       - api
       - ai-service
+    networks:
+      - heavenly
+
+  telegram-service:
+    build:
+      context: ../..
+      dockerfile: apps/telegram-service/Dockerfile
+    container_name: hd-telegram
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      API_URL: http://api:3000
+      TG_SERVICE_PORT: 4004
+    depends_on:
+      - redis
+      - api
+    ports:
+      - "4004:4004"
+    networks:
+      - heavenly
+
+  phone-validation-service:
+    build:
+      context: ../..
+      dockerfile: apps/phone-validation-service/Dockerfile
+    container_name: hd-phone-validation
+    restart: unless-stopped
+    environment:
+      PHONE_SERVICE_PORT: 4005
+      NUMVERIFY_API_KEY: ${NUMVERIFY_API_KEY}
+    ports:
+      - "4005:4005"
+    networks:
+      - heavenly
+
+  email-validation-service:
+    build:
+      context: ../..
+      dockerfile: apps/email-validation-service/Dockerfile
+    container_name: hd-email-validation
+    restart: unless-stopped
+    environment:
+      EMAIL_SERVICE_PORT: 4006
+    ports:
+      - "4006:4006"
     networks:
       - heavenly
 
