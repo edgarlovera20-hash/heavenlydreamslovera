@@ -74,16 +74,14 @@ async function main() {
     company = await prisma.company.create({
       data: {
         id: randomUUID(),
-        nombre: 'Heavenly Dreams',
+        name: 'Heavenly Dreams',
         rfc: 'HEAVEN001',
-        telefono: '5500000000',
-        email: 'admin@heavenlydreams.mx',
-        activa: true,
+        active: true,
       },
     });
-    console.log('✅ Empresa creada:', company.nombre);
+    console.log('✅ Empresa creada:', company.name);
   } else {
-    console.log('✅ Empresa encontrada:', company.nombre);
+    console.log('✅ Empresa encontrada:', company.name);
   }
 
   // 2. Read CSV and collect all rows (use cleaned file if available)
@@ -136,7 +134,6 @@ async function main() {
           username,
           email: `${clave}@heavenly.internal`,
           nombre: '',
-          apellido: '',
           password: passwordHash,
           role: 'PROMOTOR',
           active: true,

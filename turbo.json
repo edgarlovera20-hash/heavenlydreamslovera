@@ -32,6 +32,9 @@
     },
     "db:import-siac": {
       "cache": false
+    },
+    "db:clean-siac": {
+      "cache": false
     }
   }
 }
