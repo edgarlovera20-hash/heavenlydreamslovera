@@ -171,10 +171,27 @@ async function startServer() {
   }));
 
   app.post("/api/ventas", wrap((req: any, res: any) => {
+    const b = req.body;
     const data = {
-      id: randomUUID(), status: 'pendiente',
-      folio: null, ...req.body,
-      metadata: req.body.metadata ? JSON.stringify(req.body.metadata) : null,
+      id: randomUUID(),
+      folio: b.folio || null,
+      asesor_id: b.asesor_id,
+      asesor_nombre: b.asesor_nombre || null,
+      status: 'pendiente',
+      nombres: b.nombres || null,
+      apellidos: [b.apellido_paterno, b.apellido_materno].filter(Boolean).join(' ') || b.apellidos || null,
+      telefono: b.telefono_titular || b.telefono || null,
+      direccion: [b.calle, b.colonia].filter(Boolean).join(', ') || b.direccion || null,
+      colonia: b.colonia || null,
+      municipio: b.delegacion || b.ciudad || b.municipio || null,
+      tipo_cliente: b.tipo_cliente || null,
+      tipo_servicio: b.tipo_servicio || null,
+      plan: b.paquete_nombre || b.plan || null,
+      renta_mensual: b.renta_mensual || null,
+      zona: b.zona || null,
+      notas: b.notas || null,
+      fecha_solicitud: b.fecha_solicitud || new Date().toISOString(),
+      metadata: JSON.stringify(b),
     };
     Ventas.create(data);
     AuditLog.insert({ accion: 'CREATE_VENTA', entidad: 'ventas', entidad_id: data.id, user_id: data.asesor_id, user_nombre: data.asesor_nombre, detalle: data.folio });
