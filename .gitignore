@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 
+# Data de clientes (NO subir al repo — contiene PII)
+packages/database/prisma/siac_import.csv
+packages/database/prisma/*.csv
+
 # Build output
 dist/
 
