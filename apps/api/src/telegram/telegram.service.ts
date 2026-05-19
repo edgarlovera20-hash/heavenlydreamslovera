@@ -83,8 +83,8 @@ export class TelegramService {
       throw new NotFoundException(`Telegram session ${sessionId} not found`);
     }
 
-    return this.prisma.telegramMessage.findMany({
-      where: { sessionId },
+    return this.prisma.conversationMessage.findMany({
+      where: { conversation: { sessionId, companyId } },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

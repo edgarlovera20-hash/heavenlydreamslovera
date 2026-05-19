@@ -82,12 +82,12 @@ export class FlowEngineService {
       );
     }
 
-    await this.prisma.message.create({
+    await this.prisma.conversationMessage.create({
       data: {
         conversationId: dto.conversationId,
         content: dto.message,
         mediaUrl: dto.mediaUrl,
-        direction: 'INBOUND',
+        fromAgent: false,
       },
     });
 
