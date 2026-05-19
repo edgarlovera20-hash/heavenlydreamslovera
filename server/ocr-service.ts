@@ -24,7 +24,7 @@ const OLLAMA_URL        = process.env.OLLAMA_URL || '';
 const OLLAMA_API_KEY    = process.env.OLLAMA_API_KEY || '';
 const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'gemini').toLowerCase();
 
-const GEMINI_MODEL    = 'gemini-1.5-flash';
+const GEMINI_MODEL    = 'gemini-2.5-flash';
 const OPENAI_MODEL    = 'gpt-4o-mini';
 const OLLAMA_MODEL    = 'glm-ocr';
 
