@@ -86,8 +86,11 @@ async function main() {
     console.log('✅ Empresa encontrada:', company.nombre);
   }
 
-  // 2. Read CSV and collect all rows
-  const csvPath = path.join(__dirname, 'siac_import.csv');
+  // 2. Read CSV and collect all rows (use cleaned file if available)
+  const cleanCsv  = path.join(__dirname, 'siac_clean.csv');
+  const rawCsv    = path.join(__dirname, 'siac_import.csv');
+  const csvPath   = require('fs').existsSync(cleanCsv) ? cleanCsv : rawCsv;
+  console.log(`📄 Leyendo: ${require('path').basename(csvPath)}`);
   const rows: string[][] = [];
 
   await new Promise<void>((resolve, reject) => {
@@ -101,23 +104,14 @@ async function main() {
     rl.on('error', reject);
   });
 
-  console.log(`📄 Total filas CSV: ${rows.length}`);
+  console.log(`📄 Registros a importar: ${rows.length}\n`);
 
-  // 3. Deduplicate by FOLIO_SIAC — prefer row with most data filled
+  // 3. Index by FOLIO_SIAC (CSV limpio ya viene deduplicado)
   const byFolio = new Map<string, string[]>();
   for (const row of rows) {
     const folio = row[COL.FOLIO_SIAC]?.trim();
-    if (!folio) continue;
-    const existing = byFolio.get(folio);
-    if (!existing) {
-      byFolio.set(folio, row);
-    } else {
-      // Keep the row with more non-empty fields
-      const score = (r: string[]) => r.filter(c => c && c !== '0').length;
-      if (score(row) > score(existing)) byFolio.set(folio, row);
-    }
+    if (folio) byFolio.set(folio, row);
   }
-  console.log(`🗂️  Folios únicos: ${byFolio.size}\n`);
 
   // 4. Collect unique CLAVE_USUARIO values
   const claves = new Set<string>();
@@ -141,8 +135,8 @@ async function main() {
           companyId: company.id,
           username,
           email: `${clave}@heavenly.internal`,
-          nombre: `Promotor`,
-          apellido: clave,
+          nombre: '',
+          apellido: '',
           password: passwordHash,
           role: 'PROMOTOR',
           active: true,

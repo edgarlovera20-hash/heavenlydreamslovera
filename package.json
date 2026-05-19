@@ -18,6 +18,7 @@
     "db:generate": "turbo run db:generate --filter=@heavenly/database",
     "db:migrate": "turbo run db:migrate --filter=@heavenly/database",
     "db:studio": "turbo run db:studio --filter=@heavenly/database",
+    "db:clean-siac": "turbo run db:clean-siac --filter=@heavenly/database",
     "db:import-siac": "turbo run db:import-siac --filter=@heavenly/database",
     "docker:up": "docker-compose -f infrastructure/docker/docker-compose.yml up -d",
     "docker:down": "docker-compose -f infrastructure/docker/docker-compose.yml down",

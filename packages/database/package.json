@@ -8,6 +8,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "db:clean-siac": "tsx prisma/clean-siac.ts",
     "db:import-siac": "tsx prisma/import-siac.ts"
   },
   "dependencies": {
