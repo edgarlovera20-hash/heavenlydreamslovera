@@ -25,6 +25,7 @@ import { FlowEngineModule } from './flow-engine/flow-engine.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { AuditModule } from './audit/audit.module';
+import { PackagesModule } from './packages/packages.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { AuditModule } from './audit/audit.module';
     NotificationsModule,
     RealtimeModule,
     AuditModule,
+    PackagesModule,
   ],
 })
 export class AppModule {}
