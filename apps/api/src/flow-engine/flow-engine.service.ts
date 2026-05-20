@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { StartFlowDto } from './dto/start-flow.dto';
 import { ProcessMessageDto } from './dto/process-message.dto';
@@ -58,7 +59,8 @@ export class FlowEngineService {
         companyId,
         channel: dto.channel,
         externalId: dto.externalId,
-        sessionId: dto.sessionId,
+        whatsappSessionId: dto.channel === 'WHATSAPP' ? dto.sessionId : undefined,
+        telegramSessionId: dto.channel === 'TELEGRAM' ? dto.sessionId : undefined,
         state: 'IN_PROGRESS',
         context: {},
       },
@@ -125,7 +127,7 @@ export class FlowEngineService {
 
     await this.prisma.conversation.update({
       where: { id: dto.conversationId },
-      data: { state: nextState, context },
+      data: { state: nextState, context: context as Prisma.InputJsonValue },
     });
 
     return {
@@ -175,8 +177,8 @@ export class FlowEngineService {
 
     return this.prisma.conversation.update({
       where: { id: dto.conversationId },
-      data: { state: 'TRANSFERRED', agentId: dto.agentId },
-      select: { id: true, state: true, agentId: true, updatedAt: true },
+      data: { state: 'TRANSFERRED', assignedAgentId: dto.agentId },
+      select: { id: true, state: true, assignedAgentId: true, updatedAt: true },
     });
   }
 
@@ -191,8 +193,8 @@ export class FlowEngineService {
 
     return this.prisma.conversation.update({
       where: { id },
-      data: { state: 'COMPLETED', completedAt: new Date() },
-      select: { id: true, state: true, completedAt: true },
+      data: { state: 'COMPLETED', resolvedAt: new Date() },
+      select: { id: true, state: true, resolvedAt: true },
     });
   }
 }

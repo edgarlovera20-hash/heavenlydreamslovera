@@ -18,7 +18,7 @@ export class CollectionsService {
         ...(filters?.priority && { priority: filters.priority }),
       },
       include: {
-        customer: { select: { id: true, nombre: true, telefono: true } },
+        customer: { select: { id: true, nombres: true, telefono: true } },
         sale: { select: { id: true, status: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -29,7 +29,7 @@ export class CollectionsService {
     const caseRecord = await this.prisma.collectionCase.findFirst({
       where: { id, companyId },
       include: {
-        customer: { select: { id: true, nombre: true, telefono: true, email: true } },
+        customer: { select: { id: true, nombres: true, telefono: true, email: true } },
         sale: { select: { id: true, status: true } },
         actions: { orderBy: { createdAt: 'desc' } },
       },

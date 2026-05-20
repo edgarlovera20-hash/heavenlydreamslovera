@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateFlowDto } from './dto/create-flow.dto';
 import { TriggerFlowDto } from './dto/trigger-flow.dto';
@@ -22,7 +23,11 @@ export class AutomationService {
   create(dto: CreateFlowDto, companyId: string) {
     return this.prisma.automationFlow.create({
       data: {
-        ...dto,
+        name: dto.name,
+        description: dto.description,
+        trigger: dto.trigger,
+        channel: dto.channel,
+        steps: dto.steps as Prisma.InputJsonValue,
         companyId,
         active: false,
       },
@@ -32,10 +37,14 @@ export class AutomationService {
   async update(id: string, dto: Partial<CreateFlowDto>, companyId: string) {
     await this.findOneOrFail(id, companyId);
 
-    return this.prisma.automationFlow.update({
-      where: { id },
-      data: dto,
-    });
+    const data: Prisma.AutomationFlowUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.trigger !== undefined) data.trigger = dto.trigger;
+    if (dto.channel !== undefined) data.channel = dto.channel;
+    if (dto.steps !== undefined) data.steps = dto.steps as Prisma.InputJsonValue;
+
+    return this.prisma.automationFlow.update({ where: { id }, data });
   }
 
   async toggle(id: string, companyId: string) {

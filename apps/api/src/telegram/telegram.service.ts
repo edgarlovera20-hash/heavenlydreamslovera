@@ -19,7 +19,7 @@ export class TelegramService {
         id: true,
         botName: true,
         purpose: true,
-        active: true,
+        status: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -32,13 +32,13 @@ export class TelegramService {
       data: {
         ...dto,
         companyId,
-        active: true,
+        status: 'ACTIVE',
       },
       select: {
         id: true,
         botName: true,
         purpose: true,
-        active: true,
+        status: true,
         createdAt: true,
       },
     });
@@ -46,7 +46,7 @@ export class TelegramService {
 
   async sendMessage(dto: SendTelegramMessageDto, companyId: string) {
     const session = await this.prisma.telegramSession.findFirst({
-      where: { id: dto.sessionId, companyId, active: true },
+      where: { id: dto.sessionId, companyId, status: 'ACTIVE' },
     });
 
     if (!session) {
@@ -84,7 +84,7 @@ export class TelegramService {
     }
 
     return this.prisma.conversationMessage.findMany({
-      where: { conversation: { sessionId, companyId } },
+      where: { conversation: { telegramSessionId: sessionId, companyId } },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -101,8 +101,8 @@ export class TelegramService {
 
     return this.prisma.telegramSession.update({
       where: { id },
-      data: { active: false },
-      select: { id: true, active: true, updatedAt: true },
+      data: { status: 'INACTIVE' },
+      select: { id: true, status: true, updatedAt: true },
     });
   }
 }
