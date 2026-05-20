@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Users, Target, Edit2, UserX, UserCheck, Save, X, TrendingUp, Award, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
 import { logAudit } from '../../lib/auditLog';
-import { auth } from '../../lib/firebase';
+function getCurrentUser() { try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s) : null; } catch { return null; } }
 import { toast } from 'sonner';
 
 interface TeamMember {
@@ -15,69 +15,76 @@ interface TeamMember {
   fechaIngreso?: string;
 }
 
-function getQuotas(): Record<string, number> {
-  try { return JSON.parse(localStorage.getItem('adhdreams_quotas') || '{}'); } catch { return {}; }
-}
-function saveQuotas(q: Record<string, number>) { localStorage.setItem('adhdreams_quotas', JSON.stringify(q)); }
+let _allSalesCache: any[] = [];
 
 function getMemberStats(uid: string, period: string) {
-  try {
-    const sales: any[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-    const mine = sales.filter(s => s.asesorId === uid && (s.fechaSolicitud || '').startsWith(period));
-    const approved = mine.filter(s => ['APROBADA','PROCEDIO'].includes((s.status||'').toUpperCase())).length;
-    const revenue = mine.filter(s => ['APROBADA','PROCEDIO'].includes((s.status||'').toUpperCase()))
-      .reduce((a, s) => a + (Number(s.rentaMensual) || 0), 0);
-    return { total: mine.length, approved, revenue };
-  } catch { return { total: 0, approved: 0, revenue: 0 }; }
+  const sales = _allSalesCache;
+  const mine = sales.filter((s: any) => (s.asesor_id || s.asesorId) === uid && (s.fecha_solicitud || s.fechaSolicitud || '').startsWith(period));
+  const approved = mine.filter((s: any) => ['aprobada','procedio'].includes((s.status||'').toLowerCase())).length;
+  const revenue = mine.filter((s: any) => ['aprobada','procedio'].includes((s.status||'').toLowerCase()))
+    .reduce((a: number, s: any) => a + (Number(s.renta_mensual || s.rentaMensual) || 0), 0);
+  return { total: mine.length, approved, revenue };
 }
 
 const ROLES = ['ASESOR', 'SUPERVISOR', 'GERENTE'];
 
 export default function TeamManagementView() {
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const [quotas, setQuotasState] = useState<Record<string, number>>(getQuotas());
+  const [quotas, setQuotasState] = useState<Record<string, number>>({});
   const [editingQuota, setEditingQuota] = useState<string | null>(null);
   const [tempQuota, setTempQuota] = useState('');
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const load = () => {
-    try { setMembers(JSON.parse(localStorage.getItem('adhdreams_users') || '[]')); } catch { setMembers([]); }
-    setQuotasState(getQuotas());
+  const load = async () => {
+    try {
+      const [usersRes, salesRes, quotasRes] = await Promise.all([
+        fetch('/api/users').then(r => r.ok ? r.json() : []),
+        fetch('/api/ventas').then(r => r.ok ? r.json() : []),
+        fetch('/api/quotas').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+      ]);
+      setMembers(usersRes.filter((u: any) => u.activo === 1));
+      _allSalesCache = salesRes;
+      setQuotasState(quotasRes || {});
+    } catch { setMembers([]); }
   };
 
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
-  const saveQuota = (uid: string) => {
+  const saveQuota = async (uid: string) => {
     const val = parseInt(tempQuota);
     if (isNaN(val) || val < 0) { toast.error('Meta inválida.'); return; }
-    const updated = { ...quotas, [uid]: val };
-    saveQuotas(updated);
-    setQuotasState(updated);
-    setEditingQuota(null);
-    logAudit('META_ESTABLECIDA', auth.currentUser?.uid||'', auth.currentUser?.displayName||'', { targetId: uid, details: `Meta: ${val} ventas/mes` });
-    toast.success('Meta guardada.');
+    try {
+      await fetch(`/api/quotas/${uid}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ meta: val }) });
+      setQuotasState(prev => ({ ...prev, [uid]: val }));
+      setEditingQuota(null);
+      toast.success('Meta guardada.');
+    } catch { toast.error('Error al guardar meta.'); }
   };
 
-  const toggleActive = (uid: string) => {
-    const updated = members.map(m => m.uid === uid ? { ...m, active: !(m.active !== false) } : m);
-    localStorage.setItem('adhdreams_users', JSON.stringify(updated));
-    setMembers(updated);
+  const toggleActive = async (uid: string) => {
     const m = members.find(m => m.uid === uid);
     const isNowActive = m?.active === false;
-    logAudit(isNowActive ? 'USUARIO_EDITADO' : 'USUARIO_DESACTIVADO', auth.currentUser?.uid||'', auth.currentUser?.displayName||'', { targetId: uid, targetLabel: m?.displayName || m?.email });
-    toast.success(isNowActive ? 'Usuario reactivado.' : 'Usuario desactivado.');
+    try {
+      await fetch(`/api/users/${uid}/${isNowActive ? 'approve' : 'reject'}`, { method: 'POST' });
+      load();
+      toast.success(isNowActive ? 'Usuario reactivado.' : 'Usuario desactivado.');
+    } catch { toast.error('Error al actualizar usuario.'); }
   };
 
-  const saveMember = () => {
+  const saveMember = async () => {
     if (!editingMember) return;
-    const updated = members.map(m => m.uid === editingMember.uid ? editingMember : m);
-    localStorage.setItem('adhdreams_users', JSON.stringify(updated));
-    setMembers(updated);
-    setEditingMember(null);
-    logAudit('USUARIO_EDITADO', auth.currentUser?.uid||'', auth.currentUser?.displayName||'', { targetId: editingMember.uid, targetLabel: editingMember.displayName });
-    toast.success('Datos del usuario actualizados.');
+    try {
+      await fetch(`/api/users/${editingMember.uid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingMember),
+      });
+      setEditingMember(null);
+      load();
+      toast.success('Datos del usuario actualizados.');
+    } catch { toast.error('Error al actualizar usuario.'); }
   };
 
   const active = members.filter(m => m.active !== false);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, FunnelChart, Funnel, LabelList
@@ -7,17 +7,23 @@ import { BarChart3, TrendingUp, Download, Calendar, RefreshCw } from 'lucide-rea
 import { cn, formatCurrency } from '../../lib/utils';
 import { exportToCSV, exportElementToPDF } from '../../lib/exportUtils';
 import { logAudit } from '../../lib/auditLog';
-import { auth } from '../../lib/firebase';
 
 const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 function useSales(period: string) {
-  return useMemo(() => {
-    try {
-      const all: any[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-      return period === 'all' ? all : all.filter(s => (s.fechaSolicitud || '').startsWith(period));
-    } catch { return []; }
-  }, [period]);
+  const [all, setAll] = useState<any[]>([]);
+  useEffect(() => {
+    fetch('/api/ventas').then(r => r.ok ? r.json() : []).then((data: any[]) => {
+      setAll(data.map(s => ({
+        ...s,
+        fechaSolicitud: s.fecha_solicitud || s.created_at,
+        rentaMensual: s.renta_mensual,
+        asesorId: s.asesor_id,
+        paqueteNombre: s.paquete_nombre,
+      })));
+    }).catch(() => {});
+  }, []);
+  return useMemo(() => period === 'all' ? all : all.filter(s => (s.fechaSolicitud || '').startsWith(period)), [all, period]);
 }
 
 // Build daily sales data for the selected period
@@ -71,7 +77,8 @@ function buildByPaquete(sales: any[]) {
 export default function AnalyticsView() {
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const sales = useSales(period === 'all' ? 'all' : period);
-  const users: any[] = useMemo(() => { try { return JSON.parse(localStorage.getItem('adhdreams_users') || '[]'); } catch { return []; } }, []);
+  const [users, setUsers] = useState<any[]>([]);
+  useEffect(() => { fetch('/api/users').then(r => r.ok ? r.json() : []).then(setUsers).catch(() => {}); }, []);
   const chartRef = useRef<HTMLDivElement>(null);
 
   const daily = useMemo(() => buildDailyData(sales, period), [sales, period]);
@@ -95,7 +102,7 @@ export default function AnalyticsView() {
       paquete: s.paqueteNombre, renta: s.rentaMensual, status: s.status,
       fecha: (s.fechaSolicitud||'').slice(0,10), colonia: s.colonia, asesor: s.asesorId
     })), `reporte_ventas_${period}`);
-    logAudit('EXPORTACION', auth.currentUser?.uid||'', auth.currentUser?.displayName||'', { details: `Reporte ventas ${period}` });
+    try { const cu = JSON.parse(localStorage.getItem('hd_session') || 'null'); logAudit('EXPORTACION', cu?.uid||'', cu?.displayName||'', { details: `Reporte ventas ${period}` }); } catch {}
   };
 
   const handleExportPDF = async () => {

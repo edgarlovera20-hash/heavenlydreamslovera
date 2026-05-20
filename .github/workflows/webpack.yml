@@ -1,0 +1,50 @@
+name: Monorepo Validation
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  validate:
+    name: validate (node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Validate Prisma schema
+        env:
+          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+        run: npx --yes prisma@5 validate --schema packages/database/prisma/schema.prisma
+
+      - name: Validate all package.json files
+        run: |
+          fail=0
+          for f in package.json turbo.json \
+            apps/*/package.json packages/*/package.json; do
+            if [ -f "$f" ]; then
+              node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" \
+                && echo "✅ $f" \
+                || { echo "❌ $f"; fail=1; }
+            fi
+          done
+          exit $fail
+
+      - name: Verify monorepo structure
+        run: |
+          test -f turbo.json                               && echo "✅ turbo.json"
+          test -f packages/database/prisma/schema.prisma   && echo "✅ prisma schema"
+          test -f infrastructure/docker/docker-compose.yml && echo "✅ docker-compose"
+          test -d apps/api/src                             && echo "✅ apps/api/src"
+          test -d apps/web/src                             && echo "✅ apps/web/src"

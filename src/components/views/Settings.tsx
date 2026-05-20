@@ -956,109 +956,86 @@ function ImportExportTab() {
 // con su teléfono y la conexión se completa.
 // ──────────────────────────────────────────────────────────
 function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConnected: (phone: string) => void; }) {
-  const [step, setStep] = useState<'qr' | 'phone' | 'connecting' | 'done'>('qr');
-  const [sessionId, setSessionId] = useState(() => generateSessionId());
-  const [secondsLeft, setSecondsLeft] = useState(60);
-  const [phone, setPhone] = useState('');
+  const [qr, setQr] = useState<string | null>(null);
+  const [status, setStatus] = useState<'disconnected' | 'qr' | 'authenticating' | 'connected'>('disconnected');
+  const [error, setError] = useState<string | null>(null);
+  const [initializing, setInitializing] = useState(false);
 
+  // Iniciar sesión y hacer polling cada 2s
   useEffect(() => {
-    if (step !== 'qr') return;
-    if (secondsLeft <= 0) return;
-    const t = setInterval(() => setSecondsLeft(s => s - 1), 1000);
-    return () => clearInterval(t);
-  }, [step, secondsLeft]);
+    let cancelled = false;
 
-  const handleRefresh = () => {
-    setSessionId(generateSessionId());
-    setSecondsLeft(60);
-  };
+    const init = async () => {
+      setInitializing(true);
+      try {
+        const r = await fetch('/api/whatsapp/init', { method: 'POST' });
+        if (!r.ok) throw new Error('No se pudo iniciar WhatsApp en el servidor.');
+      } catch (e: any) {
+        if (!cancelled) setError(e.message);
+      } finally {
+        if (!cancelled) setInitializing(false);
+      }
+    };
 
-  const handleSimulateScan = () => {
-    setStep('phone');
-  };
+    init();
 
-  const handleConfirmPhone = () => {
-    const cleaned = phone.replace(/\s+/g, '');
-    if (!/^\+?\d{10,15}$/.test(cleaned)) {
-      toast.error('Ingresa un número válido con código de país (ej. +5215512345678).');
-      return;
-    }
-    setStep('connecting');
-    setTimeout(() => {
-      setStep('done');
-      toast.success(`WhatsApp ${cleaned} conectado correctamente.`);
-      setTimeout(() => onConnected(cleaned), 700);
-    }, 1500);
-  };
+    const poll = setInterval(async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch('/api/whatsapp/qr');
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.qr) setQr(data.qr);
+        if (data.status?.status) setStatus(data.status.status);
+        if (data.status?.error) setError(data.status.error);
+        if (data.status?.status === 'connected') {
+          toast.success('WhatsApp conectado correctamente.');
+          setTimeout(() => onConnected('WhatsApp Web'), 600);
+          clearInterval(poll);
+        }
+      } catch {
+        // ignorar errores transitorios
+      }
+    }, 2000);
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&bgcolor=ffffff&color=000000&data=${encodeURIComponent('https://web.whatsapp.com/wa-link/' + sessionId)}`;
+    return () => { cancelled = true; clearInterval(poll); };
+  }, [onConnected]);
 
   return (
     <ModalShell title="Vincular WhatsApp" accent="emerald" icon={<MessageCircle className="w-5 h-5 text-emerald-400" />} onClose={onClose}>
-      {step === 'qr' && (
-        <>
-          <ol className="text-xs text-slate-400 space-y-1.5 mb-4 list-decimal list-inside">
-            <li>Abre <b className="text-slate-200">WhatsApp</b> en tu teléfono.</li>
-            <li>Toca <b className="text-slate-200">Menú</b> (⋮) o <b className="text-slate-200">Ajustes</b> y selecciona <b className="text-slate-200">Dispositivos vinculados</b>.</li>
-            <li>Toca <b className="text-slate-200">Vincular un dispositivo</b> y escanea este código.</li>
-          </ol>
-          <div className="relative mx-auto w-fit bg-white p-2 rounded-xl">
-            <img src={qrUrl} alt="QR de vinculación de WhatsApp" className="block w-[260px] h-[260px]" />
-            {secondsLeft <= 0 && (
-              <div className="absolute inset-0 bg-white/85 rounded-xl flex flex-col items-center justify-center gap-2 backdrop-blur-sm">
-                <p className="text-xs font-bold text-slate-700">Código expirado</p>
-                <button onClick={handleRefresh} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium">
-                  <RefreshCw className="w-3.5 h-3.5" /> Regenerar
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
-            <span>Caduca en <span className="text-slate-300 font-mono">{Math.max(0, secondsLeft)}s</span></span>
-            <button onClick={handleRefresh} className="flex items-center gap-1 text-slate-400 hover:text-slate-200">
-              <RefreshCw className="w-3 h-3" /> Nuevo código
-            </button>
-          </div>
-          <button onClick={handleSimulateScan} className="mt-5 w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">
-            Ya escaneé el código
-          </button>
-        </>
-      )}
-      {step === 'phone' && (
-        <>
-          <p className="text-xs text-slate-400 mb-3">Confirma el número de WhatsApp que estás vinculando:</p>
-          <input
-            type="tel"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            placeholder="+52 1 55 1234 5678"
-            className="w-full bg-slate-950 border border-white/10 rounded-lg p-3 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 font-mono"
-            autoFocus
-          />
-          <button onClick={handleConfirmPhone} className="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">
-            Confirmar y conectar
-          </button>
-        </>
-      )}
-      {step === 'connecting' && (
-        <div className="py-10 flex flex-col items-center gap-3">
-          <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
-          <p className="text-sm text-slate-300">Sincronizando con WhatsApp…</p>
+      <ol className="text-xs text-slate-400 space-y-1.5 mb-4 list-decimal list-inside">
+        <li>Abre <b className="text-slate-200">WhatsApp</b> en tu teléfono.</li>
+        <li>Toca <b className="text-slate-200">Menú</b> (⋮) o <b className="text-slate-200">Ajustes</b> y selecciona <b className="text-slate-200">Dispositivos vinculados</b>.</li>
+        <li>Toca <b className="text-slate-200">Vincular un dispositivo</b> y escanea este código.</li>
+      </ol>
+
+      {error && (
+        <div className="mb-3 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300">
+          {error}
         </div>
       )}
-      {step === 'done' && (
-        <div className="py-10 flex flex-col items-center gap-3">
-          <CheckCircle2 className="w-12 h-12 text-emerald-400" />
-          <p className="text-sm font-medium text-slate-200">Cuenta vinculada</p>
-        </div>
-      )}
+
+      <div className="relative mx-auto w-fit bg-white p-2 rounded-xl min-h-[280px] min-w-[280px] flex items-center justify-center">
+        {qr && status === 'qr' ? (
+          <img src={qr} alt="QR real de WhatsApp Web" className="block w-[260px] h-[260px]" />
+        ) : (
+          <div className="flex flex-col items-center gap-3 text-slate-600">
+            <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />
+            <p className="text-xs font-medium">
+              {initializing && 'Iniciando WhatsApp en el servidor…'}
+              {!initializing && status === 'disconnected' && 'Generando código QR…'}
+              {status === 'authenticating' && 'Autenticando con WhatsApp…'}
+              {status === 'connected' && '¡Conectado!'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 text-xs text-slate-500 text-center">
+        Estado: <span className="text-slate-300 font-mono">{status}</span>
+      </div>
     </ModalShell>
   );
-}
-
-function generateSessionId(): string {
-  const rnd = () => Math.random().toString(36).slice(2, 10);
-  return `${Date.now().toString(36)}-${rnd()}-${rnd()}`;
 }
 
 // ──────────────────────────────────────────────────────────

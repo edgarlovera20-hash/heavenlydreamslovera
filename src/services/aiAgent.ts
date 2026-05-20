@@ -45,60 +45,49 @@ const MOCK_RESPONSES: Record<EventType, (c: CustomerData) => string> = {
 
 // ─────────────────────────────────────────────
 // GOOGLE CLOUD VISION — DOCUMENT_TEXT_DETECTION
-// Llama al REST API con la key guardada en
-// localStorage (adhdreams_google_vision_key).
-// Retorna el texto completo detectado.
+// Llama al endpoint del servidor /api/vision/ocr
+// que autentica con la cuenta de servicio.
 // ─────────────────────────────────────────────
+export interface VisionOCRResponse {
+  text: string;
+  fields?: Record<string, string>;
+}
+
 export async function runGoogleVision(
   base64Image: string,
   onProgress?: (p: number) => void,
 ): Promise<string> {
-  const apiKey =
-    localStorage.getItem('adhdreams_google_vision_key')?.trim() || '';
+  const data = await callVisionOCR(base64Image, onProgress);
+  return data.text;
+}
 
-  if (!apiKey) {
-    throw new Error(
-      'API key de Google Cloud Vision no configurada.\n' +
-      'Ve a Ajustes → Integraciones y APIs → OCR con Google Vision.',
-    );
-  }
-
-  // Quitar prefijo data-URL si viene incluido
-  const base64 = base64Image.replace(/^data:image\/[a-z+]+;base64,/, '');
-
+export async function callVisionOCR(
+  imageOrImages: string | string[],
+  onProgress?: (p: number) => void,
+): Promise<VisionOCRResponse> {
   if (onProgress) onProgress(10);
 
-  const response = await fetch(
-    `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requests: [
-          {
-            image: { content: base64 },
-            features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }],
-            imageContext: { languageHints: ['es', 'es-MX'] },
-          },
-        ],
-      }),
-    },
-  );
+  const body = Array.isArray(imageOrImages)
+    ? { images: imageOrImages }
+    : { image: imageOrImages };
+
+  const response = await fetch('/api/vision/ocr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 
   if (onProgress) onProgress(80);
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({})) as any;
-    const msg = err?.error?.message || response.statusText;
-    throw new Error(`Google Vision API error (${response.status}): ${msg}`);
+    const msg = err?.error || response.statusText;
+    throw new Error(`OCR error (${response.status}): ${msg}`);
   }
 
-  const data = await response.json() as any;
-
+  const data = await response.json() as VisionOCRResponse;
   if (onProgress) onProgress(100);
-
-  // DOCUMENT_TEXT_DETECTION devuelve el texto en fullTextAnnotation.text
-  return (data?.responses?.[0]?.fullTextAnnotation?.text as string) || '';
+  return { text: data.text || '', fields: data.fields };
 }
 
 // ─────────────────────────────────────────────
@@ -310,17 +299,39 @@ export class CRM_AI_Agent {
   }
 
   public async analyzeDocument(
-    base64Image: string,
+    imageOrImages: string | string[],
     _mimeType: string,
     onProgress?: (p: number) => void,
   ): Promise<Partial<OcrResult> | null> {
     try {
-      // Usar Google Cloud Vision para OCR de alta precisión
-      const rawText = await runGoogleVision(base64Image, onProgress);
+      const { text: rawText, fields } = await callVisionOCR(imageOrImages, onProgress);
+
+      // Si Ollama devolvió campos estructurados, úsalos directamente
+      if (fields && Object.keys(fields).length > 0) {
+        const result: Partial<OcrResult> = {};
+        const f = fields;
+        // Map all known field names (also handle alternate casing from model)
+        const nombres = f.nombres || f.nombre || f.name || '';
+        const apPat = f.apellidoPaterno || f.apellido_paterno || f.primerApellido || '';
+        const apMat = f.apellidoMaterno || f.apellido_materno || f.segundoApellido || '';
+        if (nombres)   result.nombres         = nombres;
+        if (apPat)     result.apellidoPaterno = apPat;
+        if (apMat)     result.apellidoMaterno = apMat;
+        if (f.curp)            result.curp            = f.curp;
+        if (f.folioIne || f.claveElector) result.folioIne = f.folioIne || f.claveElector;
+        if (f.calle)           result.calle           = f.calle;
+        if (f.numeroExterior || f.numExterior)  result.numeroExterior  = f.numeroExterior || f.numExterior;
+        if (f.numeroInterior || f.numInterior)  result.numeroInterior  = f.numeroInterior || f.numInterior;
+        if (f.colonia)         result.colonia         = f.colonia;
+        if (f.codigoPostal || f.cp || f.postal) result.codigoPostal = f.codigoPostal || f.cp || f.postal;
+        if (f.delegacion || f.municipio || f.alcaldia) result.delegacion = f.delegacion || f.municipio || f.alcaldia;
+        if (f.ciudad || f.estado)  result.ciudad = f.ciudad || f.estado;
+        if (Object.keys(result).length > 0) return result;
+      }
+
+      // Fallback: extraer con regex del texto crudo
       if (!rawText || rawText.trim().length < 10) return null;
-
       const cleaned = cleanText(rawText);
-
       const curp = extractCURP(cleaned);
       const folioIne = extractFolioINE(cleaned);
       const codigoPostal = extractCP(cleaned);
@@ -332,24 +343,24 @@ export class CRM_AI_Agent {
       const dom = mergeOcr(dom1, dom2);
 
       const result: Partial<OcrResult> = {};
-      if (nombres) result.nombres = nombres;
-      if (apellidoPaterno) result.apellidoPaterno = apellidoPaterno;
-      if (apellidoMaterno) result.apellidoMaterno = apellidoMaterno;
-      if (curp) result.curp = curp;
-      if (folioIne) result.folioIne = folioIne;
-      if (codigoPostal) result.codigoPostal = codigoPostal;
-      if (dom.calle) result.calle = dom.calle;
+      if (nombres)           result.nombres         = nombres;
+      if (apellidoPaterno)   result.apellidoPaterno = apellidoPaterno;
+      if (apellidoMaterno)   result.apellidoMaterno = apellidoMaterno;
+      if (curp)              result.curp            = curp;
+      if (folioIne)          result.folioIne        = folioIne;
+      if (codigoPostal)      result.codigoPostal    = codigoPostal;
+      if (dom.calle)         result.calle           = dom.calle;
       if (dom.numeroExterior) result.numeroExterior = dom.numeroExterior;
       if (dom.numeroInterior) result.numeroInterior = dom.numeroInterior;
-      if (dom.colonia) result.colonia = dom.colonia;
-      if (dom.delegacion) result.delegacion = dom.delegacion;
-      if (dom.ciudad) result.ciudad = dom.ciudad;
+      if (dom.colonia)       result.colonia         = dom.colonia;
+      if (dom.delegacion)    result.delegacion      = dom.delegacion;
+      if (dom.ciudad)        result.ciudad          = dom.ciudad;
 
       if (Object.keys(result).length === 0) return null;
       return result;
     } catch (err) {
       console.error('[OCR] Error:', err);
-      throw err; // re-throw para que la UI muestre el mensaje al usuario
+      throw err;
     }
   }
 }

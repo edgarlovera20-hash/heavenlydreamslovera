@@ -4,14 +4,19 @@ import { ArrowLeft, Zap, CheckCircle2, Search, Clock } from 'lucide-react';
 // Use same mock data structure as the CRM for consistency
 import { ClientData } from './MyClientsView';
 
-const PENDING_CLIENTS: ClientData[] = [
-  { id: 'C-1003', name: 'Pedro López', phone: '5599887766', package: 'Paquete 3', status: 'Pendiente', notes: 'Pendiente de validación', date: '2023-10-26' },
-  { id: 'C-1005', name: 'Laura Gómez', phone: '5544332211', package: 'Paquete 2', status: 'Pendiente', notes: 'Requiere validación manual', date: '2023-10-27' },
-  { id: 'C-1006', name: 'Carlos Díaz', phone: '5500112233', package: 'Paquete 1', status: 'Pendiente', notes: 'Recuperado de "No responde"', date: '2023-10-28' },
-];
-
 export default function DirectValidationView({ onBack }: { onBack: () => void }) {
-  const [clients, setClients] = useState<ClientData[]>(PENDING_CLIENTS);
+  const pendingSales: ClientData[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]')
+    .filter((s: any) => s.status === 'PENDIENTE')
+    .map((s: any) => ({
+      id: s.id || s.folio || '',
+      name: `${s.nombres || ''} ${s.apellidoPaterno || ''}`.trim() || 'Sin nombre',
+      phone: s.telefonoTitular || '',
+      package: s.paqueteNombre || '',
+      status: 'Pendiente',
+      notes: '',
+      date: s.fechaSolicitud?.split('T')[0] || '',
+    }));
+  const [clients, setClients] = useState<ClientData[]>(pendingSales);
   const [searchTerm, setSearchTerm] = useState('');
   const [requestingId, setRequestingId] = useState<string | null>(null);
 

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, ArrowLeft, UserPlus, CheckCircle, Eye, EyeOff, Fingerprint, X, FileText } from 'lucide-react';
 import { MatrixInput } from '../ui/MatrixInput';
-import { auth, hashPassword } from '../../lib/firebase';
+async function hashPassword(plain: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 interface RegisterFormProps {
   onBack: () => void;
@@ -161,8 +164,6 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
 
   const zones = [
     { id: '1', name: 'CDMX - Edgar Lovera' },
-    { id: '2', name: 'Edo Mex - Emmanuel Ochoa' },
-    { id: '3', name: 'Tijuana - Anthoni Moreno' },
   ];
 
   const supervisors: Record<string, string[]> = {
@@ -200,54 +201,43 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
     setErrorMsg('');
 
     try {
-      const users: any[] = JSON.parse(localStorage.getItem('adhdreams_users') || '[]');
-      const exists = users.find((u: any) => u.email === formData.email || u.username === formData.username);
-      if (exists) {
-        setErrorMsg('El correo o usuario ya está registrado.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      const uid = `user-${Date.now()}`;
       const passwordHash = await hashPassword(formData.password);
       const { confirmPassword: _cp, password: _pw, ...rest } = formData;
 
       let biometricCredId: string | null = null;
       if (enableBiometric) {
         try {
-          biometricCredId = await enrollBiometric(uid, formData.email || formData.username);
+          biometricCredId = await enrollBiometric(`reg-${Date.now()}`, formData.email || formData.username);
         } catch (bioErr: any) {
           setErrorMsg(bioErr.message || 'No se pudo registrar la huella. Tu cuenta se creó sin biométrico.');
         }
       }
 
-      const newUser = {
-        uid,
-        email: formData.email,
-        displayName: `${formData.nombre} ${formData.apellidoPaterno}`,
-        password: passwordHash,
-        role: 'ASESOR',
-        ...rest,
-        biometricCredId,
-        termsAccepted: { version: TERMS_VERSION, at: new Date().toISOString() },
-        createdAt: new Date().toISOString(),
-      };
-      users.push(newUser);
-      localStorage.setItem('adhdreams_users', JSON.stringify(users));
-
-      if (rememberMe) {
-        localStorage.setItem('adhdreams_remember', JSON.stringify({
-          username: formData.username,
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...rest,
           email: formData.email,
-          // Plain password is kept locally only because the user opted in. SHA-256 hash already lives in users.
-          password: formData.password,
-        }));
-      } else {
-        localStorage.removeItem('adhdreams_remember');
+          displayName: `${formData.nombre} ${formData.apellidoPaterno}`,
+          password: passwordHash,
+          role: 'ASESOR',
+          biometricCredId,
+          termsAccepted: JSON.stringify({ version: TERMS_VERSION, at: new Date().toISOString() }),
+          fromRegistration: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Error al registrar. Intenta de nuevo.');
+        return;
       }
 
-      auth.currentUser = { uid, email: formData.email, displayName: newUser.displayName, role: 'ASESOR' };
-      localStorage.setItem('adhdreams_session', JSON.stringify(auth.currentUser));
+      if (rememberMe) {
+        try { localStorage.setItem('adhdreams_remember', JSON.stringify({ username: formData.username, email: formData.email, password: formData.password })); } catch {}
+      } else {
+        try { localStorage.removeItem('adhdreams_remember'); } catch {}
+      }
 
       setStep(2);
     } catch (err: any) {
@@ -265,10 +255,13 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
             <CheckCircle className="w-8 h-8" />
           </div>
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">Registro Completado</h2>
-        <p className="text-cyber-electric text-sm mb-8">
-          Tu registro ha sido enviado. Solo el creador o un Administrador podrán aceptarlo en el sistema.
-          {enableBiometric && ' La próxima vez podrás iniciar sesión con tu huella digital.'}
+        <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">Solicitud Enviada</h2>
+        <p className="text-cyber-electric text-sm mb-4">
+          Tu registro está <strong className="text-yellow-400">pendiente de aprobación</strong> por la gerencia.
+          Recibirás acceso una vez que un administrador revise y acepte tu cuenta.
+        </p>
+        <p className="text-slate-500 text-xs mb-8">
+          {enableBiometric ? 'Una vez aprobado, podrás iniciar sesión con tu huella digital.' : 'Usa tu usuario y contraseña para iniciar sesión cuando seas aprobado.'}
         </p>
         <button
           onClick={onBack}

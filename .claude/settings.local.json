@@ -9,7 +9,14 @@
       "Bash(xargs sed -i 's/bg-slate-900\\\\/40/bg-slate-900\\\\/70/g; s/bg-slate-950\\\\/30/bg-slate-950\\\\/60/g; s/bg-slate-950\\\\/40/bg-slate-950\\\\/70/g; s/bg-slate-900\\\\/30/bg-slate-900\\\\/60/g')",
       "Bash(xargs -0 sed -i 's/bg-slate-900\\\\/40/bg-slate-900\\\\/70/g; s/bg-slate-950\\\\/30/bg-slate-950\\\\/60/g; s/bg-slate-950\\\\/40/bg-slate-950\\\\/70/g; s/bg-slate-900\\\\/30/bg-slate-900\\\\/60/g')",
       "Bash(npm install *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(curl -s -o /tmp/gh.zip -L \"https://github.com/cli/cli/releases/download/v2.67.0/gh_2.67.0_windows_amd64.zip\")",
+      "Read(//c/tmp/**)",
+      "Bash(unzip -o gh.zip -d gh_cli)",
+      "Bash(cmdkey /list)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d '{\"uid\":\"uid-edgar-gmail\",\"nombre\":\"Edgar Lovera\",\"email\":\"edgarlovera20@gmail.com\",\"username\":\"edgarlovera20\",\"role\":\"GERENTE\",\"password\":\"Elovera1964\",\"zona\":\"CDMX\"}')"
     ]
   }
 }

@@ -1,16 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, ProductCategory } from '../../configs/package-catalog';
-import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Crosshair, Loader2, MessageCircle, X, ScanLine, Sparkles } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
 import { chatUrl } from '../../lib/channels';
 import { cn, formatCurrency } from '../../lib/utils';
 import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
 import { MatrixInput } from '../ui/MatrixInput';
-import { auth } from '../../lib/firebase';
+import { MapPicker } from '../ui/MapPicker';
+import { PortabilidadAnexo } from './PortabilidadAnexo';
+import { SiacValidator } from '../ui/SiacValidator';
+function getCurrentUserId(): string {
+  try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s).uid : 'anonymous'; } catch { return 'anonymous'; }
+}
 import { toast } from 'sonner';
 import { aiAgent } from '../../services/aiAgent';
 
 interface CustomerCaptureData {
   folio: string;
+  folioSiac?: string;
+  servicioSiac?: string;
+  capturaSiac?: string;
   tipoCliente: ClientType;
   tipoServicio: ServiceSegment;
   categoriaProducto: ProductCategory;
@@ -97,7 +105,39 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
+  // OCR en background — NO bloquea la UI, el usuario puede avanzar libremente
+  const [ocrBgStatus, setOcrBgStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [ocrBgMessage, setOcrBgMessage] = useState<string>('');
+  const [ocrBgFieldsCount, setOcrBgFieldsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [showAnexo, setShowAnexo] = useState(false);
+
+  // Field validation state
+  type ValidationState = 'idle' | 'checking' | 'ok' | 'error';
+  const [telTitularVal, setTelTitularVal] = useState<ValidationState>('idle');
+  const [telRefVal, setTelRefVal] = useState<ValidationState>('idle');
+  const [emailVal, setEmailVal] = useState<ValidationState>('idle');
+  const [emailMsg, setEmailMsg] = useState('');
+
+  const validatePhone = (val: string): ValidationState =>
+    /^\d{10}$/.test(val.replace(/\D/g, '')) ? 'ok' : 'error';
+
+  const validateEmail = async (email: string) => {
+    if (!email) { setEmailVal('idle'); return; }
+    const basicRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!basicRe.test(email)) { setEmailVal('error'); setEmailMsg('Formato inválido'); return; }
+    setEmailVal('checking');
+    try {
+      const res = await fetch(`/api/validate/email?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      setEmailVal(data.ok ? 'ok' : 'error');
+      setEmailMsg(data.reason || '');
+    } catch {
+      setEmailVal('error');
+      setEmailMsg('No se pudo verificar');
+    }
+  };
   const [docType, setDocType] = useState<'ine' | 'curp'>('ine');
   const [selectedPackage, setSelectedPackage] = useState<PackageCatalogItem | null>(null);
   const [error, setError] = useState<string>('');
@@ -211,7 +251,24 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const handleNext = () => setStep(s => Math.min(s + 1, 5));
+  const isPhone10 = (v?: string) => !!v && /^\d{10}$/.test(v.replace(/\D/g, ''));
+
+  const handleNext = () => {
+    // Bloqueo paso 1: teléfono titular obligatorio y 10 dígitos exactos
+    if (step === 1) {
+      if (!isPhone10(form.telefonoTitular)) {
+        setTelTitularVal('error');
+        toast.error('El Teléfono Titular debe tener exactamente 10 dígitos.');
+        return;
+      }
+      if (form.telefonoReferencia && !isPhone10(form.telefonoReferencia)) {
+        setTelRefVal('error');
+        toast.error('El Teléfono Referencia debe tener exactamente 10 dígitos.');
+        return;
+      }
+    }
+    setStep(s => Math.min(s + 1, 5));
+  };
   const handlePrev = () => setStep(s => Math.max(s - 1, 1));
 
   const updateForm = (updates: Partial<CustomerCaptureData>) => {
@@ -258,21 +315,19 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const reversoInputRef = useRef<HTMLInputElement>(null);
 
   // Núcleo del OCR — recibe lista de imágenes (base64) y autorellena.
+  // Envía TODAS las imágenes en UNA sola llamada al backend — el modelo combina
+  // info de frente + reverso en un solo prompt, mejor precisión y menos tokens.
+  // (Versión LEGACY síncrona — kept para botón manual "Re-escanear")
   const runOcrOnImages = async (imgs: string[]) => {
     if (imgs.length === 0) return;
     setIsOcrLoading(true);
-    setOcrProgress(0);
+    setOcrProgress(10);
     try {
+      const result = await aiAgent.analyzeDocument(imgs, 'image/png', setOcrProgress);
       const merged: Record<string, string> = {};
-      for (let i = 0; i < imgs.length; i++) {
-        const baseProgress = Math.round((i / imgs.length) * 100);
-        const result = await aiAgent.analyzeDocument(imgs[i], 'image/png', (p) => {
-          setOcrProgress(baseProgress + Math.round(p / imgs.length));
-        });
-        if (result) {
-          for (const [k, v] of Object.entries(result)) {
-            if (v && (!merged[k] || v.length > merged[k].length)) merged[k] = v as string;
-          }
+      if (result) {
+        for (const [k, v] of Object.entries(result)) {
+          if (v) merged[k] = v as string;
         }
       }
       const fields = Object.keys(merged);
@@ -291,20 +346,195 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
-  // Al subir un documento, lo guardamos en el form Y disparamos OCR automáticamente sobre esa imagen.
+  // NUEVO: OCR en background — NO bloquea la UI.
+  // El usuario puede avanzar de paso mientras se procesa.
+  // Smart merge: solo rellena campos VACÍOS (respeta lo que el usuario escribió).
+  const runOcrInBackground = (imgs: string[]) => {
+    if (imgs.length === 0) return;
+    setOcrBgStatus('running');
+    setOcrBgMessage('Procesando documento con IA…');
+    setOcrBgFieldsCount(0);
+
+    // Disparamos sin await — corre en background
+    (async () => {
+      try {
+        const result = await aiAgent.analyzeDocument(imgs, 'image/png');
+        // Smart merge: usamos un setForm con función para acceder al estado MÁS RECIENTE
+        // y solo rellenar campos vacíos (no sobrescribir lo que el usuario escribió)
+        let filledCount = 0;
+        setForm(prev => {
+          const updates: Record<string, any> = {};
+          if (result) {
+            for (const [k, v] of Object.entries(result)) {
+              const current = (prev as any)[k];
+              // Solo rellenar si el campo está vacío
+              if (v && (!current || String(current).trim() === '')) {
+                updates[k] = v;
+                filledCount++;
+              }
+            }
+          }
+          return { ...prev, ...updates };
+        });
+
+        setTimeout(() => {
+          setOcrBgFieldsCount(filledCount);
+          if (filledCount > 0) {
+            setOcrBgStatus('success');
+            setOcrBgMessage(`IA completó ${filledCount} campo${filledCount !== 1 ? 's' : ''}`);
+            toast.success(`✨ OCR autocompletó ${filledCount} campo${filledCount !== 1 ? 's' : ''}`, { duration: 4000 });
+            // Auto-ocultar después de 8s
+            setTimeout(() => setOcrBgStatus(s => s === 'success' ? 'idle' : s), 8000);
+          } else {
+            setOcrBgStatus('idle');
+            setOcrBgMessage('');
+            toast.info('Los datos ya estaban llenos o no fueron detectados.', { duration: 4000 });
+          }
+        }, 0);
+      } catch (err: any) {
+        console.error('OCR Background Error:', err);
+        setOcrBgStatus('error');
+        setOcrBgMessage('Error de OCR — completa manualmente');
+        toast.error('OCR en background falló. Puedes completar los campos manualmente.', { duration: 6000 });
+        setTimeout(() => setOcrBgStatus(s => s === 'error' ? 'idle' : s), 10000);
+      }
+    })();
+  };
+
+  // Subir comprobante de domicilio (CFE/Izzi/Totalplay/Telmex) — guarda y dispara OCR en background.
+  const handleComprobanteUpload = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => toast.error('No se pudo leer el archivo.');
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      updateForm({ comprobanteDomicilio: base64 });
+      toast.info('📸 Comprobante cargado — IA extrayendo domicilio en segundo plano. Puedes seguir avanzando.', { duration: 4000 });
+      // Disparar OCR de comprobante en background (no bloquea)
+      runComprobanteOcrInBackground(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // OCR del comprobante en background — no bloquea la UI
+  const runComprobanteOcrInBackground = (image: string) => {
+    setOcrBgStatus('running');
+    setOcrBgMessage('Extrayendo domicilio con IA…');
+    (async () => {
+      try {
+        const res = await fetch('/api/vision/comprobante', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image }),
+        });
+        if (!res.ok) throw new Error(`OCR error (${res.status})`);
+        const data = await res.json();
+        const f = data.fields || {};
+        let filled = 0;
+        setForm(prev => {
+          const updates: any = {};
+          // Smart merge: solo llenar campos vacíos
+          const tryFill = (key: keyof typeof prev, val: any) => {
+            if (val && (!prev[key] || String(prev[key]).trim() === '')) {
+              updates[key] = val;
+              filled++;
+            }
+          };
+          tryFill('calle', f.calle);
+          tryFill('numeroExterior', f.numeroExterior);
+          tryFill('numeroInterior', f.numeroInterior);
+          tryFill('colonia', f.colonia);
+          tryFill('codigoPostal', f.codigoPostal);
+          tryFill('delegacion', f.delegacion);
+          tryFill('ciudad', f.ciudad);
+          return { ...prev, ...updates };
+        });
+        setTimeout(() => {
+          if (filled > 0) {
+            setOcrBgStatus('success');
+            setOcrBgMessage(`IA completó ${filled} campo${filled !== 1 ? 's' : ''} de domicilio`);
+            toast.success(`✨ Domicilio autocompletado: ${filled} campo${filled !== 1 ? 's' : ''}`);
+            setTimeout(() => setOcrBgStatus(s => s === 'success' ? 'idle' : s), 8000);
+          } else {
+            setOcrBgStatus('idle');
+            toast.info('Los datos de domicilio ya estaban llenos o no se extrajeron.');
+          }
+        }, 0);
+      } catch (err: any) {
+        setOcrBgStatus('error');
+        setOcrBgMessage('Error escaneando comprobante');
+        toast.error('OCR del comprobante falló. Completa el domicilio manualmente.');
+        setTimeout(() => setOcrBgStatus(s => s === 'error' ? 'idle' : s), 10000);
+      }
+    })();
+  };
+
+  // Ejecutar OCR sobre el comprobante ya subido — disparado por botón explícito.
+  const handleScanComprobante = async () => {
+    if (!form.comprobanteDomicilio) {
+      toast.error('Sube primero un comprobante de domicilio.');
+      return;
+    }
+    setIsOcrLoading(true);
+    setOcrProgress(20);
+    try {
+      const res = await fetch('/api/vision/comprobante', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: form.comprobanteDomicilio }),
+      });
+      setOcrProgress(80);
+      if (!res.ok) throw new Error(`OCR error (${res.status})`);
+      const data = await res.json();
+      const f = data.fields || {};
+      const updates: any = {};
+      if (f.calle)         updates.calle = f.calle;
+      if (f.numeroExterior) updates.numeroExterior = f.numeroExterior;
+      if (f.numeroInterior) updates.numeroInterior = f.numeroInterior;
+      if (f.colonia)       updates.colonia = f.colonia;
+      if (f.codigoPostal)  updates.codigoPostal = f.codigoPostal;
+      if (f.delegacion)    updates.delegacion = f.delegacion;
+      if (f.ciudad)        updates.ciudad = f.ciudad;
+      const count = Object.keys(updates).length;
+      if (count > 0) {
+        updateForm(updates);
+        toast.success(`Comprobante escaneado: ${count} campo${count !== 1 ? 's' : ''} de domicilio detectado${count !== 1 ? 's' : ''}.`);
+      } else {
+        toast.info('No se extrajo domicilio del comprobante. Llena los campos manualmente.', { duration: 5000 });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al procesar el comprobante.');
+    } finally {
+      setIsOcrLoading(false);
+      setOcrProgress(0);
+    }
+  };
+
+  // Al subir un documento, se guarda Y se dispara OCR en background automáticamente.
+  // El usuario puede seguir avanzando con el formulario mientras la IA procesa.
   const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onerror = () => toast.error('No se pudo leer el archivo.');
-    reader.onloadend = async () => {
+    reader.onloadend = () => {
       const base64 = reader.result as string;
-      // Guardar la imagen en el formulario
-      if (slot === 'frente') updateForm({ ineFrente: base64 });
-      else if (slot === 'reverso') updateForm({ ineReverso: base64 });
-      else updateForm({ curpDoc: base64 });
-      // Disparar OCR automático sobre la imagen recién subida
-      await runOcrOnImages([base64]);
+      // Calculamos las imágenes que estarán disponibles después de actualizar
+      let imgsForOcr: string[] = [];
+      if (slot === 'frente') {
+        updateForm({ ineFrente: base64 });
+        imgsForOcr = [base64];
+        if (form.ineReverso) imgsForOcr.push(form.ineReverso);
+      } else if (slot === 'reverso') {
+        updateForm({ ineReverso: base64 });
+        imgsForOcr = form.ineFrente ? [form.ineFrente, base64] : [base64];
+      } else {
+        updateForm({ curpDoc: base64 });
+        imgsForOcr = [base64];
+      }
+      toast.info('📸 Imagen cargada — la IA está extrayendo los datos en segundo plano. Puedes seguir avanzando.', { duration: 4000 });
+      // Disparar OCR en background SIN await — no bloquea la UI
+      runOcrInBackground(imgsForOcr);
     };
     reader.readAsDataURL(file);
     event.target.value = '';
@@ -332,16 +562,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     else updateForm({ curpDoc: undefined });
   };
 
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        const { latitude, longitude } = position.coords;
-        updateForm({ coordenadas: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` });
-      });
-    }
-  };
-
-  const exportToPDF = async () => {
+const exportToPDF = async () => {
     if (!receiptRef.current) return;
     try {
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
@@ -379,17 +600,47 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
         }
       }
       
-      // 2. Save to localStorage
+      // 2. Save to server API
       const saleData = {
-        ...form,
-        id: `sale-${Date.now()}`,
-        asesorId: auth.currentUser?.uid || 'anonymous',
-        status: 'PENDIENTE',
-        fechaSolicitud: new Date().toISOString()
+        folio: form.folio,
+        folio_siac: form.folioSiac,
+        servicio_siac: form.servicioSiac,
+        nombres: form.nombres,
+        apellido_paterno: form.apellidoPaterno,
+        apellido_materno: form.apellidoMaterno,
+        curp: form.curp,
+        telefono_titular: form.telefonoTitular,
+        correo: form.correo,
+        calle: form.calle,
+        colonia: form.colonia,
+        ciudad: form.ciudad,
+        codigo_postal: form.codigoPostal,
+        delegacion: form.delegacion,
+        coordenadas: form.coordenadas,
+        package_id: form.packageId,
+        paquete_nombre: form.paqueteNombre,
+        renta_mensual: form.rentaMensual,
+        tipo_cliente: form.tipoCliente,
+        tipo_servicio: form.tipoServicio,
+        categoria_producto: form.categoriaProducto,
+        streaming_elegido: form.streamingElegido,
+        plataformas_adicionales: JSON.stringify(form.plataformasAdicionales || []),
+        numero_a_portar: form.numeroAPortar,
+        compania_actual: form.companiaActual,
+        asesor_id: getCurrentUserId(),
+        status: 'pendiente',
+        fecha_solicitud: new Date().toISOString(),
+        metadata: JSON.stringify(form),
       };
-      const sales: any[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-      sales.push(saleData);
-      localStorage.setItem('adhdreams_sales', JSON.stringify(sales));
+      const apiRes = await fetch('/api/ventas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(saleData),
+      });
+      if (!apiRes.ok) {
+        const err = await apiRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al guardar en el servidor');
+      }
       
       // 3. Export PDF
       await exportToPDF();
@@ -416,6 +667,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const currentStepLabel = steps.find(s => s.id === step)?.label || '';
 
   return (
+    <>
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Persistent breadcrumb — sticky so the user always knows where they are */}
       <div className="sticky top-0 z-30 -mx-2 px-2 py-3 backdrop-blur-xl bg-slate-950/90 border-b border-white/10 mb-2">
@@ -502,9 +754,11 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                 </button>
               </div>
 
-              {/* Inputs ocultos para cada slot */}
+              {/* Inputs ocultos — archivo y cámara para cada slot */}
               <input type="file" ref={frenteInputRef} onChange={handleFileSelect(docType === 'ine' ? 'frente' : 'curp')} accept="image/*" className="hidden" />
+              <input type="file" id="frente-cam" onChange={handleFileSelect(docType === 'ine' ? 'frente' : 'curp')} accept="image/*" capture="environment" className="hidden" />
               <input type="file" ref={reversoInputRef} onChange={handleFileSelect('reverso')} accept="image/*" className="hidden" />
+              <input type="file" id="reverso-cam" onChange={handleFileSelect('reverso')} accept="image/*" capture="environment" className="hidden" />
 
               {/* Zonas de carga con preview */}
               <div className={cn('grid gap-4', docType === 'ine' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1')}>
@@ -512,36 +766,66 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                   title={docType === 'ine' ? 'Frente de INE' : 'Documento CURP'}
                   image={docType === 'ine' ? form.ineFrente : form.curpDoc}
                   onPick={() => frenteInputRef.current?.click()}
+                  onCamera={() => document.getElementById('frente-cam')?.click()}
                   onRemove={() => removeImage(docType === 'ine' ? 'frente' : 'curp')}
-                  disabled={isOcrLoading}
+                  disabled={false}
                 />
                 {docType === 'ine' && (
                   <UploadSlot
                     title="Reverso de INE"
                     image={form.ineReverso}
                     onPick={() => reversoInputRef.current?.click()}
+                    onCamera={() => document.getElementById('reverso-cam')?.click()}
                     onRemove={() => removeImage('reverso')}
-                    disabled={isOcrLoading}
+                    disabled={false}
                   />
                 )}
               </div>
 
-              {/* Botón Escanear / Estado del escaneo */}
+              {/* Indicador NO-BLOQUEANTE de OCR en background + botón re-escanear */}
               {(() => {
                 const hasImages = docType === 'ine'
                   ? Boolean(form.ineFrente || form.ineReverso)
                   : Boolean(form.curpDoc);
                 if (!hasImages) return null;
                 return (
-                  <div className="mt-5">
-                    {isOcrLoading ? (
-                      <div className="bg-gradient-to-r from-blue-600/20 via-blue-500/15 to-blue-600/20 border border-blue-500/30 rounded-2xl p-5 flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
-                          <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-                        </div>
+                  <div className="mt-5 space-y-3">
+                    {/* Indicador discreto de OCR background */}
+                    {ocrBgStatus === 'running' && (
+                      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 flex items-center gap-3">
+                        <Loader2 className="w-5 h-5 text-blue-400 animate-spin shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-blue-300 mb-1">Escaneando con Google Vision…</div>
-                          <div className="w-full h-2 bg-blue-500/20 rounded-full overflow-hidden">
+                          <div className="text-xs font-semibold text-blue-300">🤖 IA procesando en segundo plano…</div>
+                          <div className="text-[11px] text-blue-300/70">Puedes seguir llenando el formulario o avanzar de paso</div>
+                        </div>
+                      </div>
+                    )}
+                    {ocrBgStatus === 'success' && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 flex items-center gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-emerald-300">✓ {ocrBgMessage}</div>
+                          <div className="text-[11px] text-emerald-300/70">Revisa que los datos sean correctos</div>
+                        </div>
+                      </div>
+                    )}
+                    {ocrBgStatus === 'error' && (
+                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-center gap-3">
+                        <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-amber-300">{ocrBgMessage}</div>
+                          <div className="text-[11px] text-amber-300/70">Completa los campos manualmente</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botón de re-escanear manual (siempre disponible) */}
+                    {isOcrLoading ? (
+                      <div className="bg-gradient-to-r from-blue-600/20 via-blue-500/15 to-blue-600/20 border border-blue-500/30 rounded-2xl p-4 flex items-center gap-4">
+                        <Loader2 className="w-5 h-5 text-blue-400 animate-spin shrink-0" />
+                        <div className="flex-1">
+                          <div className="text-sm font-bold text-blue-300">Re-escaneando con IA…</div>
+                          <div className="w-full h-1.5 bg-blue-500/20 rounded-full overflow-hidden mt-1">
                             <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-200" style={{ width: `${Math.max(5, ocrProgress)}%` }} />
                           </div>
                         </div>
@@ -551,11 +835,12 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                       <button
                         type="button"
                         onClick={handleScan}
-                        className="group w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-blue-500/30 ring-1 ring-white/10"
+                        disabled={ocrBgStatus === 'running'}
+                        className="group w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/30 ring-1 ring-white/10"
                       >
-                        <ScanLine className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        <span>Volver a escanear con IA</span>
-                        <Sparkles className="w-4 h-4 opacity-80" />
+                        <ScanLine className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                        <span>{form.curp || form.nombres ? 'Volver a escanear (sobrescribe)' : 'Forzar escaneo manual'}</span>
+                        <Sparkles className="w-3.5 h-3.5 opacity-80" />
                       </button>
                     )}
                   </div>
@@ -596,20 +881,91 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                       value={form.folioIne || ''} onChange={e => updateForm({ folioIne: e.target.value })} />
                   </div>
                 )}
+                {/* Teléfono Titular — validación EN VIVO 10 dígitos */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Teléfono Titular</label>
-                  <MatrixInput type="tel" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
-                    value={form.telefonoTitular || ''} onChange={e => updateForm({ telefonoTitular: e.target.value })} />
+                  <label className="text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
+                    Teléfono Titular <span className="text-red-400">*</span>
+                    {telTitularVal === 'ok' && <CheckCircle className="w-3.5 h-3.5 text-green-400" />}
+                    {telTitularVal === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+                    <span className={cn("ml-auto text-[10px] font-mono",
+                      (form.telefonoTitular?.length || 0) === 10 ? 'text-green-400' : 'text-slate-500')}>
+                      {form.telefonoTitular?.length || 0}/10
+                    </span>
+                  </label>
+                  <MatrixInput
+                    type="tel" inputMode="numeric" maxLength={10}
+                    placeholder="10 dígitos"
+                    className={cn("w-full bg-slate-950/80 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
+                      telTitularVal === 'ok' ? 'border-green-500/60' : telTitularVal === 'error' ? 'border-red-500/60' : 'border-white/10')}
+                    value={form.telefonoTitular || ''}
+                    onChange={e => {
+                      const v = e.target.value.replace(/\D/g,'').slice(0,10);
+                      updateForm({ telefonoTitular: v });
+                      // Validación en vivo
+                      if (v.length === 0) setTelTitularVal('idle');
+                      else if (v.length === 10) setTelTitularVal('ok');
+                      else setTelTitularVal('error');
+                    }}
+                    onBlur={e => setTelTitularVal(e.target.value ? validatePhone(e.target.value) : 'idle')}
+                  />
+                  {telTitularVal === 'error' && (form.telefonoTitular?.length || 0) > 0 && (
+                    <p className="text-red-400 text-xs mt-1">
+                      Faltan {10 - (form.telefonoTitular?.length || 0)} dígito{10 - (form.telefonoTitular?.length || 0) !== 1 ? 's' : ''}
+                    </p>
+                  )}
                 </div>
+
+                {/* Teléfono Referencia */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Teléfono Referencia</label>
-                  <MatrixInput type="tel" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
-                    value={form.telefonoReferencia || ''} onChange={e => updateForm({ telefonoReferencia: e.target.value })} />
+                  <label className="text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
+                    Teléfono Referencia
+                    {telRefVal === 'ok' && <CheckCircle className="w-3.5 h-3.5 text-green-400" />}
+                    {telRefVal === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+                    <span className={cn("ml-auto text-[10px] font-mono",
+                      (form.telefonoReferencia?.length || 0) === 10 ? 'text-green-400' : 'text-slate-500')}>
+                      {form.telefonoReferencia?.length || 0}/10
+                    </span>
+                  </label>
+                  <MatrixInput
+                    type="tel" inputMode="numeric" maxLength={10}
+                    placeholder="10 dígitos (opcional)"
+                    className={cn("w-full bg-slate-950/80 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
+                      telRefVal === 'ok' ? 'border-green-500/60' : telRefVal === 'error' ? 'border-red-500/60' : 'border-white/10')}
+                    value={form.telefonoReferencia || ''}
+                    onChange={e => {
+                      const v = e.target.value.replace(/\D/g,'').slice(0,10);
+                      updateForm({ telefonoReferencia: v });
+                      if (v.length === 0) setTelRefVal('idle');
+                      else if (v.length === 10) setTelRefVal('ok');
+                      else setTelRefVal('error');
+                    }}
+                    onBlur={e => setTelRefVal(e.target.value ? validatePhone(e.target.value) : 'idle')}
+                  />
+                  {telRefVal === 'error' && (form.telefonoReferencia?.length || 0) > 0 && (
+                    <p className="text-red-400 text-xs mt-1">
+                      Faltan {10 - (form.telefonoReferencia?.length || 0)} dígito{10 - (form.telefonoReferencia?.length || 0) !== 1 ? 's' : ''}
+                    </p>
+                  )}
                 </div>
+
+                {/* Correo */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Correo Electrónico</label>
-                  <MatrixInput type="email" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
-                    value={form.correo || ''} onChange={e => updateForm({ correo: e.target.value })} />
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
+                    Correo Electrónico
+                    {emailVal === 'checking' && <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />}
+                    {emailVal === 'ok' && <CheckCircle className="w-3.5 h-3.5 text-green-400" />}
+                    {emailVal === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+                  </label>
+                  <MatrixInput
+                    type="email"
+                    className={cn("w-full bg-slate-950/80 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
+                      emailVal === 'ok' ? 'border-green-500/60' : emailVal === 'error' ? 'border-red-500/60' : 'border-white/10')}
+                    value={form.correo || ''}
+                    onChange={e => { updateForm({ correo: e.target.value }); setEmailVal('idle'); }}
+                    onBlur={e => validateEmail(e.target.value)}
+                  />
+                  {emailVal === 'ok' && <p className="text-green-400 text-xs mt-1">✓ Dominio de correo verificado</p>}
+                  {emailVal === 'error' && <p className="text-red-400 text-xs mt-1">✗ {emailMsg}</p>}
                 </div>
               </div>
             </div>
@@ -628,12 +984,49 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                 />
                 
                 {!form.mismaDireccionIne && (
-                  <div className="mt-4 pt-4 border-t border-cyber-electric/20">
-                    <div className="border-2 border-dashed border-amber-500/30 bg-amber-500/10 rounded-xl p-6 text-center hover:bg-amber-500/20 transition-colors cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.1)]">
-                      <Upload className="w-6 h-6 text-amber-400 mx-auto mb-2 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" />
-                      <p className="text-sm text-amber-400 font-bold uppercase tracking-wider">Subir Comprobante de Domicilio</p>
-                      <p className="text-[10px] text-amber-400/60 mt-1 uppercase tracking-widest font-mono">Requerido ya que la dirección no coincide</p>
-                    </div>
+                  <div className="mt-4 pt-4 border-t border-cyber-electric/20 space-y-3">
+                    {form.comprobanteDomicilio ? (
+                      <div className="space-y-3">
+                        <div className="relative rounded-xl overflow-hidden border border-amber-500/40">
+                          <img src={form.comprobanteDomicilio} alt="Comprobante" className="w-full max-h-56 object-contain bg-black" />
+                          <button type="button" onClick={() => updateForm({ comprobanteDomicilio: undefined })}
+                            className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-500 text-white rounded-full p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                          <p className="text-center text-xs text-green-400 py-2 bg-black/60">
+                            {isOcrLoading ? '⏳ Escaneando comprobante con IA…' : '✓ Comprobante cargado'}
+                          </p>
+                        </div>
+                        {!isOcrLoading && (
+                          <button
+                            type="button"
+                            onClick={handleScanComprobante}
+                            className="group w-full bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-amber-500/30 ring-1 ring-white/10"
+                          >
+                            <ScanLine className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                            <span>{form.calle ? 'Volver a escanear con IA' : 'Escanear con IA'}</span>
+                            <Sparkles className="w-4 h-4 opacity-80" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="border-2 border-dashed border-amber-500/40 bg-amber-500/10 rounded-xl p-5 text-center hover:bg-amber-500/20 transition-colors cursor-pointer flex flex-col items-center gap-2">
+                          <input type="file" accept="image/*,application/pdf" className="hidden"
+                            onChange={e => handleComprobanteUpload(e.target.files?.[0])} />
+                          <Upload className="w-6 h-6 text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" />
+                          <p className="text-xs text-amber-400 font-bold uppercase tracking-wide">Subir archivo</p>
+                          <p className="text-[10px] text-amber-400/60">CFE, Izzi, Totalplay, Telmex…</p>
+                        </label>
+                        <label className="border-2 border-dashed border-blue-500/40 bg-blue-500/10 rounded-xl p-5 text-center hover:bg-blue-500/20 transition-colors cursor-pointer flex flex-col items-center gap-2">
+                          <input type="file" accept="image/*" capture="environment" className="hidden"
+                            onChange={e => handleComprobanteUpload(e.target.files?.[0])} />
+                          <Phone className="w-6 h-6 text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.5)]" />
+                          <p className="text-xs text-blue-400 font-bold uppercase tracking-wide">Tomar foto</p>
+                          <p className="text-[10px] text-blue-400/60">Auto-llena domicilio</p>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -688,20 +1081,16 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
 
-              {/* Mini Mapa */}
+              {/* Mapa interactivo */}
               <div className="bg-slate-950/80 border border-white/10 rounded-xl p-4">
-                <div className="flex justify-between items-center mb-3">
-                  <label className="block text-sm font-medium text-white">Ubicación GPS (Coordenadas)</label>
-                  <button onClick={getCurrentLocation} className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
-                    <Crosshair className="w-3 h-3" /> Obtener Ubicación Actual
-                  </button>
-                </div>
-                <MatrixInput type="text" className="w-full bg-slate-900 border border-white/10 rounded-lg p-2.5 text-white text-sm font-mono mb-3" 
-                  value={form.coordenadas || ''} onChange={e => updateForm({ coordenadas: e.target.value })} placeholder="Latitud, Longitud" />
-                
-                <div className="w-full h-20 bg-slate-800/50 rounded-lg flex items-center justify-center border border-white/5 text-slate-500 text-xs font-mono">
-                  📍 Coordenadas: {form.coordenadas || 'No especificadas'}
-                </div>
+                <label className="block text-sm font-medium text-white mb-3 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-blue-400" /> Ubicación GPS
+                </label>
+                <MapPicker
+                  coords={form.coordenadas || ''}
+                  onCoordsChange={c => updateForm({ coordenadas: c })}
+                  searchAddress={[form.calle, form.colonia, form.delegacion, form.ciudad].filter(Boolean).join(', ')}
+                />
               </div>
             </div>
             
@@ -1039,28 +1428,38 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                       value={form.nip || ''} onChange={e => updateForm({ nip: e.target.value })} placeholder="1234" />
                   </div>
                 </div>
-                <div className="mt-4 pt-4 border-t border-white/10 space-y-4">
-                  <div 
-                    className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${form.anexoPendiente ? 'opacity-50 pointer-events-none border-slate-700 bg-slate-800 text-slate-500' : 'border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 text-blue-400'}`} 
-                    onClick={() => updateForm({ anexoPortabilidad: 'uploaded' })}
+                <div className="mt-4 pt-4 border-t border-white/10 space-y-3">
+                  {/* Botón principal del Anexo */}
+                  <button
+                    type="button"
+                    disabled={form.anexoPendiente}
+                    onClick={() => { updateForm({ anexoPortabilidad: 'generated' }); setShowAnexo(true); }}
+                    className={cn(
+                      "w-full border-2 border-dashed rounded-xl p-5 text-center transition-colors flex flex-col items-center gap-2",
+                      form.anexoPendiente
+                        ? 'border-slate-700 bg-slate-800/50 text-slate-500 cursor-not-allowed opacity-50'
+                        : form.anexoPortabilidad
+                          ? 'border-green-500/40 bg-green-500/10 hover:bg-green-500/20 cursor-pointer'
+                          : 'border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 cursor-pointer'
+                    )}
                   >
-                    <Upload className="w-6 h-6 mx-auto mb-2" />
-                    <p className={`text-sm font-medium ${form.anexoPendiente ? 'text-slate-400' : 'text-blue-300'}`}>
-                      {form.anexoPortabilidad ? '✅ Anexo de Portabilidad Cargado' : 'Subir Anexo de Portabilidad'}
+                    <Phone className={`w-7 h-7 ${form.anexoPortabilidad ? 'text-green-400' : 'text-blue-400'}`} />
+                    <p className={`text-sm font-bold uppercase tracking-wide ${form.anexoPortabilidad ? 'text-green-300' : 'text-blue-300'}`}>
+                      {form.anexoPortabilidad ? '✅ Anexo Generado — Ver / Reimprimir' : 'Generar Anexo de Portabilidad'}
                     </p>
-                    <p className={`text-xs mt-1 ${form.anexoPendiente ? 'text-slate-500' : 'text-blue-400/70'}`}>
-                      {form.anexoPendiente ? 'Subirá el anexo después' : 'Requerido para el trámite de portabilidad'}
+                    <p className={`text-xs ${form.anexoPortabilidad ? 'text-green-400/70' : 'text-blue-400/70'}`}>
+                      {form.anexoPendiente ? 'Se generará después' : 'Se auto-llena con los datos del cliente · Imprimible y exportable a PDF'}
                     </p>
-                  </div>
+                  </button>
 
                   <div className="flex items-center gap-3 bg-slate-900 border border-white/10 rounded-xl p-4">
-                    <AnimatedCheckbox 
-                      checked={form.anexoPendiente || false} 
+                    <AnimatedCheckbox
+                      checked={form.anexoPendiente || false}
                       onChange={(checked) => {
                         updateForm({ anexoPendiente: checked });
                         if (checked) updateForm({ anexoPortabilidad: undefined });
                       }}
-                      label="Subir Anexo de Portabilidad más tarde"
+                      label="Generar Anexo de Portabilidad más tarde"
                     />
                   </div>
                 </div>
@@ -1314,8 +1713,22 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                 </div>
               )}
 
-              <button 
-                onClick={handleSaveAndFinish} 
+              {/* Validación SIAC — sube captura y compara contra contrato */}
+              <SiacValidator
+                contract={{
+                  nombres: form.nombres,
+                  apellidoPaterno: form.apellidoPaterno,
+                  apellidoMaterno: form.apellidoMaterno,
+                  telefonoTitular: form.telefonoTitular,
+                  correo: form.correo,
+                }}
+                onValidated={({ folioSiac, servicio, image }) =>
+                  updateForm({ folioSiac, servicioSiac: servicio, capturaSiac: image })
+                }
+              />
+
+              <button
+                onClick={handleSaveAndFinish}
                 disabled={isLoading}
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white p-4 rounded-xl font-bold flex justify-center items-center gap-2 shadow-lg hover:scale-[1.02] transition-transform disabled:opacity-50"
               >
@@ -1344,6 +1757,22 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
 
       </div>
     </div>
+    {showAnexo && (
+      <PortabilidadAnexo
+        data={{
+          apellidoPaterno: form.apellidoPaterno,
+          apellidoMaterno: form.apellidoMaterno,
+          nombres: form.nombres,
+          numeroAPortar: form.numeroAPortar,
+          companiaActual: form.companiaActual,
+          nip: form.nip,
+          fechaSolicitud: form.fechaSolicitud,
+          folio: form.folio,
+        }}
+        onClose={() => setShowAnexo(false)}
+      />
+    )}
+    </>
   );
 }
 
@@ -1356,12 +1785,14 @@ function UploadSlot({
   title,
   image,
   onPick,
+  onCamera,
   onRemove,
   disabled,
 }: {
   title: string;
   image?: string;
   onPick: () => void;
+  onCamera?: () => void;
   onRemove: () => void;
   disabled?: boolean;
 }) {
@@ -1374,37 +1805,41 @@ function UploadSlot({
             <CheckCircle2 className="w-3 h-3" />
             {title}
           </div>
-          <button
-            type="button"
-            onClick={onRemove}
-            disabled={disabled}
-            title="Eliminar"
-            className="p-1.5 bg-black/60 hover:bg-red-500/80 rounded-md text-white transition-colors disabled:opacity-40"
-          >
+          <button type="button" onClick={onRemove} disabled={disabled} title="Eliminar"
+            className="p-1.5 bg-black/60 hover:bg-red-500/80 rounded-md text-white transition-colors disabled:opacity-40">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
-        <button
-          type="button"
-          onClick={onPick}
-          disabled={disabled}
-          className="absolute inset-x-0 bottom-0 p-2 text-[11px] font-medium text-slate-200 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
-        >
-          Cambiar imagen
-        </button>
+        <div className="absolute inset-x-0 bottom-0 flex gap-2 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+          <button type="button" onClick={onPick} disabled={disabled}
+            className="flex-1 text-[11px] font-medium text-slate-200 bg-slate-700/80 hover:bg-slate-600 rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors">
+            <Upload className="w-3 h-3" /> Cambiar archivo
+          </button>
+          {onCamera && (
+            <button type="button" onClick={onCamera} disabled={disabled}
+              className="flex-1 text-[11px] font-medium text-blue-200 bg-blue-700/80 hover:bg-blue-600 rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors">
+              <Phone className="w-3 h-3" /> Tomar foto
+            </button>
+          )}
+        </div>
       </div>
     );
   }
   return (
-    <button
-      type="button"
-      onClick={onPick}
-      disabled={disabled}
-      className="border-2 border-dashed border-slate-700 hover:border-blue-500/60 hover:bg-blue-500/5 rounded-xl p-8 text-center transition-colors flex flex-col items-center justify-center min-h-[176px] disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <Upload className="w-8 h-8 text-slate-500 mb-3" />
-      <p className="text-sm text-slate-300 font-medium">Subir {title}</p>
-      <p className="text-xs text-slate-500 mt-1">Escaneo por IA activa</p>
-    </button>
+    <div className="flex flex-col gap-2 min-h-[176px]">
+      <button type="button" onClick={onPick} disabled={disabled}
+        className="flex-1 border-2 border-dashed border-slate-700 hover:border-blue-500/60 hover:bg-blue-500/5 rounded-xl p-6 text-center transition-colors flex flex-col items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+        <Upload className="w-7 h-7 text-slate-500 mb-2" />
+        <p className="text-sm text-slate-300 font-medium">Subir {title}</p>
+        <p className="text-xs text-slate-500 mt-0.5">JPG, PNG, PDF — IA activa</p>
+      </button>
+      {onCamera && (
+        <button type="button" onClick={onCamera} disabled={disabled}
+          className="border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded-xl px-4 py-2.5 text-center transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          <Phone className="w-4 h-4 text-blue-400" />
+          <span className="text-sm text-blue-300 font-medium">Tomar foto con cámara</span>
+        </button>
+      )}
+    </div>
   );
 }

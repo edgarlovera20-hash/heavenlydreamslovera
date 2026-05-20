@@ -4,20 +4,12 @@ import { cn, formatCurrency } from '../../lib/utils';
 
 type Tab = 'seguimiento' | 'comprobantes' | 'bancarios' | 'adelantos' | 'gestion';
 
-// --- MOCK DATA FOR API ---
-const mockUsers = [
-  { id: 'UUID-123', name: 'Edgar Lovera' },
-  { id: 'UUID-456', name: 'Ana García' },
-];
-
-const mockSalesData = [
-  { folio_siac: '9876543', estatus_pisa: 'Terminado', monto_comision: 500 },
-  { folio_siac: '9876550', estatus_pisa: 'En Curso', monto_comision: 350 },
-];
+const mockUsers: { id: string; name: string }[] = JSON.parse(localStorage.getItem('adhdreams_users') || '[]').map((u: any) => ({ id: u.uid, name: u.displayName || u.nombre || u.email || 'Usuario' }));
+const mockSalesData: { folio_siac: string; estatus_pisa: string; monto_comision: number }[] = [];
 
 export default function Payroll() {
   const [activeTab, setActiveTab] = useState<Tab>('seguimiento');
-  const isAdmin = true; // Simulating admin role
+  const isAdmin = (['GERENTE', 'ADMIN', 'ADMINISTRACION'].includes((JSON.parse(localStorage.getItem('adhdreams_current_user') || '{}').role || '').toUpperCase()));
 
   const tabs = [
     { id: 'seguimiento', label: 'Mi Seguimiento', icon: TrendingUp },

@@ -13,12 +13,6 @@ export interface ClientData {
   date: string;
 }
 
-const MOCK_CLIENTS: ClientData[] = [
-  { id: 'C-1001', name: 'Juan Pérez', phone: '5512345678', package: 'Paquete 1', status: 'Procedió', notes: 'Instalación programada', date: '2023-10-25' },
-  { id: 'C-1002', name: 'María García', phone: '5587654321', package: 'Paquete 2', status: 'No responde', notes: 'Llamar mañana por la tarde', date: '2023-10-25' },
-  { id: 'C-1003', name: 'Pedro López', phone: '5599887766', package: 'Paquete 3', status: 'Pendiente', notes: 'Pendiente de validación de Buró', date: '2023-10-26' },
-  { id: 'C-1004', name: 'Ana Martínez', phone: '5533221100', package: 'Paquete 1', status: 'Rechazado', notes: 'No cuenta con cobertura', date: '2023-10-27' },
-];
 
 export default function MyClientsView({ onBack }: { onBack: () => void }) {
   const [clients, setClients] = useState<ClientData[]>([]);
@@ -34,19 +28,15 @@ export default function MyClientsView({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     const sales: any[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-    if (sales.length > 0) {
-      setClients(sales.map((s: any) => ({
-        id: s.id || s.folio || `C-${Math.random().toString(36).slice(2, 7)}`,
-        name: `${s.nombres || ''} ${s.apellidoPaterno || ''}`.trim() || 'Sin nombre',
-        phone: s.telefonoTitular || '',
-        package: s.paqueteNombre || '',
-        status: s.status || 'PENDIENTE',
-        notes: s.notes || '',
-        date: s.fechaSolicitud?.split('T')[0] || '',
-      })));
-    } else {
-      setClients(MOCK_CLIENTS);
-    }
+    setClients(sales.map((s: any) => ({
+      id: s.id || s.folio || `C-${Math.random().toString(36).slice(2, 7)}`,
+      name: `${s.nombres || ''} ${s.apellidoPaterno || ''}`.trim() || 'Sin nombre',
+      phone: s.telefonoTitular || '',
+      package: s.paqueteNombre || '',
+      status: s.status || 'PENDIENTE',
+      notes: s.notes || '',
+      date: s.fechaSolicitud?.split('T')[0] || '',
+    })));
     setLoading(false);
   }, []);
 
