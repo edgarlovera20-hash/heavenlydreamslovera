@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ─── Heavenly Dreams — Setup inicial del servidor ─────────────
 REPO_URL="https://github.com/edgarlovera20-hash/heavenlydreamslovera.git"
-BRANCH="claude/open-app-zJE4P"
+BRANCH="main"
 INSTALL_DIR="/root/heavenlydreamslovera"
 COMPOSE_FILE="infrastructure/docker/docker-compose.yml"
 
@@ -60,14 +60,18 @@ else
   info ".env ya existe — omitiendo configuración"
 fi
 
-# ─── 4. Construir y levantar contenedores ─────────────────────
+# ─── 4. Copiar .env donde Docker Compose lo espera ───────────
+# Docker Compose busca .env en el directorio del compose file
+cp .env infrastructure/docker/.env
+
+# ─── 5. Construir y levantar contenedores ─────────────────────
 info "Construyendo imágenes Docker (puede tardar 5–10 min)..."
 docker compose -f "$COMPOSE_FILE" build --parallel
 
 info "Levantando servicios..."
 docker compose -f "$COMPOSE_FILE" up -d
 
-# ─── 5. Esperar a que postgres esté listo ─────────────────────
+# ─── 6. Esperar a que postgres esté listo ─────────────────────
 info "Esperando a que PostgreSQL esté listo..."
 for i in {1..30}; do
   if docker exec hd-postgres pg_isready -U hd_user >/dev/null 2>&1; then
@@ -78,7 +82,7 @@ for i in {1..30}; do
   sleep 2
 done
 
-# ─── 6. Migraciones ───────────────────────────────────────────
+# ─── 7. Migraciones ───────────────────────────────────────────
 info "Ejecutando migraciones de base de datos..."
 docker exec hd-api sh -c "cd /app && npx prisma migrate deploy --schema /app/packages/database/prisma/schema.prisma" 2>/dev/null \
   || warn "Migraciones con advertencias (puede ser la primera vez)"
