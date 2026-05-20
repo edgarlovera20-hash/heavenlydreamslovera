@@ -1,5 +1,5 @@
 FROM node:20-alpine
-RUN apk add --no-cache libc6-compat chromium
+RUN apk add --no-cache libc6-compat chromium git
 WORKDIR /app
 COPY apps/whatsapp-service/package.json ./
 RUN npm install --omit=dev
