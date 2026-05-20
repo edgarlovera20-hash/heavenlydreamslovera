@@ -41,6 +41,12 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
   }
 
+  // Health endpoint (before global prefix)
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/api/v1/health', (_req: unknown, res: { json: (body: unknown) => void }) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   Logger.log(`🚀 API running on http://localhost:${port}/api/v1`, 'Bootstrap');
