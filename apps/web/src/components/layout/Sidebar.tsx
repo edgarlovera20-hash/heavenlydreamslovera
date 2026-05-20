@@ -30,6 +30,10 @@ import {
   Map,
   UserSquare,
   Wallet,
+  UsersRound,
+  ShieldCheck,
+  Database,
+  Package,
 } from 'lucide-react';
 import { Role } from '@heavenly/types';
 import { useAuth } from '@/hooks/useAuth';
@@ -194,6 +198,30 @@ const NAV_ITEMS: NavItem[] = [
     href: '/dashboard/zones',
     icon: MapPin,
     roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.SUPERVISOR],
+  },
+  {
+    label: 'Catálogo',
+    href: '/dashboard/packages',
+    icon: Package,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.ADMINISTRACION],
+  },
+  {
+    label: 'Equipo',
+    href: '/dashboard/team',
+    icon: UsersRound,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.SUPERVISOR],
+  },
+  {
+    label: 'Auditoría',
+    href: '/dashboard/audit',
+    icon: ShieldCheck,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE],
+  },
+  {
+    label: 'Gestor de Datos',
+    href: '/dashboard/data',
+    icon: Database,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE],
   },
 ];
 
