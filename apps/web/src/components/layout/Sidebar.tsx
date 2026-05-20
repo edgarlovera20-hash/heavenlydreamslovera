@@ -206,6 +206,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.SUPERVISOR],
   },
   {
+    label: 'Contratos',
+    href: '/dashboard/contracts',
+    icon: FileText,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.ADMINISTRACION, Role.SUPERVISOR],
+  },
+  {
     label: 'Catálogo',
     href: '/dashboard/packages',
     icon: Package,
