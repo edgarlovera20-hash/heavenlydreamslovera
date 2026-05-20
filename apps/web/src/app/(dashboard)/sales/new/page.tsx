@@ -58,7 +58,7 @@ export default function NewSalePage() {
         rentaMensual: form.rentaMensual ? parseFloat(form.rentaMensual) : undefined,
       });
       toast.success('Venta creada exitosamente');
-      router.push('/dashboard/sales');
+      router.push('/sales');
     } catch {
       toast.error('Error al crear la venta');
     } finally {
