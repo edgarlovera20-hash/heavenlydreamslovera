@@ -7,10 +7,12 @@ COPY package.json package-lock.json turbo.json ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/types/package.json ./packages/types/
 COPY packages/ui/package.json ./packages/ui/
-RUN npm ci --workspace=apps/web --workspace=packages/types --workspace=packages/ui
+COPY packages/shared/package.json ./packages/shared/
+RUN npm ci --workspace=apps/web --workspace=packages/types --workspace=packages/ui --workspace=packages/shared
 
 COPY packages/types ./packages/types
 COPY packages/ui ./packages/ui
+COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 RUN cd apps/web && npm run build
 
