@@ -15,7 +15,7 @@ export class CustomerSuccessService {
         ...(filters?.type && { type: filters.type }),
       },
       include: {
-        customer: { select: { id: true, nombre: true, telefono: true } },
+        customer: { select: { id: true, nombres: true, telefono: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -25,7 +25,7 @@ export class CustomerSuccessService {
     const caseRecord = await this.prisma.customerSuccessCase.findFirst({
       where: { id, companyId },
       include: {
-        customer: { select: { id: true, nombre: true, telefono: true, email: true } },
+        customer: { select: { id: true, nombres: true, telefono: true, email: true } },
       },
     });
 

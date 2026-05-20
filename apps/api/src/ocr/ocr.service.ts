@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { ProcessDocumentDto } from './dto/process-document.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class OcrService {
@@ -38,10 +39,9 @@ export class OcrService {
         url: true,
         type: true,
         ocrData: true,
-        confidence: true,
+        ocrConfidence: true,
         fraudRisk: true,
         createdAt: true,
-        updatedAt: true,
       },
     });
     if (!document) {
@@ -53,14 +53,14 @@ export class OcrService {
   async saveOcrResult(
     saleId: string,
     ocrData: Record<string, unknown>,
-    confidence: number,
+    ocrConfidence: number,
     fraudRisk: string,
   ) {
     return this.prisma.document.updateMany({
       where: { saleId },
       data: {
-        ocrData,
-        confidence,
+        ocrData: ocrData as Prisma.InputJsonValue,
+        ocrConfidence,
         fraudRisk,
       },
     });
