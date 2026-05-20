@@ -101,6 +101,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: [Role.SUPER_ADMIN, Role.GERENTE],
   },
   {
+    label: 'Solicitudes val.',
+    href: '/dashboard/validations/requests',
+    icon: CheckSquare,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.ADMINISTRACION],
+  },
+  {
     label: 'Reportes',
     href: '/dashboard/reports',
     icon: BarChart3,
