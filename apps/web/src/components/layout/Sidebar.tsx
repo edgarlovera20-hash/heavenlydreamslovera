@@ -19,6 +19,17 @@ import {
   UserCog,
   Building2,
   ChevronRight,
+  MapPin,
+  DollarSign,
+  FileText,
+  Puzzle,
+  Megaphone,
+  GitBranch,
+  Calculator,
+  Trophy,
+  Map,
+  UserSquare,
+  Wallet,
 } from 'lucide-react';
 import { Role } from '@heavenly/types';
 import { useAuth } from '@/hooks/useAuth';
@@ -108,6 +119,81 @@ const NAV_ITEMS: NavItem[] = [
     href: '/dashboard/companies',
     icon: Building2,
     roles: [Role.SUPER_ADMIN],
+  },
+  {
+    label: 'Territorios',
+    href: '/dashboard/territories',
+    icon: MapPin,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE],
+  },
+  {
+    label: 'Comisiones',
+    href: '/dashboard/commissions',
+    icon: DollarSign,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.ADMINISTRACION],
+  },
+  {
+    label: 'Nómina',
+    href: '/dashboard/payroll',
+    icon: Wallet,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.ADMINISTRACION],
+  },
+  {
+    label: 'Scripts',
+    href: '/dashboard/scripts',
+    icon: FileText,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.SUPERVISOR, Role.PROMOTOR],
+  },
+  {
+    label: 'Cotizador',
+    href: '/dashboard/quote',
+    icon: Calculator,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.SUPERVISOR, Role.PROMOTOR],
+  },
+  {
+    label: 'Anuncios',
+    href: '/dashboard/announcements',
+    icon: Megaphone,
+  },
+  {
+    label: 'Referidos',
+    href: '/dashboard/referrals',
+    icon: GitBranch,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.SUPERVISOR],
+  },
+  {
+    label: 'SIAC',
+    href: '/dashboard/siac',
+    icon: Map,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.ADMINISTRACION],
+  },
+  {
+    label: 'Integraciones',
+    href: '/dashboard/integrations',
+    icon: Puzzle,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE],
+  },
+  {
+    label: 'Logros',
+    href: '/dashboard/game',
+    icon: Trophy,
+  },
+  {
+    label: 'Gerente',
+    href: '/dashboard/manager',
+    icon: UserSquare,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE],
+  },
+  {
+    label: 'Mi Perfil',
+    href: '/dashboard/profile',
+    icon: UserCog,
+  },
+  {
+    label: 'Zonas',
+    href: '/dashboard/zones',
+    icon: MapPin,
+    roles: [Role.SUPER_ADMIN, Role.GERENTE, Role.SUPERVISOR],
   },
 ];
 
