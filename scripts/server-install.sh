@@ -84,10 +84,21 @@ done
 
 # ─── 7. Migraciones ───────────────────────────────────────────
 info "Ejecutando migraciones de base de datos..."
-docker exec hd-api sh -c "cd /app && npx prisma migrate deploy --schema /app/packages/database/prisma/schema.prisma" 2>/dev/null \
-  || warn "Migraciones con advertencias (puede ser la primera vez)"
+docker exec hd-api sh -c "cd /app && npx prisma migrate deploy --schema /app/packages/database/prisma/schema.prisma" \
+  || die "Las migraciones fallaron — revisa 'docker logs hd-api'"
 
-# ─── 7. Estado final ──────────────────────────────────────────
+# ─── 8. Seed (solo si la BD está vacía) ───────────────────────
+USER_COUNT=$(docker exec hd-postgres psql -U "${POSTGRES_USER:-hd_user}" -d "${POSTGRES_DB:-heavenlydreams}" -tAc "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "0")
+if [ "${USER_COUNT//[!0-9]/}" = "0" ]; then
+  info "Base de datos vacía — ejecutando seed inicial..."
+  docker exec hd-api sh -c "cd /app && npx tsx packages/database/prisma/seed.ts" \
+    && info "Seed completado — login: super / super123" \
+    || warn "El seed falló — revisa 'docker logs hd-api'"
+else
+  info "BD ya tiene datos ($USER_COUNT usuarios) — omitiendo seed"
+fi
+
+# ─── 9. Estado final ──────────────────────────────────────────
 info "Estado de los contenedores:"
 docker compose -f "$COMPOSE_FILE" ps
 
