@@ -27,6 +27,10 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { AuditModule } from './audit/audit.module';
 import { PackagesModule } from './packages/packages.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
+import { TerritoriesModule } from './territories/territories.module';
+import { CommissionsModule } from './commissions/commissions.module';
+import { NominaModule } from './nomina/nomina.module';
 
 @Module({
   imports: [
@@ -69,6 +73,10 @@ import { DashboardModule } from './dashboard/dashboard.module';
     AuditModule,
     PackagesModule,
     DashboardModule,
+    AnnouncementsModule,
+    TerritoriesModule,
+    CommissionsModule,
+    NominaModule,
   ],
 })
 export class AppModule {}

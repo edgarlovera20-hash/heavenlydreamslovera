@@ -60,7 +60,7 @@ export default function WhatsAppPage() {
     }
     setIsSending(true);
     try {
-      await post('/whatsapp/send', {
+      await post('/whatsapp/messages/send', {
         sessionId: selectedSession.id,
         to: data.phone,
         message: data.message,

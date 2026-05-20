@@ -63,7 +63,7 @@ export default function DashboardPage() {
       try {
         const [statsData, salesData, sessionsData] = await Promise.allSettled([
           get<DashboardStats>('/dashboard/stats'),
-          get<{ data: Sale[] }>('/sales?limit=10&sort=createdAt:desc'),
+          get<{ data: Sale[]; total: number }>('/sales?limit=10&sortBy=createdAt&sortOrder=desc'),
           get<WhatsAppSession[]>('/whatsapp/sessions'),
         ]);
 

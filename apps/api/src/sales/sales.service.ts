@@ -8,23 +8,42 @@ import { UpdateSaleDto } from './dto/update-sale.dto';
 export class SalesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(
+  async findAll(
     companyId: string,
-    filters?: { status?: SaleStatus; asesorId?: string },
-  ) {
-    return this.prisma.sale.findMany({
-      where: {
-        companyId,
-        ...(filters?.status && { status: filters.status }),
-        ...(filters?.asesorId && { asesorId: filters.asesorId }),
-      },
-      include: {
-        asesor: {
-          select: { id: true, nombre: true, username: true, role: true },
+    filters?: {
+      status?: SaleStatus;
+      asesorId?: string;
+      limit?: number;
+      offset?: number;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+    },
+  ): Promise<{ data: any[]; total: number }> {
+    const limit = Math.min(filters?.limit ?? 50, 200);
+    const offset = filters?.offset ?? 0;
+    const sortBy = filters?.sortBy ?? 'createdAt';
+    const sortOrder = filters?.sortOrder ?? 'desc';
+
+    const where = {
+      companyId,
+      ...(filters?.status && { status: filters.status }),
+      ...(filters?.asesorId && { asesorId: filters.asesorId }),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.sale.findMany({
+        where,
+        include: {
+          asesor: { select: { id: true, nombre: true, username: true, role: true } },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { [sortBy]: sortOrder },
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.sale.count({ where }),
+    ]);
+
+    return { data, total };
   }
 
   async findOne(id: string, companyId: string) {

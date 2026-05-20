@@ -49,9 +49,6 @@ export default function LoginPage() {
       setToken(response.access_token);
       setUser(response.user);
 
-      // Also store token in localStorage for axios interceptor
-      localStorage.setItem('hd_token', response.access_token);
-
       toast.success('Sesión iniciada correctamente');
       router.push('/dashboard');
     } catch (error: unknown) {

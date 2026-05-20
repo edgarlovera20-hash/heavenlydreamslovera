@@ -30,12 +30,27 @@ export class SalesController {
   @Get()
   @ApiQuery({ name: 'status', enum: SaleStatus, required: false })
   @ApiQuery({ name: 'asesorId', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'offset', required: false })
+  @ApiQuery({ name: 'sortBy', required: false })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   findAll(
     @CurrentUser() user: { companyId: string },
     @Query('status') status?: SaleStatus,
     @Query('asesorId') asesorId?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
   ) {
-    return this.salesService.findAll(user.companyId, { status, asesorId });
+    return this.salesService.findAll(user.companyId, {
+      status,
+      asesorId,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      offset: offset ? parseInt(offset, 10) : undefined,
+      sortBy,
+      sortOrder,
+    });
   }
 
   @Get('stats')
