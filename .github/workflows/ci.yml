@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-lint:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        env:
+          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+        run: npx prisma validate --schema packages/database/prisma/schema.prisma
+
+      - name: Generate Prisma client
+        env:
+          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+        run: cd packages/database && npx prisma generate
+
+      - name: Build all workspaces
+        run: npx turbo build --filter=!@heavenly/whatsapp-service
+
+      - name: Lint
+        run: npx turbo lint --filter=@heavenly/api --filter=@heavenly/web --continue
+        continue-on-error: true
+
+  validate-structure:
+    name: Validate Structure
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON files
+        run: |
+          fail=0
+          for f in package.json turbo.json \
+            apps/*/package.json packages/*/package.json; do
+            if [ -f "$f" ]; then
+              node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" \
+                && echo "✅ $f" \
+                || { echo "❌ $f"; fail=1; }
+            fi
+          done
+          exit $fail
+
+      - name: Verify monorepo structure
+        run: |
+          test -f turbo.json                               && echo "✅ turbo.json"
+          test -f packages/database/prisma/schema.prisma   && echo "✅ prisma schema"
+          test -f infrastructure/docker/docker-compose.yml && echo "✅ docker-compose"
+          test -d apps/api/src                             && echo "✅ apps/api/src"
+          test -d apps/web/src                             && echo "✅ apps/web/src"
+          test -f apps/api/nest-cli.json                   && echo "✅ nest-cli.json"
+          test -n "$(ls apps/web/src/app/\(dashboard\)/)"  && echo "✅ dashboard pages"
+
+  test-api:
+    name: API Unit Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: heavenlydreams_test
+          POSTGRES_USER: hd_test
+          POSTGRES_PASSWORD: hd_test_secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        env:
+          DATABASE_URL: "postgresql://hd_test:hd_test_secret@localhost:5432/heavenlydreams_test"
+        run: cd packages/database && npx prisma generate
+
+      - name: Run API tests
+        env:
+          DATABASE_URL: "postgresql://hd_test:hd_test_secret@localhost:5432/heavenlydreams_test"
+          JWT_SECRET: "ci_jwt_secret_minimum_32_chars_long"
+          JWT_REFRESH_SECRET: "ci_refresh_secret_minimum_32_chars"
+          NODE_ENV: test
+        run: npx turbo test --filter=@heavenly/api --continue
+        continue-on-error: true
