@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Search, Filter, Download, X, FileSearch, AlertCircle, Columns, Check, MessageCircle, Send, CheckCircle2, Loader2 } from 'lucide-react';
+import { Search, Filter, Download, Upload, X, FileSearch, AlertCircle, Columns, Check, MessageCircle, Send, CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { LinkChannelModal } from '../ui/LinkChannelModal';
 import { getChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/channels';
@@ -22,6 +22,7 @@ interface SiacRecord {
   motivo_rechazo: string | null;
   telefono_asignado: string | null;
   telefono_portado: string | null;
+  telefono_referencia: string | null;
   os_alta: string | null;
   fecha_os_alta: string | null;
   estatus_pisa: string | null;
@@ -31,23 +32,36 @@ interface SiacRecord {
   correo: string | null;
   estatus_etapa: string | null;
   campana: string | null;
+  zona: string | null;
+  distrito: string | null;
+  colonia: string | null;
 }
 
 const columnsConfig = [
-  { id: 'estatus_siac', label: 'ESTATUS' },
-  { id: 'fecha_captura', label: 'FECHA CAPTURA' },
-  { id: 'folio_siac', label: 'FOLIO SIAC' },
-  { id: 'estatus_etapa', label: 'ETAPA' },
-  { id: 'paquete', label: 'PAQUETE' },
-  { id: 'tipo_cliente', label: 'TIPO CLIENTE' },
-  { id: 'estrategia', label: 'ESTRATEGIA' },
-  { id: 'promotor', label: 'PROMOTOR' },
-  { id: 'os_alta', label: 'ORDEN SERV' },
-  { id: 'telefono_asignado', label: 'TELÉFONO' },
-  { id: 'fecha_os_alta', label: 'FECHA OS ALTA' },
-  { id: 'estatus_pisa', label: 'ESTATUS PISA' },
-  { id: 'tipo_servicio', label: 'TIPO SERVICIO' },
-  { id: 'campana', label: 'CAMPAÑA' },
+  { id: 'id',                  label: 'ID' },
+  { id: 'estatus_siac',        label: 'ESTATUS' },
+  { id: 'fecha_captura',       label: 'FECHA DE CAPTURA' },
+  { id: 'folio_siac',          label: 'FOLIO' },
+  { id: 'telefono_asignado',   label: 'TEL. TITULAR' },
+  { id: 'telefono_referencia', label: 'TEL. REFERENCIA' },
+  { id: 'correo',              label: 'CORREO ELECTRÓNICO' },
+  { id: 'linea_contratada',    label: 'NÚM. PORTABILIDAD' },
+  { id: 'telefono_portado',    label: 'NÚMERO A PORTAR' },
+  { id: 'estatus_pisa',        label: 'ETAPA PISA' },
+  { id: 'paquete',             label: 'PAQUETE' },
+  { id: 'tipo_linea',          label: 'TIPO CONTRATACIÓN' },
+  { id: 'area',                label: 'ÁREA' },
+  { id: 'estrategia',          label: 'ESTRATEGIA' },
+  { id: 'promotor',            label: 'USUARIO' },
+  { id: 'os_alta',             label: 'ORDEN DE SERVICIO' },
+  { id: 'fecha_os_alta',       label: 'FECHA DE POSTEO' },
+  { id: 'tienda',              label: 'TIENDA' },
+  { id: 'estatus_etapa',       label: 'ETAPA PISA (SIAC)' },
+  { id: 'tipo_servicio',       label: 'TIPO DE SERVICIO' },
+  { id: 'zona',                label: 'ZONA' },
+  { id: 'distrito',            label: 'DISTRITO' },
+  { id: 'colonia',             label: 'COLONIA' },
+  { id: 'tipo_cliente',        label: 'TIPO CLIENTE' },
 ];
 
 export default function ConsultasSeguimiento() {
@@ -66,6 +80,7 @@ export default function ConsultasSeguimiento() {
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(columnsConfig.map(c => c.id)));
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const columnMenuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkChannels, setLinkChannels] = useState<ChannelKey[]>([]);
   const [channelState, setChannelState] = useState<ChannelsState>(getChannels());
@@ -123,6 +138,62 @@ export default function ConsultasSeguimiento() {
     setCapFin('');
     setCurrentPage(1);
     await fetchAll();
+  };
+
+  const handleExport = () => {
+    if (filteredData.length === 0) return;
+    const header = columnsConfig.map(c => `"${c.label}"`).join(',');
+    const rows = filteredData.map(item => 
+      columnsConfig.map(c => {
+        const val = (item as any)[c.id];
+        return `"${val ? String(val).replace(/"/g, '""') : ''}"`;
+      }).join(',')
+    );
+    const csv = [header, ...rows].join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `siac_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const text = evt.target?.result as string;
+      if (!text) return;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) return;
+      
+      const inHeaders = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
+      const labelToId = Object.fromEntries(columnsConfig.map(c => [c.label, c.id]));
+      const dbHeaders = inHeaders.map(h => labelToId[h] || h);
+      const mappedCsv = [dbHeaders.join(','), ...lines.slice(1)].join('\r\n');
+      
+      try {
+        setLoading(true);
+        const res = await fetch('/api/import/siac_records', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csv: mappedCsv, replace: false })
+        });
+        const data = await res.json();
+        alert(`Importación completada:\n${data.imported || 0} registros guardados/actualizados.`);
+        await fetchAll();
+      } catch (err) {
+        console.error(err);
+        alert('Error al importar archivo CSV.');
+      } finally {
+        setLoading(false);
+      }
+      
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsText(file);
   };
 
   // Load all on mount
@@ -306,7 +377,25 @@ export default function ConsultasSeguimiento() {
               )}
             </div>
 
-            <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-sm font-medium rounded-xl transition-colors border border-emerald-500/20">
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleImport}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 text-sm font-medium rounded-xl transition-colors border border-purple-500/20"
+            >
+              <Upload className="w-4 h-4" />
+              Importar CSV
+            </button>
+
+            <button 
+              onClick={handleExport}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-sm font-medium rounded-xl transition-colors border border-emerald-500/20"
+            >
               <Download className="w-4 h-4" />
               Exportar
             </button>

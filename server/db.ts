@@ -25,6 +25,23 @@ try {
   }
 } catch {}
 
+// Add new columns to siac_records if they don't exist yet
+const newSiacCols = [
+  { name: 'telefono_referencia', def: 'TEXT' },
+  { name: 'zona',               def: 'TEXT' },
+  { name: 'distrito',           def: 'TEXT' },
+  { name: 'colonia',            def: 'TEXT' },
+];
+try {
+  const existingCols = ((db as any).prepare('PRAGMA table_info(siac_records)').all() as any[]).map((c: any) => c.name);
+  for (const col of newSiacCols) {
+    if (!existingCols.includes(col.name)) {
+      db.exec(`ALTER TABLE siac_records ADD COLUMN ${col.name} ${col.def}`);
+      console.log(`[DB] Migración: columna siac_records.${col.name} añadida`);
+    }
+  }
+} catch (e) { console.warn('[DB] Migración siac_records omitida:', e); }
+
 // ─── SCHEMA ───────────────────────────────────────────────────────────────────
 
 db.exec(`
@@ -318,14 +335,14 @@ export const SiacRecords = {
       observaciones, respuesta_telmex, motivo_rechazo, telefono_asignado,
       telefono_portado, os_alta, fecha_os_alta, estatus_pisa,
       fecha_cambio_estatus, tipo_cliente, tipo_servicio, correo,
-      estatus_etapa, campana
+      estatus_etapa, campana, telefono_referencia, zona, distrito, colonia
     ) VALUES (
       @id, @folio_siac, @fecha_captura, @estrategia, @promotor, @estatus_siac,
       @tipo_linea, @linea_contratada, @area, @division, @tienda, @paquete,
       @observaciones, @respuesta_telmex, @motivo_rechazo, @telefono_asignado,
       @telefono_portado, @os_alta, @fecha_os_alta, @estatus_pisa,
       @fecha_cambio_estatus, @tipo_cliente, @tipo_servicio, @correo,
-      @estatus_etapa, @campana
+      @estatus_etapa, @campana, @telefono_referencia, @zona, @distrito, @colonia
     ) ON CONFLICT(folio_siac) DO UPDATE SET
       estatus_siac=excluded.estatus_siac,
       estatus_pisa=excluded.estatus_pisa,
@@ -333,7 +350,11 @@ export const SiacRecords = {
       fecha_cambio_estatus=excluded.fecha_cambio_estatus,
       observaciones=excluded.observaciones,
       respuesta_telmex=excluded.respuesta_telmex,
-      motivo_rechazo=excluded.motivo_rechazo
+      motivo_rechazo=excluded.motivo_rechazo,
+      telefono_referencia=excluded.telefono_referencia,
+      zona=excluded.zona,
+      distrito=excluded.distrito,
+      colonia=excluded.colonia
   `).run(data),
   deleteAll: () => db.prepare('DELETE FROM siac_records').run(),
   count: () => (db.prepare('SELECT COUNT(*) as c FROM siac_records').get() as any).c,
