@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables (NEVER subir al repo)
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Vite cache
+.vite/
+
+# WhatsApp Web session
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Private keys (NEVER COMMIT)
+*.pem
+*.key
+
+# SQLite WAL / SHM (runtime files, not source)
+data/*.db-wal
+data/*.db-shm
+
+# Claude worktrees
+.claude/worktrees/

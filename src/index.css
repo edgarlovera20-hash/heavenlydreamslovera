@@ -1,0 +1,167 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --theme-electric: #0ea5e9; /* Cyan highlight */
+  --theme-deep: #111827; 
+  --theme-dark: #131d2f; /* Panel background from image */
+  --theme-black: #0B1120; /* Main background from image */
+  --theme-neon: #22d3ee; /* Cyant text */
+  --theme-matrix: #10b981; 
+  --theme-text-main: #f8fafc;
+}
+
+html.light {
+  --theme-electric: #00509E; /* Executive Blue tint */
+  --theme-deep: #002B5E; /* Executive blue deep */
+  --theme-dark: #F8FAFC; /* Slate 50 for very light blue inputs background if needed */
+  --theme-black: #00AEEF; /* Main background from image */
+  --theme-neon: #00A8E8; 
+  --theme-matrix: #047857; 
+  --theme-text-main: #0F172A; 
+}
+
+@theme {
+  --color-cyber-electric: var(--theme-electric);
+  --color-cyber-deep: var(--theme-deep);
+  --color-cyber-dark: var(--theme-dark);
+  --color-cyber-black: var(--theme-black);
+  --color-cyber-neon: var(--theme-neon);
+  --color-cyber-matrix: var(--theme-matrix);
+
+  --animate-matrix-glitch: matrix-glitch 0.2s linear;
+  --animate-drive: drive 1.5s ease-in-out infinite;
+  --animate-spin-slow: spin 4s linear infinite;
+}
+
+@layer utilities {
+  .hide-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--theme-electric) transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; display: block; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--theme-electric) 40%, transparent);
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--theme-electric);
+  }
+
+  .glass-panel {
+    @apply bg-cyber-dark/80 backdrop-blur-xl border border-cyber-electric/30 shadow-[0_4px_30px_rgba(3,154,220,0.1)];
+  }
+
+  /* Light mode overrides for glass */
+  .light .glass-panel {
+    @apply border-[#003B73]/40 shadow-[0_4px_30px_rgba(0,59,115,0.15)] bg-[#003B73];
+  }
+
+  .glass-panel-neon {
+    @apply bg-cyber-dark/85 backdrop-blur-xl border border-cyber-neon/50 shadow-[0_0_20px_rgba(0,229,255,0.2)];
+  }
+  
+  .light .glass-panel-neon {
+    @apply border-[#00509E]/60 shadow-[0_0_20px_rgba(0,80,158,0.3)] bg-[#004080];
+  }
+
+  .text-glow {
+    text-shadow: 0 0 10px rgba(3,154,220,0.5), 0 0 20px rgba(3,154,220,0.3);
+  }
+  
+  .border-glow {
+    box-shadow: 0 0 15px rgba(3,154,220,0.3) inset, 0 0 15px rgba(3,154,220,0.3);
+  }
+
+  /* Handle raw text-white class in light mode outside panels */
+  html.light .text-white {
+    color: #0F172A;
+  }
+  html.light .glass-panel .text-white,
+  html.light .glass-panel-neon .text-white {
+    color: #ffffff;
+  }
+
+  /* Force Panels to have white text in light mode */
+  html.light .glass-panel, html.light .glass-panel-neon {
+    --theme-text-main: #ffffff !important;
+    --theme-electric: #87CEEB !important; /* Sky blue for contrast against dark blue panel */
+    --theme-dark: rgba(0, 0, 0, 0.2) !important; /* Inner backgrounds like inputs become semi-transparent dark */
+    color: #ffffff;
+  }
+  
+  html.light .glass-panel .text-\[var\(--theme-text-main\)\],
+  html.light .glass-panel-neon .text-\[var\(--theme-text-main\)\] {
+    color: #ffffff !important;
+  }
+
+  /* Ensure slate text colors are bright enough on the blue panel */
+  .light .glass-panel .text-slate-500,
+  .light .glass-panel-neon .text-slate-500 {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+  .light .glass-panel .text-slate-400,
+  .light .glass-panel-neon .text-slate-400 {
+    color: rgba(255, 255, 255, 0.8) !important;
+  }
+}
+
+@layer base {
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+  body {
+    @apply bg-cyber-black text-[var(--theme-text-main)] transition-colors duration-500;
+  }
+}
+
+@keyframes matrix-glitch {
+  0% { opacity: 1; color: var(--theme-matrix); transform: translateY(0); }
+  25% { opacity: 0.8; color: var(--theme-matrix); transform: translateY(-1px) translateX(1px); }
+  50% { opacity: 0.5; color: var(--theme-text-main); transform: translateY(1px) translateX(-1px); }
+  75% { opacity: 0.8; color: var(--theme-matrix); transform: translateY(0); }
+  100% { opacity: 1; color: var(--theme-text-main); }
+}
+
+@keyframes drive {
+  0% { transform: translateY(0px) rotate(0deg); }
+  10% { transform: translateY(-4px) rotate(-1deg); }
+  25% { transform: translateY(2px) rotate(1deg); }
+  50% { transform: translateY(-2px) rotate(0deg); }
+  75% { transform: translateY(3px) rotate(0.5deg); }
+  90% { transform: translateY(-1px) rotate(-0.5deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@keyframes float-zzz {
+  0% { transform: translateY(0) scale(0.8); opacity: 0; }
+  10% { opacity: 1; }
+  50% { transform: translateY(-20px) scale(1.2); opacity: 0.8; }
+  100% { transform: translateY(-40px) scale(1.5); opacity: 0; }
+}
+
+.animate-float-zzz-1 { animation: float-zzz 2.5s infinite linear; }
+.animate-float-zzz-2 { animation: float-zzz 2.5s infinite linear 0.8s; }
+.animate-float-zzz-3 { animation: float-zzz 2.5s infinite linear 1.6s; }
+
+@keyframes slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
