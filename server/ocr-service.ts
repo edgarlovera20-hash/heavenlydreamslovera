@@ -25,7 +25,7 @@ const OPENAI_API_KEY    = process.env.OPENAI_API_KEY || '';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OLLAMA_URL        = process.env.OLLAMA_URL || '';
 const OLLAMA_API_KEY    = process.env.OLLAMA_API_KEY || '';
-const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'gemini').toLowerCase();
+const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'claude').toLowerCase();
 
 const GEMINI_MODEL    = 'gemini-2.5-flash';
 const OPENAI_MODEL    = 'gpt-4o-mini';

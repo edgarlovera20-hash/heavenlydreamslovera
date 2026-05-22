@@ -3,6 +3,9 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { Toaster } from 'sonner';
+import { installApiFetch } from './lib/apiClient';
+
+installApiFetch();
 
 // Register PWA service worker
 if ('serviceWorker' in navigator) {

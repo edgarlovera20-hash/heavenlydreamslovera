@@ -320,6 +320,31 @@ db.exec(`
     tags        TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- Credenciales WebAuthn verificadas por servidor
+  CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id                  TEXT PRIMARY KEY,
+    user_id             TEXT NOT NULL,
+    credential_id       TEXT UNIQUE NOT NULL,
+    public_key          TEXT NOT NULL,
+    counter             INTEGER NOT NULL DEFAULT 0,
+    transports          TEXT,
+    device_type         TEXT,
+    backed_up           INTEGER DEFAULT 0,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE
+  );
+
+  -- Challenges temporales para registro/login WebAuthn
+  CREATE TABLE IF NOT EXISTS webauthn_challenges (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    challenge   TEXT NOT NULL,
+    type        TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // ─── INDEXES ──────────────────────────────────────────────────────────────────
@@ -344,6 +369,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_events_name      ON system_events (event, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_jobs_status   ON ai_jobs (status, priority, created_at);
   CREATE INDEX IF NOT EXISTS idx_metrics_name     ON metrics (name, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_webauthn_user    ON webauthn_credentials (user_id);
+  CREATE INDEX IF NOT EXISTS idx_webauthn_ch_user ON webauthn_challenges (user_id, type);
 `);
 
 // Seed admin user if no users exist
@@ -616,4 +643,35 @@ export const Metrics = {
   insert: (data: any) => db.prepare(`
     INSERT INTO metrics (id,name,value,tags) VALUES (@id,@name,@value,@tags)
   `).run(data),
+};
+
+export const WebAuthnCredentials = {
+  getByUser: (userId: string) => db.prepare('SELECT * FROM webauthn_credentials WHERE user_id=? ORDER BY created_at DESC').all(userId),
+  getByCredentialId: (credentialId: string) => db.prepare('SELECT * FROM webauthn_credentials WHERE credential_id=?').get(credentialId),
+  create: (data: any) => db.prepare(`
+    INSERT INTO webauthn_credentials
+      (id,user_id,credential_id,public_key,counter,transports,device_type,backed_up)
+    VALUES
+      (@id,@user_id,@credential_id,@public_key,@counter,@transports,@device_type,@backed_up)
+  `).run(data),
+  updateCounter: (credentialId: string, counter: number) => db.prepare(`
+    UPDATE webauthn_credentials SET counter=?, updated_at=datetime('now') WHERE credential_id=?
+  `).run(counter, credentialId),
+};
+
+export const WebAuthnChallenges = {
+  set: (data: any) => db.prepare(`
+    INSERT INTO webauthn_challenges (id,user_id,challenge,type,expires_at)
+    VALUES (@id,@user_id,@challenge,@type,@expires_at)
+  `).run(data),
+  consume: (userId: string, type: string, challenge: string) => {
+    const row = db.prepare(`
+      SELECT * FROM webauthn_challenges
+      WHERE user_id=? AND type=? AND challenge=? AND expires_at > datetime('now')
+      ORDER BY created_at DESC LIMIT 1
+    `).get(userId, type, challenge) as any;
+    if (row) db.prepare('DELETE FROM webauthn_challenges WHERE id=?').run(row.id);
+    return row;
+  },
+  clearExpired: () => db.prepare("DELETE FROM webauthn_challenges WHERE expires_at <= datetime('now')").run(),
 };

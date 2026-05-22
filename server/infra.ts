@@ -1,0 +1,57 @@
+let redisClient: any = null;
+let queues: Record<string, any> | null = null;
+
+export async function getRedisClient() {
+  if (!process.env.REDIS_URL) return null;
+  if (redisClient) return redisClient;
+  const { default: IORedis } = await import('ioredis');
+  redisClient = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+  return redisClient;
+}
+
+export async function getQueues() {
+  if (!process.env.REDIS_URL) return null;
+  if (queues) return queues;
+  const { Queue } = await import('bullmq');
+  const connection = await getRedisClient();
+  queues = {
+    aiProcessing: new Queue('ai-processing', { connection }),
+    messages: new Queue('messages', { connection }),
+    notifications: new Queue('notifications', { connection }),
+    reports: new Queue('reports', { connection }),
+  };
+  return queues;
+}
+
+export async function queueJob(queueName: 'aiProcessing' | 'messages' | 'notifications' | 'reports', name: string, payload: any) {
+  const activeQueues = await getQueues();
+  if (!activeQueues) return null;
+  return activeQueues[queueName].add(name, payload, {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2000 },
+    removeOnComplete: 500,
+    removeOnFail: 1000,
+  });
+}
+
+export async function postgresAvailable() {
+  if (!process.env.DATABASE_URL) return false;
+  try {
+    const pg = await import('pg');
+    const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    await client.query('select 1');
+    await client.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function infraMode() {
+  return {
+    database: process.env.DATABASE_URL ? 'postgres' : 'sqlite',
+    eventBus: process.env.REDIS_URL ? 'redis' : 'local-events',
+    queues: process.env.REDIS_URL ? 'bullmq' : 'sqlite-queue',
+  };
+}

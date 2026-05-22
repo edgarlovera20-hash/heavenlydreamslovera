@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import db, { AiJobs, AuditLog, AutomationRules, Metrics } from './db';
+import { infraMode, queueJob } from './infra';
 
 type ProviderName = 'claude' | 'gemini' | 'openai';
 
@@ -105,6 +106,7 @@ export function enqueueAiJob(type: string, payload: any, priority = 5) {
   };
   AiJobs.create(job);
   recordMetric('ai.job.queued', 1, { type });
+  queueJob('aiProcessing', type, { id: job.id, type, payload }).catch(() => {});
   return { ...job, payload };
 }
 
@@ -134,6 +136,7 @@ export function recordEvent(event: string, payload: any = {}, actor: any = null)
     VALUES (?,?,?,?,datetime('now'))
   `).run(id, event, JSON.stringify(payload), actor?.uid || actor?.sub || null);
   recordMetric(`event.${event}`, 1, {});
+  queueJob('messages', event, { id, event, payload, actor }).catch(() => {});
   fireAutomationRules(event, payload, actor);
   return { id, event, payload };
 }
@@ -160,11 +163,12 @@ export function fireAutomationRules(event: string, payload: any, actor: any) {
 
 export function enterpriseHealth() {
   const ai = Object.fromEntries(PROVIDERS.map(p => [p.name, { configured: p.configured() }]));
+  const infra = infraMode();
   return {
     mode: process.env.NODE_ENV || 'development',
-    database: process.env.DATABASE_URL ? 'postgres-ready' : 'sqlite-mockdb',
-    eventBus: process.env.REDIS_URL ? 'redis-ready' : 'local-db-events',
-    queues: process.env.REDIS_URL ? 'bullmq-ready' : 'sqlite-durable-queue',
+    database: infra.database,
+    eventBus: infra.eventBus,
+    queues: infra.queues,
     ai,
   };
 }

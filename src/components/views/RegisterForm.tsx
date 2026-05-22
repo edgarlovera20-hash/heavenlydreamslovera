@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, ArrowLeft, UserPlus, CheckCircle, Eye, EyeOff, Fingerprint, X, FileText } from 'lucide-react';
+import { Shield, ArrowLeft, UserPlus, CheckCircle, Eye, EyeOff, X, FileText } from 'lucide-react';
 import { MatrixInput } from '../ui/MatrixInput';
 async function hashPassword(plain: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain));
@@ -32,9 +32,9 @@ La Aplicación es una herramienta interna de gestión comercial (CRM) destinada 
 4.1 La autenticación biométrica es opcional y se realiza mediante el estándar WebAuthn del dispositivo del usuario. La huella o factor biométrico NO se transmite ni almacena en servidores de la Empresa: permanece exclusivamente en el hardware seguro del dispositivo.
 4.2 La Empresa únicamente almacena un identificador público de credencial que permite verificar la firma generada por el dispositivo. Revocar el acceso biométrico es posible en cualquier momento desde Ajustes.
 
-5. RECORDATORIO DE SESIÓN
-5.1 La opción "Recordar usuario y contraseña" almacena las credenciales de forma local en el navegador del dispositivo (localStorage). El usuario reconoce que activar esta opción en un dispositivo compartido o público representa un riesgo de seguridad de su exclusiva responsabilidad.
-5.2 Las contraseñas se almacenan cifradas con algoritmo SHA-256; sin embargo, la Empresa recomienda no activar esta opción en equipos no personales.
+5. RECORDATORIO DE USUARIO
+5.1 La opción "Recordar usuario" almacena únicamente el nombre de usuario o correo localmente en el navegador del dispositivo.
+5.2 La contraseña no se guarda en localStorage. La sesión se administra mediante tokens emitidos por el servidor.
 
 6. USO ACEPTABLE
 El usuario se obliga a:
@@ -75,50 +75,6 @@ Cualquier duda relacionada con estos Términos puede dirigirse al área de Recur
 
 Al marcar la casilla "Acepto los Términos y Condiciones" el usuario manifiesta haber leído, comprendido y aceptado el presente documento en su totalidad.`;
 
-// ---- WebAuthn helpers ----
-function bufferToBase64Url(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let str = '';
-  for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-async function enrollBiometric(userId: string, userName: string): Promise<string | null> {
-  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
-    throw new Error('Este dispositivo no soporta autenticación biométrica.');
-  }
-  const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-  if (!available) {
-    throw new Error('No se detectó un sensor biométrico (huella / Face ID) en este dispositivo.');
-  }
-  const challenge = crypto.getRandomValues(new Uint8Array(32));
-  const userIdBuf = new TextEncoder().encode(userId);
-  const cred = await navigator.credentials.create({
-    publicKey: {
-      challenge,
-      rp: { name: 'Heavenly Dreams CRM' },
-      user: {
-        id: userIdBuf,
-        name: userName,
-        displayName: userName,
-      },
-      pubKeyCredParams: [
-        { type: 'public-key', alg: -7 },
-        { type: 'public-key', alg: -257 },
-      ],
-      authenticatorSelection: {
-        authenticatorAttachment: 'platform',
-        userVerification: 'required',
-        requireResidentKey: false,
-      },
-      timeout: 60000,
-      attestation: 'none',
-    },
-  }) as PublicKeyCredential | null;
-  if (!cred) return null;
-  return bufferToBase64Url(cred.rawId);
-}
-
 export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [formData, setFormData] = useState({
@@ -142,20 +98,13 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [enableBiometric, setEnableBiometric] = useState(false);
-  const [biometricSupported, setBiometricSupported] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.PublicKeyCredential) {
-      PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-        .then(setBiometricSupported)
-        .catch(() => setBiometricSupported(false));
-    }
     // Prefill from previous "remember me" session
     try {
-      const remembered = JSON.parse(localStorage.getItem('adhdreams_remember') || 'null');
+      const remembered = JSON.parse(localStorage.getItem('hd_remember_user') || 'null');
       if (remembered?.username) {
         setFormData(prev => ({ ...prev, username: remembered.username, email: remembered.email || '' }));
       }
@@ -204,15 +153,6 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
       const passwordHash = await hashPassword(formData.password);
       const { confirmPassword: _cp, password: _pw, ...rest } = formData;
 
-      let biometricCredId: string | null = null;
-      if (enableBiometric) {
-        try {
-          biometricCredId = await enrollBiometric(`reg-${Date.now()}`, formData.email || formData.username);
-        } catch (bioErr: any) {
-          setErrorMsg(bioErr.message || 'No se pudo registrar la huella. Tu cuenta se creó sin biométrico.');
-        }
-      }
-
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,7 +162,7 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
           displayName: `${formData.nombre} ${formData.apellidoPaterno}`,
           password: passwordHash,
           role: 'ASESOR',
-          biometricCredId,
+          biometricCredId: null,
           termsAccepted: JSON.stringify({ version: TERMS_VERSION, at: new Date().toISOString() }),
           fromRegistration: true,
         }),
@@ -234,9 +174,9 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
       }
 
       if (rememberMe) {
-        try { localStorage.setItem('adhdreams_remember', JSON.stringify({ username: formData.username, email: formData.email, password: formData.password })); } catch {}
+        try { localStorage.setItem('hd_remember_user', JSON.stringify({ username: formData.username, email: formData.email })); } catch {}
       } else {
-        try { localStorage.removeItem('adhdreams_remember'); } catch {}
+        try { localStorage.removeItem('hd_remember_user'); } catch {}
       }
 
       setStep(2);
@@ -261,7 +201,7 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
           Recibirás acceso una vez que un administrador revise y acepte tu cuenta.
         </p>
         <p className="text-slate-500 text-xs mb-8">
-          {enableBiometric ? 'Una vez aprobado, podrás iniciar sesión con tu huella digital.' : 'Usa tu usuario y contraseña para iniciar sesión cuando seas aprobado.'}
+          Usa tu usuario y contraseña para iniciar sesión cuando seas aprobado. Si tu rol lo requiere, el sistema pedirá registrar una passkey en el primer acceso.
         </p>
         <button
           onClick={onBack}
@@ -447,30 +387,9 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
                 className="mt-0.5 w-4 h-4 accent-cyber-neon cursor-pointer"
               />
               <div className="flex-1">
-                <span className="text-sm font-bold text-white uppercase tracking-wider">Recordar usuario y contraseña</span>
+                <span className="text-sm font-bold text-white uppercase tracking-wider">Recordar usuario</span>
                 <p className="text-[11px] text-cyber-electric/60 mt-0.5">
-                  Guardará tus credenciales en este dispositivo para los próximos inicios de sesión. No actives en equipos compartidos.
-                </p>
-              </div>
-            </label>
-
-            <label className={`flex items-start gap-3 ${biometricSupported ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'} group`}>
-              <input
-                type="checkbox"
-                disabled={!biometricSupported}
-                checked={enableBiometric}
-                onChange={e => setEnableBiometric(e.target.checked)}
-                className="mt-0.5 w-4 h-4 accent-cyber-neon cursor-pointer disabled:cursor-not-allowed"
-              />
-              <div className="flex-1">
-                <span className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <Fingerprint className="w-4 h-4 text-cyber-neon" />
-                  Entrar con huella digital / biométrico
-                </span>
-                <p className="text-[11px] text-cyber-electric/60 mt-0.5">
-                  {biometricSupported
-                    ? 'Al finalizar el registro se solicitará tu huella o Face ID para autenticación rápida. Los datos biométricos se quedan en tu dispositivo.'
-                    : 'Tu dispositivo o navegador no soporta autenticación biométrica.'}
+                  Guardará solo tu usuario o correo en este dispositivo. La contraseña nunca se almacena en localStorage.
                 </p>
               </div>
             </label>
@@ -508,8 +427,6 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
             >
               {isSubmitting ? (
                 <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />
-              ) : enableBiometric ? (
-                <><Fingerprint className="w-4 h-4" /> Solicitar Acceso + Registrar Huella</>
               ) : (
                 <><Shield className="w-4 h-4" /> Solicitar Acceso</>
               )}

@@ -49,6 +49,13 @@ export function verifyAccessToken(token: string) {
   return payload;
 }
 
+export function getBearerAuth(req: Request) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) return null;
+  return verifyAccessToken(token);
+}
+
 export function issueSession(user: any, req?: Request) {
   const refreshToken = `${randomUUID()}.${randomBytes(32).toString('base64url')}`;
   const expiresAt = new Date(Date.now() + REFRESH_TTL_MS).toISOString();
@@ -95,6 +102,10 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   } catch (err: any) {
     res.status(401).json({ error: err.message || 'Token inválido' });
   }
+}
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  return authenticate(req, res, next);
 }
 
 export function requireRole(...roles: AppRole[]) {

@@ -9,10 +9,10 @@ import db, {
   Users, Ventas, SiacRecords, Tickets, AuditLog, Settings,
   Referrals, Quotas, CommissionRules, PackageCatalog,
   Nominas, Territories, ValidationRequests, Announcements,
-  InventoryItems, AutomationRules, AiJobs, Metrics,
+  InventoryItems, AutomationRules, AiJobs, Metrics, Sessions,
 } from "./server/db";
 import { importSiacCSV } from "./server/siac-importer";
-import { issueSession, rateLimit, requireRole, rotateRefreshToken } from "./server/security";
+import { getBearerAuth, issueSession, rateLimit, requireAuth, requireRole, rotateRefreshToken } from "./server/security";
 import {
   classifyMorosityReply,
   enqueueAiJob,
@@ -22,6 +22,13 @@ import {
   recordMetric,
   runAiWithFallback,
 } from "./server/enterprise";
+import {
+  makeAuthenticationOptions,
+  makeRegistrationOptions,
+  userHasPasskey,
+  verifyAuthentication,
+  verifyRegistration,
+} from "./server/webauthn";
 
 function wrap(fn: Function) {
   return async (req: any, res: any) => {
@@ -82,11 +89,30 @@ async function startServer() {
   app.use(express.json({ limit: '20mb' }));
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
   const ocrLimiter = rateLimit('ocr', 40, 15 * 60 * 1000);
+  const authOnly = requireAuth;
+  const opsOnly = requireRole('GERENTE', 'SUPERVISOR');
+  const managerOnly = requireRole('GERENTE');
+
+  function assertManager(req: any, res: any) {
+    const auth = getBearerAuth(req);
+    if (auth.role !== 'GERENTE') {
+      res.status(403).json({ error: 'Permisos insuficientes' });
+      return null;
+    }
+    return auth;
+  }
 
   // ── USUARIOS ────────────────────────────────────────────────
-  app.get("/api/users", wrap((_req: any, res: any) => res.json(Users.getAll())));
+  app.get("/api/users", opsOnly, wrap((_req: any, res: any) => res.json(Users.getAll())));
 
   app.post("/api/users", wrap((req: any, res: any) => {
+    if (!req.body.fromRegistration) {
+      try {
+        if (!assertManager(req, res)) return;
+      } catch {
+        return res.status(401).json({ error: 'Token requerido' });
+      }
+    }
     // Si viene de registro público usa activo=2 (pendiente); si lo crea un admin usa activo=1
     const defaultActivo = req.body.fromRegistration ? 2 : 1;
     const { fromRegistration: _fr, ...body } = req.body;
@@ -101,16 +127,6 @@ async function startServer() {
     Users.create(data);
     AuditLog.insert({ accion: 'CREATE_USER', entidad: 'users', entidad_id: data.uid, user_id: req.body.createdBy || null, user_nombre: data.nombre, detalle: null });
     res.json(Users.getById(data.uid));
-  }));
-
-  app.put("/api/users/:uid", wrap((req: any, res: any) => {
-    Users.update(req.params.uid, req.body);
-    res.json(Users.getById(req.params.uid));
-  }));
-
-  app.delete("/api/users/:uid", wrap((req: any, res: any) => {
-    Users.delete(req.params.uid);
-    res.json({ ok: true });
   }));
 
   // ── Verificación de password SHA-256 (compatible con plain text legacy) ──
@@ -139,8 +155,11 @@ async function startServer() {
       return res.status(403).json({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador.', code: 'INACTIVE' });
     AuditLog.insert({ accion: 'LOGIN', entidad: 'users', entidad_id: user.uid, user_id: user.uid, user_nombre: user.nombre, detalle: null });
     const { password: _, ...safe } = user;
+    if (user.role === 'GERENTE' && userHasPasskey(user.uid)) {
+      return res.json({ requiresWebAuthn: true, webAuthnUserId: user.uid, nombre: user.nombre, role: user.role });
+    }
     const session = issueSession(user, req);
-    res.json({ ...safe, ...session });
+    res.json({ ...safe, ...session, webAuthnEnrollmentRequired: user.role === 'GERENTE' });
   }));
 
   app.post("/api/auth/refresh", loginLimiter, wrap((req: any, res: any) => {
@@ -151,13 +170,40 @@ async function startServer() {
     res.json({ ...safe, ...session });
   }));
 
+  app.post("/api/auth/logout", wrap((req: any, res: any) => {
+    const { refreshToken } = req.body;
+    if (refreshToken) Sessions.revoke(refreshToken);
+    res.json({ ok: true });
+  }));
+
+  app.post("/api/webauthn/register/options", authOnly, wrap(async (req: any, res: any) => {
+    res.json(await makeRegistrationOptions(req.auth.sub, req));
+  }));
+
+  app.post("/api/webauthn/register/verify", authOnly, wrap(async (req: any, res: any) => {
+    res.json(await verifyRegistration(req.auth.sub, req.body.response, req));
+  }));
+
+  app.post("/api/webauthn/login/options", loginLimiter, wrap(async (req: any, res: any) => {
+    const { userId, username } = req.body;
+    const user = userId ? Users.getById(userId) as any : username ? Users.getByUsername(username) as any : null;
+    if (!user) return res.status(400).json({ error: 'usuario requerido' });
+    res.json({ ...(await makeAuthenticationOptions(user.uid, req)), userId: user.uid });
+  }));
+
+  app.post("/api/webauthn/login/verify", loginLimiter, wrap(async (req: any, res: any) => {
+    const { userId, response } = req.body;
+    if (!userId || !response) return res.status(400).json({ error: 'userId y response son requeridos' });
+    res.json(await verifyAuthentication(userId, response, req));
+  }));
+
   // Usuarios pendientes de aprobación
-  app.get("/api/users/pending", wrap((_req: any, res: any) => {
+  app.get("/api/users/pending", managerOnly, wrap((_req: any, res: any) => {
     res.json(Users.getAll().filter((u: any) => u.activo === 2));
   }));
 
   // Aprobar cuenta
-  app.post("/api/users/:uid/approve", wrap((req: any, res: any) => {
+  app.post("/api/users/:uid/approve", managerOnly, wrap((req: any, res: any) => {
     Users.update(req.params.uid, { activo: 1 });
     const u = Users.getById(req.params.uid) as any;
     AuditLog.insert({ accion: 'APPROVE_USER', entidad: 'users', entidad_id: req.params.uid, user_id: req.body.by || null, user_nombre: null, detalle: u?.nombre || null });
@@ -165,7 +211,7 @@ async function startServer() {
   }));
 
   // Rechazar / desactivar cuenta
-  app.post("/api/users/:uid/reject", wrap((req: any, res: any) => {
+  app.post("/api/users/:uid/reject", managerOnly, wrap((req: any, res: any) => {
     Users.update(req.params.uid, { activo: 0 });
     const u = Users.getById(req.params.uid) as any;
     AuditLog.insert({ accion: 'REJECT_USER', entidad: 'users', entidad_id: req.params.uid, user_id: req.body.by || null, user_nombre: null, detalle: u?.nombre || null });
@@ -173,14 +219,14 @@ async function startServer() {
   }));
 
   // Editar datos de usuario
-  app.put("/api/users/:uid", wrap((req: any, res: any) => {
+  app.put("/api/users/:uid", managerOnly, wrap((req: any, res: any) => {
     const { password, uid: _uid, ...data } = req.body;
     Users.update(req.params.uid, data);
     res.json({ ok: true });
   }));
 
   // Eliminar cuenta permanentemente
-  app.delete("/api/users/:uid", wrap((req: any, res: any) => {
+  app.delete("/api/users/:uid", managerOnly, wrap((req: any, res: any) => {
     const u = Users.getById(req.params.uid) as any;
     if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
     Users.delete(req.params.uid);
@@ -189,12 +235,12 @@ async function startServer() {
   }));
 
   // Contar pendientes (para notificaciones)
-  app.get("/api/users/pending-count", wrap((_req: any, res: any) => {
+  app.get("/api/users/pending-count", opsOnly, wrap((_req: any, res: any) => {
     const count = Users.getAll().filter((u: any) => u.activo === 2).length;
     res.json({ count });
   }));
 
-  app.get("/api/users/:uid", wrap((req: any, res: any) => {
+  app.get("/api/users/:uid", authOnly, wrap((req: any, res: any) => {
     const user = Users.getById(req.params.uid) as any;
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     const { password: _, ...safe } = user;
@@ -202,12 +248,12 @@ async function startServer() {
   }));
 
   // ── VENTAS ─────────────────────────────────────────────────
-  app.get("/api/ventas", wrap((req: any, res: any) => {
+  app.get("/api/ventas", authOnly, wrap((req: any, res: any) => {
     const { asesor_id } = req.query;
     res.json(asesor_id ? Ventas.getByAsesor(asesor_id as string) : Ventas.getAll());
   }));
 
-  app.post("/api/ventas", wrap((req: any, res: any) => {
+  app.post("/api/ventas", authOnly, wrap((req: any, res: any) => {
     const data = {
       id: randomUUID(), status: 'pendiente',
       folio: null, ...req.body,
@@ -225,187 +271,187 @@ async function startServer() {
     AuditLog.insert({ accion: 'UPDATE_VENTA', entidad: 'ventas', entidad_id: req.params.id, user_id: update.by || null, user_nombre: update.byName || null, detalle: update.status || null });
     res.json(Ventas.getById(req.params.id));
   });
-  app.put("/api/ventas/:id", updateVenta);
-  app.patch("/api/ventas/:id", updateVenta);
+  app.put("/api/ventas/:id", authOnly, updateVenta);
+  app.patch("/api/ventas/:id", authOnly, updateVenta);
 
-  app.delete("/api/ventas/:id", wrap((req: any, res: any) => {
+  app.delete("/api/ventas/:id", opsOnly, wrap((req: any, res: any) => {
     Ventas.delete(req.params.id);
     res.json({ ok: true });
   }));
 
   // ── SIAC ───────────────────────────────────────────────────
   // Buscar por Folio SIAC (columna fija clave)
-  app.get("/api/siac/search", wrap((req: any, res: any) => {
+  app.get("/api/siac/search", authOnly, wrap((req: any, res: any) => {
     const folio = (req.query.folio as string || '').trim();
     if (!folio) return res.json([]);
     res.json(SiacRecords.search(folio));
   }));
 
-  app.get("/api/siac/:folio", wrap((req: any, res: any) => {
+  app.get("/api/siac/:folio", authOnly, wrap((req: any, res: any) => {
     const record = SiacRecords.getByFolio(req.params.folio);
     if (!record) return res.status(404).json({ error: 'Folio no encontrado' });
     res.json(record);
   }));
 
-  app.get("/api/siac", wrap((_req: any, res: any) => res.json(SiacRecords.getAll())));
+  app.get("/api/siac", authOnly, wrap((_req: any, res: any) => res.json(SiacRecords.getAll())));
 
   // Reimportar CSV
-  app.post("/api/siac/import", wrap((_req: any, res: any) => {
+  app.post("/api/siac/import", managerOnly, wrap((_req: any, res: any) => {
     const result = importSiacCSV();
     res.json({ ok: true, ...result });
   }));
 
-  app.delete("/api/siac", wrap((_req: any, res: any) => {
+  app.delete("/api/siac", managerOnly, wrap((_req: any, res: any) => {
     SiacRecords.deleteAll();
     res.json({ ok: true });
   }));
 
   // ── TICKETS ────────────────────────────────────────────────
-  app.get("/api/tickets", wrap((_req: any, res: any) => res.json(Tickets.getAll())));
+  app.get("/api/tickets", authOnly, wrap((_req: any, res: any) => res.json(Tickets.getAll())));
 
-  app.post("/api/tickets", wrap((req: any, res: any) => {
+  app.post("/api/tickets", authOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), status: 'abierto', prioridad: 'media', categoria: null, ...req.body };
     Tickets.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
-  app.put("/api/tickets/:id", wrap((req: any, res: any) => {
+  app.put("/api/tickets/:id", authOnly, wrap((req: any, res: any) => {
     Tickets.update(req.params.id, req.body);
     res.json({ ok: true });
   }));
 
   // ── VALIDACIONES ───────────────────────────────────────────
-  app.get("/api/validations", wrap((_req: any, res: any) => res.json(ValidationRequests.getAll())));
+  app.get("/api/validations", opsOnly, wrap((_req: any, res: any) => res.json(ValidationRequests.getAll())));
 
-  app.post("/api/validations", wrap((req: any, res: any) => {
+  app.post("/api/validations", authOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), status: 'pendiente', notas: null, ...req.body };
     ValidationRequests.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
-  app.put("/api/validations/:id", wrap((req: any, res: any) => {
+  app.put("/api/validations/:id", opsOnly, wrap((req: any, res: any) => {
     ValidationRequests.update(req.params.id, req.body);
     res.json({ ok: true });
   }));
 
   // ── REFERIDOS ──────────────────────────────────────────────
-  app.get("/api/referrals", wrap((_req: any, res: any) => res.json(Referrals.getAll())));
+  app.get("/api/referrals", authOnly, wrap((_req: any, res: any) => res.json(Referrals.getAll())));
 
-  app.post("/api/referrals", wrap((req: any, res: any) => {
+  app.post("/api/referrals", authOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), status: 'pendiente', convertido: 0, ...req.body };
     Referrals.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
-  app.put("/api/referrals/:id", wrap((req: any, res: any) => {
+  app.put("/api/referrals/:id", authOnly, wrap((req: any, res: any) => {
     Referrals.update(req.params.id, req.body);
     res.json({ ok: true });
   }));
 
   // ── TERRITORIOS ────────────────────────────────────────────
-  app.get("/api/territories", wrap((_req: any, res: any) => res.json(Territories.getAll())));
+  app.get("/api/territories", authOnly, wrap((_req: any, res: any) => res.json(Territories.getAll())));
 
-  app.post("/api/territories", wrap((req: any, res: any) => {
+  app.post("/api/territories", opsOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), poligono: null, color: null, ...req.body };
     Territories.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
-  app.put("/api/territories/:id", wrap((req: any, res: any) => {
+  app.put("/api/territories/:id", opsOnly, wrap((req: any, res: any) => {
     Territories.update(req.params.id, req.body);
     res.json({ ok: true });
   }));
 
-  app.delete("/api/territories/:id", wrap((req: any, res: any) => {
+  app.delete("/api/territories/:id", opsOnly, wrap((req: any, res: any) => {
     Territories.delete(req.params.id);
     res.json({ ok: true });
   }));
 
   // ── CUOTAS ─────────────────────────────────────────────────
-  app.get("/api/quotas", wrap((_req: any, res: any) => res.json(Quotas.getAll())));
+  app.get("/api/quotas", opsOnly, wrap((_req: any, res: any) => res.json(Quotas.getAll())));
 
-  app.put("/api/quotas/:userId", wrap((req: any, res: any) => {
+  app.put("/api/quotas/:userId", opsOnly, wrap((req: any, res: any) => {
     Quotas.set(req.params.userId, req.body.meta);
     res.json({ ok: true });
   }));
 
   // ── COMISIONES ─────────────────────────────────────────────
-  app.get("/api/commissions", wrap((_req: any, res: any) => res.json(CommissionRules.getAll())));
+  app.get("/api/commissions", opsOnly, wrap((_req: any, res: any) => res.json(CommissionRules.getAll())));
 
-  app.post("/api/commissions", wrap((req: any, res: any) => {
+  app.post("/api/commissions", managerOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), ...req.body };
     CommissionRules.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
-  app.delete("/api/commissions/:id", wrap((req: any, res: any) => {
+  app.delete("/api/commissions/:id", managerOnly, wrap((req: any, res: any) => {
     CommissionRules.delete(req.params.id);
     res.json({ ok: true });
   }));
 
   // ── CATÁLOGO PAQUETES ──────────────────────────────────────
-  app.get("/api/packages", wrap((_req: any, res: any) => res.json(PackageCatalog.getAll())));
+  app.get("/api/packages", authOnly, wrap((_req: any, res: any) => res.json(PackageCatalog.getAll())));
 
-  app.post("/api/packages", wrap((req: any, res: any) => {
+  app.post("/api/packages", managerOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), descripcion: null, ...req.body };
     PackageCatalog.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
-  app.put("/api/packages/:id", wrap((req: any, res: any) => {
+  app.put("/api/packages/:id", managerOnly, wrap((req: any, res: any) => {
     PackageCatalog.update(req.params.id, req.body);
     res.json({ ok: true });
   }));
 
-  app.delete("/api/packages/:id", wrap((req: any, res: any) => {
+  app.delete("/api/packages/:id", managerOnly, wrap((req: any, res: any) => {
     PackageCatalog.delete(req.params.id);
     res.json({ ok: true });
   }));
 
   // ── NÓMINAS ────────────────────────────────────────────────
-  app.get("/api/nominas", wrap((req: any, res: any) => {
+  app.get("/api/nominas", opsOnly, wrap((req: any, res: any) => {
     const { asesor_id } = req.query;
     res.json(asesor_id ? Nominas.getByAsesor(asesor_id as string) : Nominas.getAll());
   }));
 
-  app.post("/api/nominas", wrap((req: any, res: any) => {
+  app.post("/api/nominas", managerOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), status: 'borrador', ...req.body };
     Nominas.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
-  app.put("/api/nominas/:id", wrap((req: any, res: any) => {
+  app.put("/api/nominas/:id", managerOnly, wrap((req: any, res: any) => {
     Nominas.update(req.params.id, req.body);
     res.json({ ok: true });
   }));
 
   // ── ANUNCIOS ───────────────────────────────────────────────
-  app.get("/api/announcements", wrap((_req: any, res: any) => res.json(Announcements.getAll())));
+  app.get("/api/announcements", authOnly, wrap((_req: any, res: any) => res.json(Announcements.getAll())));
 
-  app.post("/api/announcements", wrap((req: any, res: any) => {
+  app.post("/api/announcements", opsOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), tipo: 'info', autor_id: null, ...req.body };
     Announcements.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
-  app.delete("/api/announcements/:id", wrap((req: any, res: any) => {
+  app.delete("/api/announcements/:id", opsOnly, wrap((req: any, res: any) => {
     Announcements.delete(req.params.id);
     res.json({ ok: true });
   }));
 
   // ── CONFIGURACIÓN ──────────────────────────────────────────
-  app.get("/api/settings/:key", wrap((req: any, res: any) => {
+  app.get("/api/settings/:key", managerOnly, wrap((req: any, res: any) => {
     const val = Settings.get(req.params.key);
     res.json({ key: req.params.key, value: val });
   }));
 
-  app.put("/api/settings/:key", wrap((req: any, res: any) => {
+  app.put("/api/settings/:key", managerOnly, wrap((req: any, res: any) => {
     Settings.set(req.params.key, req.body.value);
     res.json({ ok: true });
   }));
 
   // ── AUDIT LOG ──────────────────────────────────────────────
-  app.get("/api/audit", wrap((req: any, res: any) => {
+  app.get("/api/audit", managerOnly, wrap((req: any, res: any) => {
     const limit = parseInt(req.query.limit as string) || 200;
     res.json(AuditLog.getAll(limit));
   }));
@@ -429,9 +475,11 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
-  app.get("/api/inventory", wrap((_req: any, res: any) => res.json(InventoryItems.getAll())));
+  app.get("/api/inventory", opsOnly, wrap((_req: any, res: any) => res.json(InventoryItems.getAll())));
 
   app.post("/api/inventory", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+    const allowedTypes = new Set(['modem', 'sim', 'uniforme', 'herramienta', 'otro']);
+    const allowedStates = new Set(['disponible', 'asignado', 'danado', 'baja']);
     const data = {
       id: randomUUID(),
       sku: null,
@@ -442,6 +490,9 @@ async function startServer() {
       notes: null,
       ...req.body,
     };
+    if (!data.nombre || !data.tipo) return res.status(400).json({ error: 'nombre y tipo son requeridos' });
+    if (!allowedTypes.has(data.tipo)) return res.status(400).json({ error: 'tipo de activo invalido' });
+    if (!allowedStates.has(data.estado)) return res.status(400).json({ error: 'estado de activo invalido' });
     InventoryItems.create(data);
     AuditLog.insert({ accion: 'CREATE_INVENTORY_ITEM', entidad: 'inventory_items', entidad_id: data.id, user_id: (req as any).auth?.sub || null, user_nombre: null, detalle: data.nombre });
     recordEvent('inventory.created', data, (req as any).auth);
@@ -449,10 +500,21 @@ async function startServer() {
   }));
 
   app.patch("/api/inventory/:id", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+    const allowedTypes = new Set(['modem', 'sim', 'uniforme', 'herramienta', 'otro']);
+    const allowedStates = new Set(['disponible', 'asignado', 'danado', 'baja']);
+    if (req.body.tipo && !allowedTypes.has(req.body.tipo)) return res.status(400).json({ error: 'tipo de activo invalido' });
+    if (req.body.estado && !allowedStates.has(req.body.estado)) return res.status(400).json({ error: 'estado de activo invalido' });
     InventoryItems.update(req.params.id, req.body);
     AuditLog.insert({ accion: 'UPDATE_INVENTORY_ITEM', entidad: 'inventory_items', entidad_id: req.params.id, user_id: (req as any).auth?.sub || null, user_nombre: null, detalle: req.body.estado || null });
     recordEvent('inventory.updated', { id: req.params.id, ...req.body }, (req as any).auth);
     res.json(InventoryItems.getById(req.params.id));
+  }));
+
+  app.delete("/api/inventory/:id", managerOnly, wrap((req: any, res: any) => {
+    InventoryItems.delete(req.params.id);
+    AuditLog.insert({ accion: 'DELETE_INVENTORY_ITEM', entidad: 'inventory_items', entidad_id: req.params.id, user_id: req.auth?.sub || null, user_nombre: null, detalle: null });
+    recordEvent('inventory.deleted', { id: req.params.id }, req.auth);
+    res.json({ ok: true });
   }));
 
   app.get("/api/automation/rules", requireRole('GERENTE', 'SUPERVISOR'), wrap((_req: any, res: any) => {
@@ -479,6 +541,13 @@ async function startServer() {
     if (update.conditions && typeof update.conditions === 'object') update.conditions = JSON.stringify(update.conditions);
     if (update.actions && typeof update.actions === 'object') update.actions = JSON.stringify(update.actions);
     AutomationRules.update(req.params.id, update);
+    AuditLog.insert({ accion: 'UPDATE_AUTOMATION_RULE', entidad: 'automation_rules', entidad_id: req.params.id, user_id: (req as any).auth?.sub || null, user_nombre: null, detalle: null });
+    res.json({ ok: true });
+  }));
+
+  app.delete("/api/automation/rules/:id", requireRole('GERENTE'), wrap((req: any, res: any) => {
+    AutomationRules.delete(req.params.id);
+    AuditLog.insert({ accion: 'DELETE_AUTOMATION_RULE', entidad: 'automation_rules', entidad_id: req.params.id, user_id: (req as any).auth?.sub || null, user_nombre: null, detalle: null });
     res.json({ ok: true });
   }));
 
@@ -487,7 +556,7 @@ async function startServer() {
     res.json(await runAiWithFallback(req.body.prompt));
   }));
 
-  app.post("/api/ai/morosity/classify", wrap(async (req: any, res: any) => {
+  app.post("/api/ai/morosity/classify", authOnly, wrap(async (req: any, res: any) => {
     if (!req.body.text) return res.status(400).json({ error: 'text requerido' });
     res.json(await classifyMorosityReply(req.body.text));
   }));
@@ -506,7 +575,7 @@ async function startServer() {
 
   // ── MIGRACIÓN DESDE LOCALSTORAGE ──────────────────────────
   // El frontend puede enviar su localStorage para persistirlo
-  app.post("/api/migrate", wrap((req: any, res: any) => {
+  app.post("/api/migrate", managerOnly, wrap((req: any, res: any) => {
     const { key, data } = req.body as { key: string; data: any[] };
     const results: Record<string, number> = {};
 
@@ -560,38 +629,38 @@ async function startServer() {
   }));
 
   // ── WHATSAPP ───────────────────────────────────────────────
-  app.get("/api/whatsapp/status", (req, res) => res.json(getWhatsAppStatus()));
-  app.get("/api/whatsapp/qr", (req, res) => res.json({ qr: getWhatsAppQR(), status: getWhatsAppStatus() }));
+  app.get("/api/whatsapp/status", opsOnly, (req, res) => res.json(getWhatsAppStatus()));
+  app.get("/api/whatsapp/qr", opsOnly, (req, res) => res.json({ qr: getWhatsAppQR(), status: getWhatsAppStatus() }));
 
-  app.post("/api/whatsapp/init", wrap(async (_req: any, res: any) => {
+  app.post("/api/whatsapp/init", opsOnly, wrap(async (_req: any, res: any) => {
     await initWhatsApp(); res.json({ ok: true });
   }));
 
-  app.post("/api/whatsapp/send", wrap(async (req: any, res: any) => {
+  app.post("/api/whatsapp/send", opsOnly, wrap(async (req: any, res: any) => {
     const { phone, message } = req.body;
     if (!phone || !message) return res.status(400).json({ error: 'phone y message son requeridos' });
     res.json(await sendWhatsAppMessage(phone, message));
   }));
 
-  app.post("/api/whatsapp/logout", wrap(async (_req: any, res: any) => {
+  app.post("/api/whatsapp/logout", opsOnly, wrap(async (_req: any, res: any) => {
     await logoutWhatsApp(); res.json({ ok: true });
   }));
 
   // Mensajes recibidos (para panel admin/gerente)
-  app.get("/api/whatsapp/messages", wrap((_req: any, res: any) => {
+  app.get("/api/whatsapp/messages", opsOnly, wrap((_req: any, res: any) => {
     res.json(getRecentMessages(100));
   }));
 
   // ── TELEGRAM ──────────────────────────────────────────────
-  app.get("/api/telegram/status", wrap((_req: any, res: any) => {
+  app.get("/api/telegram/status", opsOnly, wrap((_req: any, res: any) => {
     res.json(getTelegramStatus());
   }));
 
-  app.get("/api/telegram/messages", wrap((_req: any, res: any) => {
+  app.get("/api/telegram/messages", opsOnly, wrap((_req: any, res: any) => {
     res.json(getTelegramMessages(100));
   }));
 
-  app.post("/api/telegram/init", wrap(async (req: any, res: any) => {
+  app.post("/api/telegram/init", opsOnly, wrap(async (req: any, res: any) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'token requerido' });
     // Persistir token en Settings para sobrevivir reinicios
@@ -600,20 +669,20 @@ async function startServer() {
     res.json(result);
   }));
 
-  app.post("/api/telegram/stop", wrap((_req: any, res: any) => {
+  app.post("/api/telegram/stop", opsOnly, wrap((_req: any, res: any) => {
     stopTelegram();
     Settings.set('telegram_bot_token', '');
     res.json({ ok: true });
   }));
 
-  app.post("/api/telegram/send", wrap(async (req: any, res: any) => {
+  app.post("/api/telegram/send", opsOnly, wrap(async (req: any, res: any) => {
     const { chatId, message } = req.body;
     if (!chatId || !message) return res.status(400).json({ error: 'chatId y message requeridos' });
     res.json(await sendTelegramMessage(chatId, message));
   }));
 
   // Mensajes combinados WA + Telegram (para panel unificado)
-  app.get("/api/channels/messages", wrap((_req: any, res: any) => {
+  app.get("/api/channels/messages", opsOnly, wrap((_req: any, res: any) => {
     const wa = getRecentMessages(100);
     const tg = getTelegramMessages(100);
     const all = [...wa, ...tg].sort((a, b) => a.timestamp - b.timestamp);
@@ -788,11 +857,11 @@ async function startServer() {
     validador: async () => { agentState.validador.lastRun = new Date().toISOString(); },
   };
 
-  app.get("/api/agents/status", wrap((_req: any, res: any) => {
+  app.get("/api/agents/status", opsOnly, wrap((_req: any, res: any) => {
     res.json(agentState);
   }));
 
-  app.post("/api/agents/:agent/toggle", wrap(async (req: any, res: any) => {
+  app.post("/api/agents/:agent/toggle", opsOnly, wrap(async (req: any, res: any) => {
     const { agent } = req.params;
     if (!agentState[agent]) return res.status(404).json({ error: 'Agente no encontrado' });
     const current = agentState[agent].active;
@@ -812,7 +881,7 @@ async function startServer() {
     res.json({ agent, active: agentState[agent].active });
   }));
 
-  app.post("/api/agents/:agent/run", wrap(async (req: any, res: any) => {
+  app.post("/api/agents/:agent/run", opsOnly, wrap(async (req: any, res: any) => {
     const { agent } = req.params;
     const runner = AGENT_RUNNERS[agent];
     if (!runner) return res.status(404).json({ error: 'Agente no encontrado' });
@@ -821,7 +890,7 @@ async function startServer() {
   }));
 
   // ── DB STATS / EXPORT / IMPORT ────────────────────────────
-  app.get("/api/db/stats", wrap((_req: any, res: any) => {
+  app.get("/api/db/stats", managerOnly, wrap((_req: any, res: any) => {
     const stats: Record<string, number> = {};
     for (const t of ALLOWED_TABLES) {
       try { stats[t] = (db as any).prepare(`SELECT COUNT(*) as c FROM ${t}`).get().c; }
@@ -830,7 +899,7 @@ async function startServer() {
     res.json(stats);
   }));
 
-  app.get("/api/export/:table", wrap((req: any, res: any) => {
+  app.get("/api/export/:table", managerOnly, wrap((req: any, res: any) => {
     const { table } = req.params;
     if (!ALLOWED_TABLES.includes(table)) return res.status(400).json({ error: 'Tabla no permitida' });
     const rows: any[] = (db as any).prepare(`SELECT * FROM ${table}`).all();
@@ -847,7 +916,7 @@ async function startServer() {
     res.send('﻿' + csv);
   }));
 
-  app.get("/api/export-template/:table", wrap((req: any, res: any) => {
+  app.get("/api/export-template/:table", managerOnly, wrap((req: any, res: any) => {
     const { table } = req.params;
     if (!ALLOWED_TABLES.includes(table)) return res.status(400).json({ error: 'Tabla no permitida' });
     const cols: any[] = (db as any).prepare(`PRAGMA table_info(${table})`).all();
@@ -857,7 +926,7 @@ async function startServer() {
     res.send('﻿' + csv);
   }));
 
-  app.post("/api/import/:table", wrap((req: any, res: any) => {
+  app.post("/api/import/:table", managerOnly, wrap((req: any, res: any) => {
     const { table } = req.params;
     if (!ALLOWED_TABLES.includes(table)) return res.status(400).json({ error: 'Tabla no permitida' });
     const { csv, replace } = req.body as { csv: string; replace?: boolean };
@@ -890,7 +959,7 @@ async function startServer() {
     res.json({ imported, skipped });
   }));
 
-  app.delete("/api/db/clear/:table", wrap((req: any, res: any) => {
+  app.delete("/api/db/clear/:table", managerOnly, wrap((req: any, res: any) => {
     const { table } = req.params;
     if (!ALLOWED_TABLES.includes(table)) return res.status(400).json({ error: 'Tabla no permitida' });
     (db as any).prepare(`DELETE FROM ${table}`).run();
@@ -900,7 +969,7 @@ async function startServer() {
 
   // ── OCR MULTI-PROVEEDOR (GPT-4o-mini → Claude Haiku 4.5 → Tesseract) ──────
   // Acepta { image: "..." } o { images: ["frente","reverso"] } — múltiples mejoran precisión.
-  app.post("/api/vision/ocr", ocrLimiter, wrap(async (req: any, res: any) => {
+  app.post("/api/vision/ocr", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
@@ -909,7 +978,7 @@ async function startServer() {
     res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
-  app.post("/api/vision/siac", ocrLimiter, wrap(async (req: any, res: any) => {
+  app.post("/api/vision/siac", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
@@ -918,7 +987,7 @@ async function startServer() {
     res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
-  app.post("/api/vision/comprobante", ocrLimiter, wrap(async (req: any, res: any) => {
+  app.post("/api/vision/comprobante", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
@@ -927,7 +996,7 @@ async function startServer() {
     res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
-  app.get("/api/vision/status", wrap(async (_req: any, res: any) => {
+  app.get("/api/vision/status", authOnly, wrap(async (_req: any, res: any) => {
     const status = await checkOcrStatus();
     res.json(status);
   }));

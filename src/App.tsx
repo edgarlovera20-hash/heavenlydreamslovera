@@ -9,6 +9,8 @@ import { MatrixText } from './components/ui/matrix-text';
 import { LoadingOverlay } from './components/ui/LoadingOverlay';
 import { CyberIcon } from './components/ui/CyberIcon';
 import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, ScanFace, Sun, Moon, UserPlus, Fingerprint } from 'lucide-react';
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
+import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, rememberUsername } from './lib/apiClient';
 
 export type Role = 'GERENTE' | 'SUPERVISOR' | 'ASESOR';
 
@@ -17,11 +19,6 @@ const SESSION_KEY = 'hd_session';
 function saveSession(user: any) { try { localStorage.setItem(SESSION_KEY, JSON.stringify(user)); } catch {} }
 function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch {} }
 function loadSession(): any | null { try { const s = localStorage.getItem(SESSION_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
-
-const REMEMBER_KEY = 'hd_remember';
-function saveRemember(u: string, p: string) { try { localStorage.setItem(REMEMBER_KEY, JSON.stringify({ u, p })); } catch {} }
-function clearRemember() { try { localStorage.removeItem(REMEMBER_KEY); } catch {} }
-function loadRemember(): { u: string; p: string } | null { try { const s = localStorage.getItem(REMEMBER_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 
 export default function App() {
   const [role, setRole] = useState<Role | null>(null);
@@ -39,6 +36,8 @@ export default function App() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [passkeyUserId, setPasskeyUserId] = useState<string | null>(null);
+  const [passkeyEnrollmentRequired, setPasskeyEnrollmentRequired] = useState(false);
 
   const [showProfileWidget, setShowProfileWidget] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -53,8 +52,9 @@ export default function App() {
       const av = localStorage.getItem(`hd_avatar_${session.uid}`);
       if (av) setAvatarUrl(av);
     } else {
-      const rem = loadRemember();
-      if (rem) { setUsername(rem.u); setPassword(rem.p); setRememberMe(true); }
+      try { localStorage.removeItem('hd_remember'); localStorage.removeItem('adhdreams_remember'); } catch {}
+      const rem = loadRememberedUsername();
+      if (rem) { setUsername(rem.username); setRememberMe(true); }
     }
     if (typeof window !== 'undefined' && window.PublicKeyCredential) {
       PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
@@ -95,8 +95,14 @@ export default function App() {
       });
       const data = await r.json();
       if (!r.ok) { setError(data.error || 'Error al iniciar sesión.'); return; }
-      if (rememberMe) saveRemember(username, password); else clearRemember();
+      if (data.requiresWebAuthn) {
+        setPasskeyUserId(data.webAuthnUserId);
+        await handleBiometricLogin(data.webAuthnUserId);
+        return;
+      }
+      if (rememberMe) rememberUsername(username); else forgetRememberedUsername();
       applyLogin(data);
+      setPasskeyEnrollmentRequired(Boolean(data.webAuthnEnrollmentRequired));
     } catch {
       setError('No se pudo conectar al servidor.');
     } finally {
@@ -104,51 +110,68 @@ export default function App() {
     }
   };
 
-  const handleBiometricLogin = async () => {
+  const handleBiometricLogin = async (userIdOverride?: string) => {
     setError('');
-    if (!window.PublicKeyCredential) { setError('Tu navegador no soporta biométrico.'); return; }
+    const targetUserId = userIdOverride || passkeyUserId || currentUser?.uid;
+    if (!targetUserId && !username) { setError('Ingresa tu usuario para usar passkey.'); return; }
     try {
-      // Buscar credenciales biométricas guardadas localmente
-      const stored = localStorage.getItem('hd_biometric_creds');
-      if (!stored) { setError('No hay cuentas con biométrico en este dispositivo.'); return; }
-      const creds: Array<{ uid: string; email: string; credId: string }> = JSON.parse(stored);
-      const challenge = crypto.getRandomValues(new Uint8Array(32));
-      const assertion = await navigator.credentials.get({
-        publicKey: {
-          challenge,
-          timeout: 60000,
-          userVerification: 'required',
-          allowCredentials: creds.map(c => ({
-            type: 'public-key' as const,
-            id: Uint8Array.from(atob(c.credId.replace(/-/g,'+').replace(/_/g,'/')), x => x.charCodeAt(0)),
-          })),
-        },
-      }) as PublicKeyCredential | null;
-      if (!assertion) { setError('Autenticación cancelada.'); return; }
-      const rawId = new Uint8Array(assertion.rawId);
-      const idB64 = btoa(String.fromCharCode(...rawId)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-      const matched = creds.find(c => c.credId === idB64);
-      if (!matched) { setError('Credencial no reconocida.'); return; }
-      // Verificar que el usuario sigue activo en el servidor
-      const r = await fetch(`/api/users/${matched.uid}`).catch(() => null);
-      if (!r?.ok) { setError('No se pudo verificar la cuenta.'); return; }
-      const user = await r.json();
-      if (user.activo === 2) { setError('Cuenta pendiente de aprobación.'); return; }
-      if (user.activo === 0) { setError('Cuenta desactivada.'); return; }
+      const optionsRes = await fetch('/api/webauthn/login/options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: targetUserId, username }),
+      });
+      const options = await optionsRes.json();
+      if (!optionsRes.ok) { setError(options.error || 'No hay passkey registrada.'); return; }
+      const verifiedUserId = options.userId || targetUserId;
+      const assertion = await startAuthentication({ optionsJSON: options });
+      const verifyRes = await fetch('/api/webauthn/login/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: verifiedUserId, response: assertion }),
+      });
+      const user = await verifyRes.json();
+      if (!verifyRes.ok) { setError(user.error || 'Falló la autenticación biométrica.'); return; }
+      if (rememberMe && username) rememberUsername(username); else if (!rememberMe) forgetRememberedUsername();
       applyLogin({ ...user, displayName: user.nombre });
+      setPasskeyUserId(null);
+      setPasskeyEnrollmentRequired(false);
     } catch (err: any) {
       setError(err.message || 'Falló la autenticación biométrica.');
     }
   };
 
+  const handleRegisterPasskey = async () => {
+    setError('');
+    try {
+      const optionsRes = await fetch('/api/webauthn/register/options', { method: 'POST' });
+      const options = await optionsRes.json();
+      if (!optionsRes.ok) { setError(options.error || 'No se pudo iniciar el registro biométrico.'); return; }
+      const credential = await startRegistration({ optionsJSON: options });
+      const verifyRes = await fetch('/api/webauthn/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: credential }),
+      });
+      const result = await verifyRes.json();
+      if (!verifyRes.ok || !result.verified) { setError(result.error || 'No se pudo verificar la passkey.'); return; }
+      setPasskeyEnrollmentRequired(false);
+    } catch (err: any) {
+      setError(err.message || 'No se pudo registrar la passkey.');
+    }
+  };
+
   const handleLogout = () => {
-    clearSession();
+    const session = loadSession();
+    if (session?.refreshToken) {
+      fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: session.refreshToken }) }).catch(() => {});
+    }
+    clearSession(); clearApiSession();
     setCurrentUser(null);
     setRole(null);
     setAvatarUrl(null);
     setPendingRole(null);
-    const rem = loadRemember();
-    if (rem) { setUsername(rem.u); setPassword(rem.p); setRememberMe(true); }
+    const rem = loadRememberedUsername();
+    if (rem) { setUsername(rem.username); setPassword(''); setRememberMe(true); }
     else { setUsername(''); setPassword(''); setRememberMe(false); }
   };
 
@@ -297,7 +320,7 @@ export default function App() {
               <div className="flex items-center justify-between w-full gap-3">
                 <label className="flex items-center gap-2 cursor-pointer group">
                   <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="w-3.5 h-3.5 accent-cyber-neon cursor-pointer" />
-                  <span className="text-[10px] text-cyber-electric/80 group-hover:text-cyber-neon uppercase tracking-widest font-bold transition-colors">Recordarme</span>
+                  <span className="text-[10px] text-cyber-electric/80 group-hover:text-cyber-neon uppercase tracking-widest font-bold transition-colors">Recordar usuario</span>
                 </label>
                 <button type="button" onClick={() => setError('Contacta al administrador para restablecer tu contraseña.')}
                   className="text-[10px] text-cyber-electric/70 hover:text-cyber-neon uppercase tracking-widest font-bold transition-colors">
@@ -317,13 +340,41 @@ export default function App() {
                     <span className="text-[9px] uppercase tracking-widest text-cyber-electric/60 font-bold">o</span>
                     <div className="flex-1 h-px bg-cyber-electric/20" />
                   </div>
-                  <button type="button" onClick={handleBiometricLogin}
+                  <button type="button" onClick={() => handleBiometricLogin()}
                     className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] bg-cyber-dark/50 hover:bg-cyber-neon/10 text-cyber-neon border border-cyber-neon/40 uppercase tracking-wider text-sm">
                     <Fingerprint className="w-4 h-4" /> Entrar con huella digital
                   </button>
                 </>
               )}
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Required passkey enrollment for managers */}
+      {role === 'GERENTE' && passkeyEnrollmentRequired && (
+        <div className="absolute inset-0 z-[80] bg-cyber-black/95 backdrop-blur-xl flex items-center justify-center px-6">
+          <div className="w-full max-w-md glass-panel-neon rounded-3xl p-8 text-center border border-yellow-400/30">
+            <div className="w-16 h-16 rounded-2xl mx-auto mb-5 bg-yellow-400/10 border border-yellow-400/40 flex items-center justify-center text-yellow-300">
+              <Fingerprint className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-black text-white uppercase tracking-widest mb-3">Passkey requerida</h2>
+            <p className="text-sm text-slate-300 mb-6">
+              Las cuentas de gerencia deben registrar biometría/passkey verificada por el servidor antes de entrar al CRM.
+            </p>
+            {error && <p className="text-xs text-red-300 border border-red-500/30 bg-red-500/10 rounded-lg p-3 mb-4">{error}</p>}
+            <button
+              onClick={handleRegisterPasskey}
+              className="w-full py-4 rounded-xl bg-yellow-400 text-black font-black uppercase tracking-widest flex items-center justify-center gap-2"
+            >
+              <Fingerprint className="w-4 h-4" /> Registrar passkey
+            </button>
+            <button
+              onClick={handleLogout}
+              className="mt-3 w-full py-3 rounded-xl border border-slate-700 text-slate-300 font-bold uppercase tracking-widest text-xs"
+            >
+              Cerrar sesión
+            </button>
           </div>
         </div>
       )}
@@ -338,7 +389,7 @@ export default function App() {
       )}
 
       {/* Main App */}
-      {role && (
+      {role && !passkeyEnrollmentRequired && (
         <div className="h-full flex flex-col relative w-full">
           <div className="flex-1 overflow-hidden">
             <Suspense fallback={<LoadingOverlay visible text="Cargando…" />}>
