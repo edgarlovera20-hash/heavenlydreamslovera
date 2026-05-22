@@ -66,6 +66,17 @@ function NavGroup({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
+function ClockText() {
+  const [time, setTime] = useState(() => new Date().toLocaleTimeString('es-ES', { hour12: false }));
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTime(new Date().toLocaleTimeString('es-ES', { hour12: false }));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return <>{time}</>;
+}
+
 import { Role } from '../../App';
 import NetworkPattern from '../ui/NetworkPattern';
 
@@ -79,7 +90,6 @@ interface ManagerViewProps {
 
 export default function ManagerView({ role, onBack, currentUser, isLightMode, onToggleTheme }: ManagerViewProps) {
   const [activeSection, setActiveSection] = useState(['GERENTE', 'SUPERVISOR'].includes(role) ? 'Dashboard' : 'Perfil');
-  const [time, setTime] = useState(new Date().toLocaleTimeString('es-ES', { hour12: false }));
   const [showAgentDesigner, setShowAgentDesigner] = useState(false);
   const { isOnline, pendingCount, syncing, syncNow } = useOfflineSync();
   useFollowUpReminders();
@@ -98,39 +108,26 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [pendingUsers, setPendingUsers] = useState(0);
 
   const loadStats = async () => {
+    if (!['GERENTE', 'SUPERVISOR'].includes(role)) return;
     try {
-      const [usersRes, ventasRes] = await Promise.all([
-        fetch('/api/users'),
-        fetch('/api/ventas'),
-      ]);
-      const users: any[] = usersRes.ok ? await usersRes.json() : [];
-      const sales: any[] = ventasRes.ok ? await ventasRes.json() : [];
-
-      setUserCount(users.filter((u: any) => u.activo === 1).length || 0);
-      setPendingUsers(users.filter((u: any) => u.activo === 2).length || 0);
-      setSaleCount(sales.length || 0);
-      setPendingSales(sales.filter((s: any) => (s.status || 'pendiente') === 'pendiente').length);
-      setApprovedSales(sales.filter((s: any) => s.status === 'aprobada' || s.status === 'procedio').length);
-      setRejectedSales(sales.filter((s: any) => s.status === 'rechazada').length);
-
-      const today = new Date().toISOString().split('T')[0];
-      setTodaySales(sales.filter((s: any) => (s.fecha_solicitud || s.created_at || '').startsWith(today)).length);
-
-      const now = new Date();
-      const monthSales = sales.filter((s: any) => {
-        const d = new Date(s.fecha_solicitud || s.created_at || 0);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      });
-      setMonthRevenue(monthSales.reduce((sum: number, s: any) => sum + (Number(s.renta_mensual) || 0), 0));
+      const res = await fetch('/api/dashboard/summary');
+      if (!res.ok) return;
+      const data = await res.json();
+      setUserCount(data.userCount || 0);
+      setPendingUsers(data.pendingUsers || 0);
+      setSaleCount(data.saleCount || 0);
+      setPendingSales(data.pendingSales || 0);
+      setApprovedSales(data.approvedSales || 0);
+      setRejectedSales(data.rejectedSales || 0);
+      setTodaySales(data.todaySales || 0);
+      setMonthRevenue(data.monthRevenue || 0);
     } catch { /* silencioso - puede estar offline */ }
   };
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTime(new Date().toLocaleTimeString('es-ES', { hour12: false }));
-    }, 1000);
     loadStats();
     const loadChannels = async () => {
+      if (!['GERENTE', 'SUPERVISOR'].includes(role)) return;
       try {
         const [ws, tgs, msgs] = await Promise.all([
           fetch('/api/whatsapp/status').then(r => r.ok ? r.json() : null),
@@ -143,10 +140,10 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       } catch {}
     };
     loadChannels();
-    const statsTimer = setInterval(loadStats, 8000);
-    const channelTimer = setInterval(loadChannels, 12000);
-    return () => { clearInterval(timer); clearInterval(statsTimer); clearInterval(channelTimer); };
-  }, []);
+    const statsTimer = ['GERENTE', 'SUPERVISOR'].includes(role) ? setInterval(loadStats, 30000) : undefined;
+    const channelTimer = ['GERENTE', 'SUPERVISOR'].includes(role) ? setInterval(loadChannels, 30000) : undefined;
+    return () => { clearInterval(statsTimer); clearInterval(channelTimer); };
+  }, [role]);
 
   const userName = currentUser?.displayName || 'Usuario';
   const userRoleLabel = (currentUser?.role || role) === 'GERENTE'
@@ -319,7 +316,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                         <Crown className="text-yellow-400 w-8 h-8 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" />
                         <span className="text-white">{userName}</span> <span className="text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">CRM</span>
                      </h2>
-                     <p className="text-slate-500 text-xs mt-1.5 uppercase tracking-widest font-semibold">Panel de control · {time}</p>
+                     <p className="text-slate-500 text-xs mt-1.5 uppercase tracking-widest font-semibold">Panel de control · <ClockText /></p>
                   </div>
                   <div className="px-3 py-1.5 border border-[#10b981]/30 bg-[#10b981]/5 flex items-center gap-2 rounded-full">
                      <div className="w-2 h-2 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>

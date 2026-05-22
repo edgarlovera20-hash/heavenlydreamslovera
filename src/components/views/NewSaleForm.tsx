@@ -1,18 +1,19 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, ProductCategory } from '../../configs/package-catalog';
 import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
 import { chatUrl } from '../../lib/channels';
 import { cn, formatCurrency } from '../../lib/utils';
 import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
 import { MatrixInput } from '../ui/MatrixInput';
-import { MapPicker } from '../ui/MapPicker';
-import { PortabilidadAnexo } from './PortabilidadAnexo';
 import { SiacValidator } from '../ui/SiacValidator';
 function getCurrentUserId(): string {
   try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s).uid : 'anonymous'; } catch { return 'anonymous'; }
 }
 import { toast } from 'sonner';
 import { aiAgent } from '../../services/aiAgent';
+
+const MapPicker = lazy(() => import('../ui/MapPicker').then(m => ({ default: m.MapPicker })));
+const PortabilidadAnexo = lazy(() => import('./PortabilidadAnexo').then(m => ({ default: m.PortabilidadAnexo })));
 
 interface CustomerCaptureData {
   folio: string;
@@ -1086,11 +1087,13 @@ const exportToPDF = async () => {
                 <label className="block text-sm font-medium text-white mb-3 flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-blue-400" /> Ubicación GPS
                 </label>
-                <MapPicker
-                  coords={form.coordenadas || ''}
-                  onCoordsChange={c => updateForm({ coordenadas: c })}
-                  searchAddress={[form.calle, form.colonia, form.delegacion, form.ciudad].filter(Boolean).join(', ')}
-                />
+                <Suspense fallback={<div className="h-72 rounded-xl border border-white/10 bg-black/30 flex items-center justify-center text-xs font-bold uppercase tracking-widest text-slate-500">Cargando mapa...</div>}>
+                  <MapPicker
+                    coords={form.coordenadas || ''}
+                    onCoordsChange={c => updateForm({ coordenadas: c })}
+                    searchAddress={[form.calle, form.colonia, form.delegacion, form.ciudad].filter(Boolean).join(', ')}
+                  />
+                </Suspense>
               </div>
             </div>
             
@@ -1758,19 +1761,21 @@ const exportToPDF = async () => {
       </div>
     </div>
     {showAnexo && (
-      <PortabilidadAnexo
-        data={{
-          apellidoPaterno: form.apellidoPaterno,
-          apellidoMaterno: form.apellidoMaterno,
-          nombres: form.nombres,
-          numeroAPortar: form.numeroAPortar,
-          companiaActual: form.companiaActual,
-          nip: form.nip,
-          fechaSolicitud: form.fechaSolicitud,
-          folio: form.folio,
-        }}
-        onClose={() => setShowAnexo(false)}
-      />
+      <Suspense fallback={null}>
+        <PortabilidadAnexo
+          data={{
+            apellidoPaterno: form.apellidoPaterno,
+            apellidoMaterno: form.apellidoMaterno,
+            nombres: form.nombres,
+            numeroAPortar: form.numeroAPortar,
+            companiaActual: form.companiaActual,
+            nip: form.nip,
+            fechaSolicitud: form.fechaSolicitud,
+            folio: form.folio,
+          }}
+          onClose={() => setShowAnexo(false)}
+        />
+      </Suspense>
     )}
     </>
   );

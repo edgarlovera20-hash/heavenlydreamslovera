@@ -247,6 +247,37 @@ async function startServer() {
     res.json(safe);
   }));
 
+  app.get("/api/dashboard/summary", opsOnly, wrap((_req: any, res: any) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const month = new Date().toISOString().slice(0, 7);
+    const userStats = db.prepare(`
+      SELECT
+        SUM(CASE WHEN activo=1 THEN 1 ELSE 0 END) AS activeUsers,
+        SUM(CASE WHEN activo=2 THEN 1 ELSE 0 END) AS pendingUsers
+      FROM users
+    `).get() as any;
+    const salesStats = db.prepare(`
+      SELECT
+        COUNT(*) AS saleCount,
+        SUM(CASE WHEN COALESCE(status, 'pendiente')='pendiente' THEN 1 ELSE 0 END) AS pendingSales,
+        SUM(CASE WHEN status IN ('aprobada', 'procedio') THEN 1 ELSE 0 END) AS approvedSales,
+        SUM(CASE WHEN status='rechazada' THEN 1 ELSE 0 END) AS rejectedSales,
+        SUM(CASE WHEN COALESCE(fecha_solicitud, created_at, '') LIKE @today THEN 1 ELSE 0 END) AS todaySales,
+        SUM(CASE WHEN COALESCE(fecha_solicitud, created_at, '') LIKE @month THEN COALESCE(renta_mensual, 0) ELSE 0 END) AS monthRevenue
+      FROM ventas
+    `).get({ today: `${today}%`, month: `${month}%` }) as any;
+    res.json({
+      userCount: Number(userStats?.activeUsers || 0),
+      pendingUsers: Number(userStats?.pendingUsers || 0),
+      saleCount: Number(salesStats?.saleCount || 0),
+      pendingSales: Number(salesStats?.pendingSales || 0),
+      approvedSales: Number(salesStats?.approvedSales || 0),
+      rejectedSales: Number(salesStats?.rejectedSales || 0),
+      todaySales: Number(salesStats?.todaySales || 0),
+      monthRevenue: Number(salesStats?.monthRevenue || 0),
+    });
+  }));
+
   // ── VENTAS ─────────────────────────────────────────────────
   app.get("/api/ventas", authOnly, wrap((req: any, res: any) => {
     const { asesor_id } = req.query;

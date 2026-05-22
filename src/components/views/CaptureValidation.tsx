@@ -1,9 +1,18 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { Bot, ChevronRight, FileSignature, Users, Zap } from 'lucide-react';
-import NewSaleForm from './NewSaleForm';
-import MyClientsView from './MyClientsView';
-import DirectValidationView from './DirectValidationView';
 import { CyberIcon, CyberColor } from '../ui/CyberIcon';
+
+const NewSaleForm = lazy(() => import('./NewSaleForm'));
+const MyClientsView = lazy(() => import('./MyClientsView'));
+const DirectValidationView = lazy(() => import('./DirectValidationView'));
+
+function ViewLoader() {
+  return (
+    <div className="h-48 flex items-center justify-center text-xs font-bold uppercase tracking-widest text-cyber-electric/70">
+      Cargando modulo...
+    </div>
+  );
+}
 
 export default function CaptureValidation() {
   const [activeView, setActiveView] = useState<'menu' | 'new_sale' | 'my_clients' | 'direct_validation'>('menu');
@@ -38,15 +47,15 @@ export default function CaptureValidation() {
   ];
 
   if (activeView === 'new_sale') {
-    return <NewSaleForm onBack={() => setActiveView('menu')} />;
+    return <Suspense fallback={<ViewLoader />}><NewSaleForm onBack={() => setActiveView('menu')} /></Suspense>;
   }
 
   if (activeView === 'my_clients') {
-    return <MyClientsView onBack={() => setActiveView('menu')} />;
+    return <Suspense fallback={<ViewLoader />}><MyClientsView onBack={() => setActiveView('menu')} /></Suspense>;
   }
 
   if (activeView === 'direct_validation') {
-    return <DirectValidationView onBack={() => setActiveView('menu')} />;
+    return <Suspense fallback={<ViewLoader />}><DirectValidationView onBack={() => setActiveView('menu')} /></Suspense>;
   }
 
   return (

@@ -25,14 +25,17 @@ export default defineConfig(({mode}) => {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom'],
-            'vendor-ui': ['lucide-react', 'sonner', 'clsx', 'tailwind-merge'],
-            'vendor-charts': ['recharts'],
-            'vendor-zip': ['jszip'],
-            'vendor-pdf': ['jspdf', 'html2canvas'],
-            'vendor-motion': ['motion'],
-            'vendor-qr': ['qrcode'],
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('leaflet') || id.includes('maplibre-gl') || id.includes('react-leaflet')) return 'vendor-maps';
+            if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('scheduler')) return 'vendor-react';
+            if (id.includes('lucide-react') || id.includes('sonner') || id.includes('clsx') || id.includes('tailwind-merge')) return 'vendor-ui';
+            if (id.includes('recharts') || id.includes('d3-') || id.includes('victory-vendor')) return 'vendor-charts';
+            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('dompurify')) return 'vendor-pdf';
+            if (id.includes('jszip')) return 'vendor-zip';
+            if (id.includes('motion') || id.includes('framer-motion')) return 'vendor-motion';
+            if (id.includes('@simplewebauthn')) return 'vendor-auth';
+            return undefined;
           },
         },
       },
