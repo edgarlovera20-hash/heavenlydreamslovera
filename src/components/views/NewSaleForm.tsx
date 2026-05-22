@@ -91,6 +91,45 @@ const PLATAFORMAS_ADICIONALES = [
   { id: 'f1_tv', provider: 'F1 TV', name: 'Suscripción F1 TV Pro', price: 129 },
 ];
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function optimizeImageForOcr(file: File): Promise<string> {
+  const raw = await readFileAsDataUrl(file);
+  if (!file.type.startsWith('image/')) return raw;
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('No se pudo preparar la imagen para OCR.'));
+    img.src = raw;
+  });
+  const maxSide = 1600;
+  const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
+  const width = Math.max(1, Math.round(image.width * ratio));
+  const height = Math.max(1, Math.round(image.height * ratio));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return raw;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
+
+function ocrJobKey(images: string[]) {
+  return images.map(img => `${img.length}:${img.slice(0, 48)}:${img.slice(-48)}`).join('|');
+}
+
 export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<Partial<CustomerCaptureData>>({
@@ -101,7 +140,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     categoriaProducto: 'infinitum_puro',
     streamingElegido: 'ninguno',
     mismaDireccionIne: true,
-    coordenadas: '19.432608, -99.133209' // Default CDMX Zocalo
+    coordenadas: ''
   });
   
   const [isOcrLoading, setIsOcrLoading] = useState(false);
@@ -142,6 +181,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [docType, setDocType] = useState<'ine' | 'curp'>('ine');
   const [selectedPackage, setSelectedPackage] = useState<PackageCatalogItem | null>(null);
   const [error, setError] = useState<string>('');
+  const pendingOcrJobsRef = useRef<Set<string>>(new Set());
   const receiptRef = useRef<HTMLDivElement>(null);
   
   const sigCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -352,6 +392,9 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   // Smart merge: solo rellena campos VACÍOS (respeta lo que el usuario escribió).
   const runOcrInBackground = (imgs: string[]) => {
     if (imgs.length === 0) return;
+    const jobKey = ocrJobKey(imgs);
+    if (pendingOcrJobsRef.current.has(jobKey)) return;
+    pendingOcrJobsRef.current.add(jobKey);
     setOcrBgStatus('running');
     setOcrBgMessage('Procesando documento con IA…');
     setOcrBgFieldsCount(0);
@@ -398,27 +441,31 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
         setOcrBgMessage('Error de OCR — completa manualmente');
         toast.error('OCR en background falló. Puedes completar los campos manualmente.', { duration: 6000 });
         setTimeout(() => setOcrBgStatus(s => s === 'error' ? 'idle' : s), 10000);
+      } finally {
+        pendingOcrJobsRef.current.delete(jobKey);
       }
     })();
   };
 
   // Subir comprobante de domicilio (CFE/Izzi/Totalplay/Telmex) — guarda y dispara OCR en background.
-  const handleComprobanteUpload = (file: File | undefined) => {
+  const handleComprobanteUpload = async (file: File | undefined) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onerror = () => toast.error('No se pudo leer el archivo.');
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
+    try {
+      const base64 = await optimizeImageForOcr(file);
       updateForm({ comprobanteDomicilio: base64 });
       toast.info('📸 Comprobante cargado — IA extrayendo domicilio en segundo plano. Puedes seguir avanzando.', { duration: 4000 });
       // Disparar OCR de comprobante en background (no bloquea)
       runComprobanteOcrInBackground(base64);
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo leer el archivo.');
+    }
   };
 
   // OCR del comprobante en background — no bloquea la UI
   const runComprobanteOcrInBackground = (image: string) => {
+    const jobKey = ocrJobKey([image]);
+    if (pendingOcrJobsRef.current.has(jobKey)) return;
+    pendingOcrJobsRef.current.add(jobKey);
     setOcrBgStatus('running');
     setOcrBgMessage('Extrayendo domicilio con IA…');
     (async () => {
@@ -466,6 +513,8 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
         setOcrBgMessage('Error escaneando comprobante');
         toast.error('OCR del comprobante falló. Completa el domicilio manualmente.');
         setTimeout(() => setOcrBgStatus(s => s === 'error' ? 'idle' : s), 10000);
+      } finally {
+        pendingOcrJobsRef.current.delete(jobKey);
       }
     })();
   };
@@ -513,13 +562,11 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
 
   // Al subir un documento, se guarda Y se dispara OCR en background automáticamente.
   // El usuario puede seguir avanzando con el formulario mientras la IA procesa.
-  const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onerror = () => toast.error('No se pudo leer el archivo.');
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
+    try {
+      const base64 = await optimizeImageForOcr(file);
       // Calculamos las imágenes que estarán disponibles después de actualizar
       let imgsForOcr: string[] = [];
       if (slot === 'frente') {
@@ -536,8 +583,9 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       toast.info('📸 Imagen cargada — la IA está extrayendo los datos en segundo plano. Puedes seguir avanzando.', { duration: 4000 });
       // Disparar OCR en background SIN await — no bloquea la UI
       runOcrInBackground(imgsForOcr);
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo leer el archivo.');
+    }
     event.target.value = '';
   };
 

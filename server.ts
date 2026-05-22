@@ -1006,7 +1006,7 @@ async function startServer() {
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
     const result = await runIneOcr(imgs);
     console.log('[OCR-ine]', result.provider, `${result.durationMs}ms`, `${imgs.length}img`, JSON.stringify(result.fields));
-    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
+    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason, cached: result.cached || false });
   }));
 
   app.post("/api/vision/siac", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
@@ -1015,7 +1015,7 @@ async function startServer() {
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
     const result = await runSiacOcr(imgs);
     console.log('[OCR-siac]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
-    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
+    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason, cached: result.cached || false });
   }));
 
   app.post("/api/vision/comprobante", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
@@ -1024,7 +1024,7 @@ async function startServer() {
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
     const result = await runComprobanteOcr(imgs);
     console.log('[OCR-comprobante]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
-    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
+    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason, cached: result.cached || false });
   }));
 
   app.get("/api/vision/status", authOnly, wrap(async (_req: any, res: any) => {

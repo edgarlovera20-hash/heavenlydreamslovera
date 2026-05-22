@@ -18,6 +18,7 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { createHash } from 'node:crypto';
 import { runTesseractIne, runTesseractComprobante, runTesseractSiac } from './ocr-tesseract';
 
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
@@ -34,6 +35,8 @@ const OLLAMA_MODEL    = 'glm-ocr';
 
 const TIMEOUT_MS_LLM       = 45_000;  // 45s para GPT/Claude
 const TIMEOUT_MS_TESSERACT = 60_000;  // 60s para tesseract local
+const CACHE_TTL_MS         = 10 * 60 * 1000;
+const CACHE_MAX_ENTRIES    = 100;
 
 export type OcrProvider = 'claude' | 'gemini' | 'openai' | 'ollama' | 'tesseract';
 export type OcrDocType  = 'ine' | 'comprobante' | 'siac';
@@ -46,6 +49,10 @@ export interface OcrResult {
   durationMs: number;
   fallbackReason?: string; // por qué se cayó al siguiente proveedor
 }
+
+type CachedOcrResult = OcrResult & { cached?: boolean };
+
+const ocrCache = new Map<string, { expiresAt: number; result: OcrResult }>();
 
 // ─── PROMPTS (compartidos entre GPT y Claude) ────────────────────────────────
 
@@ -147,7 +154,7 @@ const PROMPTS: Record<OcrDocType, string> = {
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 
 function stripDataUrl(base64: string): string {
-  return base64.replace(/^data:image\/[a-z+]+;base64,/, '');
+  return base64.replace(/^data:[^;]+;base64,/, '');
 }
 
 function detectMediaType(base64Original: string): string {
@@ -262,6 +269,37 @@ async function callClaude(prompt: string, base64Images: string[]): Promise<strin
 
   const data = await res.json() as any;
   return data?.content?.[0]?.text || '';
+}
+
+function cacheKey(docType: OcrDocType, images: string[]) {
+  const hash = createHash('sha256');
+  hash.update(docType);
+  for (const image of images) hash.update(stripDataUrl(image));
+  return hash.digest('hex');
+}
+
+function getCached(key: string): OcrResult | null {
+  const item = ocrCache.get(key);
+  if (!item) return null;
+  if (item.expiresAt <= Date.now()) {
+    ocrCache.delete(key);
+    return null;
+  }
+  ocrCache.delete(key);
+  ocrCache.set(key, item);
+  return {
+    ...item.result,
+    durationMs: 0,
+    fallbackReason: item.result.fallbackReason ? `${item.result.fallbackReason} | cache-hit` : 'cache-hit',
+  };
+}
+
+function setCached(key: string, result: OcrResult) {
+  if (ocrCache.size >= CACHE_MAX_ENTRIES) {
+    const oldest = ocrCache.keys().next().value;
+    if (oldest) ocrCache.delete(oldest);
+  }
+  ocrCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, result: { ...result } });
 }
 
 async function callOpenAi(prompt: string, base64Images: string[]): Promise<string> {
@@ -469,9 +507,16 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
   return { text, fields, provider, model: 'tesseract-spa', durationMs: Date.now() - t0 };
 }
 
-export async function runOcrWithFallback(docType: OcrDocType, images: string | string[]): Promise<OcrResult> {
-  const imgs = Array.isArray(images) ? images : [images];
+export async function runOcrWithFallback(docType: OcrDocType, images: string | string[]): Promise<CachedOcrResult> {
+  const imgs = (Array.isArray(images) ? images : [images]).filter(Boolean);
   if (imgs.length === 0) throw new Error('No se proporcionaron imágenes');
+
+  const key = cacheKey(docType, imgs);
+  const cached = getCached(key);
+  if (cached) {
+    console.log(`[OCR-${docType}] cache hit (${imgs.length}img)`);
+    return { ...cached, cached: true };
+  }
 
   const errors: string[] = [];
 
@@ -494,6 +539,7 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
 
       if (errors.length) result.fallbackReason = errors.join(' | ');
       console.log(`[OCR-${docType}] ${provider} OK in ${result.durationMs}ms (${Object.keys(result.fields).length} fields)`);
+      setCached(key, result);
       return result;
     } catch (err: any) {
       const msg = err?.message || String(err);
@@ -507,15 +553,15 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
 
 // ─── API PÚBLICA ─────────────────────────────────────────────────────────────
 
-export async function runIneOcr(images: string | string[]): Promise<OcrResult> {
+export async function runIneOcr(images: string | string[]): Promise<CachedOcrResult> {
   return runOcrWithFallback('ine', images);
 }
 
-export async function runComprobanteOcr(images: string | string[]): Promise<OcrResult> {
+export async function runComprobanteOcr(images: string | string[]): Promise<CachedOcrResult> {
   return runOcrWithFallback('comprobante', images);
 }
 
-export async function runSiacOcr(images: string | string[]): Promise<OcrResult> {
+export async function runSiacOcr(images: string | string[]): Promise<CachedOcrResult> {
   return runOcrWithFallback('siac', images);
 }
 
