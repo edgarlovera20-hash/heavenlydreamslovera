@@ -1061,6 +1061,9 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     // Hashed assets (JS/CSS chunks) can be cached for 1 year; index.html must not be cached
     app.use('/assets', express.static(path.join(distPath, 'assets'), { maxAge: '1y', immutable: true }));
+    app.use('/assets', (_req, res) => {
+      res.status(404).type('text/plain').send('Asset not found');
+    });
     app.use(express.static(distPath, { maxAge: 0 }));
     app.get('*', (_req, res) => {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
