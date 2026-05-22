@@ -9,8 +9,19 @@ import db, {
   Users, Ventas, SiacRecords, Tickets, AuditLog, Settings,
   Referrals, Quotas, CommissionRules, PackageCatalog,
   Nominas, Territories, ValidationRequests, Announcements,
+  InventoryItems, AutomationRules, AiJobs, Metrics,
 } from "./server/db";
 import { importSiacCSV } from "./server/siac-importer";
+import { issueSession, rateLimit, requireRole, rotateRefreshToken } from "./server/security";
+import {
+  classifyMorosityReply,
+  enqueueAiJob,
+  enterpriseHealth,
+  processNextAiJob,
+  recordEvent,
+  recordMetric,
+  runAiWithFallback,
+} from "./server/enterprise";
 
 function wrap(fn: Function) {
   return async (req: any, res: any) => {
@@ -61,13 +72,16 @@ function parseCsvToRows(text: string): { headers: string[]; rows: Record<string,
 const ALLOWED_TABLES = [
   'users', 'ventas', 'siac_records', 'tickets', 'referrals',
   'territories', 'nominas', 'announcements', 'package_catalog',
-  'commission_rules', 'quotas', 'validation_requests',
+  'commission_rules', 'quotas', 'validation_requests', 'inventory_items',
+  'automation_rules', 'ai_jobs', 'metrics', 'system_events', 'sessions',
 ];
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
   app.use(express.json({ limit: '20mb' }));
+  const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
+  const ocrLimiter = rateLimit('ocr', 40, 15 * 60 * 1000);
 
   // ── USUARIOS ────────────────────────────────────────────────
   app.get("/api/users", wrap((_req: any, res: any) => res.json(Users.getAll())));
@@ -76,7 +90,14 @@ async function startServer() {
     // Si viene de registro público usa activo=2 (pendiente); si lo crea un admin usa activo=1
     const defaultActivo = req.body.fromRegistration ? 2 : 1;
     const { fromRegistration: _fr, ...body } = req.body;
-    const data = { uid: randomUUID(), activo: defaultActivo, ...body };
+    const data = {
+      uid: randomUUID(),
+      role: 'ASESOR',
+      zona: null,
+      puesto: null,
+      activo: defaultActivo,
+      ...body,
+    };
     Users.create(data);
     AuditLog.insert({ accion: 'CREATE_USER', entidad: 'users', entidad_id: data.uid, user_id: req.body.createdBy || null, user_nombre: data.nombre, detalle: null });
     res.json(Users.getById(data.uid));
@@ -105,7 +126,7 @@ async function startServer() {
   }
 
   // Login
-  app.post("/api/auth/login", wrap(async (req: any, res: any) => {
+  app.post("/api/auth/login", loginLimiter, wrap(async (req: any, res: any) => {
     const { username, password } = req.body;
     // Buscar por username o email
     const user = (Users.getByUsername(username) || Users.getByUsername(username + '@adhdreams.local')) as any;
@@ -118,7 +139,16 @@ async function startServer() {
       return res.status(403).json({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador.', code: 'INACTIVE' });
     AuditLog.insert({ accion: 'LOGIN', entidad: 'users', entidad_id: user.uid, user_id: user.uid, user_nombre: user.nombre, detalle: null });
     const { password: _, ...safe } = user;
-    res.json(safe);
+    const session = issueSession(user, req);
+    res.json({ ...safe, ...session });
+  }));
+
+  app.post("/api/auth/refresh", loginLimiter, wrap((req: any, res: any) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(400).json({ error: 'refreshToken requerido' });
+    const { user, session } = rotateRefreshToken(refreshToken, req);
+    const { password: _, ...safe } = user;
+    res.json({ ...safe, ...session });
   }));
 
   // Usuarios pendientes de aprobación
@@ -162,6 +192,13 @@ async function startServer() {
   app.get("/api/users/pending-count", wrap((_req: any, res: any) => {
     const count = Users.getAll().filter((u: any) => u.activo === 2).length;
     res.json({ count });
+  }));
+
+  app.get("/api/users/:uid", wrap((req: any, res: any) => {
+    const user = Users.getById(req.params.uid) as any;
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const { password: _, ...safe } = user;
+    res.json(safe);
   }));
 
   // ── VENTAS ─────────────────────────────────────────────────
@@ -373,6 +410,100 @@ async function startServer() {
     res.json(AuditLog.getAll(limit));
   }));
 
+  // ── ENTERPRISE CONTROL PLANE ──────────────────────────────
+  app.get("/api/enterprise/health", wrap((_req: any, res: any) => {
+    res.json(enterpriseHealth());
+  }));
+
+  app.post("/api/enterprise/events", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+    res.json(recordEvent(req.body.event, req.body.payload || {}, (req as any).auth));
+  }));
+
+  app.get("/api/enterprise/metrics", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 200, 1000);
+    res.json(Metrics.getRecent(limit));
+  }));
+
+  app.post("/api/enterprise/metrics", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+    recordMetric(req.body.name, Number(req.body.value ?? 1), req.body.tags || {});
+    res.json({ ok: true });
+  }));
+
+  app.get("/api/inventory", wrap((_req: any, res: any) => res.json(InventoryItems.getAll())));
+
+  app.post("/api/inventory", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+    const data = {
+      id: randomUUID(),
+      sku: null,
+      serial: null,
+      estado: 'disponible',
+      assigned_to: null,
+      sale_id: null,
+      notes: null,
+      ...req.body,
+    };
+    InventoryItems.create(data);
+    AuditLog.insert({ accion: 'CREATE_INVENTORY_ITEM', entidad: 'inventory_items', entidad_id: data.id, user_id: (req as any).auth?.sub || null, user_nombre: null, detalle: data.nombre });
+    recordEvent('inventory.created', data, (req as any).auth);
+    res.json(InventoryItems.getById(data.id));
+  }));
+
+  app.patch("/api/inventory/:id", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+    InventoryItems.update(req.params.id, req.body);
+    AuditLog.insert({ accion: 'UPDATE_INVENTORY_ITEM', entidad: 'inventory_items', entidad_id: req.params.id, user_id: (req as any).auth?.sub || null, user_nombre: null, detalle: req.body.estado || null });
+    recordEvent('inventory.updated', { id: req.params.id, ...req.body }, (req as any).auth);
+    res.json(InventoryItems.getById(req.params.id));
+  }));
+
+  app.get("/api/automation/rules", requireRole('GERENTE', 'SUPERVISOR'), wrap((_req: any, res: any) => {
+    res.json(AutomationRules.getAll());
+  }));
+
+  app.post("/api/automation/rules", requireRole('GERENTE'), wrap((req: any, res: any) => {
+    const data = {
+      id: randomUUID(),
+      name: req.body.name,
+      event: req.body.event,
+      conditions: JSON.stringify(req.body.conditions || {}),
+      actions: JSON.stringify(req.body.actions || []),
+      enabled: req.body.enabled === false ? 0 : 1,
+    };
+    if (!data.name || !data.event) return res.status(400).json({ error: 'name y event son requeridos' });
+    AutomationRules.create(data);
+    AuditLog.insert({ accion: 'CREATE_AUTOMATION_RULE', entidad: 'automation_rules', entidad_id: data.id, user_id: (req as any).auth?.sub || null, user_nombre: null, detalle: data.name });
+    res.json({ ...data, conditions: JSON.parse(data.conditions), actions: JSON.parse(data.actions) });
+  }));
+
+  app.patch("/api/automation/rules/:id", requireRole('GERENTE'), wrap((req: any, res: any) => {
+    const update = { ...req.body };
+    if (update.conditions && typeof update.conditions === 'object') update.conditions = JSON.stringify(update.conditions);
+    if (update.actions && typeof update.actions === 'object') update.actions = JSON.stringify(update.actions);
+    AutomationRules.update(req.params.id, update);
+    res.json({ ok: true });
+  }));
+
+  app.post("/api/ai/run", requireRole('GERENTE', 'SUPERVISOR'), wrap(async (req: any, res: any) => {
+    if (!req.body.prompt) return res.status(400).json({ error: 'prompt requerido' });
+    res.json(await runAiWithFallback(req.body.prompt));
+  }));
+
+  app.post("/api/ai/morosity/classify", wrap(async (req: any, res: any) => {
+    if (!req.body.text) return res.status(400).json({ error: 'text requerido' });
+    res.json(await classifyMorosityReply(req.body.text));
+  }));
+
+  app.get("/api/ai/jobs", requireRole('GERENTE', 'SUPERVISOR'), wrap((_req: any, res: any) => {
+    res.json(AiJobs.getAll());
+  }));
+
+  app.post("/api/ai/jobs", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+    res.json(enqueueAiJob(req.body.type || 'generic', req.body.payload || {}, Number(req.body.priority ?? 5)));
+  }));
+
+  app.post("/api/ai/jobs/process-next", requireRole('GERENTE', 'SUPERVISOR'), wrap(async (_req: any, res: any) => {
+    res.json(await processNextAiJob() || { ok: true, idle: true });
+  }));
+
   // ── MIGRACIÓN DESDE LOCALSTORAGE ──────────────────────────
   // El frontend puede enviar su localStorage para persistirlo
   app.post("/api/migrate", wrap((req: any, res: any) => {
@@ -389,7 +520,7 @@ async function startServer() {
               uid: u.uid || randomUUID(), nombre: u.nombre || u.displayName || u.name,
               email: u.email || `${u.username}@app.local`, username: u.username || u.email,
               role: u.role || 'ASESOR', password: u.password || 'temporal123',
-              zona: u.zona || null, puesto: u.puesto || null,
+              zona: u.zona || null, puesto: u.puesto || null, activo: u.activo ?? 1,
             });
             count++;
           }
@@ -769,7 +900,7 @@ async function startServer() {
 
   // ── OCR MULTI-PROVEEDOR (GPT-4o-mini → Claude Haiku 4.5 → Tesseract) ──────
   // Acepta { image: "..." } o { images: ["frente","reverso"] } — múltiples mejoran precisión.
-  app.post("/api/vision/ocr", wrap(async (req: any, res: any) => {
+  app.post("/api/vision/ocr", ocrLimiter, wrap(async (req: any, res: any) => {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
@@ -778,7 +909,7 @@ async function startServer() {
     res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
-  app.post("/api/vision/siac", wrap(async (req: any, res: any) => {
+  app.post("/api/vision/siac", ocrLimiter, wrap(async (req: any, res: any) => {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
@@ -787,7 +918,7 @@ async function startServer() {
     res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason });
   }));
 
-  app.post("/api/vision/comprobante", wrap(async (req: any, res: any) => {
+  app.post("/api/vision/comprobante", ocrLimiter, wrap(async (req: any, res: any) => {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });

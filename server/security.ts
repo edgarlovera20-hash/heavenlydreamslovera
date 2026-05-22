@@ -1,0 +1,126 @@
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
+import type { Request, Response, NextFunction } from 'express';
+import { AuditLog, Sessions, Users } from './db';
+
+const ACCESS_TTL_MS = 15 * 60 * 1000;
+const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-heavenly-dreams-change-me';
+const ISSUER = 'heavenly-dreams-crm';
+
+export type AppRole = 'GERENTE' | 'SUPERVISOR' | 'ASESOR';
+
+function b64url(input: Buffer | string) {
+  return Buffer.from(input).toString('base64url');
+}
+
+function sign(data: string) {
+  return createHmac('sha256', JWT_SECRET).update(data).digest('base64url');
+}
+
+function safeEqual(a: string, b: string) {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+export function createAccessToken(user: any) {
+  const now = Date.now();
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = b64url(JSON.stringify({
+    iss: ISSUER,
+    sub: user.uid,
+    role: user.role,
+    name: user.nombre,
+    iat: Math.floor(now / 1000),
+    exp: Math.floor((now + ACCESS_TTL_MS) / 1000),
+  }));
+  const unsigned = `${header}.${payload}`;
+  return `${unsigned}.${sign(unsigned)}`;
+}
+
+export function verifyAccessToken(token: string) {
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('Token inválido');
+  const unsigned = `${parts[0]}.${parts[1]}`;
+  if (!safeEqual(sign(unsigned), parts[2])) throw new Error('Firma inválida');
+  const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  if (payload.iss !== ISSUER) throw new Error('Issuer inválido');
+  if (!payload.exp || payload.exp * 1000 < Date.now()) throw new Error('Token expirado');
+  return payload;
+}
+
+export function issueSession(user: any, req?: Request) {
+  const refreshToken = `${randomUUID()}.${randomBytes(32).toString('base64url')}`;
+  const expiresAt = new Date(Date.now() + REFRESH_TTL_MS).toISOString();
+  Sessions.create({
+    id: randomUUID(),
+    user_id: user.uid,
+    refresh_token: refreshToken,
+    expires_at: expiresAt,
+    ip: req?.ip || null,
+    user_agent: req?.headers['user-agent'] || null,
+  });
+  return {
+    accessToken: createAccessToken(user),
+    refreshToken,
+    expiresIn: Math.floor(ACCESS_TTL_MS / 1000),
+  };
+}
+
+export function rotateRefreshToken(refreshToken: string, req?: Request) {
+  const session = Sessions.getByRefreshToken(refreshToken) as any;
+  if (!session || session.revoked_at) throw new Error('Sesión inválida');
+  if (new Date(session.expires_at).getTime() < Date.now()) throw new Error('Sesión expirada');
+  Sessions.revoke(refreshToken);
+  const user = Users.getById(session.user_id) as any;
+  if (!user || user.activo !== 1) throw new Error('Usuario inactivo');
+  AuditLog.insert({
+    accion: 'REFRESH_TOKEN_ROTATED',
+    entidad: 'sessions',
+    entidad_id: session.id,
+    user_id: user.uid,
+    user_nombre: user.nombre,
+    detalle: null,
+  });
+  return { user, session: issueSession(user, req) };
+}
+
+export function authenticate(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) return res.status(401).json({ error: 'Token requerido' });
+  try {
+    (req as any).auth = verifyAccessToken(token);
+    next();
+  } catch (err: any) {
+    res.status(401).json({ error: err.message || 'Token inválido' });
+  }
+}
+
+export function requireRole(...roles: AppRole[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    authenticate(req, res, () => {
+      const role = (req as any).auth?.role;
+      if (!roles.includes(role)) return res.status(403).json({ error: 'Permisos insuficientes' });
+      next();
+    });
+  };
+}
+
+export function rateLimit(name: string, limit: number, windowMs: number) {
+  const hits = new Map<string, { count: number; resetAt: number }>();
+  return (req: Request, res: Response, next: NextFunction) => {
+    const key = `${name}:${req.ip}`;
+    const now = Date.now();
+    const current = hits.get(key);
+    if (!current || current.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    current.count += 1;
+    if (current.count > limit) {
+      return res.status(429).json({ error: 'Demasiadas solicitudes, intenta más tarde.' });
+    }
+    next();
+  };
+}

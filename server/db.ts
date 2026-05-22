@@ -248,6 +248,78 @@ db.exec(`
     activo      INTEGER DEFAULT 1,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- Sesiones con refresh-token rotativo
+  CREATE TABLE IF NOT EXISTS sessions (
+    id            TEXT PRIMARY KEY,
+    user_id       TEXT NOT NULL,
+    refresh_token TEXT UNIQUE NOT NULL,
+    expires_at    TEXT NOT NULL,
+    revoked_at    TEXT,
+    ip            TEXT,
+    user_agent    TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE
+  );
+
+  -- Inventario empresarial: modems, SIMs, uniformes y activos
+  CREATE TABLE IF NOT EXISTS inventory_items (
+    id            TEXT PRIMARY KEY,
+    sku           TEXT,
+    tipo          TEXT NOT NULL,
+    nombre        TEXT NOT NULL,
+    serial        TEXT,
+    estado        TEXT NOT NULL DEFAULT 'disponible',
+    assigned_to   TEXT,
+    sale_id       TEXT,
+    notes         TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Eventos del sistema para automatizaciones y trazabilidad
+  CREATE TABLE IF NOT EXISTS system_events (
+    id          TEXT PRIMARY KEY,
+    event       TEXT NOT NULL,
+    payload     TEXT,
+    actor_id    TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Cola durable local para trabajos IA; Redis/BullMQ puede reemplazar el transport
+  CREATE TABLE IF NOT EXISTS ai_jobs (
+    id          TEXT PRIMARY KEY,
+    type        TEXT NOT NULL,
+    payload     TEXT,
+    status      TEXT NOT NULL DEFAULT 'queued',
+    priority    INTEGER DEFAULT 5,
+    attempts    INTEGER DEFAULT 0,
+    result      TEXT,
+    error       TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Reglas de automatización accionadas por eventos
+  CREATE TABLE IF NOT EXISTS automation_rules (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    event       TEXT NOT NULL,
+    conditions  TEXT,
+    actions     TEXT NOT NULL,
+    enabled     INTEGER DEFAULT 1,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Métricas/KPIs capturados por módulos y workers
+  CREATE TABLE IF NOT EXISTS metrics (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    value       REAL NOT NULL DEFAULT 1,
+    tags        TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // ─── INDEXES ──────────────────────────────────────────────────────────────────
@@ -267,6 +339,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_referrals_by     ON referrals (referred_by);
   CREATE INDEX IF NOT EXISTS idx_valreq_sale      ON validation_requests (sale_id);
   CREATE INDEX IF NOT EXISTS idx_valreq_status    ON validation_requests (status);
+  CREATE INDEX IF NOT EXISTS idx_sessions_token   ON sessions (refresh_token);
+  CREATE INDEX IF NOT EXISTS idx_inventory_estado ON inventory_items (estado);
+  CREATE INDEX IF NOT EXISTS idx_events_name      ON system_events (event, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ai_jobs_status   ON ai_jobs (status, priority, created_at);
+  CREATE INDEX IF NOT EXISTS idx_metrics_name     ON metrics (name, created_at DESC);
 `);
 
 // Seed admin user if no users exist
@@ -284,13 +361,13 @@ export default db;
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 export const Users = {
-  getAll: () => db.prepare('SELECT * FROM users WHERE activo=1 ORDER BY nombre').all(),
+  getAll: () => db.prepare('SELECT * FROM users ORDER BY nombre').all(),
   getById: (uid: string) => db.prepare('SELECT * FROM users WHERE uid=?').get(uid),
   getByUsername: (username: string) => db.prepare('SELECT * FROM users WHERE username=?').get(username),
   create: (data: any) => {
     const stmt = db.prepare(`
       INSERT INTO users (uid,nombre,email,username,role,password,zona,puesto,activo)
-      VALUES (@uid,@nombre,@email,@username,@role,@password,@zona,@puesto,1)
+      VALUES (@uid,@nombre,@email,@username,@role,@password,@zona,@puesto,@activo)
     `);
     return stmt.run(data);
   },
@@ -478,4 +555,65 @@ export const Announcements = {
     VALUES (@id,@titulo,@contenido,@tipo,@autor_id)
   `).run(data),
   delete: (id: string) => db.prepare('UPDATE announcements SET activo=0 WHERE id=?').run(id),
+};
+
+export const Sessions = {
+  create: (data: any) => db.prepare(`
+    INSERT INTO sessions (id,user_id,refresh_token,expires_at,ip,user_agent)
+    VALUES (@id,@user_id,@refresh_token,@expires_at,@ip,@user_agent)
+  `).run(data),
+  getByRefreshToken: (token: string) => db.prepare('SELECT * FROM sessions WHERE refresh_token=?').get(token),
+  revoke: (token: string) => db.prepare("UPDATE sessions SET revoked_at=datetime('now') WHERE refresh_token=?").run(token),
+};
+
+export const InventoryItems = {
+  getAll: () => db.prepare('SELECT * FROM inventory_items ORDER BY created_at DESC').all(),
+  getById: (id: string) => db.prepare('SELECT * FROM inventory_items WHERE id=?').get(id),
+  create: (data: any) => db.prepare(`
+    INSERT INTO inventory_items (id,sku,tipo,nombre,serial,estado,assigned_to,sale_id,notes)
+    VALUES (@id,@sku,@tipo,@nombre,@serial,@estado,@assigned_to,@sale_id,@notes)
+  `).run(data),
+  update: (id: string, data: any) => {
+    const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
+    return db.prepare(`UPDATE inventory_items SET ${fields},updated_at=datetime('now') WHERE id=@id`).run({ ...data, id });
+  },
+  delete: (id: string) => db.prepare('DELETE FROM inventory_items WHERE id=?').run(id),
+};
+
+export const AiJobs = {
+  getAll: () => db.prepare('SELECT * FROM ai_jobs ORDER BY created_at DESC LIMIT 200').all(),
+  create: (data: any) => db.prepare(`
+    INSERT INTO ai_jobs (id,type,payload,status,priority,attempts,result,error)
+    VALUES (@id,@type,@payload,@status,@priority,@attempts,@result,@error)
+  `).run(data),
+  next: () => db.prepare(`
+    SELECT * FROM ai_jobs WHERE status='queued' ORDER BY priority ASC, created_at ASC LIMIT 1
+  `).get(),
+  update: (id: string, data: any) => {
+    const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
+    return db.prepare(`UPDATE ai_jobs SET ${fields},updated_at=datetime('now') WHERE id=@id`).run({ ...data, id });
+  },
+};
+
+export const AutomationRules = {
+  getAll: () => db.prepare('SELECT * FROM automation_rules ORDER BY created_at DESC').all(),
+  getEnabledByEvent: (event: string) => db.prepare(
+    'SELECT * FROM automation_rules WHERE enabled=1 AND event=? ORDER BY created_at DESC'
+  ).all(event),
+  create: (data: any) => db.prepare(`
+    INSERT INTO automation_rules (id,name,event,conditions,actions,enabled)
+    VALUES (@id,@name,@event,@conditions,@actions,@enabled)
+  `).run(data),
+  update: (id: string, data: any) => {
+    const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
+    return db.prepare(`UPDATE automation_rules SET ${fields},updated_at=datetime('now') WHERE id=@id`).run({ ...data, id });
+  },
+  delete: (id: string) => db.prepare('DELETE FROM automation_rules WHERE id=?').run(id),
+};
+
+export const Metrics = {
+  getRecent: (limit = 200) => db.prepare('SELECT * FROM metrics ORDER BY created_at DESC LIMIT ?').all(limit),
+  insert: (data: any) => db.prepare(`
+    INSERT INTO metrics (id,name,value,tags) VALUES (@id,@name,@value,@tags)
+  `).run(data),
 };

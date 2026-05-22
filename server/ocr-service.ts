@@ -1,9 +1,10 @@
 /**
  * OCR multi-proveedor con fallback en cascada:
- *   1. Gemini 1.5 Pro (Google) — potente, ~3-5s, requiere GEMINI_API_KEY
- *   2. GPT-4o-mini (OpenAI)    — rápido, ~3-5s, requiere OPENAI_API_KEY
- *   3. Ollama (local/remoto)   — flexible, ~5-10s, requiere OLLAMA_URL
- *   4. Tesseract.js            — fallback offline, ~5-10s, sin red ni API key
+ *   1. Claude (Anthropic)      — primario empresarial, requiere ANTHROPIC_API_KEY
+ *   2. Gemini (Google)         — respaldo, requiere GEMINI_API_KEY
+ *   3. GPT-4o-mini (OpenAI)    — respaldo, requiere OPENAI_API_KEY
+ *   4. Ollama (local/remoto)   — flexible, requiere OLLAMA_URL
+ *   5. Tesseract.js            — fallback offline, sin red ni API key
  *
  * Si los cuatro fallan, lanza error.
  *
@@ -12,7 +13,8 @@
  *   OPENAI_API_KEY     — clave para GPT-4o-mini
  *   OLLAMA_URL         — URL del servidor Ollama (ej: http://localhost:11434)
  *   OLLAMA_API_KEY     — opcional, clave de autenticación para Ollama
- *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'gemini' | 'openai' | 'ollama' | 'tesseract'
+ *   ANTHROPIC_API_KEY  — clave para Claude
+ *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'claude' | 'gemini' | 'openai' | 'ollama' | 'tesseract'
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -20,18 +22,20 @@ import { runTesseractIne, runTesseractComprobante, runTesseractSiac } from './oc
 
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY || '';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OLLAMA_URL        = process.env.OLLAMA_URL || '';
 const OLLAMA_API_KEY    = process.env.OLLAMA_API_KEY || '';
 const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'gemini').toLowerCase();
 
 const GEMINI_MODEL    = 'gemini-2.5-flash';
 const OPENAI_MODEL    = 'gpt-4o-mini';
+const CLAUDE_MODEL    = process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-latest';
 const OLLAMA_MODEL    = 'glm-ocr';
 
 const TIMEOUT_MS_LLM       = 45_000;  // 45s para GPT/Claude
 const TIMEOUT_MS_TESSERACT = 60_000;  // 60s para tesseract local
 
-export type OcrProvider = 'gemini' | 'openai' | 'ollama' | 'tesseract';
+export type OcrProvider = 'claude' | 'gemini' | 'openai' | 'ollama' | 'tesseract';
 export type OcrDocType  = 'ine' | 'comprobante' | 'siac';
 
 export interface OcrResult {
@@ -217,6 +221,49 @@ function validateFields(docType: OcrDocType, fields: Record<string, string>): { 
 
 // ─── PROVIDER 1: GPT-4o-mini ─────────────────────────────────────────────────
 
+async function callClaude(prompt: string, base64Images: string[]): Promise<string> {
+  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY no configurada');
+
+  const imageBlocks = base64Images.map(b64 => ({
+    type: 'image' as const,
+    source: {
+      type: 'base64' as const,
+      media_type: detectMediaType(b64),
+      data: stripDataUrl(b64),
+    },
+  }));
+
+  const res = await withTimeout(
+    fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 2000,
+        temperature: 0,
+        messages: [{
+          role: 'user',
+          content: [{ type: 'text', text: prompt }, ...imageBlocks],
+        }],
+      }),
+    }),
+    TIMEOUT_MS_LLM,
+    'Claude'
+  );
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Claude ${res.status}: ${body.slice(0, 200)}`);
+  }
+
+  const data = await res.json() as any;
+  return data?.content?.[0]?.text || '';
+}
+
 async function callOpenAi(prompt: string, base64Images: string[]): Promise<string> {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY no configurada');
 
@@ -369,16 +416,26 @@ async function callTesseract(docType: OcrDocType, base64Images: string[]): Promi
 
 const PROVIDER_ORDER: OcrProvider[] = (() => {
   // Permite forzar el orden vía OCR_PRIMARY
-  const all: OcrProvider[] = ['gemini', 'openai', 'ollama', 'tesseract'];
-  if (OCR_PRIMARY === 'openai') return ['openai', 'gemini', 'ollama', 'tesseract'];
-  if (OCR_PRIMARY === 'ollama') return ['ollama', 'gemini', 'openai', 'tesseract'];
-  if (OCR_PRIMARY === 'tesseract') return ['tesseract', 'gemini', 'openai', 'ollama'];
-  return all; // default: gemini → openai → ollama → tesseract
+  const all: OcrProvider[] = ['claude', 'gemini', 'openai', 'ollama', 'tesseract'];
+  if (OCR_PRIMARY === 'gemini') return ['gemini', 'claude', 'openai', 'ollama', 'tesseract'];
+  if (OCR_PRIMARY === 'openai') return ['openai', 'claude', 'gemini', 'ollama', 'tesseract'];
+  if (OCR_PRIMARY === 'ollama') return ['ollama', 'claude', 'gemini', 'openai', 'tesseract'];
+  if (OCR_PRIMARY === 'tesseract') return ['tesseract', 'claude', 'gemini', 'openai', 'ollama'];
+  return all; // default: Claude → Gemini → OpenAI → Ollama → Tesseract
 })();
 
 async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: string[]): Promise<OcrResult> {
   const t0 = Date.now();
   const prompt = PROMPTS[docType];
+
+  if (provider === 'claude') {
+    const raw = await callClaude(prompt, images);
+    if (!raw) throw new Error('Claude devolvió respuesta vacía');
+    const fields = parseJsonResponse(raw);
+    const text = fields.rawText || raw;
+    delete fields.rawText;
+    return { text, fields, provider, model: CLAUDE_MODEL, durationMs: Date.now() - t0 };
+  }
 
   if (provider === 'gemini') {
     const raw = await callGemini(prompt, images);
@@ -419,6 +476,7 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
   const errors: string[] = [];
 
   for (const provider of PROVIDER_ORDER) {
+    if (provider === 'claude' && !ANTHROPIC_API_KEY) { errors.push('claude: sin API key'); continue; }
     if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin API key'); continue; }
     if (provider === 'openai' && !OPENAI_API_KEY) { errors.push('openai: sin API key'); continue; }
     if (provider === 'ollama' && !OLLAMA_URL) { errors.push('ollama: sin URL configurada'); continue; }
@@ -466,6 +524,7 @@ export async function checkOcrStatus() {
     primary: PROVIDER_ORDER[0],
     order: PROVIDER_ORDER,
     providers: {
+      claude:    { configured: !!ANTHROPIC_API_KEY, model: CLAUDE_MODEL },
       gemini:    { configured: !!GEMINI_API_KEY,   model: GEMINI_MODEL },
       openai:    { configured: !!OPENAI_API_KEY,    model: OPENAI_MODEL },
       ollama:    { configured: !!OLLAMA_URL,        model: OLLAMA_MODEL, url: OLLAMA_URL },

@@ -806,7 +806,7 @@ function SaleCard({
 }
 
 function DocCard({
-  doc, uploaded, analyzing, validation, onUpload,
+  doc, uploaded, analyzing, validation, onUpload, onDownload,
 }: {
   key?: React.Key | null;
   doc: DocumentDef;
