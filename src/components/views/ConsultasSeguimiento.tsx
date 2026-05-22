@@ -140,12 +140,20 @@ export default function ConsultasSeguimiento() {
     await fetchAll();
   };
 
+  const getDisplayId = (id: string | null) => {
+    if (!id) return '--';
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) hash = Math.imul(31, hash) + id.charCodeAt(i) | 0;
+    return (hash >>> 0).toString().slice(0, 6).padStart(6, '0');
+  };
+
   const handleExport = () => {
     if (filteredData.length === 0) return;
     const header = columnsConfig.map(c => `"${c.label}"`).join(',');
     const rows = filteredData.map(item => 
       columnsConfig.map(c => {
-        const val = (item as any)[c.id];
+        let val = (item as any)[c.id];
+        if (c.id === 'id') val = getDisplayId(val as string);
         return `"${val ? String(val).replace(/"/g, '""') : ''}"`;
       }).join(',')
     );
@@ -242,6 +250,7 @@ export default function ConsultasSeguimiento() {
   const tgUrl = chatUrl('telegramVendedores');
 
   const getCellValue = (item: SiacRecord, colId: string): string => {
+    if (colId === 'id') return getDisplayId(item.id);
     return (item as any)[colId] ?? '--';
   };
 

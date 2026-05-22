@@ -6,6 +6,7 @@ import {
   Calendar, CalendarDays, CalendarClock, ShieldCheck,
   ShieldAlert, Sparkles, Home,
 } from 'lucide-react';
+import { set, get } from 'idb-keyval';
 import { auth } from '../../lib/firebase';
 import { aiAgent } from '../../services/aiAgent';
 import { toast } from 'sonner';
@@ -310,18 +311,21 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
         return;
       }
 
-      // Persistir en localStorage
+      // Save base64 in IndexedDB for large media support
+      await set(`file_${target.saleId}_${target.docId}`, base64);
+
+      // Persistir solo bandera en localStorage
       persistSales(prev => prev.map(s => {
         if (s.id !== target.saleId) return s;
         const validations = { ...(s.docValidations || {}), [target.docId]: validation };
-        return { ...s, [target.docId]: base64, docValidations: validations };
+        return { ...s, [target.docId]: true, docValidations: validations };
       }));
 
       // Refrescar memoria local
       setSales(prev => prev.map(s => {
         if (s.id !== target.saleId) return s;
         const validations = { ...(s.docValidations || {}), [target.docId]: validation };
-        return { ...s, [target.docId]: base64, docValidations: validations };
+        return { ...s, [target.docId]: true, docValidations: validations };
       }));
 
       toast.success('Documento cargado y validado por la IA.');
@@ -572,6 +576,22 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
   }
 
   // ──────────── FOLIO → DETALLE DEL EXPEDIENTE ────────────
+  const handleDownloadDoc = async (saleId: string, docId: string, name: string) => {
+    try {
+      const base64 = await get(`file_${saleId}_${docId}`);
+      if (!base64) {
+        toast.error('El archivo no se encontró en la base de datos local.');
+        return;
+      }
+      const a = document.createElement('a');
+      a.href = base64;
+      a.download = `${name}_${saleId}`;
+      a.click();
+    } catch {
+      toast.error('Error al descargar el archivo.');
+    }
+  };
+
   if (path.level === 'folio' && path.folioId) {
     const sale = sales.find(s => s.id === path.folioId);
     if (!sale) {
@@ -685,6 +705,7 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
                 analyzing={analyzingDocId === doc.id}
                 validation={sale.docValidations?.[doc.id]}
                 onUpload={() => triggerUpload(sale.id!, doc.id as string, doc.type)}
+                onDownload={() => handleDownloadDoc(sale.id!, doc.id as string, doc.name)}
               />
             ))}
           </div>
@@ -793,6 +814,7 @@ function DocCard({
   analyzing: boolean;
   validation?: DocValidation;
   onUpload: () => void;
+  onDownload: () => void;
 }) {
   const getIcon = () => {
     if (doc.type === 'pdf') return <FileText className="w-5 h-5" />;
@@ -858,7 +880,10 @@ function DocCard({
           )}
         </button>
       ) : (
-        <button className="flex items-center justify-center w-8 h-8 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-400 transition-colors">
+        <button 
+          onClick={onDownload}
+          title="Descargar archivo"
+          className="flex items-center justify-center w-8 h-8 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-400 transition-colors">
           <Download className="w-4 h-4" />
         </button>
       )}
