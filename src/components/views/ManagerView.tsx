@@ -516,6 +516,8 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
               <ChatsView
                 onOpenSettings={() => setActiveSection('Ajustes')}
                 onOpenAgents={() => setActiveSection('Hub de Agentes')}
+                onStartCapture={() => setActiveSection('Captura y Validación')}
+                onOpenFolios={() => setActiveSection('Consulta y Seguimiento')}
               />
             )}
             {activeSection === 'Seguimiento de Clientes' && <CustomerFollowUpView />}

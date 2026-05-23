@@ -2,18 +2,25 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Bot,
+  Brain,
   CheckCircle2,
   Clock,
+  ClipboardCheck,
+  FileSearch,
   Hash,
   Loader2,
   MessageCircle,
   MessageSquare,
   Phone,
   RefreshCw,
+  Save,
   Search,
   Send,
   Settings,
+  Sparkles,
+  UserPlus,
   WifiOff,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -42,6 +49,23 @@ interface ChannelStatus {
 interface ChatsViewProps {
   onOpenSettings?: () => void;
   onOpenAgents?: () => void;
+  onStartCapture?: () => void;
+  onOpenFolios?: () => void;
+}
+
+interface AgentStatus {
+  active: boolean;
+  lastRun: string | null;
+  processed: number;
+  errors: number;
+}
+
+interface BotMemory {
+  name: string;
+  personality: string;
+  selfKnowledge: string;
+  knowledgeBase: string;
+  learnedNotes: string[];
 }
 
 const CHANNELS: Array<{
@@ -66,6 +90,34 @@ const CHANNELS: Array<{
     tone: 'sky',
   },
 ];
+
+const MEMORY_KEY = 'hd_chats_agent_memory';
+
+const DEFAULT_MEMORY: BotMemory = {
+  name: 'Agente Heavenly',
+  personality: 'Cordial, claro, rapido y profesional. Saluda con confianza, pide datos concretos y no suena como robot generico.',
+  selfKnowledge: 'Soy el agente de Chats de Heavenly Dreams. Puedo saludar clientes, iniciar captura de nuevos clientes, consultar folios SIAC importantes y operar por WhatsApp o Telegram.',
+  knowledgeBase: 'Para nuevo cliente debo pedir nombre, telefono, direccion, plan y documentos. Para folios importantes debo pedir el folio y consultar el estatus.',
+  learnedNotes: [],
+};
+
+function loadBotMemory(): BotMemory {
+  try {
+    const saved = localStorage.getItem(MEMORY_KEY);
+    return saved ? { ...DEFAULT_MEMORY, ...JSON.parse(saved) } : DEFAULT_MEMORY;
+  } catch {
+    return DEFAULT_MEMORY;
+  }
+}
+
+function persistBotMemory(memory: BotMemory) {
+  localStorage.setItem(MEMORY_KEY, JSON.stringify(memory));
+}
+
+function buildGreeting(memory: BotMemory) {
+  const learned = memory.learnedNotes.slice(0, 2).map(note => `Aprendi: ${note}`).join(' ');
+  return `Hola, soy ${memory.name}, agente virtual de Heavenly Dreams. ${memory.selfKnowledge} Puedo ayudarte a iniciar la captura de un nuevo cliente o consultar folios importantes. ${memory.knowledgeBase} ${learned}`.trim();
+}
 
 function formatTime(timestamp: number) {
   if (!timestamp) return '--:--';
@@ -108,28 +160,34 @@ function isReady(channel: ChatChannel, status?: string) {
   return channel === 'whatsapp' ? status === 'connected' : status === 'polling';
 }
 
-export default function ChatsView({ onOpenSettings, onOpenAgents }: ChatsViewProps) {
+export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture, onOpenFolios }: ChatsViewProps) {
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('whatsapp');
   const [messages, setMessages] = useState<ChannelMessage[]>([]);
   const [whatsAppStatus, setWhatsAppStatus] = useState<ChannelStatus>({});
   const [telegramStatus, setTelegramStatus] = useState<ChannelStatus>({});
+  const [agents, setAgents] = useState<Record<string, AgentStatus>>({});
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [agentBusy, setAgentBusy] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState('');
   const [target, setTarget] = useState('');
-  const [message, setMessage] = useState('');
+  const [memory, setMemory] = useState<BotMemory>(() => loadBotMemory());
+  const [learningInput, setLearningInput] = useState('');
+  const [message, setMessage] = useState(() => buildGreeting(loadBotMemory()));
   const [lastSync, setLastSync] = useState<number | null>(null);
 
   const loadMessages = useCallback(async () => {
     try {
-      const [waStatusRes, tgStatusRes, messagesRes] = await Promise.all([
+      const [waStatusRes, tgStatusRes, messagesRes, agentsRes] = await Promise.all([
         fetch('/api/whatsapp/status'),
         fetch('/api/telegram/status'),
         fetch('/api/channels/messages'),
+        fetch('/api/agents/status').catch(() => null),
       ]);
 
       if (waStatusRes.ok) setWhatsAppStatus(await waStatusRes.json());
       if (tgStatusRes.ok) setTelegramStatus(await tgStatusRes.json());
+      if (agentsRes?.ok) setAgents(await agentsRes.json());
       if (messagesRes.ok) {
         const data = await messagesRes.json();
         setMessages(Array.isArray(data) ? data : []);
@@ -147,6 +205,21 @@ export default function ChatsView({ onOpenSettings, onOpenAgents }: ChatsViewPro
     const timer = window.setInterval(loadMessages, 3500);
     return () => window.clearInterval(timer);
   }, [loadMessages]);
+
+  useEffect(() => {
+    if (messages.length === 0) return;
+    setMemory(current => {
+      const learned = messages
+        .filter(msg => msg.direction !== 'outgoing')
+        .map(msg => msg.body.trim())
+        .filter(body => body.length >= 18 && !current.learnedNotes.includes(body))
+        .slice(0, 2);
+      if (learned.length === 0) return current;
+      const next = { ...current, learnedNotes: [...learned, ...current.learnedNotes].slice(0, 30) };
+      persistBotMemory(next);
+      return next;
+    });
+  }, [messages]);
 
   const activeStatus = activeChannel === 'whatsapp' ? whatsAppStatus : telegramStatus;
   const isChannelReady = isReady(activeChannel, activeStatus.status);
@@ -231,6 +304,45 @@ export default function ChatsView({ onOpenSettings, onOpenAgents }: ChatsViewPro
       };
   const ConnectorIcon = connectorAction.icon;
   const activeStats = channelStats[activeChannel];
+  const flowReady = Boolean(agents.capturista?.active && agents.consultor?.active);
+
+  const saveMemory = (nextMemory = memory) => {
+    persistBotMemory(nextMemory);
+    setMessage(buildGreeting(nextMemory));
+    toast.success('Memoria del agente guardada.');
+  };
+
+  const addLearning = () => {
+    const note = learningInput.trim();
+    if (!note) {
+      toast.error('Escribe que debe aprender el agente.');
+      return;
+    }
+    const nextMemory = {
+      ...memory,
+      learnedNotes: [note, ...memory.learnedNotes.filter(item => item !== note)].slice(0, 30),
+    };
+    setMemory(nextMemory);
+    setLearningInput('');
+    saveMemory(nextMemory);
+  };
+
+  const toggleAgent = async (agent: 'capturista' | 'consultor') => {
+    setAgentBusy(state => ({ ...state, [agent]: true }));
+    try {
+      const res = await fetch(`/api/agents/${agent}/toggle`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'No se pudo actualizar el agente.');
+      }
+      await loadMessages();
+      toast.success(agent === 'capturista' ? 'Agente capturista actualizado.' : 'Agente consultor de folios actualizado.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo actualizar el agente.');
+    } finally {
+      setAgentBusy(state => ({ ...state, [agent]: false }));
+    }
+  };
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-4">
@@ -307,6 +419,137 @@ export default function ChatsView({ onOpenSettings, onOpenAgents }: ChatsViewPro
           );
         })}
       </div>
+
+      <section className="rounded-2xl border border-cyan-400/25 bg-slate-950/75 p-4 shadow-[0_0_32px_rgba(34,211,238,0.08)]">
+        <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_430px]">
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10">
+                  <Bot className="h-6 w-6 text-cyan-300" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Agente de bienvenida</p>
+                    <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${flowReady ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-yellow-400/30 bg-yellow-400/10 text-yellow-200'}`}>
+                      {flowReady ? 'Memoria y flujo activos' : 'Configurar flujo'}
+                    </span>
+                  </div>
+                  <h2 className="mt-1 text-2xl font-black text-white">{memory.name}</h2>
+                  <p className="mt-2 max-w-4xl text-sm leading-relaxed text-slate-400">
+                    Saluda, se presenta para ayudar, aprende con el tiempo, recuerda instrucciones y desde aqui inicia captura de cliente o consulta folios importantes.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenAgents}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-400/30 bg-purple-400/10 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-purple-100 transition-colors hover:bg-purple-400/20"
+              >
+                <Sparkles className="h-4 w-4" />
+                Hub de Agentes
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <AgentAction icon={UserPlus} title="Iniciar captura" desc="Abrir alta de cliente" onClick={onStartCapture} />
+              <AgentAction icon={FileSearch} title="Consultar folios" desc="Revisar folios importantes" onClick={onOpenFolios} />
+              <AgentToggle
+                icon={ClipboardCheck}
+                title="Captura automatica"
+                desc="Lee Nombre, Tel y Plan"
+                active={Boolean(agents.capturista?.active)}
+                loading={agentBusy.capturista}
+                onClick={() => toggleAgent('capturista')}
+              />
+              <AgentToggle
+                icon={Search}
+                title="Consulta SIAC"
+                desc="Responde folio 123456"
+                active={Boolean(agents.consultor?.active)}
+                loading={agentBusy.consultor}
+                onClick={() => toggleAgent('consultor')}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-purple-400/20 bg-purple-400/5 p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-purple-300">Personalidad y memoria</p>
+                <p className="text-xs text-slate-400">Se guarda y no se cierra al cambiar de seccion.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => saveMemory()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-purple-400/30 bg-purple-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-100 hover:bg-purple-400/20"
+              >
+                <Save className="h-3.5 w-3.5" />
+                Guardar
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <input
+                value={memory.name}
+                onChange={event => setMemory(state => ({ ...state, name: event.target.value }))}
+                aria-label="Nombre del agente"
+                className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-purple-400/60"
+              />
+              <MiniTextArea label="Personalidad" value={memory.personality} onChange={value => setMemory(state => ({ ...state, personality: value }))} />
+              <MiniTextArea label="Autoconocimiento" value={memory.selfKnowledge} onChange={value => setMemory(state => ({ ...state, selfKnowledge: value }))} />
+              <MiniTextArea label="Conocimiento base" value={memory.knowledgeBase} onChange={value => setMemory(state => ({ ...state, knowledgeBase: value }))} />
+
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Nuevo aprendizaje</label>
+                <textarea
+                  value={learningInput}
+                  onChange={event => setLearningInput(event.target.value)}
+                  placeholder="Ej. Si pregunta por instalacion, pedir folio y colonia antes de transferir."
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-white/10 bg-slate-950/80 p-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-purple-400/60"
+                />
+                <button
+                  type="button"
+                  onClick={addLearning}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-purple-400 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-slate-950 transition-colors hover:bg-purple-300"
+                >
+                  <Brain className="h-4 w-4" />
+                  Aprender con el tiempo
+                </button>
+              </div>
+
+              <div className="max-h-44 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                {memory.learnedNotes.length === 0 ? (
+                  <p className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-500">
+                    Sin aprendizajes todavia. El bot puede aprender de mensajes recibidos y de reglas que guardes aqui.
+                  </p>
+                ) : (
+                  memory.learnedNotes.map((note, index) => (
+                    <div key={`${note}-${index}`} className="rounded-xl border border-purple-400/15 bg-black/20 p-3">
+                      <div className="flex items-start gap-2">
+                        <span className="mt-0.5 text-[10px] font-black text-purple-300">{index + 1}</span>
+                        <p className="min-w-0 flex-1 text-xs leading-relaxed text-slate-300">{note}</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = { ...memory, learnedNotes: memory.learnedNotes.filter((_, i) => i !== index) };
+                            setMemory(next);
+                            saveMemory(next);
+                          }}
+                          className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-rose-300"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
         <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
@@ -485,5 +728,62 @@ export default function ChatsView({ onOpenSettings, onOpenAgents }: ChatsViewPro
         </section>
       </div>
     </div>
+  );
+}
+
+function MiniTextArea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</span>
+      <textarea
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        rows={3}
+        className="w-full resize-none rounded-xl border border-white/10 bg-slate-950/80 p-3 text-xs text-white outline-none transition-colors focus:border-purple-400/60"
+      />
+    </label>
+  );
+}
+
+function AgentAction({ icon: Icon, title, desc, onClick }: { icon: LucideIcon; title: string; desc: string; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className="flex min-h-[92px] items-center gap-3 rounded-xl border border-cyan-400/25 bg-cyan-400/10 p-3 text-left transition-colors hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10">
+        <Icon className="h-5 w-5 text-cyan-200" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-black text-white">{title}</p>
+        <p className="mt-0.5 text-xs leading-snug text-slate-400">{desc}</p>
+      </div>
+    </button>
+  );
+}
+
+function AgentToggle({ icon: Icon, title, desc, active, loading, onClick }: { icon: LucideIcon; title: string; desc: string; active: boolean; loading?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className={`flex min-h-[92px] items-center gap-3 rounded-xl border p-3 text-left transition-colors disabled:cursor-wait disabled:opacity-60 ${
+        active
+          ? 'border-emerald-400/30 bg-emerald-400/10'
+          : 'border-white/10 bg-black/20 hover:border-slate-600'
+      }`}
+    >
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${active ? 'border-emerald-400/30 bg-emerald-400/10' : 'border-white/10 bg-slate-950/80'}`}>
+        {active ? <CheckCircle2 className="h-5 w-5 text-emerald-300" /> : <Icon className="h-5 w-5 text-slate-400" />}
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-black text-white">{title}</p>
+        <p className="mt-0.5 text-xs leading-snug text-slate-400">{desc}</p>
+      </div>
+      <Zap className={`ml-auto h-4 w-4 shrink-0 ${active ? 'text-emerald-300' : 'text-slate-600'}`} />
+    </button>
   );
 }
