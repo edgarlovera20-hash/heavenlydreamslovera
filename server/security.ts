@@ -14,6 +14,11 @@ if (process.env.NODE_ENV === 'production' && JWT_SECRET === DEFAULT_JWT_SECRET) 
 
 export type AppRole = 'GERENTE' | 'SUPERVISOR' | 'ASESOR';
 
+type SessionOptions = {
+  webAuthnVerified?: boolean;
+  webAuthnEnrollmentRequired?: boolean;
+};
+
 function b64url(input: Buffer | string) {
   return Buffer.from(input).toString('base64url');
 }
@@ -28,7 +33,7 @@ function safeEqual(a: string, b: string) {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
-export function createAccessToken(user: any) {
+export function createAccessToken(user: any, options: SessionOptions = {}) {
   const now = Date.now();
   const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const payload = b64url(JSON.stringify({
@@ -36,6 +41,8 @@ export function createAccessToken(user: any) {
     sub: user.uid,
     role: user.role,
     name: user.nombre,
+    webAuthnVerified: options.webAuthnVerified === true,
+    webAuthnEnrollmentRequired: options.webAuthnEnrollmentRequired === true,
     iat: Math.floor(now / 1000),
     exp: Math.floor((now + ACCESS_TTL_MS) / 1000),
   }));
@@ -61,9 +68,11 @@ export function getBearerAuth(req: Request) {
   return verifyAccessToken(token);
 }
 
-export function issueSession(user: any, req?: Request) {
+export function issueSession(user: any, req?: Request, options: SessionOptions = {}) {
   const refreshToken = `${randomUUID()}.${randomBytes(32).toString('base64url')}`;
   const expiresAt = new Date(Date.now() + REFRESH_TTL_MS).toISOString();
+  const webAuthnVerified = options.webAuthnVerified === true;
+  const webAuthnEnrollmentRequired = options.webAuthnEnrollmentRequired === true;
   Sessions.create({
     id: randomUUID(),
     user_id: user.uid,
@@ -71,11 +80,15 @@ export function issueSession(user: any, req?: Request) {
     expires_at: expiresAt,
     ip: req?.ip || null,
     user_agent: req?.headers['user-agent'] || null,
+    webauthn_verified: webAuthnVerified ? 1 : 0,
+    webauthn_enrollment_required: webAuthnEnrollmentRequired ? 1 : 0,
   });
   return {
-    accessToken: createAccessToken(user),
+    accessToken: createAccessToken(user, { webAuthnVerified, webAuthnEnrollmentRequired }),
     refreshToken,
     expiresIn: Math.floor(ACCESS_TTL_MS / 1000),
+    webAuthnVerified,
+    webAuthnEnrollmentRequired,
   };
 }
 
@@ -94,7 +107,22 @@ export function rotateRefreshToken(refreshToken: string, req?: Request) {
     user_nombre: user.nombre,
     detalle: null,
   });
-  return { user, session: issueSession(user, req) };
+  return {
+    user,
+    session: issueSession(user, req, {
+      webAuthnVerified: session.webauthn_verified === 1,
+      webAuthnEnrollmentRequired: session.webauthn_enrollment_required === 1,
+    }),
+  };
+}
+
+function allowsPendingManagerPasskey(req: Request) {
+  return [
+    '/api/webauthn/register/options',
+    '/api/webauthn/register/verify',
+    '/api/auth/logout',
+    '/api/auth/refresh',
+  ].includes(req.path);
 }
 
 export function authenticate(req: Request, res: Response, next: NextFunction) {
@@ -102,7 +130,14 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   if (!token) return res.status(401).json({ error: 'Token requerido' });
   try {
-    (req as any).auth = verifyAccessToken(token);
+    const auth = verifyAccessToken(token);
+    if (auth.role === 'GERENTE' && auth.webAuthnVerified !== true && !allowsPendingManagerPasskey(req)) {
+      return res.status(403).json({
+        error: 'Passkey requerida para completar el acceso de gerencia.',
+        code: 'WEBAUTHN_REQUIRED',
+      });
+    }
+    (req as any).auth = auth;
     next();
   } catch (err: any) {
     res.status(401).json({ error: err.message || 'Token inválido' });

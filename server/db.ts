@@ -258,6 +258,8 @@ db.exec(`
     revoked_at    TEXT,
     ip            TEXT,
     user_agent    TEXT,
+    webauthn_verified INTEGER NOT NULL DEFAULT 0,
+    webauthn_enrollment_required INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE
   );
@@ -346,6 +348,19 @@ db.exec(`
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
+
+function ensureColumn(table: string, name: string, definition: string) {
+  const cols = (db as any).prepare(`PRAGMA table_info(${table})`).all() as any[];
+  if (!cols.some((c: any) => c.name === name)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+    console.log(`[DB] Migracion: columna ${table}.${name} anadida`);
+  }
+}
+
+try {
+  ensureColumn('sessions', 'webauthn_verified', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('sessions', 'webauthn_enrollment_required', 'INTEGER NOT NULL DEFAULT 0');
+} catch (e) { console.warn('[DB] Migracion sessions omitida:', e); }
 
 // ─── INDEXES ──────────────────────────────────────────────────────────────────
 db.exec(`
@@ -596,8 +611,8 @@ export const Announcements = {
 
 export const Sessions = {
   create: (data: any) => db.prepare(`
-    INSERT INTO sessions (id,user_id,refresh_token,expires_at,ip,user_agent)
-    VALUES (@id,@user_id,@refresh_token,@expires_at,@ip,@user_agent)
+    INSERT INTO sessions (id,user_id,refresh_token,expires_at,ip,user_agent,webauthn_verified,webauthn_enrollment_required)
+    VALUES (@id,@user_id,@refresh_token,@expires_at,@ip,@user_agent,@webauthn_verified,@webauthn_enrollment_required)
   `).run(data),
   getByRefreshToken: (token: string) => db.prepare('SELECT * FROM sessions WHERE refresh_token=?').get(token),
   revoke: (token: string) => db.prepare("UPDATE sessions SET revoked_at=datetime('now') WHERE refresh_token=?").run(token),

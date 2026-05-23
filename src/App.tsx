@@ -20,6 +20,19 @@ function saveSession(user: any) { try { localStorage.setItem(SESSION_KEY, JSON.s
 function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch {} }
 function loadSession(): any | null { try { const s = localStorage.getItem(SESSION_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 
+function passkeyUnavailableMessage() {
+  return 'Este navegador no soporta passkeys. Abre la app en Chrome o Edge. En produccion usa HTTPS y un dominio, no IP directa.';
+}
+
+function friendlyPasskeyError(err: any) {
+  const raw = String(err?.message || err || '');
+  if (/not allowed|timed out|privacy-considerations|cancel/i.test(raw)) {
+    return 'El navegador cancelo la passkey o no permite WebAuthn aqui. Intenta en Chrome/Edge, con HTTPS y dominio valido.';
+  }
+  if (/secure|https|domain|IP directa|WEBAUTHN/i.test(raw)) return raw;
+  return raw || 'No se pudo completar la passkey.';
+}
+
 export default function App() {
   const [role, setRole] = useState<Role | null>(null);
   const [pendingRole, setPendingRole] = useState<Role | null>(null);
@@ -33,6 +46,7 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [passkeySupported, setPasskeySupported] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -49,6 +63,7 @@ export default function App() {
     if (session?.uid && session?.role) {
       setCurrentUser(session);
       setRole(session.role as Role);
+      setPasskeyEnrollmentRequired(session.role === 'GERENTE' && session.webAuthnVerified !== true);
       const av = localStorage.getItem(`hd_avatar_${session.uid}`);
       if (av) setAvatarUrl(av);
     } else {
@@ -56,9 +71,18 @@ export default function App() {
       const rem = loadRememberedUsername();
       if (rem) { setUsername(rem.username); setRememberMe(true); }
     }
-    if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+    const supportsWebAuthn = typeof window !== 'undefined' && Boolean(window.PublicKeyCredential) && window.isSecureContext;
+    setPasskeySupported(false);
+    if (supportsWebAuthn) {
       PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-        .then(setBiometricAvailable).catch(() => {});
+        .then((available) => {
+          setBiometricAvailable(available);
+          setPasskeySupported(available);
+        })
+        .catch(() => {
+          setBiometricAvailable(false);
+          setPasskeySupported(false);
+        });
     }
     setIsLoading(false);
   }, []);
@@ -112,6 +136,7 @@ export default function App() {
 
   const handleBiometricLogin = async (userIdOverride?: string) => {
     setError('');
+    if (!passkeySupported) { setError(passkeyUnavailableMessage()); return; }
     const targetUserId = userIdOverride || passkeyUserId || currentUser?.uid;
     if (!targetUserId && !username) { setError('Ingresa tu usuario para usar passkey.'); return; }
     try {
@@ -136,12 +161,13 @@ export default function App() {
       setPasskeyUserId(null);
       setPasskeyEnrollmentRequired(false);
     } catch (err: any) {
-      setError(err.message || 'Falló la autenticación biométrica.');
+      setError(friendlyPasskeyError(err));
     }
   };
 
   const handleRegisterPasskey = async () => {
     setError('');
+    if (!passkeySupported) { setError(passkeyUnavailableMessage()); return; }
     try {
       const optionsRes = await fetch('/api/webauthn/register/options', { method: 'POST' });
       const options = await optionsRes.json();
@@ -154,9 +180,19 @@ export default function App() {
       });
       const result = await verifyRes.json();
       if (!verifyRes.ok || !result.verified) { setError(result.error || 'No se pudo verificar la passkey.'); return; }
+      const verifiedSession = {
+        ...currentUser,
+        ...result,
+        displayName: result.nombre || currentUser?.displayName,
+        webAuthnVerified: true,
+        webAuthnEnrollmentRequired: false,
+      };
+      saveSession(verifiedSession);
+      setCurrentUser(verifiedSession);
+      setRole(verifiedSession.role as Role);
       setPasskeyEnrollmentRequired(false);
     } catch (err: any) {
-      setError(err.message || 'No se pudo registrar la passkey.');
+      setError(friendlyPasskeyError(err));
     }
   };
 
@@ -362,12 +398,26 @@ export default function App() {
             <p className="text-sm text-slate-300 mb-6">
               Las cuentas de gerencia deben registrar biometría/passkey verificada por el servidor antes de entrar al CRM.
             </p>
+            {!passkeySupported && (
+              <p className="text-xs text-yellow-200 border border-yellow-400/30 bg-yellow-400/10 rounded-lg p-3 mb-4">
+                Este navegador no soporta passkeys. Abre esta misma URL en Chrome o Edge. En servidor real usa HTTPS y dominio configurado.
+              </p>
+            )}
             {error && <p className="text-xs text-red-300 border border-red-500/30 bg-red-500/10 rounded-lg p-3 mb-4">{error}</p>}
+            {passkeySupported && currentUser?.uid && (
+              <button
+                onClick={() => handleBiometricLogin(currentUser.uid)}
+                className="w-full mb-3 py-3 rounded-xl border border-yellow-400/50 text-yellow-200 font-black uppercase tracking-widest flex items-center justify-center gap-2"
+              >
+                <Fingerprint className="w-4 h-4" /> Usar passkey existente
+              </button>
+            )}
             <button
               onClick={handleRegisterPasskey}
-              className="w-full py-4 rounded-xl bg-yellow-400 text-black font-black uppercase tracking-widest flex items-center justify-center gap-2"
+              disabled={!passkeySupported}
+              className="w-full py-4 rounded-xl bg-yellow-400 text-black font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Fingerprint className="w-4 h-4" /> Registrar passkey
+              <Fingerprint className="w-4 h-4" /> {passkeySupported ? 'Registrar passkey' : 'Passkey no disponible'}
             </button>
             <button
               onClick={handleLogout}

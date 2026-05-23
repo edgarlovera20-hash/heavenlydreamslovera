@@ -86,6 +86,7 @@ const ALLOWED_TABLES = [
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '20mb' }));
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
   const ocrLimiter = rateLimit('ocr', 40, 15 * 60 * 1000);
@@ -208,7 +209,9 @@ async function startServer() {
     if (user.role === 'GERENTE' && userHasPasskey(user.uid)) {
       return res.json({ requiresWebAuthn: true, webAuthnUserId: user.uid, nombre: user.nombre, role: user.role });
     }
-    const session = issueSession(user, req);
+    const session = issueSession(user, req, user.role === 'GERENTE'
+      ? { webAuthnVerified: false, webAuthnEnrollmentRequired: true }
+      : {});
     res.json({ ...safe, ...session, webAuthnEnrollmentRequired: user.role === 'GERENTE' });
   }));
 
