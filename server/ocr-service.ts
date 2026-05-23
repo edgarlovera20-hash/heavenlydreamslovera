@@ -13,6 +13,8 @@
  *   OPENAI_API_KEY     — clave para GPT-4o-mini
  *   OLLAMA_URL         — URL del servidor Ollama (ej: http://localhost:11434)
  *   OLLAMA_API_KEY     — opcional, clave de autenticación para Ollama
+ *   OLLAMA_MODEL       — modelo local/remoto para OCR visual (default: glm-ocr:latest)
+ *   OLLAMA_TIMEOUT_MS  — timeout para OCR Ollama (default: 135000)
  *   ANTHROPIC_API_KEY  — clave para Claude
  *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'claude' | 'gemini' | 'openai' | 'ollama' | 'tesseract'
  *   OCR_STRATEGY       — 'adaptive' | 'quality' | 'fast' | 'local'
@@ -26,7 +28,7 @@ import { runTesseractIne, runTesseractComprobante, runTesseractSiac } from './oc
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY || '';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-const OLLAMA_URL        = process.env.OLLAMA_URL || '';
+const OLLAMA_URL        = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
 const OLLAMA_API_KEY    = process.env.OLLAMA_API_KEY || '';
 const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'claude').toLowerCase();
 const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'adaptive').toLowerCase();
@@ -34,9 +36,15 @@ const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'adaptive').toLowerCase()
 const GEMINI_MODEL    = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const OPENAI_MODEL    = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const CLAUDE_MODEL    = process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-latest';
-const OLLAMA_MODEL    = process.env.OLLAMA_MODEL || 'glm-ocr';
+const OLLAMA_MODEL    = process.env.OLLAMA_MODEL || 'glm-ocr:latest';
 
-const TIMEOUT_MS_LLM       = 45_000;  // 45s para GPT/Claude
+function parsePositiveIntEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+const TIMEOUT_MS_LLM       = parsePositiveIntEnv('OCR_LLM_TIMEOUT_MS', 45_000);  // 45s para GPT/Claude
+const TIMEOUT_MS_OLLAMA    = parsePositiveIntEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM * 3);
 const TIMEOUT_MS_TESSERACT = 60_000;  // 60s para tesseract local
 const CACHE_TTL_MS         = 10 * 60 * 1000;
 const CACHE_MAX_ENTRIES    = 100;
@@ -199,6 +207,13 @@ function parseJsonResponse(raw: string): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+function modelTagMatches(availableModel: string, configuredModel: string): boolean {
+  if (availableModel === configuredModel) return true;
+  if (!configuredModel.includes(':') && availableModel === `${configuredModel}:latest`) return true;
+  if (!availableModel.includes(':') && configuredModel === `${availableModel}:latest`) return true;
+  return false;
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -495,9 +510,13 @@ async function callOllama(prompt: string, base64Images: string[]): Promise<strin
 
   const payload: any = {
     model: OLLAMA_MODEL,
-    prompt: prompt,
     stream: false,
-    images: imageBlocks,
+    format: 'json',
+    messages: [{
+      role: 'user',
+      content: prompt,
+      images: imageBlocks,
+    }],
     options: {
       temperature: 0.0,
       num_predict: 2000,
@@ -505,7 +524,7 @@ async function callOllama(prompt: string, base64Images: string[]): Promise<strin
   };
 
   const res = await withTimeout(
-    fetch(`${OLLAMA_URL}/api/generate`, {
+    fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -513,7 +532,7 @@ async function callOllama(prompt: string, base64Images: string[]): Promise<strin
       },
       body: JSON.stringify(payload),
     }),
-    TIMEOUT_MS_LLM * 3, // Ollama local puede tardar más en primera ejecución
+    TIMEOUT_MS_OLLAMA, // Ollama local puede tardar más en primera ejecución
     'Ollama'
   );
 
@@ -523,7 +542,76 @@ async function callOllama(prompt: string, base64Images: string[]): Promise<strin
   }
 
   const data = await res.json() as any;
-  return data?.response || '';
+  return data?.message?.content || data?.response || '';
+}
+
+async function checkOllamaHealth() {
+  if (!OLLAMA_URL) {
+    return {
+      configured: false,
+      reachable: false,
+      model: OLLAMA_MODEL,
+      url: OLLAMA_URL,
+      timeoutMs: TIMEOUT_MS_OLLAMA,
+      models: [] as string[],
+      hasModel: false,
+      error: 'OLLAMA_URL no configurada',
+    };
+  }
+
+  try {
+    const res = await withTimeout(
+      fetch(`${OLLAMA_URL}/api/tags`, {
+        method: 'GET',
+        headers: {
+          ...(OLLAMA_API_KEY && { 'Authorization': `Bearer ${OLLAMA_API_KEY}` }),
+        },
+      }),
+      Math.min(TIMEOUT_MS_OLLAMA, 10_000),
+      'Ollama health'
+    );
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return {
+        configured: true,
+        reachable: false,
+        model: OLLAMA_MODEL,
+        url: OLLAMA_URL,
+        timeoutMs: TIMEOUT_MS_OLLAMA,
+        models: [] as string[],
+        hasModel: false,
+        error: `Ollama ${res.status}: ${body.slice(0, 200)}`,
+      };
+    }
+
+    const data = await res.json() as any;
+    const models = Array.isArray(data?.models)
+      ? data.models
+          .map((item: any) => String(item?.name || item?.model || '').trim())
+          .filter(Boolean)
+      : [];
+    return {
+      configured: true,
+      reachable: true,
+      model: OLLAMA_MODEL,
+      url: OLLAMA_URL,
+      timeoutMs: TIMEOUT_MS_OLLAMA,
+      models,
+      hasModel: models.some(model => modelTagMatches(model, OLLAMA_MODEL)),
+    };
+  } catch (err: any) {
+    return {
+      configured: true,
+      reachable: false,
+      model: OLLAMA_MODEL,
+      url: OLLAMA_URL,
+      timeoutMs: TIMEOUT_MS_OLLAMA,
+      models: [] as string[],
+      hasModel: false,
+      error: err?.message || String(err),
+    };
+  }
 }
 
 // ─── PROVIDER 4: Tesseract.js (delegado a ocr-tesseract.ts) ──────────────────
@@ -737,6 +825,7 @@ export async function runSiacOcr(images: string | string[]): Promise<CachedOcrRe
 }
 
 export async function checkOcrStatus() {
+  const ollamaHealth = await checkOllamaHealth();
   const orders = {
     ine: providerOrderFor('ine'),
     comprobante: providerOrderFor('comprobante'),
@@ -756,7 +845,7 @@ export async function checkOcrStatus() {
       claude:    { configured: !!ANTHROPIC_API_KEY, model: CLAUDE_MODEL },
       gemini:    { configured: !!GEMINI_API_KEY,   model: GEMINI_MODEL },
       openai:    { configured: !!OPENAI_API_KEY,    model: OPENAI_MODEL },
-      ollama:    { configured: !!OLLAMA_URL,        model: OLLAMA_MODEL, url: OLLAMA_URL },
+      ollama:    ollamaHealth,
       tesseract: { configured: true,                model: 'tesseract-spa (local)' },
     },
   };
