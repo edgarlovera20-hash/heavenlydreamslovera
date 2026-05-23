@@ -291,9 +291,59 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-async function optimizeImageForOcr(file: File): Promise<string> {
+type OcrImagePreparation = {
+  dataUrl: string;
+  rotated: boolean;
+  sharpness: number;
+};
+
+function estimateImageSharpness(canvas: HTMLCanvasElement): number {
+  const sampleMaxSide = 360;
+  const ratio = Math.min(1, sampleMaxSide / Math.max(canvas.width, canvas.height));
+  const width = Math.max(24, Math.round(canvas.width * ratio));
+  const height = Math.max(24, Math.round(canvas.height * ratio));
+  const sample = document.createElement('canvas');
+  sample.width = width;
+  sample.height = height;
+  const ctx = sample.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return 0;
+  ctx.drawImage(canvas, 0, 0, width, height);
+  const { data } = ctx.getImageData(0, 0, width, height);
+  const gray = new Float32Array(width * height);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    gray[p] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+  }
+
+  let sum = 0;
+  let sumSq = 0;
+  let count = 0;
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = y * width + x;
+      const laplacian =
+        gray[idx - width] +
+        gray[idx - 1] -
+        gray[idx] * 4 +
+        gray[idx + 1] +
+        gray[idx + width];
+      sum += laplacian;
+      sumSq += laplacian * laplacian;
+      count++;
+    }
+  }
+  if (!count) return 0;
+  const mean = sum / count;
+  return sumSq / count - mean * mean;
+}
+
+async function optimizeImageForOcr(
+  file: File,
+  options: { autoRotateLandscape?: boolean; rejectBlurry?: boolean } = {}
+): Promise<OcrImagePreparation> {
   const raw = await readFileAsDataUrl(file);
-  if (!file.type.startsWith('image/')) return raw;
+  if (!file.type.startsWith('image/')) {
+    return { dataUrl: raw, rotated: false, sharpness: 0 };
+  }
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -301,20 +351,39 @@ async function optimizeImageForOcr(file: File): Promise<string> {
     img.src = raw;
   });
   const maxSide = 1600;
-  const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
-  const width = Math.max(1, Math.round(image.width * ratio));
-  const height = Math.max(1, Math.round(image.height * ratio));
+  const rotateToLandscape = Boolean(options.autoRotateLandscape && image.height > image.width * 1.12);
+  const sourceWidth = rotateToLandscape ? image.height : image.width;
+  const sourceHeight = rotateToLandscape ? image.width : image.height;
+  const ratio = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * ratio));
+  const height = Math.max(1, Math.round(sourceHeight * ratio));
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return raw;
+  if (!ctx) return { dataUrl: raw, rotated: false, sharpness: 0 };
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, width, height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL('image/jpeg', 0.82);
+  if (rotateToLandscape) {
+    ctx.translate(width / 2, height / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(image, -height / 2, -width / 2, height, width);
+  } else {
+    ctx.drawImage(image, 0, 0, width, height);
+  }
+
+  const sharpness = estimateImageSharpness(canvas);
+  if (options.rejectBlurry && sharpness < 28) {
+    throw new Error('La foto está borrosa. Toma otra más clara, con buena luz, sin movimiento y con el documento completo.');
+  }
+
+  return {
+    dataUrl: canvas.toDataURL('image/jpeg', 0.82),
+    rotated: rotateToLandscape,
+    sharpness,
+  };
 }
 
 async function rotateImageDataUrl(dataUrl: string): Promise<string> {
@@ -930,8 +999,8 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const handleComprobanteUpload = async (file: File | undefined) => {
     if (!file) return;
     try {
-      const base64 = await optimizeImageForOcr(file);
-      updateForm({ comprobanteDomicilio: base64 });
+      const prepared = await optimizeImageForOcr(file, { rejectBlurry: true });
+      updateForm({ comprobanteDomicilio: prepared.dataUrl });
       toast.info('Comprobante cargado. Presiona "Escanear comprobante" para autollenar el domicilio.', { duration: 4500 });
     } catch (err: any) {
       toast.error(err?.message || 'No se pudo leer el archivo.');
@@ -1071,15 +1140,21 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      const base64 = await optimizeImageForOcr(file);
+      const prepared = await optimizeImageForOcr(file, {
+        autoRotateLandscape: slot === 'frente' || slot === 'reverso',
+        rejectBlurry: true,
+      });
       if (slot === 'frente') {
-        updateForm({ ineFrente: base64 });
+        updateForm({ ineFrente: prepared.dataUrl });
       } else if (slot === 'reverso') {
-        updateForm({ ineReverso: base64 });
+        updateForm({ ineReverso: prepared.dataUrl });
       } else {
-        updateForm({ curpDoc: base64 });
+        updateForm({ curpDoc: prepared.dataUrl });
       }
       const fileKind = file.type === 'application/pdf' ? 'PDF' : 'archivo';
+      if (prepared.rotated) {
+        toast.success('La foto venía de lado y se acomodó automáticamente.', { duration: 3500 });
+      }
       toast.info(`${fileKind} cargado. Presiona "Iniciar auto escáner" para rellenar los datos.`, { duration: 4500 });
     } catch (err: any) {
       toast.error(err?.message || 'No se pudo leer el archivo.');
