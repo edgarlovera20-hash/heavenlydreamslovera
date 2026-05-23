@@ -2,11 +2,13 @@ export interface TgMessage {
   id: string;
   from: string;
   fromName: string;
+  to?: string;
   body: string;
   timestamp: number;
   chatId: number;
   isGroup: boolean;
   channel: 'telegram';
+  direction?: 'incoming' | 'outgoing';
 }
 
 type Status = 'disconnected' | 'polling' | 'error';
@@ -81,6 +83,7 @@ async function pollLoop(token: string, abort: AbortController) {
           chatId: msg.chat.id,
           isGroup: msg.chat.type !== 'private',
           channel: 'telegram',
+          direction: 'incoming',
         };
 
         messageBuffer.push(entry);
@@ -135,7 +138,21 @@ export function stopTelegram() {
 
 export async function sendTelegramMessage(chatId: number | string, text: string) {
   if (!botToken || status !== 'polling') throw new Error('Telegram no está conectado');
-  const r = await tgApi(botToken, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
+  const body = String(text || '').trim();
+  const r = await tgApi(botToken, 'sendMessage', { chat_id: chatId, text: body, parse_mode: 'HTML' });
   if (!r.ok) throw new Error(r.description || 'Error enviando mensaje');
+  messageBuffer.push({
+    id: String(r.result?.message_id || `sent-${chatId}-${Date.now()}`),
+    from: 'crm',
+    fromName: 'Heavenly Dreams CRM',
+    to: String(chatId),
+    body,
+    timestamp: Date.now(),
+    chatId: Number(chatId) || 0,
+    isGroup: false,
+    channel: 'telegram',
+    direction: 'outgoing',
+  });
+  if (messageBuffer.length > MAX_MESSAGES) messageBuffer.shift();
   return { ok: true, messageId: r.result?.message_id };
 }

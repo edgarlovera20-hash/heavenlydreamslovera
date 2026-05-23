@@ -28,7 +28,7 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState<Tab>('usuarios');
 
   const role = currentSessionRole();
-  const canManageChannels = role === 'GERENTE' || role === 'ADMIN';
+  const canManageChannels = ['GERENTE', 'ADMIN', 'SUPERUSER'].includes(role);
 
   const tabs = [
     { id: 'usuarios', label: 'Gestión de Usuarios', icon: Users },
@@ -1068,23 +1068,27 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
   const [error, setError] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(false);
 
+  const startSession = async () => {
+    setInitializing(true);
+    setError(null);
+    setQr(null);
+    setStatus('authenticating');
+    try {
+      const r = await fetch('/api/whatsapp/init', { method: 'POST' });
+      if (!r.ok) throw new Error('No se pudo iniciar WhatsApp en el servidor.');
+    } catch (e: any) {
+      setError(e.message);
+      setStatus('disconnected');
+    } finally {
+      setInitializing(false);
+    }
+  };
+
   // Iniciar sesión y hacer polling cada 2s
   useEffect(() => {
     let cancelled = false;
 
-    const init = async () => {
-      setInitializing(true);
-      try {
-        const r = await fetch('/api/whatsapp/init', { method: 'POST' });
-        if (!r.ok) throw new Error('No se pudo iniciar WhatsApp en el servidor.');
-      } catch (e: any) {
-        if (!cancelled) setError(e.message);
-      } finally {
-        if (!cancelled) setInitializing(false);
-      }
-    };
-
-    init();
+    startSession();
 
     const poll = setInterval(async () => {
       if (cancelled) return;
@@ -1092,9 +1096,17 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
         const res = await fetch('/api/whatsapp/qr');
         const data = await res.json();
         if (cancelled) return;
-        if (data.qr) setQr(data.qr);
+        if (data.qr) {
+          setQr(data.qr);
+        } else if (data.status?.status !== 'qr') {
+          setQr(null);
+        }
         if (data.status?.status) setStatus(data.status.status);
-        if (data.status?.error) setError(data.status.error);
+        if (data.status?.error) {
+          setError(data.status.error);
+        } else if (data.status?.status && data.status.status !== 'disconnected') {
+          setError(null);
+        }
         if (data.status?.status === 'connected') {
           toast.success('WhatsApp conectado correctamente con Baileys.');
           setTimeout(() => onConnected('WhatsApp Baileys'), 600);
@@ -1107,6 +1119,8 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
 
     return () => { cancelled = true; clearInterval(poll); };
   }, [onConnected]);
+
+  const canRetry = status === 'disconnected' && !initializing;
 
   return (
     <ModalShell title="Vincular WhatsApp" accent="emerald" icon={<MessageCircle className="w-5 h-5 text-emerald-400" />} onClose={onClose}>
@@ -1125,6 +1139,18 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
       <div className="relative mx-auto w-fit bg-white p-2 rounded-xl min-h-[280px] min-w-[280px] flex items-center justify-center">
         {qr && status === 'qr' ? (
           <img src={qr} alt="QR real de WhatsApp Web" className="block w-[260px] h-[260px]" />
+        ) : canRetry ? (
+          <div className="flex flex-col items-center gap-3 text-slate-600 px-6 text-center">
+            <RefreshCw className="w-10 h-10 text-emerald-600" />
+            <p className="text-xs font-medium">La sesión anterior se cerró. Genera un QR nuevo para vincular WhatsApp.</p>
+            <button
+              type="button"
+              onClick={startSession}
+              className="mt-1 px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-black uppercase tracking-widest hover:bg-emerald-500 transition-colors"
+            >
+              Regenerar QR
+            </button>
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-3 text-slate-600">
             <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />

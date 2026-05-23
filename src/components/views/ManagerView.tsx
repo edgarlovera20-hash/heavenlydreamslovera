@@ -39,6 +39,8 @@ const ValidationRequestsView = lazy(() => import('./ValidationRequestsView'));
 const AgentHubView = lazy(() => import('./AgentHubView'));
 const UserManagementView = lazy(() => import('./UserManagementView'));
 const EnterpriseOpsView = lazy(() => import('./EnterpriseOpsView'));
+const ChatsView = lazy(() => import('./ChatsView'));
+const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
 
 const SectionLoader = () => (
   <div className="flex flex-col items-center justify-center h-48 gap-4" role="status" aria-live="polite">
@@ -208,11 +210,13 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           <NavGroup label="Operativo">
             <NavItem icon={ClipboardCheck} color="green" label="Captura y Validación" active={activeSection === 'Captura y Validación'} onClick={() => setActiveSection('Captura y Validación')} />
             <NavItem icon={FileSearch} color="cyan" label="Consulta y Seguimiento" active={activeSection === 'Consulta y Seguimiento'} onClick={() => setActiveSection('Consulta y Seguimiento')} />
+            <NavItem icon={MessageSquare} color="green" label="Chats" active={activeSection === 'Chats'} onClick={() => setActiveSection('Chats')} />
             <NavItem icon={FolderOpen} color="purple" label="Documentación" active={activeSection === 'Documentación'} onClick={() => setActiveSection('Documentación')} />
           </NavGroup>
 
           <NavGroup label="Promotor de Campo">
             <NavItem icon={MapPin} color="cyan" label="Historial por Zona" active={activeSection === 'Historial por Zona'} onClick={() => setActiveSection('Historial por Zona')} />
+            <NavItem icon={Users} color="blue" label="Seguimiento de Clientes" active={activeSection === 'Seguimiento de Clientes'} onClick={() => setActiveSection('Seguimiento de Clientes')} />
           </NavGroup>
 
           <NavGroup label="Administración">
@@ -387,7 +391,9 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <QuickAction icon={ClipboardCheck} label="Nueva Captura" color="green" onClick={() => setActiveSection('Captura y Validación')} />
                   <QuickAction icon={FileSearch} label="Consultas" color="cyan" onClick={() => setActiveSection('Consulta y Seguimiento')} />
+                  <QuickAction icon={MessageSquare} label="Chats" color="green" onClick={() => setActiveSection('Chats')} />
                   <QuickAction icon={MapPin} label="Por Zona" color="cyan" onClick={() => setActiveSection('Historial por Zona')} />
+                  <QuickAction icon={Users} label="Seguimiento" color="blue" onClick={() => setActiveSection('Seguimiento de Clientes')} />
                   <QuickAction icon={AlertTriangle} label="Morosidad" color="red" onClick={() => setActiveSection('Morosidad')} />
                   <QuickAction icon={Headphones} label="Soporte" color="purple" onClick={() => setActiveSection('Soporte a Clientes')} />
                   {['GERENTE', 'SUPERVISOR'].includes(role) && <>
@@ -506,10 +512,12 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Config. Llamadas' && <ValidationConfigView />}
             {activeSection === 'Hub de Agentes' && <AgentHubView />}
             {activeSection === 'Gestión de Usuarios' && <UserManagementView />}
+            {activeSection === 'Chats' && <ChatsView />}
+            {activeSection === 'Seguimiento de Clientes' && <CustomerFollowUpView />}
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>

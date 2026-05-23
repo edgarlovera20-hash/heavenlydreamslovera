@@ -2,7 +2,7 @@ import React, { useState, lazy, Suspense } from 'react';
 import {
   Home, User, Wallet, Headphones,
   Bell, LogOut, PlusCircle, Activity,
-  ChevronLeft, Menu, Users, Gamepad2, ClipboardCheck, FileSearch, Megaphone, X, LayoutDashboard, AlertTriangle, SettingsIcon, FolderOpen, Zap
+  ChevronLeft, Menu, Users, Gamepad2, ClipboardCheck, FileSearch, Megaphone, X, LayoutDashboard, AlertTriangle, SettingsIcon, FolderOpen, Zap, MessageSquare
 } from 'lucide-react';
 import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
@@ -20,6 +20,8 @@ const Morosidad = lazy(() => import('./Morosidad'));
 const Settings = lazy(() => import('./Settings'));
 const MyFilesView = lazy(() => import('./MyFilesView'));
 const Integrations = lazy(() => import('./Integrations'));
+const ChatsView = lazy(() => import('./ChatsView'));
+const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
 
 const SectionLoader = () => (
   <div className="flex items-center justify-center h-48">
@@ -49,6 +51,8 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
     { id: 'Documentación', label: 'Documentos', icon: FolderOpen, color: 'cyan' },
     { id: 'Captura y Validación', label: 'Captura', icon: ClipboardCheck, color: 'green' },
     { id: 'Consulta y Seguimiento', label: 'Consultas', icon: FileSearch, color: 'yellow' },
+    { id: 'Chats', label: 'Chats', icon: MessageSquare, color: 'green' },
+    { id: 'Seguimiento de Clientes', label: 'Seguimiento', icon: Users, color: 'cyan' },
     { id: 'Nóminas', label: 'Nóminas', icon: Wallet, color: 'purple' },
     { id: 'Anuncios', label: 'Anuncios', icon: Megaphone, color: 'orange' },
     { id: 'Juego', label: 'Juego', icon: Gamepad2, color: 'pink' },
@@ -60,6 +64,8 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
       { id: 'Documentación', label: 'Documentos', icon: FolderOpen, color: 'cyan' },
       { id: 'Captura y Validación', label: 'Captura', icon: ClipboardCheck, color: 'green' },
       { id: 'Consulta y Seguimiento', label: 'Consultas', icon: FileSearch, color: 'yellow' },
+      { id: 'Chats', label: 'Chats', icon: MessageSquare, color: 'green' },
+      { id: 'Seguimiento de Clientes', label: 'Seguimiento', icon: Users, color: 'cyan' },
       { id: 'Nóminas', label: 'Nóminas', icon: Wallet, color: 'purple' },
       { id: 'Soporte a Clientes', label: 'Soporte', icon: Headphones, color: 'cyan' },
       { id: 'Morosidad', label: 'Morosidad', icon: AlertTriangle, color: 'red' },
@@ -124,6 +130,8 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
           {activeSection === 'Juego' && <Game />}
           {activeSection === 'Captura y Validación' && <CaptureValidation />}
           {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
+          {activeSection === 'Chats' && <ChatsView />}
+          {activeSection === 'Seguimiento de Clientes' && <CustomerFollowUpView />}
           {activeSection === 'Nóminas' && <Payroll />}
           {activeSection === 'Anuncios' && <Announcements />}
           {activeSection === 'Soporte a Clientes' && <CustomerSupport />}
@@ -131,7 +139,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
           {activeSection === 'Ajustes' && <Settings />}
           {activeSection === 'Integraciones' && <Integrations />}
         </Suspense>
-        {!['Perfil', 'Documentación', 'Juego', 'Captura y Validación', 'Consulta y Seguimiento', 'Nóminas', 'Anuncios', 'Soporte a Clientes', 'Morosidad', 'Ajustes', 'Integraciones'].includes(activeSection) && (
+        {!['Perfil', 'Documentación', 'Juego', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Nóminas', 'Anuncios', 'Soporte a Clientes', 'Morosidad', 'Ajustes', 'Integraciones'].includes(activeSection) && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-cyber-electric/50">
               <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
