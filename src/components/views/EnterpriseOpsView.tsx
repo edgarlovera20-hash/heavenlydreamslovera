@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertTriangle, Bot, Boxes, CheckCircle2, GitBranch, Play, RefreshCw, ShieldCheck, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, Bot, CheckCircle2, GitBranch, Play, RefreshCw, ShieldCheck, Zap } from 'lucide-react';
 
 const SESSION_KEY = 'hd_session';
 
@@ -27,7 +27,6 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: any; chil
 export default function EnterpriseOpsView() {
   const [health, setHealth] = useState<any>(null);
   const [metrics, setMetrics] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [readiness, setReadiness] = useState<any>(null);
@@ -40,18 +39,16 @@ export default function EnterpriseOpsView() {
   const load = async () => {
     setLoading(true);
     try {
-      const [healthRes, readinessRes, metricsRes, inventoryRes, rulesRes, jobsRes] = await Promise.all([
+      const [healthRes, readinessRes, metricsRes, rulesRes, jobsRes] = await Promise.all([
         fetch('/api/enterprise/health'),
         fetch('/api/enterprise/readiness', { headers }),
         fetch('/api/enterprise/metrics', { headers }),
-        fetch('/api/inventory'),
         fetch('/api/automation/rules', { headers }),
         fetch('/api/ai/jobs', { headers }),
       ]);
       if (healthRes.ok) setHealth(await healthRes.json());
       if (readinessRes.ok) setReadiness(await readinessRes.json());
       if (metricsRes.ok) setMetrics(await metricsRes.json());
-      if (inventoryRes.ok) setInventory(await inventoryRes.json());
       if (rulesRes.ok) setRules(await rulesRes.json());
       if (jobsRes.ok) setJobs(await jobsRes.json());
     } finally {
@@ -92,7 +89,7 @@ export default function EnterpriseOpsView() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-black uppercase tracking-widest text-white">Arquitectura Empresarial</h2>
-          <p className="text-xs text-slate-400 mt-1">RBAC, IA, automatización, inventario, métricas y cola operativa.</p>
+          <p className="text-xs text-slate-400 mt-1">RBAC, IA, automatización, métricas y cola operativa.</p>
         </div>
         <button
           onClick={load}
@@ -140,21 +137,6 @@ export default function EnterpriseOpsView() {
               </div>
             ))}
             {!readiness && <p className="text-xs text-slate-500">Cargando checklist empresarial.</p>}
-          </div>
-        </Panel>
-
-        <Panel title="Inventario" icon={Boxes}>
-          <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar">
-            {inventory.slice(0, 8).map(item => (
-              <div key={item.id} className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <div>
-                  <p className="text-sm text-white font-semibold">{item.nombre}</p>
-                  <p className="text-[10px] text-slate-500 uppercase">{item.tipo} · {item.serial || item.sku || 'sin serie'}</p>
-                </div>
-                {status(item.estado)}
-              </div>
-            ))}
-            {inventory.length === 0 && <p className="text-xs text-slate-500">Sin activos registrados.</p>}
           </div>
         </Panel>
 

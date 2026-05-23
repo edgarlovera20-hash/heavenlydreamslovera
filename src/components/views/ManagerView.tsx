@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Settings as SettingsIcon, PieChart, ChevronLeft, ChevronRight,
   User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, ImagePlus, Gamepad2, FolderOpen,
   Cpu, Database, Smartphone, Sun, Moon, X, Crown, Zap, Bot, Home, MessageSquare,
-  MapPin, WifiOff, RefreshCw, CheckCircle2, Shield, Package, Boxes, FileSpreadsheet, PhoneCall
+  MapPin, WifiOff, RefreshCw, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall
 } from 'lucide-react';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
@@ -39,7 +39,6 @@ const ValidationRequestsView = lazy(() => import('./ValidationRequestsView'));
 const AgentHubView = lazy(() => import('./AgentHubView'));
 const UserManagementView = lazy(() => import('./UserManagementView'));
 const EnterpriseOpsView = lazy(() => import('./EnterpriseOpsView'));
-const InventoryView = lazy(() => import('./InventoryView'));
 
 const SectionLoader = () => (
   <div className="flex flex-col items-center justify-center h-48 gap-4" role="status" aria-live="polite">
@@ -240,7 +239,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
               <NavItem icon={Users} color="cyan" label="Gestión de Usuarios" active={activeSection === 'Gestión de Usuarios'} onClick={() => setActiveSection('Gestión de Usuarios')} badge={pendingUsers > 0 ? pendingUsers : undefined} />
               <NavItem icon={MapPin} color="cyan" label="Territorios" active={activeSection === 'Territorios'} onClick={() => setActiveSection('Territorios')} />
               <NavItem icon={Package} color="purple" label="Catálogo" active={activeSection === 'Catálogo'} onClick={() => setActiveSection('Catálogo')} />
-              <NavItem icon={Boxes} color="green" label="Inventario" active={activeSection === 'Inventario'} onClick={() => setActiveSection('Inventario')} />
               <NavItem icon={Shield} color="yellow" label="Auditoría" active={activeSection === 'Auditoría'} onClick={() => setActiveSection('Auditoría')} />
               <NavItem icon={Activity} color="green" label="Arquitectura Empresarial" active={activeSection === 'Arquitectura Empresarial'} onClick={() => setActiveSection('Arquitectura Empresarial')} />
               <NavItem icon={Database} color="blue" label="Datos y Backup" active={activeSection === 'Datos y Backup'} onClick={() => setActiveSection('Datos y Backup')} />
@@ -502,7 +500,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Catálogo' && <PackageCatalogEditor />}
             {activeSection === 'Auditoría' && <AuditLogView />}
             {activeSection === 'Arquitectura Empresarial' && <EnterpriseOpsView />}
-            {activeSection === 'Inventario' && <InventoryView />}
             {activeSection === 'Datos y Backup' && <DataManagerView />}
             {activeSection === 'Base SIAC' && <SIACView />}
             {activeSection === 'Validaciones' && <ValidationRequestsView />}
@@ -512,7 +509,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Inventario', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
