@@ -1,19 +1,27 @@
 {
-  "name": "react-example",
+  "name": "heavenly-dreams-enterprise",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "tsx server.ts",
     "start": "NODE_ENV=production tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist .turbo",
     "lint": "tsc --noEmit",
     "enterprise:check": "node scripts/enterprise-check.mjs",
     "backup:sqlite": "node scripts/backup-db.mjs",
-    "test": "npm run lint && npm run enterprise:check"
+    "test": "npm run lint && npm run enterprise:check",
+    "turbo:build": "turbo run build",
+    "turbo:lint": "turbo run lint",
+    "turbo:dev": "turbo run dev --parallel"
   },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=20.0.0"
   },
@@ -63,6 +71,7 @@
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
+    "turbo": "^2.5.8",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
