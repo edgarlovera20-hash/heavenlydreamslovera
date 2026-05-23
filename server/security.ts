@@ -120,6 +120,7 @@ function allowsPendingManagerPasskey(req: Request) {
   return [
     '/api/webauthn/register/options',
     '/api/webauthn/register/verify',
+    '/api/auth/passkey/continue',
     '/api/auth/logout',
     '/api/auth/refresh',
   ].includes(req.path);
@@ -131,7 +132,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   if (!token) return res.status(401).json({ error: 'Token requerido' });
   try {
     const auth = verifyAccessToken(token);
-    if (auth.role === 'GERENTE' && auth.webAuthnVerified !== true && !allowsPendingManagerPasskey(req)) {
+    if (auth.role === 'GERENTE' && auth.webAuthnEnrollmentRequired === true && auth.webAuthnVerified !== true && !allowsPendingManagerPasskey(req)) {
       return res.status(403).json({
         error: 'Passkey requerida para completar el acceso de gerencia.',
         code: 'WEBAUTHN_REQUIRED',

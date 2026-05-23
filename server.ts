@@ -25,6 +25,7 @@ import {
 import {
   makeAuthenticationOptions,
   makeRegistrationOptions,
+  isWebAuthnRequired,
   userHasPasskey,
   verifyAuthentication,
   verifyRegistration,
@@ -206,13 +207,14 @@ async function startServer() {
       return res.status(403).json({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador.', code: 'INACTIVE' });
     AuditLog.insert({ accion: 'LOGIN', entidad: 'users', entidad_id: user.uid, user_id: user.uid, user_nombre: user.nombre, detalle: null });
     const { password: _, ...safe } = user;
-    if (user.role === 'GERENTE' && userHasPasskey(user.uid)) {
+    const managerRequiresWebAuthn = user.role === 'GERENTE' && isWebAuthnRequired(req);
+    if (managerRequiresWebAuthn && userHasPasskey(user.uid)) {
       return res.json({ requiresWebAuthn: true, webAuthnUserId: user.uid, nombre: user.nombre, role: user.role });
     }
     const session = issueSession(user, req, user.role === 'GERENTE'
-      ? { webAuthnVerified: false, webAuthnEnrollmentRequired: true }
+      ? { webAuthnVerified: !managerRequiresWebAuthn, webAuthnEnrollmentRequired: managerRequiresWebAuthn }
       : {});
-    res.json({ ...safe, ...session, webAuthnEnrollmentRequired: user.role === 'GERENTE' });
+    res.json({ ...safe, ...session, webAuthnEnrollmentRequired: managerRequiresWebAuthn });
   }));
 
   app.post("/api/auth/refresh", loginLimiter, wrap((req: any, res: any) => {
@@ -227,6 +229,26 @@ async function startServer() {
     const { refreshToken } = req.body;
     if (refreshToken) Sessions.revoke(refreshToken);
     res.json({ ok: true });
+  }));
+
+  app.post("/api/auth/passkey/continue", authOnly, wrap((req: any, res: any) => {
+    if (isWebAuthnRequired(req)) {
+      return res.status(403).json({ error: 'Passkey obligatoria en este entorno.', code: 'WEBAUTHN_REQUIRED' });
+    }
+    const user = Users.getById(req.auth.sub) as any;
+    if (!user || user.activo !== 1) return res.status(401).json({ error: 'Usuario inválido' });
+    if (user.role !== 'GERENTE') return res.status(403).json({ error: 'Solo gerencia puede continuar este flujo' });
+    if (req.body?.refreshToken) Sessions.revoke(req.body.refreshToken);
+    AuditLog.insert({
+      accion: 'WEBAUTHN_LOCAL_CONTINUE',
+      entidad: 'users',
+      entidad_id: user.uid,
+      user_id: user.uid,
+      user_nombre: user.nombre,
+      detalle: 'WebAuthn no requerido por configuracion del entorno',
+    });
+    const { password: _, ...safe } = user;
+    res.json({ ...safe, ...issueSession(user, req, { webAuthnVerified: true, webAuthnEnrollmentRequired: false }) });
   }));
 
   app.post("/api/webauthn/register/options", authOnly, wrap(async (req: any, res: any) => {

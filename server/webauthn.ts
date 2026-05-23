@@ -44,6 +44,17 @@ function isLocalRp(id: string) {
   return id === 'localhost' || id === '127.0.0.1' || id === '::1';
 }
 
+export function isWebAuthnRequired(req?: Request) {
+  const forced = process.env.WEBAUTHN_REQUIRED?.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'si'].includes(forced || '')) return true;
+  if (['0', 'false', 'no'].includes(forced || '')) return false;
+
+  const id = rpID(req);
+  const expectedOrigin = origin(req);
+  const configured = Boolean(process.env.WEBAUTHN_RP_ID && process.env.WEBAUTHN_ORIGIN);
+  return configured && !isLocalRp(id) && !isIP(id) && expectedOrigin.startsWith('https://');
+}
+
 function assertWebAuthnContext(req?: Request) {
   const id = rpID(req);
   const expectedOrigin = origin(req);

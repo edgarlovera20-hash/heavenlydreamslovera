@@ -50,6 +50,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [continuingWithoutPasskey, setContinuingWithoutPasskey] = useState(false);
   const [passkeyUserId, setPasskeyUserId] = useState<string | null>(null);
   const [passkeyEnrollmentRequired, setPasskeyEnrollmentRequired] = useState(false);
 
@@ -193,6 +194,28 @@ export default function App() {
       setPasskeyEnrollmentRequired(false);
     } catch (err: any) {
       setError(friendlyPasskeyError(err));
+    }
+  };
+
+  const handleContinueWithoutPasskey = async () => {
+    setError('');
+    setContinuingWithoutPasskey(true);
+    try {
+      const session = loadSession();
+      const res = await fetch('/api/auth/passkey/continue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: session?.refreshToken }),
+      });
+      const next = await res.json();
+      if (!res.ok) { setError(next.error || 'No se pudo continuar sin passkey.'); return; }
+      applyLogin({ ...next, displayName: next.nombre });
+      setPasskeyUserId(null);
+      setPasskeyEnrollmentRequired(false);
+    } catch {
+      setError('No se pudo conectar al servidor.');
+    } finally {
+      setContinuingWithoutPasskey(false);
     }
   };
 
@@ -404,6 +427,15 @@ export default function App() {
               </p>
             )}
             {error && <p className="text-xs text-red-300 border border-red-500/30 bg-red-500/10 rounded-lg p-3 mb-4">{error}</p>}
+            <button
+              onClick={handleContinueWithoutPasskey}
+              disabled={continuingWithoutPasskey}
+              className="w-full mb-3 py-4 rounded-xl bg-cyber-electric text-cyber-black font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+            >
+              {continuingWithoutPasskey
+                ? <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />
+                : <><Lock className="w-4 h-4" /> Continuar al CRM</>}
+            </button>
             {passkeySupported && currentUser?.uid && (
               <button
                 onClick={() => handleBiometricLogin(currentUser.uid)}
