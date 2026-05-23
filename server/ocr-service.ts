@@ -214,6 +214,77 @@ const CURP_RE        = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
 const CP_RE          = /^\d{5}$/;
 const PHONE_RE       = /^\d{10}$/;
 const FOLIO_SIAC_RE  = /^\d{6,12}$/;
+const PERSON_FIELDS  = ['nombres', 'apellidoPaterno', 'apellidoMaterno'];
+const NAME_PARTICLES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y', 'SAN', 'SANTA']);
+const OCR_NAME_STOPWORDS = new Set([
+  'NOMBRE', 'NOMBRES', 'APELLIDO', 'PATERNO', 'MATERNO', 'DOMICILIO', 'CALLE',
+  'COLONIA', 'MUNICIPIO', 'ESTADO', 'MEXICO', 'INSTITUTO', 'NACIONAL',
+  'ELECTORAL', 'CREDENCIAL', 'VOTAR', 'CLAVE', 'ELECTOR', 'CURP', 'SECCION',
+  'VIGENCIA', 'EMISION', 'REGISTRO', 'FECHA', 'NACIMIENTO', 'SEXO', 'FIRMA',
+]);
+
+function deburr(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function normalizePersonName(value: any) {
+  return deburr(String(value || ''))
+    .toUpperCase()
+    .replace(/[^A-ZÑ\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isPlausibleName(value: any) {
+  const normalized = normalizePersonName(value);
+  if (!normalized || normalized.length < 3 || normalized.length > 60) return false;
+  const tokens = normalized.split(' ').filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 6) return false;
+  let significant = 0;
+  for (const token of tokens) {
+    if (NAME_PARTICLES.has(token)) continue;
+    if (OCR_NAME_STOPWORDS.has(token)) return false;
+    if (token.length < 3 || token.length > 24) return false;
+    if (!/[AEIOU]/.test(token) || !/[BCDFGHJKLMNPQRSTVWXYZÑ]/.test(token)) return false;
+    if (/^([A-ZÑ])\1+$/.test(token)) return false;
+    significant++;
+  }
+  return significant > 0;
+}
+
+function sanitizeFields(docType: OcrDocType, fields: Record<string, string>) {
+  const clean: Record<string, string> = {};
+  for (const [key, rawValue] of Object.entries(fields || {})) {
+    const value = String(rawValue || '').trim();
+    if (!value) continue;
+    if (PERSON_FIELDS.includes(key)) {
+      if (isPlausibleName(value)) clean[key] = normalizePersonName(value);
+      continue;
+    }
+    if (key === 'curp') {
+      const curp = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      if (CURP_RE.test(curp)) clean.curp = curp;
+      continue;
+    }
+    if (key === 'codigoPostal') {
+      const cp = value.replace(/\D/g, '').slice(0, 5);
+      if (CP_RE.test(cp)) clean.codigoPostal = cp;
+      continue;
+    }
+    if (key === 'folioIne' || key === 'claveElector') {
+      const folio = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      if (/^[A-Z0-9]{9,18}$/.test(folio) && !CURP_RE.test(folio)) clean.folioIne = folio;
+      continue;
+    }
+    if (docType === 'siac' && key === 'celular') {
+      const phone = value.replace(/\D/g, '');
+      if (PHONE_RE.test(phone)) clean.celular = phone;
+      continue;
+    }
+    clean[key] = value;
+  }
+  return clean;
+}
 
 /**
  * Devuelve true si el output del modelo parece coherente con el tipo de documento.
@@ -228,10 +299,13 @@ function validateFields(docType: OcrDocType, fields: Record<string, string>): { 
     if (fields.codigoPostal && !CP_RE.test(fields.codigoPostal)) {
       return { ok: false, reason: `CP inválido: "${fields.codigoPostal}"` };
     }
-    // Al menos uno de los campos de nombre debe existir
-    const hasName = fields.nombres || fields.apellidoPaterno || fields.apellidoMaterno;
-    if (!hasName && !fields.curp) {
-      return { ok: false, reason: 'Sin nombres ni CURP detectados' };
+    const hasFullName = Boolean(fields.nombres && fields.apellidoPaterno && fields.apellidoMaterno);
+    const hasTrustedId = Boolean(fields.curp || fields.folioIne);
+    if (!hasFullName && !hasTrustedId) {
+      return { ok: false, reason: 'Sin identidad confiable detectada' };
+    }
+    if (!fields.curp && !hasFullName && (fields.nombres || fields.apellidoPaterno || fields.apellidoMaterno)) {
+      return { ok: false, reason: 'Nombre incompleto o de baja confianza' };
     }
   }
   if (docType === 'siac') {
@@ -534,7 +608,7 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
   if (provider === 'claude') {
     const raw = await callClaude(prompt, images);
     if (!raw) throw new Error('Claude devolvió respuesta vacía');
-    const fields = parseJsonResponse(raw);
+    const fields = sanitizeFields(docType, parseJsonResponse(raw));
     const text = fields.rawText || raw;
     delete fields.rawText;
     return { text, fields, provider, model: CLAUDE_MODEL, durationMs: Date.now() - t0 };
@@ -543,7 +617,7 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
   if (provider === 'gemini') {
     const raw = await callGemini(prompt, images);
     if (!raw) throw new Error('Gemini devolvió respuesta vacía');
-    const fields = parseJsonResponse(raw);
+    const fields = sanitizeFields(docType, parseJsonResponse(raw));
     const text = fields.rawText || raw;
     delete fields.rawText;
     return { text, fields, provider, model: GEMINI_MODEL, durationMs: Date.now() - t0 };
@@ -552,7 +626,7 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
   if (provider === 'openai') {
     const raw = await callOpenAi(prompt, images);
     if (!raw) throw new Error('OpenAI devolvió respuesta vacía');
-    const fields = parseJsonResponse(raw);
+    const fields = sanitizeFields(docType, parseJsonResponse(raw));
     const text = fields.rawText || raw;
     delete fields.rawText;
     return { text, fields, provider, model: OPENAI_MODEL, durationMs: Date.now() - t0 };
@@ -561,7 +635,7 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
   if (provider === 'ollama') {
     const raw = await callOllama(prompt, images);
     if (!raw) throw new Error('Ollama devolvió respuesta vacía');
-    const fields = parseJsonResponse(raw);
+    const fields = sanitizeFields(docType, parseJsonResponse(raw));
     const text = fields.rawText || raw;
     delete fields.rawText;
     return { text, fields, provider, model: OLLAMA_MODEL, durationMs: Date.now() - t0 };
@@ -569,7 +643,7 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
 
   // tesseract
   const { text, fields } = await callTesseract(docType, images);
-  return { text, fields, provider, model: 'tesseract-spa', durationMs: Date.now() - t0 };
+  return { text, fields: sanitizeFields(docType, fields), provider, model: 'tesseract-spa', durationMs: Date.now() - t0 };
 }
 
 export async function runOcrWithFallback(docType: OcrDocType, images: string | string[]): Promise<CachedOcrResult> {

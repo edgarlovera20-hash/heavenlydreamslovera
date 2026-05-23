@@ -141,6 +141,41 @@ function cleanText(s: string): string {
     .toUpperCase();
 }
 
+const NAME_PARTICLES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y', 'SAN', 'SANTA']);
+const OCR_NAME_STOPWORDS = new Set([
+  'NOMBRE', 'NOMBRES', 'APELLIDO', 'PATERNO', 'MATERNO', 'DOMICILIO', 'CALLE',
+  'COLONIA', 'MUNICIPIO', 'ESTADO', 'MEXICO', 'INSTITUTO', 'NACIONAL',
+  'ELECTORAL', 'CREDENCIAL', 'VOTAR', 'CLAVE', 'ELECTOR', 'CURP', 'SECCION',
+  'VIGENCIA', 'EMISION', 'REGISTRO', 'FECHA', 'NACIMIENTO', 'SEXO', 'FIRMA',
+]);
+
+function normalizeOcrPersonName(value?: string) {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-ZÑ\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isPlausibleOcrPersonName(value?: string) {
+  const normalized = normalizeOcrPersonName(value);
+  if (!normalized || normalized.length < 3 || normalized.length > 60) return false;
+  const tokens = normalized.split(' ').filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 6) return false;
+  let significant = 0;
+  for (const token of tokens) {
+    if (NAME_PARTICLES.has(token)) continue;
+    if (OCR_NAME_STOPWORDS.has(token)) return false;
+    if (token.length < 3 || token.length > 24) return false;
+    if (!/[AEIOU]/.test(token) || !/[BCDFGHJKLMNPQRSTVWXYZÑ]/.test(token)) return false;
+    if (/^([A-ZÑ])\1+$/.test(token)) return false;
+    significant++;
+  }
+  return significant > 0;
+}
+
 function extractCURP(text: string): string {
   const m = text.match(CURP_RE);
   if (m) return m[1];
@@ -339,10 +374,11 @@ export class CRM_AI_Agent {
         const nombres = f.nombres || f.nombre || f.name || '';
         const apPat = f.apellidoPaterno || f.apellido_paterno || f.primerApellido || '';
         const apMat = f.apellidoMaterno || f.apellido_materno || f.segundoApellido || '';
-        if (nombres)   result.nombres         = nombres;
-        if (apPat)     result.apellidoPaterno = apPat;
-        if (apMat)     result.apellidoMaterno = apMat;
-        if (f.curp)            result.curp            = f.curp;
+        if (isPlausibleOcrPersonName(nombres)) result.nombres = normalizeOcrPersonName(nombres);
+        if (isPlausibleOcrPersonName(apPat)) result.apellidoPaterno = normalizeOcrPersonName(apPat);
+        if (isPlausibleOcrPersonName(apMat)) result.apellidoMaterno = normalizeOcrPersonName(apMat);
+        const curpField = extractCURP(String(f.curp || '').toUpperCase());
+        if (curpField) result.curp = curpField;
         if (f.folioIne || f.claveElector) result.folioIne = f.folioIne || f.claveElector;
         if (f.prefijoCalle || f.tipoVialidad || f.tipo_vialidad || f.vialidadTipo) result.prefijoCalle = f.prefijoCalle || f.tipoVialidad || f.tipo_vialidad || f.vialidadTipo;
         if (f.calle)           result.calle           = f.calle;
@@ -380,9 +416,9 @@ export class CRM_AI_Agent {
       const dom = mergeOcr(dom1, dom2);
 
       const result: Partial<OcrResult> = {};
-      if (nombres)           result.nombres         = nombres;
-      if (apellidoPaterno)   result.apellidoPaterno = apellidoPaterno;
-      if (apellidoMaterno)   result.apellidoMaterno = apellidoMaterno;
+      if (isPlausibleOcrPersonName(nombres)) result.nombres = normalizeOcrPersonName(nombres);
+      if (isPlausibleOcrPersonName(apellidoPaterno)) result.apellidoPaterno = normalizeOcrPersonName(apellidoPaterno);
+      if (isPlausibleOcrPersonName(apellidoMaterno)) result.apellidoMaterno = normalizeOcrPersonName(apellidoMaterno);
       if (curp)              result.curp            = curp;
       if (folioIne)          result.folioIne        = folioIne;
       if (codigoPostal)      result.codigoPostal    = codigoPostal;
