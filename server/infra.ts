@@ -19,11 +19,12 @@ export async function getQueues() {
     messages: new Queue('messages', { connection }),
     notifications: new Queue('notifications', { connection }),
     reports: new Queue('reports', { connection }),
+    telmexAutomation: new Queue('telmex-automation', { connection }),
   };
   return queues;
 }
 
-export async function queueJob(queueName: 'aiProcessing' | 'messages' | 'notifications' | 'reports', name: string, payload: any) {
+export async function queueJob(queueName: 'aiProcessing' | 'messages' | 'notifications' | 'reports' | 'telmexAutomation', name: string, payload: any) {
   const activeQueues = await getQueues();
   if (!activeQueues) return null;
   return activeQueues[queueName].add(name, payload, {

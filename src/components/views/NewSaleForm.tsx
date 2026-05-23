@@ -667,6 +667,8 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [docType, setDocType] = useState<'ine' | 'curp'>('ine');
   const [selectedPackage, setSelectedPackage] = useState<PackageCatalogItem | null>(null);
   const [error, setError] = useState<string>('');
+  const [telmexAutomationLoading, setTelmexAutomationLoading] = useState(false);
+  const [telmexAutomationJob, setTelmexAutomationJob] = useState<{ id: string; status: string; current_step?: string; progress?: number } | null>(null);
   const pendingOcrJobsRef = useRef<Set<string>>(new Set());
   const receiptRef = useRef<HTMLDivElement>(null);
   const draftKeyRef = useRef(getDraftKey());
@@ -1559,6 +1561,65 @@ const exportToPDF = async () => {
       toast.error(message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleStartTelmexAutomation = async () => {
+    if (!form.nombres || !form.apellidoPaterno || !form.telefonoTitular || !form.paqueteNombre) {
+      toast.error('Completa nombre, telefono y paquete antes de iniciar la contratacion automatica.');
+      return;
+    }
+
+    setTelmexAutomationLoading(true);
+    try {
+      const payload = {
+        folio: form.folio,
+        cliente: {
+          nombres: form.nombres,
+          apellidoPaterno: form.apellidoPaterno,
+          apellidoMaterno: form.apellidoMaterno,
+          curp: form.curp,
+          telefono: form.telefonoTitular,
+          correo: form.correo,
+        },
+        direccion: {
+          calle: buildStreetLine(form),
+          colonia: form.colonia,
+          ciudad: form.ciudad,
+          delegacion: form.delegacion,
+          codigoPostal: form.codigoPostal,
+          coordenadas: form.coordenadas,
+          completa: buildInstallAddress(form),
+        },
+        paquete: {
+          id: form.packageId,
+          nombre: form.paqueteNombre,
+          rentaMensual: form.rentaMensual,
+          tipoServicio: form.tipoServicio,
+          categoriaProducto: form.categoriaProducto,
+        },
+        documentos: {
+          ineFrente: Boolean(form.ineFrente),
+          ineReverso: Boolean(form.ineReverso),
+          comprobanteDomicilio: Boolean(form.comprobanteDomicilio),
+          capturaSiac: Boolean(form.capturaSiac),
+        },
+      };
+
+      const res = await fetch('/api/telmex/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'No se pudo crear el trabajo Telmex.');
+      setTelmexAutomationJob(body);
+      toast.success('Contratacion automatica enviada a cola Telmex.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'No se pudo iniciar la automatizacion Telmex.';
+      toast.error(message);
+    } finally {
+      setTelmexAutomationLoading(false);
     }
   };
 
@@ -2953,6 +3014,33 @@ const exportToPDF = async () => {
                   updateForm({ folioSiac, servicioSiac: servicio, capturaSiac: image })
                 }
               />
+
+              <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-3">
+                <div className="flex flex-col md:flex-row md:items-center gap-3">
+                  <div className="flex-1">
+                    <h3 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-200 flex items-center gap-2">
+                      <Bot className="w-4 h-4" /> Automatizacion Telmex
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Envia esta venta a la cola de contratacion para que el worker la procese con evidencias y folio.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleStartTelmexAutomation}
+                    disabled={telmexAutomationLoading}
+                    className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-5 py-3 rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {telmexAutomationLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+                    Contratar automaticamente
+                  </button>
+                </div>
+                {telmexAutomationJob && (
+                  <div className="rounded-xl border border-cyan-400/20 bg-slate-950/60 p-3 text-xs text-cyan-100">
+                    <div className="font-mono">Job: {telmexAutomationJob.id}</div>
+                    <div className="text-slate-300">Estado: {telmexAutomationJob.status} · Paso: {telmexAutomationJob.current_step || 'En cola'}</div>
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={handleSaveAndFinish}

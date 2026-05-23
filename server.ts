@@ -36,6 +36,7 @@ import { getEnterpriseReadiness } from "./server/readiness";
 import { readStoredDocument, storeDocument } from "./server/document-storage";
 import { buildValidationTwiML, createTwilioCall, twilioConfigured } from "./server/twilio";
 import { oauthCallback, oauthStart, oauthStatus } from "./server/oauth";
+import { createTelmexAutomationJob, getTelmexJob, listTelmexJobs, updateTelmexAutomationJob } from "./server/telmex-automation";
 
 function wrap(fn: Function) {
   return async (req: any, res: any) => {
@@ -1825,6 +1826,55 @@ async function startServer() {
     AuditLog.insert({ accion: 'DELETE_AUTOMATION_RULE', entidad: 'automation_rules', entidad_id: req.params.id, user_id: (req as any).auth?.sub || null, user_nombre: null, detalle: null });
     res.json({ ok: true });
   }));
+
+  const enqueueTelmexAction = (action: string) => wrap(async (req: any, res: any) => {
+    const job = await createTelmexAutomationJob(action, {
+      ...req.body,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] || null,
+    }, req.auth);
+    AuditLog.insert({
+      accion: 'CREATE_TELMEX_AUTOMATION_JOB',
+      entidad: 'telmex_automation_jobs',
+      entidad_id: job.id,
+      user_id: req.auth?.sub || null,
+      user_nombre: null,
+      detalle: `${action}: ${job.folio || job.sale_id || 'sin folio'}`,
+    });
+    res.json(job);
+  });
+
+  app.get("/api/telmex/jobs", requireRole('GERENTE', 'SUPERVISOR'), wrap((_req: any, res: any) => {
+    res.json(listTelmexJobs());
+  }));
+
+  app.get("/api/telmex/status/:id", authOnly, wrap((req: any, res: any) => {
+    const job = getTelmexJob(req.params.id);
+    if (!job) return res.status(404).json({ error: 'trabajo Telmex no encontrado' });
+    res.json(job);
+  }));
+
+  app.patch("/api/telmex/status/:id", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+    const job = updateTelmexAutomationJob(req.params.id, req.body || {}, req.auth);
+    if (!job) return res.status(404).json({ error: 'trabajo Telmex no encontrado' });
+    res.json(job);
+  }));
+
+  app.post("/api/telmex/login", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('login'));
+  app.post("/api/telmex/coverage", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('coverage'));
+  app.post("/api/telmex/create-order", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('create-order'));
+  app.post("/api/telmex/send-otp", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
+  app.post("/api/telmex/confirm-otp", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
+  app.get("/telmex/status/:id", authOnly, wrap((req: any, res: any) => {
+    const job = getTelmexJob(req.params.id);
+    if (!job) return res.status(404).json({ error: 'trabajo Telmex no encontrado' });
+    res.json(job);
+  }));
+  app.post("/telmex/login", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('login'));
+  app.post("/telmex/coverage", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('coverage'));
+  app.post("/telmex/create-order", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('create-order'));
+  app.post("/telmex/send-otp", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
+  app.post("/telmex/confirm-otp", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
 
   app.post("/api/ai/run", requireRole('GERENTE', 'SUPERVISOR'), wrap(async (req: any, res: any) => {
     if (!req.body.prompt) return res.status(400).json({ error: 'prompt requerido' });

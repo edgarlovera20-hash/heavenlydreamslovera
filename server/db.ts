@@ -322,6 +322,29 @@ db.exec(`
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Automatizacion Telmex: trabajos desacoplados, evidencias y folios devueltos por workers
+  CREATE TABLE IF NOT EXISTS telmex_automation_jobs (
+    id             TEXT PRIMARY KEY,
+    action         TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'queued',
+    current_step   TEXT,
+    progress       INTEGER NOT NULL DEFAULT 0,
+    sale_id        TEXT,
+    captura_id     TEXT,
+    user_id        TEXT,
+    folio          TEXT,
+    payload        TEXT,
+    result         TEXT,
+    error          TEXT,
+    evidence       TEXT,
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (sale_id) REFERENCES ventas(id) ON DELETE SET NULL,
+    FOREIGN KEY (captura_id) REFERENCES capturas(id) ON DELETE SET NULL,
+    FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE SET NULL
+  );
+
   -- Reglas de automatización accionadas por eventos
   CREATE TABLE IF NOT EXISTS automation_rules (
     id          TEXT PRIMARY KEY,
@@ -576,6 +599,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_inventory_estado ON inventory_items (estado);
   CREATE INDEX IF NOT EXISTS idx_events_name      ON system_events (event, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_jobs_status   ON ai_jobs (status, priority, created_at);
+  CREATE INDEX IF NOT EXISTS idx_telmex_jobs_status ON telmex_automation_jobs (status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_telmex_jobs_sale ON telmex_automation_jobs (sale_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_metrics_name     ON metrics (name, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_capturas_folio   ON capturas (folio);
   CREATE INDEX IF NOT EXISTS idx_capturas_vendedor ON capturas (vendedor_id, fecha_captura DESC);
@@ -898,6 +923,25 @@ export const AiJobs = {
     const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
     return db.prepare(`UPDATE ai_jobs SET ${fields},updated_at=datetime('now') WHERE id=@id`).run({ ...data, id });
   },
+};
+
+export const TelmexAutomationJobs = {
+  getAll: (limit = 200) => db.prepare('SELECT * FROM telmex_automation_jobs ORDER BY created_at DESC LIMIT ?').all(limit),
+  getById: (id: string) => db.prepare('SELECT * FROM telmex_automation_jobs WHERE id=?').get(id),
+  getBySale: (saleId: string) => db.prepare('SELECT * FROM telmex_automation_jobs WHERE sale_id=? ORDER BY created_at DESC').all(saleId),
+  create: (data: any) => db.prepare(`
+    INSERT INTO telmex_automation_jobs
+      (id,action,status,current_step,progress,sale_id,captura_id,user_id,folio,payload,result,error,evidence,attempts)
+    VALUES
+      (@id,@action,@status,@current_step,@progress,@sale_id,@captura_id,@user_id,@folio,@payload,@result,@error,@evidence,@attempts)
+  `).run(data),
+  update: (id: string, data: any) => updateById(
+    'telmex_automation_jobs',
+    'id',
+    id,
+    data,
+    ['status', 'current_step', 'progress', 'sale_id', 'captura_id', 'user_id', 'folio', 'payload', 'result', 'error', 'evidence', 'attempts']
+  ),
 };
 
 export const AutomationRules = {
