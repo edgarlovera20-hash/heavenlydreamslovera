@@ -28,7 +28,6 @@ const AgentDesigner = lazy(() => import('./AgentDesigner').then(m => ({ default:
 const ZoneHistoryView = lazy(() => import('./ZoneHistoryView'));
 const AnalyticsView = lazy(() => import('./AnalyticsView'));
 const TeamManagementView = lazy(() => import('./TeamManagementView'));
-const CommissionsView = lazy(() => import('./CommissionsView'));
 const ApprovalFlowView = lazy(() => import('./ApprovalFlowView'));
 const TerritoriesView = lazy(() => import('./TerritoriesView'));
 const PackageCatalogEditor = lazy(() => import('./PackageCatalogEditor'));
@@ -226,7 +225,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             <NavGroup label="Administración Avanzada">
               <NavItem icon={BarChart3} color="cyan" label="Efectividad" active={activeSection === 'Analytics'} onClick={() => setActiveSection('Analytics')} />
               <NavItem icon={Users} color="blue" label="Equipo y Metas" active={activeSection === 'Equipo y Metas'} onClick={() => setActiveSection('Equipo y Metas')} />
-              <NavItem icon={DollarSign} color="yellow" label="Comisiones" active={activeSection === 'Comisiones'} onClick={() => setActiveSection('Comisiones')} />
               <NavItem icon={CheckCircle2} color="green" label="Aprobaciones" active={activeSection === 'Aprobaciones'} onClick={() => setActiveSection('Aprobaciones')} />
             </NavGroup>
           )}
@@ -397,7 +395,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   {['GERENTE', 'SUPERVISOR'].includes(role) && <>
                     <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
                     <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
-                    <QuickAction icon={DollarSign} label="Comisiones" color="yellow" onClick={() => setActiveSection('Comisiones')} />
                     <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
                   </>}
                 </div>
@@ -500,7 +497,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Historial por Zona' && <ZoneHistoryView />}
             {activeSection === 'Analytics' && <AnalyticsView />}
             {activeSection === 'Equipo y Metas' && <TeamManagementView />}
-            {activeSection === 'Comisiones' && <CommissionsView />}
             {activeSection === 'Aprobaciones' && <ApprovalFlowView />}
             {activeSection === 'Territorios' && <TerritoriesView />}
             {activeSection === 'Catálogo' && <PackageCatalogEditor />}
@@ -516,7 +512,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Comisiones', 'Aprobaciones', 'Territorios', 'Catálogo', 'Inventario', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Inventario', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
