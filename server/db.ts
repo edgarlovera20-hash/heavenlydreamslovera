@@ -120,6 +120,10 @@ db.exec(`
     correo              TEXT,
     estatus_etapa       TEXT,
     campana             TEXT,
+    telefono_referencia TEXT,
+    zona                TEXT,
+    distrito            TEXT,
+    colonia             TEXT,
     created_at          TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -657,8 +661,19 @@ export const Ventas = {
 export const SiacRecords = {
   getAll: () => db.prepare('SELECT * FROM siac_records ORDER BY fecha_captura DESC').all(),
   search: (folio: string) => db.prepare(
-    'SELECT * FROM siac_records WHERE folio_siac LIKE ? ORDER BY fecha_captura DESC LIMIT 50'
-  ).all(`%${folio}%`),
+    `SELECT * FROM siac_records
+      WHERE folio_siac LIKE @q
+         OR telefono_asignado LIKE @q
+         OR telefono_portado LIKE @q
+         OR telefono_referencia LIKE @q
+         OR os_alta LIKE @q
+         OR tienda LIKE @q
+         OR zona LIKE @q
+         OR distrito LIKE @q
+         OR colonia LIKE @q
+      ORDER BY fecha_captura DESC
+      LIMIT 50`
+  ).all({ q: `%${folio}%` }),
   getByFolio: (folio: string) => db.prepare(
     'SELECT * FROM siac_records WHERE folio_siac = ?'
   ).get(folio),
@@ -678,10 +693,27 @@ export const SiacRecords = {
       @fecha_cambio_estatus, @tipo_cliente, @tipo_servicio, @correo,
       @estatus_etapa, @campana, @telefono_referencia, @zona, @distrito, @colonia
     ) ON CONFLICT(folio_siac) DO UPDATE SET
+      fecha_captura=excluded.fecha_captura,
+      estrategia=excluded.estrategia,
+      promotor=excluded.promotor,
       estatus_siac=excluded.estatus_siac,
+      tipo_linea=excluded.tipo_linea,
+      linea_contratada=excluded.linea_contratada,
+      area=excluded.area,
+      division=excluded.division,
+      tienda=excluded.tienda,
+      paquete=excluded.paquete,
       estatus_pisa=excluded.estatus_pisa,
       estatus_etapa=excluded.estatus_etapa,
+      telefono_asignado=excluded.telefono_asignado,
+      telefono_portado=excluded.telefono_portado,
+      os_alta=excluded.os_alta,
+      fecha_os_alta=excluded.fecha_os_alta,
       fecha_cambio_estatus=excluded.fecha_cambio_estatus,
+      tipo_cliente=excluded.tipo_cliente,
+      tipo_servicio=excluded.tipo_servicio,
+      correo=excluded.correo,
+      campana=excluded.campana,
       observaciones=excluded.observaciones,
       respuesta_telmex=excluded.respuesta_telmex,
       motivo_rechazo=excluded.motivo_rechazo,

@@ -35,6 +35,7 @@ export const SiacAPI = {
   getAll: () => api('GET', '/api/siac'),
   create: (data: any) => api('POST', '/api/siac', data),
   bulkCreate: (records: any[]) => api('POST', '/api/siac/bulk', records),
+  importCsv: (replace = false) => api('POST', `/api/siac/import${replace ? '?replace=1' : ''}`),
   deleteAll: () => api('DELETE', '/api/siac'),
 };
 

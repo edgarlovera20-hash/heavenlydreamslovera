@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileSpreadsheet, Upload, Search, Filter, Download,
   RefreshCw, CheckCircle2, Clock, AlertTriangle, X, ChevronDown, ChevronUp
@@ -8,6 +8,7 @@ import { parseSIACCsv, saveSIAC, loadSIAC, SIACRecord } from '../../lib/siacPars
 import { exportToCSV } from '../../lib/exportUtils';
 import { logAudit } from '../../lib/auditLog';
 import { auth } from '../../lib/firebase';
+import { SiacAPI } from '../../services/db';
 import { toast } from 'sonner';
 
 const STATUS_CFG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -16,6 +17,72 @@ const STATUS_CFG: Record<string, { label: string; color: string; icon: React.Rea
 };
 
 const PAGE_SIZE = 50;
+
+function serverToSIACRecord(row: any): SIACRecord {
+  const paquete = row.paquete || '';
+  return {
+    id: row.id || `siac-${row.folio_siac}`,
+    estatus: row.estatus_siac || '',
+    fechaCaptura: row.fecha_captura || '',
+    folioSiac: row.folio_siac || '',
+    elaboracion: row.estatus_pisa || row.estatus_etapa || '',
+    paquete,
+    precio: 0,
+    tipoCliente: row.linea_contratada || row.tipo_servicio || '',
+    area: row.area || row.zona || '',
+    estrategia: row.estrategia || '',
+    nombrePromotor: row.promotor || '',
+    usuarioPromotor: row.promotor || '',
+    ordenServicio: row.os_alta || '',
+    numPortar: row.telefono_portado || row.telefono_referencia || '',
+    telefonoAsignado: row.telefono_asignado || '',
+    fechaPosteo: row.fecha_os_alta || row.fecha_cambio_estatus || '',
+    tienda: row.tienda || '',
+    etapa: row.estatus_etapa || row.estatus_pisa || '',
+    error: [row.motivo_rechazo, row.respuesta_telmex, row.observaciones].filter(Boolean).join(' · '),
+    osPago: row.observaciones?.startsWith('OS DE PAGO:') ? row.observaciones.replace('OS DE PAGO:', '').trim() : '',
+    telTelmex: row.telefono_referencia || row.telefono_portado || '',
+    tipoLinea: row.tipo_cliente || row.tipo_linea || '',
+    zona: row.zona || '',
+    email: row.correo || '',
+    numCelular: row.telefono_referencia || '',
+  };
+}
+
+function siacRecordToServerRow(record: SIACRecord) {
+  return {
+    folio_siac: record.folioSiac,
+    fecha_captura: record.fechaCaptura,
+    estrategia: record.estrategia,
+    promotor: record.nombrePromotor || record.usuarioPromotor,
+    estatus_siac: record.estatus,
+    tipo_linea: record.tipoCliente,
+    linea_contratada: record.tipoCliente,
+    area: record.area || record.zona,
+    tienda: record.tienda,
+    paquete: record.paquete,
+    observaciones: record.osPago ? `OS DE PAGO: ${record.osPago}` : record.error,
+    telefono_asignado: record.telefonoAsignado || record.telTelmex,
+    telefono_portado: record.numPortar || record.numCelular,
+    os_alta: record.ordenServicio || record.osPago,
+    fecha_os_alta: record.fechaPosteo,
+    estatus_pisa: record.elaboracion,
+    fecha_cambio_estatus: record.fechaPosteo,
+    tipo_cliente: record.tipoLinea,
+    correo: record.email,
+    estatus_etapa: record.etapa,
+    telefono_referencia: record.numCelular || record.numPortar,
+    zona: record.zona,
+  };
+}
+
+async function uploadSIACRecords(records: SIACRecord[]) {
+  await SiacAPI.deleteAll();
+  const chunkSize = 500;
+  for (let i = 0; i < records.length; i += chunkSize) {
+    await SiacAPI.bulkCreate(records.slice(i, i + chunkSize).map(siacRecordToServerRow));
+  }
+}
 
 export default function SIACView() {
   const [records, setRecords] = useState<SIACRecord[]>(() => loadSIAC());
@@ -27,6 +94,26 @@ export default function SIACView() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const loadServerRecords = async (showToast = false) => {
+    setLoading(true);
+    try {
+      const rows = await SiacAPI.getAll();
+      const mapped = Array.isArray(rows) ? rows.map(serverToSIACRecord) : [];
+      setRecords(mapped);
+      saveSIAC(mapped);
+      if (showToast) toast.success(`${mapped.length} registros SIAC cargados desde la base de datos.`);
+    } catch (err) {
+      if (showToast) toast.error(err instanceof Error ? err.message : 'No se pudo cargar SIAC desde la base de datos.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadServerRecords();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const zonas = useMemo(() => [...new Set(records.map(r => r.zona).filter(Boolean))].sort(), [records]);
   const tipos = useMemo(() => [...new Set(records.map(r => r.tipoLinea).filter(Boolean))].sort(), [records]);
@@ -70,12 +157,13 @@ export default function SIACView() {
       const text = await file.text();
       const parsed = parseSIACCsv(text);
       if (parsed.length === 0) { toast.error('No se encontraron registros válidos en el CSV.'); return; }
+      await uploadSIACRecords(parsed);
       saveSIAC(parsed);
       setRecords(parsed);
       setPage(0);
       logAudit('EXPORTACION', auth.currentUser?.uid || '', auth.currentUser?.displayName || '',
         { details: `SIAC importado: ${parsed.length} registros` });
-      toast.success(`${parsed.length} registros SIAC importados correctamente.`);
+      toast.success(`${parsed.length} registros SIAC importados y guardados en la base de datos.`);
     } catch (err) {
       toast.error('Error al leer el archivo: ' + String(err));
     } finally {
@@ -127,6 +215,11 @@ export default function SIACView() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <input ref={fileRef} type="file" accept=".csv" onChange={handleFileSelect} className="hidden" />
+          <button onClick={() => loadServerRecords(true)} disabled={loading}
+            className="flex items-center gap-2 px-3 py-2 bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold hover:bg-cyan-500/20 transition-colors disabled:opacity-50">
+            <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+            Recargar DB
+          </button>
           <button onClick={() => fileRef.current?.click()} disabled={loading}
             className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-500/20 transition-colors disabled:opacity-50">
             {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}

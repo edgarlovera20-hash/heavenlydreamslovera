@@ -13,7 +13,7 @@ import db, {
   InventoryItems, AutomationRules, AiJobs, Metrics, Sessions,
   Capturas, DocumentosCliente, DocumentFiles, ClientesCrm, EstatusFolios, LogsSistema,
 } from "./server/db";
-import { importSiacCSV } from "./server/siac-importer";
+import { getSiacCSVFingerprint, importSiacCSV } from "./server/siac-importer";
 import { getBearerAuth, issueSession, rateLimit, requireAuth, requireRole, rotateRefreshToken } from "./server/security";
 import {
   classifyMorosityReply,
@@ -1324,8 +1324,19 @@ async function startServer() {
   app.get("/api/siac", authOnly, wrap((_req: any, res: any) => res.json(SiacRecords.getAll())));
 
   // Reimportar CSV
-  app.post("/api/siac/import", managerOnly, wrap((_req: any, res: any) => {
-    const result = importSiacCSV();
+  app.post("/api/siac/import", managerOnly, wrap((req: any, res: any) => {
+    const replace = req.query.replace === '1' || req.query.replace === 'true' || req.body?.replace === true;
+    const result = importSiacCSV({ replace });
+    const fingerprint = getSiacCSVFingerprint();
+    if (fingerprint) Settings.set('siac_csv_fingerprint', fingerprint);
+    AuditLog.insert({
+      accion: replace ? 'REPLACE_IMPORT_SIAC' : 'IMPORT_SIAC',
+      entidad: 'siac_records',
+      entidad_id: null,
+      user_id: req.auth?.sub || null,
+      user_nombre: null,
+      detalle: `imported:${result.imported};skipped:${result.skipped};source:${result.source}`,
+    });
     res.json({ ok: true, ...result });
   }));
 
@@ -2485,9 +2496,13 @@ async function startServer() {
     });
   }
 
-  // Auto-import SIAC CSV on startup if table is empty
-  if (SiacRecords.count() === 0) {
-    importSiacCSV();
+  // Auto-import SIAC CSV on startup when the source file changed.
+  const siacCsvFingerprint = getSiacCSVFingerprint();
+  const storedSiacFingerprint = Settings.get('siac_csv_fingerprint');
+  if (SiacRecords.count() === 0 || (siacCsvFingerprint && storedSiacFingerprint !== siacCsvFingerprint)) {
+    const result = importSiacCSV({ replace: true });
+    if (siacCsvFingerprint) Settings.set('siac_csv_fingerprint', siacCsvFingerprint);
+    console.log(`[SIAC] CSV sincronizado: ${result.imported} registros válidos`);
   }
 
   // Auto-reconectar Telegram si había token guardado
