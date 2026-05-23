@@ -69,6 +69,7 @@ export default function ConsultasSeguimiento() {
   const [estatus, setEstatus] = useState('');
   const [capIni, setCapIni] = useState('');
   const [capFin, setCapFin] = useState('');
+  const [selectedCaptureDates, setSelectedCaptureDates] = useState<string[]>([]);
 
   const [records, setRecords] = useState<SiacRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -136,8 +137,20 @@ export default function ConsultasSeguimiento() {
     setEstatus('');
     setCapIni('');
     setCapFin('');
+    setSelectedCaptureDates([]);
     setCurrentPage(1);
     await fetchAll();
+  };
+
+  const addCaptureDate = () => {
+    if (!capIni) return;
+    setSelectedCaptureDates(prev => prev.includes(capIni) ? prev : [...prev, capIni].sort());
+    setCurrentPage(1);
+  };
+
+  const removeCaptureDate = (date: string) => {
+    setSelectedCaptureDates(prev => prev.filter(d => d !== date));
+    setCurrentPage(1);
   };
 
   const getDisplayId = (id: string | null) => {
@@ -219,14 +232,29 @@ export default function ConsultasSeguimiento() {
     });
   };
 
+  const normalizeDateForFilter = (value: string | null) => {
+    const raw = (value || '').trim();
+    if (!raw) return '';
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    return raw;
+  };
+
   const filteredData = useMemo(() => {
+    const selectedSet = new Set(selectedCaptureDates);
     return records.filter(item => {
       const matchEstatus = !estatus || item.estatus_siac === estatus;
-      const matchCap = (!capIni || (item.fecha_captura || '') >= capIni) &&
-                       (!capFin || (item.fecha_captura || '') <= capFin);
+      const captureDate = normalizeDateForFilter(item.fecha_captura);
+      const matchCap = selectedSet.size > 0
+        ? selectedSet.has(captureDate)
+        : (!capIni || captureDate >= capIni) && (!capFin || captureDate <= capFin);
       return matchEstatus && matchCap;
     });
-  }, [records, estatus, capIni, capFin]);
+  }, [records, estatus, capIni, capFin, selectedCaptureDates]);
 
   const getStatusBadge = (status: string | null) => {
     const s = (status || '').toUpperCase();
@@ -332,14 +360,50 @@ export default function ConsultasSeguimiento() {
 
           {/* Date Filters */}
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Captura Inicial</label>
-            <input type="date" value={capIni} onChange={(e) => setCapIni(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl py-2 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 [color-scheme:dark]" />
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha de captura</label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={capIni}
+                onChange={(e) => setCapIni(e.target.value)}
+                className="min-w-0 flex-1 bg-black/40 border border-white/10 rounded-xl py-2 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 [color-scheme:dark]"
+              />
+              <button
+                type="button"
+                onClick={addCaptureDate}
+                disabled={!capIni}
+                className="shrink-0 px-3 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 disabled:opacity-50 text-blue-300 text-xs font-bold border border-blue-500/30"
+              >
+                Agregar
+              </button>
+            </div>
+            {selectedCaptureDates.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {selectedCaptureDates.map(date => (
+                  <button
+                    key={date}
+                    type="button"
+                    onClick={() => removeCaptureDate(date)}
+                    className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-200"
+                    title="Quitar fecha"
+                  >
+                    {date}
+                    <X className="w-3 h-3" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Captura Final</label>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Hasta</label>
             <input type="date" value={capFin} onChange={(e) => setCapFin(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl py-2 px-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 [color-scheme:dark]" />
           </div>
         </div>
+        {selectedCaptureDates.length > 0 && (
+          <div className="mb-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-xs text-cyan-100">
+            Mostrando folios registrados en {selectedCaptureDates.length} fecha{selectedCaptureDates.length === 1 ? '' : 's'} seleccionada{selectedCaptureDates.length === 1 ? '' : 's'}.
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">

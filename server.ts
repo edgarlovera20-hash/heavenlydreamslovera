@@ -286,6 +286,57 @@ async function consultCurpProvider(payload: any) {
   }
 }
 
+const FIXED_LADA_CATALOG: Record<string, { ciudad: string; estado: string }> = {
+  '55': { ciudad: 'Ciudad de Mexico y area metropolitana', estado: 'Ciudad de Mexico' },
+  '33': { ciudad: 'Guadalajara', estado: 'Jalisco' },
+  '81': { ciudad: 'Monterrey', estado: 'Nuevo Leon' },
+  '222': { ciudad: 'Puebla', estado: 'Puebla' },
+  '221': { ciudad: 'Puebla zona conurbada', estado: 'Puebla' },
+  '228': { ciudad: 'Xalapa', estado: 'Veracruz' },
+  '229': { ciudad: 'Veracruz', estado: 'Veracruz' },
+  '442': { ciudad: 'Queretaro', estado: 'Queretaro' },
+  '449': { ciudad: 'Aguascalientes', estado: 'Aguascalientes' },
+  '477': { ciudad: 'Leon', estado: 'Guanajuato' },
+  '722': { ciudad: 'Toluca', estado: 'Estado de Mexico' },
+  '664': { ciudad: 'Tijuana', estado: 'Baja California' },
+  '686': { ciudad: 'Mexicali', estado: 'Baja California' },
+  '667': { ciudad: 'Culiacan', estado: 'Sinaloa' },
+  '669': { ciudad: 'Mazatlan', estado: 'Sinaloa' },
+  '662': { ciudad: 'Hermosillo', estado: 'Sonora' },
+  '614': { ciudad: 'Chihuahua', estado: 'Chihuahua' },
+  '618': { ciudad: 'Durango', estado: 'Durango' },
+  '871': { ciudad: 'Torreon', estado: 'Coahuila' },
+  '844': { ciudad: 'Saltillo', estado: 'Coahuila' },
+  '833': { ciudad: 'Tampico', estado: 'Tamaulipas' },
+  '444': { ciudad: 'San Luis Potosi', estado: 'San Luis Potosi' },
+  '998': { ciudad: 'Cancun', estado: 'Quintana Roo' },
+  '999': { ciudad: 'Merida', estado: 'Yucatan' },
+  '961': { ciudad: 'Tuxtla Gutierrez', estado: 'Chiapas' },
+  '951': { ciudad: 'Oaxaca', estado: 'Oaxaca' },
+  '777': { ciudad: 'Cuernavaca', estado: 'Morelos' },
+  '744': { ciudad: 'Acapulco', estado: 'Guerrero' },
+  '443': { ciudad: 'Morelia', estado: 'Michoacan' },
+  '311': { ciudad: 'Tepic', estado: 'Nayarit' },
+  '312': { ciudad: 'Colima', estado: 'Colima' },
+  '246': { ciudad: 'Tlaxcala', estado: 'Tlaxcala' },
+  '771': { ciudad: 'Pachuca', estado: 'Hidalgo' },
+  '981': { ciudad: 'Campeche', estado: 'Campeche' },
+  '993': { ciudad: 'Villahermosa', estado: 'Tabasco' },
+  '492': { ciudad: 'Zacatecas', estado: 'Zacatecas' },
+};
+
+function normalizePhone10(value: any) {
+  return String(value || '').replace(/\D/g, '').slice(0, 10);
+}
+
+function lookupFixedLada(number: string) {
+  const two = number.slice(0, 2);
+  const three = number.slice(0, 3);
+  if (FIXED_LADA_CATALOG[two]) return { lada: two, ...FIXED_LADA_CATALOG[two] };
+  if (FIXED_LADA_CATALOG[three]) return { lada: three, ...FIXED_LADA_CATALOG[three] };
+  return null;
+}
+
 const EXPORT_HEADERS: Record<string, string[]> = {
   capturas: ['Folio', 'Cliente', 'Vendedor', 'Telefono', 'Colonia', 'Ciudad', 'Paquete', 'INE', 'Contrato', 'Comprobante', 'StatusCaptura', 'StatusValidacion', 'StatusInstalacion', 'StatusDocumentos', 'FechaCaptura', 'FechaInstalacion', 'Direccion', 'Latitud', 'Longitud'],
   clientes: ['Folio', 'Cliente', 'Telefono', 'WhatsApp', 'Correo', 'Direccion', 'FechaAlta', 'Pipeline', 'UltimoContacto', 'ProximoSeguimiento', 'Satisfaccion', 'RiesgoCancelacion', 'Vendedor'],
@@ -664,6 +715,43 @@ async function startServer() {
         : 'CURP validada localmente. Configura CURP_API_URL para consulta externa.',
       providerError: providerError || undefined,
     });
+  }));
+
+  app.post("/api/portabilidad/verificar-numero", authOnly, wrap((req: any, res: any) => {
+    const number = normalizePhone10(req.body?.numero);
+    if (number.length !== 10) {
+      return res.status(400).json({
+        ok: false,
+        fixedLocal: false,
+        error: 'Favor de ingresar un telefono valido de 10 digitos.',
+      });
+    }
+    const origin = lookupFixedLada(number);
+    if (!origin) {
+      logSystem(req, 'portabilidad.verify_rejected', 'portabilidad', number, 'LADA no reconocida como fijo/local', {
+        number,
+      });
+      return res.status(422).json({
+        ok: false,
+        fixedLocal: false,
+        number,
+        error: 'Solo se aceptan numeros fijos/locales. LADA no reconocida.',
+        source: 'ift-local-catalog',
+      });
+    }
+    const payload = {
+      ok: true,
+      fixedLocal: true,
+      number,
+      lada: origin.lada,
+      ciudad: origin.ciudad,
+      estado: origin.estado,
+      tipo: 'FIJO_LOCAL',
+      source: 'ift-local-catalog',
+      message: 'Numero fijo/local verificado para portabilidad.',
+    };
+    logSystem(req, 'portabilidad.verify', 'portabilidad', number, `${origin.ciudad}, ${origin.estado}`, payload);
+    res.json(payload);
   }));
 
   app.post("/api/auth/passkey/continue", authOnly, wrap((req: any, res: any) => {

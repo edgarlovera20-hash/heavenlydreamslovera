@@ -34,6 +34,9 @@ interface CustomerCaptureData {
   apellidoMaterno: string;
   curp: string;
   folioIne: string;
+  fechaNacimiento?: string;
+  sexo?: 'H' | 'M';
+  estadoNacimiento?: string;
   
   telefonoTitular: string;
   telefonoReferencia?: string;
@@ -85,8 +88,16 @@ interface CustomerCaptureData {
   numeroAPortar?: string;
   companiaActual?: string;
   nip?: string;
+  portabilidadVerificada?: boolean;
+  portabilidadLada?: string;
+  portabilidadCiudad?: string;
+  portabilidadEstado?: string;
+  portabilidadTipo?: string;
   anexoPortabilidad?: string;
   anexoPendiente?: boolean;
+  contratoFirmado?: string;
+  videofirma?: string;
+  audioLlamada?: string;
 
   fechaSolicitud: string;
 }
@@ -328,8 +339,153 @@ type CurpLookupResult = {
   providerError?: string;
 };
 
+type PortabilityCheckResult = {
+  ok: boolean;
+  fixedLocal: boolean;
+  number: string;
+  lada?: string;
+  ciudad?: string;
+  estado?: string;
+  tipo?: string;
+  source?: string;
+  message?: string;
+  error?: string;
+};
+
+const CURP_STATE_OPTIONS = [
+  { code: 'AS', name: 'Aguascalientes' },
+  { code: 'BC', name: 'Baja California' },
+  { code: 'BS', name: 'Baja California Sur' },
+  { code: 'CC', name: 'Campeche' },
+  { code: 'CL', name: 'Coahuila' },
+  { code: 'CM', name: 'Colima' },
+  { code: 'CS', name: 'Chiapas' },
+  { code: 'CH', name: 'Chihuahua' },
+  { code: 'DF', name: 'Ciudad de Mexico' },
+  { code: 'DG', name: 'Durango' },
+  { code: 'GT', name: 'Guanajuato' },
+  { code: 'GR', name: 'Guerrero' },
+  { code: 'HG', name: 'Hidalgo' },
+  { code: 'JC', name: 'Jalisco' },
+  { code: 'MC', name: 'Estado de Mexico' },
+  { code: 'MN', name: 'Michoacan' },
+  { code: 'MS', name: 'Morelos' },
+  { code: 'NT', name: 'Nayarit' },
+  { code: 'NL', name: 'Nuevo Leon' },
+  { code: 'OC', name: 'Oaxaca' },
+  { code: 'PL', name: 'Puebla' },
+  { code: 'QT', name: 'Queretaro' },
+  { code: 'QR', name: 'Quintana Roo' },
+  { code: 'SP', name: 'San Luis Potosi' },
+  { code: 'SL', name: 'Sinaloa' },
+  { code: 'SR', name: 'Sonora' },
+  { code: 'TC', name: 'Tabasco' },
+  { code: 'TS', name: 'Tamaulipas' },
+  { code: 'TL', name: 'Tlaxcala' },
+  { code: 'VZ', name: 'Veracruz' },
+  { code: 'YN', name: 'Yucatan' },
+  { code: 'ZS', name: 'Zacatecas' },
+  { code: 'NE', name: 'Nacido en el extranjero' },
+] as const;
+
+const LARGE_CAPTURE_FIELDS: Array<keyof CustomerCaptureData> = [
+  'ineFrente',
+  'ineReverso',
+  'curpDoc',
+  'comprobanteDomicilio',
+  'capturaSiac',
+  'anexoPortabilidad',
+  'contratoFirmado',
+  'videofirma',
+  'audioLlamada',
+];
+
 function normalizeCurpInput(value?: string) {
   return (value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 18);
+}
+
+function normalizePersonPart(value?: string) {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/Ñ/g, 'X')
+    .replace(/[^A-Za-z]/g, '')
+    .toUpperCase();
+}
+
+function firstInternalVowel(value: string) {
+  return value.slice(1).match(/[AEIOU]/)?.[0] || 'X';
+}
+
+function firstInternalConsonant(value: string) {
+  return value.slice(1).match(/[BCDFGHJKLMNPQRSTVWXYZ]/)?.[0] || 'X';
+}
+
+function generateCurpFromForm(form: Partial<CustomerCaptureData>) {
+  const paterno = normalizePersonPart(form.apellidoPaterno);
+  const materno = normalizePersonPart(form.apellidoMaterno);
+  const nombres = normalizePersonPart(form.nombres);
+  const fecha = form.fechaNacimiento || '';
+  const estado = form.estadoNacimiento || '';
+  const sexo = form.sexo || '';
+  if (!paterno || !nombres || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !estado || !sexo) return '';
+  const yy = fecha.slice(2, 4);
+  const mm = fecha.slice(5, 7);
+  const dd = fecha.slice(8, 10);
+  return `${paterno[0] || 'X'}${firstInternalVowel(paterno)}${materno[0] || 'X'}${nombres[0] || 'X'}${yy}${mm}${dd}${sexo}${estado}${firstInternalConsonant(paterno)}${firstInternalConsonant(materno)}${firstInternalConsonant(nombres)}00`;
+}
+
+function sanitizeCaptureForServer(form: Partial<CustomerCaptureData>) {
+  const safe: Record<string, unknown> = { ...form };
+  for (const field of LARGE_CAPTURE_FIELDS) {
+    const value = safe[field];
+    if (typeof value === 'string' && value.startsWith('data:')) {
+      safe[field] = {
+        uploaded: true,
+        mime: value.slice(5, value.indexOf(';')) || 'application/octet-stream',
+      };
+    }
+  }
+  return safe;
+}
+
+function docFlag(value: unknown) {
+  return value ? 'registrado' : undefined;
+}
+
+function persistLocalSaleRecord(saved: any, saleData: Record<string, any>, form: Partial<CustomerCaptureData>) {
+  try {
+    const id = String(saved?.id || saleData.id || `${saleData.folio || 'venta'}-${Date.now()}`);
+    const record = {
+      id,
+      folio: saved?.folio || saleData.folio,
+      folioSiac: form.folioSiac || saleData.folio_siac,
+      servicioSiac: form.servicioSiac || saleData.servicio_siac,
+      asesorId: saleData.asesor_id || getCurrentUserId(),
+      nombres: form.nombres,
+      apellidoPaterno: form.apellidoPaterno,
+      apellidoMaterno: form.apellidoMaterno,
+      telefonoTitular: form.telefonoTitular,
+      fechaSolicitud: form.fechaSolicitud || saleData.fecha_solicitud || new Date().toISOString(),
+      tipoCliente: form.tipoCliente,
+      ineFrente: docFlag(form.ineFrente),
+      ineReverso: docFlag(form.ineReverso),
+      curpDoc: docFlag(form.curpDoc || form.curp),
+      comprobanteDomicilio: docFlag(form.comprobanteDomicilio),
+      gpsEvidence: docFlag(form.coordenadas),
+      coordenadas: form.coordenadas,
+      contratoFirmado: 'registrado',
+      videofirma: docFlag(form.videofirma),
+      audioLlamada: docFlag(form.audioLlamada),
+      capturaSiac: docFlag(form.capturaSiac || form.folioSiac),
+      anexoPortabilidad: docFlag(form.anexoPortabilidad),
+    };
+    const current = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
+    const next = [record, ...current.filter((sale: any) => sale.id !== id && sale.folio !== record.folio)];
+    localStorage.setItem('adhdreams_sales', JSON.stringify(next));
+  } catch (err) {
+    console.warn('No se pudo guardar el expediente local:', err);
+  }
 }
 
 function getDraftKey() {
@@ -386,6 +542,9 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [curpLookupLoading, setCurpLookupLoading] = useState(false);
   const [curpLookupResult, setCurpLookupResult] = useState<CurpLookupResult | null>(null);
   const [curpLookupError, setCurpLookupError] = useState('');
+  const [portabilityChecking, setPortabilityChecking] = useState(false);
+  const [portabilityResult, setPortabilityResult] = useState<PortabilityCheckResult | null>(null);
+  const [portabilityError, setPortabilityError] = useState('');
 
   // Field validation state
   type ValidationState = 'idle' | 'checking' | 'ok' | 'error';
@@ -397,20 +556,14 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const validatePhone = (val: string): ValidationState =>
     /^\d{10}$/.test(val.replace(/\D/g, '')) ? 'ok' : 'error';
 
-  const validateEmail = async (email: string) => {
-    if (!email) { setEmailVal('idle'); return; }
-    const basicRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-    if (!basicRe.test(email)) { setEmailVal('error'); setEmailMsg('Formato inválido'); return; }
-    setEmailVal('checking');
-    try {
-      const res = await fetch(`/api/validate/email?email=${encodeURIComponent(email)}`);
-      const data = await res.json();
-      setEmailVal(data.ok ? 'ok' : 'error');
-      setEmailMsg(data.reason || '');
-    } catch {
-      setEmailVal('error');
-      setEmailMsg('No se pudo verificar');
+  const markEmailAccepted = (email: string) => {
+    if (!email.trim()) {
+      setEmailVal('idle');
+      setEmailMsg('');
+      return;
     }
+    setEmailVal('ok');
+    setEmailMsg('Correo capturado; el dominio no bloquea la venta.');
   };
   const [docType, setDocType] = useState<'ine' | 'curp'>('ine');
   const [selectedPackage, setSelectedPackage] = useState<PackageCatalogItem | null>(null);
@@ -987,6 +1140,55 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const handleVerifyPortabilityNumber = async () => {
+    const number = (form.numeroAPortar || '').replace(/\D/g, '').slice(0, 10);
+    if (number.length !== 10) {
+      const message = 'El número a portar debe tener 10 dígitos.';
+      setPortabilityError(message);
+      setPortabilityResult(null);
+      updateForm({ portabilidadVerificada: false });
+      toast.error(message);
+      return;
+    }
+    setPortabilityChecking(true);
+    setPortabilityError('');
+    try {
+      const res = await fetch('/api/portabilidad/verificar-numero', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numero: number }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok || !data.fixedLocal) {
+        throw new Error(data.error || data.message || 'Solo se aceptan números fijos/locales.');
+      }
+      setPortabilityResult(data);
+      updateForm({
+        numeroAPortar: number,
+        portabilidadVerificada: true,
+        portabilidadLada: data.lada,
+        portabilidadCiudad: data.ciudad,
+        portabilidadEstado: data.estado,
+        portabilidadTipo: data.tipo,
+      });
+      toast.success(`Número fijo/local verificado: ${data.ciudad}, ${data.estado}`);
+    } catch (err: any) {
+      const message = err?.message || 'No se pudo verificar el número.';
+      setPortabilityResult(null);
+      setPortabilityError(message);
+      updateForm({
+        portabilidadVerificada: false,
+        portabilidadLada: undefined,
+        portabilidadCiudad: undefined,
+        portabilidadEstado: undefined,
+        portabilidadTipo: undefined,
+      });
+      toast.error(message);
+    } finally {
+      setPortabilityChecking(false);
+    }
+  };
+
   const copyCurpToClipboard = async () => {
     const curp = normalizeCurpInput(form.curp);
     if (!curp) {
@@ -1118,7 +1320,7 @@ const exportToPDF = async () => {
         asesor_id: getCurrentUserId(),
         status: 'pendiente',
         fecha_solicitud: new Date().toISOString(),
-        metadata: form,
+        metadata: sanitizeCaptureForServer(form),
       };
       const apiRes = await fetch('/api/ventas', {
         method: 'POST',
@@ -1127,11 +1329,13 @@ const exportToPDF = async () => {
       });
       if (!apiRes.ok) {
         const err = await apiRes.json().catch(() => ({}));
-        throw new Error(err.error || 'Error al guardar en el servidor');
+        throw new Error(err.error || err.message || `Error al guardar en el servidor (${apiRes.status})`);
       }
+      const savedSale = await apiRes.json().catch(() => null);
       
       // 3. Export PDF
       await exportToPDF();
+      persistLocalSaleRecord(savedSale, saleData, form);
       await idbDel(draftKeyRef.current);
       setDraftStatus('idle');
       setDraftUpdatedAt('');
@@ -1140,7 +1344,9 @@ const exportToPDF = async () => {
       onBack();
     } catch (err) {
       console.error('Error al guardar la venta:', err);
-      toast.error('Error al guardar la venta.');
+      const message = err instanceof Error ? err.message : 'Error al guardar la venta.';
+      setError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -1156,12 +1362,6 @@ const exportToPDF = async () => {
   ];
 
   const currentStepLabel = steps.find(s => s.id === step)?.label || '';
-  const documentIndicators = [
-    { label: 'INE', complete: Boolean(form.ineFrente && form.ineReverso) },
-    { label: 'CURP', complete: Boolean(form.curpDoc || form.curp) },
-    { label: 'Comprobante', complete: Boolean(form.comprobanteDomicilio) },
-    { label: 'GPS', complete: Boolean(form.coordenadas) },
-  ];
 
   return (
     <>
@@ -1262,26 +1462,6 @@ const exportToPDF = async () => {
               <h2 className="text-xl font-semibold text-white flex items-center gap-2 mb-6">
                 <FileText className="w-5 h-5 text-blue-400" /> Documento de Identidad (OCR)
               </h2>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
-                {documentIndicators.map(item => (
-                  <div
-                    key={item.label}
-                    className={cn(
-                      'rounded-xl border px-3 py-2 flex items-center gap-2',
-                      item.complete
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                        : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                    )}
-                  >
-                    {item.complete ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-wider truncate">{item.label}</p>
-                      <p className="text-[10px] opacity-80">{item.complete ? 'Completo' : 'Pendiente'}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
               
               <div className="flex gap-4 mb-6">
                 <button 
@@ -1428,23 +1608,90 @@ const exportToPDF = async () => {
                       value={form.folioIne || ''} onChange={e => updateForm({ folioIne: e.target.value })} />
                   </div>
                 )}
-                <div className="md:col-span-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4 space-y-3">
-                  <div className="flex flex-col md:flex-row md:items-center gap-3">
-                    <div className="flex-1 min-w-0">
+                {docType === 'curp' && (
+                  <div className="md:col-span-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4 space-y-4">
+                    <div>
                       <div className="flex items-center gap-2 text-cyan-200 font-bold uppercase tracking-widest text-xs">
                         <Search className="w-4 h-4" />
-                        Consulta CURP
+                        Consulta y generación CURP
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
-                        Busca la CURP, copia el resultado y descarga un PDF para el expediente.
+                        Captura nombre, apellidos, fecha, sexo y estado de nacimiento para generar la CURP y descargar el PDF.
                       </p>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto">
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Fecha de nacimiento</label>
+                        <MatrixInput
+                          type="date"
+                          className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500 [color-scheme:dark]"
+                          value={form.fechaNacimiento || ''}
+                          onChange={e => updateForm({ fechaNacimiento: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Sexo</label>
+                        <select
+                          className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                          value={form.sexo || ''}
+                          onChange={e => updateForm({ sexo: e.target.value as 'H' | 'M' })}
+                        >
+                          <option value="">Seleccionar...</option>
+                          <option value="H">Hombre</option>
+                          <option value="M">Mujer</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Estado de nacimiento</label>
+                        <select
+                          className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                          value={form.estadoNacimiento || ''}
+                          onChange={e => updateForm({ estadoNacimiento: e.target.value })}
+                        >
+                          <option value="">Seleccionar estado...</option>
+                          {CURP_STATE_OPTIONS.map(state => (
+                            <option key={state.code} value={state.code}>{state.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const generated = generateCurpFromForm(form);
+                          if (!generated) {
+                            toast.error('Completa nombre, apellidos, fecha, sexo y estado para generar la CURP.');
+                            return;
+                          }
+                          updateForm({ curp: generated });
+                          setCurpLookupError('');
+                          setCurpLookupResult({
+                            ok: true,
+                            curp: generated,
+                            nombres: form.nombres,
+                            apellidoPaterno: form.apellidoPaterno,
+                            apellidoMaterno: form.apellidoMaterno,
+                            sexo: form.sexo === 'M' ? 'Mujer' : 'Hombre',
+                            fechaNacimiento: form.fechaNacimiento,
+                            entidadNacimiento: CURP_STATE_OPTIONS.find(s => s.code === form.estadoNacimiento)?.name || form.estadoNacimiento,
+                            status: 'GENERADA_LOCAL',
+                            official: false,
+                          });
+                          toast.success('CURP generada localmente.');
+                        }}
+                        className="rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-4 py-2.5 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Generar
+                      </button>
                       <button
                         type="button"
                         onClick={handleCurpLookup}
                         disabled={curpLookupLoading}
-                        className="rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 px-4 py-2.5 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                        className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 disabled:opacity-50 text-cyan-200 px-4 py-2.5 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2"
                       >
                         {curpLookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                         Consultar
@@ -1468,27 +1715,28 @@ const exportToPDF = async () => {
                         PDF
                       </button>
                     </div>
+
+                    {(curpLookupError || curpLookupResult) && (
+                      <div className={cn(
+                        'rounded-xl border px-3 py-2 text-xs',
+                        curpLookupError
+                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                      )}>
+                        {curpLookupError || (
+                          <>
+                            <span className="font-bold">{curpLookupResult?.curp}</span>
+                            <span className="text-slate-300"> · {curpLookupResult?.status || 'VALIDADA'}</span>
+                            <span className="text-slate-400"> · {curpLookupResult?.official ? 'Proveedor externo' : 'Modo local'}</span>
+                            {curpLookupResult?.providerError && (
+                              <span className="block text-amber-200 mt-1">Proveedor no disponible: {curpLookupResult.providerError}</span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {(curpLookupError || curpLookupResult) && (
-                    <div className={cn(
-                      'rounded-xl border px-3 py-2 text-xs',
-                      curpLookupError
-                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-                    )}>
-                      {curpLookupError || (
-                        <>
-                          <span className="font-bold">{curpLookupResult?.curp}</span>
-                          <span className="text-slate-300"> · {curpLookupResult?.status || 'VALIDADA'}</span>
-                          <span className="text-slate-400"> · {curpLookupResult?.official ? 'Proveedor externo' : 'Modo local'}</span>
-                          {curpLookupResult?.providerError && (
-                            <span className="block text-amber-200 mt-1">Proveedor no disponible: {curpLookupResult.providerError}</span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
+                )}
                 {/* Teléfono Titular — validación EN VIVO 10 dígitos */}
                 <div>
                   <label className="text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
@@ -1565,14 +1813,15 @@ const exportToPDF = async () => {
                     {emailVal === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
                   </label>
                   <MatrixInput
-                    type="email"
+                    type="text"
+                    inputMode="email"
                     className={cn("w-full bg-slate-950/80 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
                       emailVal === 'ok' ? 'border-green-500/60' : emailVal === 'error' ? 'border-red-500/60' : 'border-white/10')}
                     value={form.correo || ''}
                     onChange={e => { updateForm({ correo: e.target.value }); setEmailVal('idle'); }}
-                    onBlur={e => validateEmail(e.target.value)}
+                    onBlur={e => markEmailAccepted(e.target.value)}
                   />
-                  {emailVal === 'ok' && <p className="text-green-400 text-xs mt-1">✓ Dominio de correo verificado</p>}
+                  {emailVal === 'ok' && <p className="text-green-400 text-xs mt-1">✓ {emailMsg || 'Correo capturado'}</p>}
                   {emailVal === 'error' && <p className="text-red-400 text-xs mt-1">✗ {emailMsg}</p>}
                 </div>
               </div>
@@ -2108,8 +2357,46 @@ const exportToPDF = async () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1.5">Número a Portar (10 dígitos)</label>
-                    <MatrixInput type="tel" maxLength={10} className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
-                      value={form.numeroAPortar || ''} onChange={e => updateForm({ numeroAPortar: e.target.value })} />
+                    <div className="flex gap-2">
+                      <MatrixInput
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={10}
+                        className={cn(
+                          "w-full bg-slate-900 border rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500",
+                          form.portabilidadVerificada ? 'border-emerald-500/60' : portabilityError ? 'border-red-500/60' : 'border-white/10'
+                        )}
+                        value={form.numeroAPortar || ''}
+                        onChange={e => {
+                          const next = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          updateForm({
+                            numeroAPortar: next,
+                            portabilidadVerificada: false,
+                            portabilidadLada: undefined,
+                            portabilidadCiudad: undefined,
+                            portabilidadEstado: undefined,
+                            portabilidadTipo: undefined,
+                          });
+                          setPortabilityResult(null);
+                          setPortabilityError('');
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyPortabilityNumber}
+                        disabled={portabilityChecking || (form.numeroAPortar || '').length !== 10}
+                        className="shrink-0 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 px-4 py-2 text-xs font-black uppercase tracking-widest flex items-center gap-2"
+                      >
+                        {portabilityChecking ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                        Verificar
+                      </button>
+                    </div>
+                    {portabilityResult && (
+                      <p className="text-emerald-300 text-xs mt-2">
+                        LADA {portabilityResult.lada} · {portabilityResult.ciudad}, {portabilityResult.estado} · {portabilityResult.tipo}
+                      </p>
+                    )}
+                    {portabilityError && <p className="text-red-400 text-xs mt-2">{portabilityError}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1.5">Compañía Actual</label>
@@ -2183,6 +2470,10 @@ const exportToPDF = async () => {
               <button onClick={() => { setError(''); handlePrev(); }} className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-xl font-medium">Atrás</button>
               <button 
                 onClick={() => {
+                  if (form.tipoCliente === 'portado' && !form.portabilidadVerificada) {
+                    setError('Verifica que el número a portar sea fijo/local antes de continuar.');
+                    return;
+                  }
                   if (form.tipoCliente === 'portado' && !form.anexoPortabilidad && !form.anexoPendiente) {
                     setError('Debes cargar el Anexo de Portabilidad para continuar o indicar que se subirá después.');
                     return;

@@ -15,6 +15,7 @@ import {
   isGoogleDriveConfigured,
   parseDriveFolderId,
 } from '../../services/googleDriveFolders';
+import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 
 // ──────────────────────────────────────────────
@@ -45,7 +46,10 @@ interface Sale {
   ineFrente?: string;
   ineReverso?: string;
   curpDoc?: string;
+  curp?: string;
   comprobanteDomicilio?: string;
+  gpsEvidence?: string;
+  coordenadas?: string;
   anexoPortabilidad?: string;
   contratoFirmado?: string;
   videofirma?: string;
@@ -73,19 +77,19 @@ interface Step {
 // DOC CATALOG
 // ──────────────────────────────────────────────
 const DOC_DEFS: DocumentDef[] = [
-  { id: 'ineFrente', name: 'INE Frente', type: 'image' },
-  { id: 'ineReverso', name: 'INE Atrás', type: 'image' },
-  { id: 'curpDoc', name: 'CURP', type: 'image' },
-  { id: 'comprobanteDomicilio', name: 'Comprobante de domicilio', type: 'image' },
+  { id: 'curpDoc', name: 'INE o CURP', type: 'image' },
+  { id: 'comprobanteDomicilio', name: 'Comprobante de domicilio (si aplica)', type: 'image', optional: true },
+  { id: 'gpsEvidence', name: 'GPS / ubicación', type: 'image' },
   { id: 'contratoFirmado', name: 'Contrato firmado (PDF)', type: 'pdf' },
-  { id: 'videofirma', name: 'Videofirma', type: 'video' },
-  { id: 'audioLlamada', name: 'Audio de la llamada', type: 'audio' },
-  { id: 'capturaSiac', name: 'Captura del folio SIAC', type: 'image' },
+  { id: 'videofirma', name: 'Video firma', type: 'video' },
+  { id: 'audioLlamada', name: 'Audio de la llamada de validación', type: 'audio' },
+  { id: 'capturaSiac', name: 'Captura del folio SIAC', type: 'image', optional: true },
   {
     id: 'anexoPortabilidad',
     name: 'Anexo de portabilidad',
     type: 'pdf',
-    showIf: (s) => s.tipoCliente === 'portabilidad',
+    optional: true,
+    showIf: (s) => s.tipoCliente === 'portabilidad' || s.tipoCliente === 'portado',
   },
 ];
 
@@ -113,8 +117,18 @@ function getDocsForSale(s: Sale): DocumentDef[] {
   return DOC_DEFS.filter(d => !d.showIf || d.showIf(s));
 }
 
+function hasIdentityDoc(s: Sale): boolean {
+  return Boolean((s.ineFrente && s.ineReverso) || s.curpDoc || s.curp);
+}
+
+function isDocUploaded(s: Sale, doc: DocumentDef): boolean {
+  if (doc.id === 'curpDoc') return hasIdentityDoc(s);
+  if (doc.id === 'gpsEvidence') return Boolean(s.gpsEvidence || s.coordenadas);
+  return Boolean(s[doc.id]);
+}
+
 function getMissingDocs(s: Sale): DocumentDef[] {
-  return getDocsForSale(s).filter(d => !d.optional && !s[d.id]);
+  return getDocsForSale(s).filter(d => !d.optional && !isDocUploaded(s, d));
 }
 
 function isComplete(s: Sale): boolean {
@@ -736,6 +750,14 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     const promoterName = promoter.displayName || promoter.nombre || 'Sin asignar';
     const promoterPhone = promoter.telefono || '—';
     const fecha = parseSaleDate(sale);
+    const documentSummary = [
+      { label: 'INE o CURP', ok: hasIdentityDoc(sale), optional: false },
+      { label: 'Comprobante', ok: Boolean(sale.comprobanteDomicilio), optional: true },
+      { label: 'GPS', ok: Boolean(sale.gpsEvidence || sale.coordenadas), optional: false },
+      { label: 'Contrato firmado', ok: Boolean(sale.contratoFirmado), optional: false },
+      { label: 'Video firma', ok: Boolean(sale.videofirma), optional: false },
+      { label: 'Audio llamada', ok: Boolean(sale.audioLlamada), optional: false },
+    ];
 
     return (
       <div className="max-w-5xl mx-auto space-y-6">
@@ -822,13 +844,35 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
             onChange={handleFileChange}
           />
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+            {documentSummary.map(item => (
+              <div
+                key={item.label}
+                className={cn(
+                  'rounded-2xl border px-4 py-3 flex items-center gap-3',
+                  item.ok
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                    : item.optional
+                      ? 'bg-slate-800/50 border-slate-700 text-slate-300'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                )}
+              >
+                {item.ok ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-widest truncate">{item.label}</p>
+                  <p className="text-[11px] opacity-80">{item.ok ? 'Registrado' : item.optional ? 'Si aplica' : 'Pendiente'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
           <h3 className="text-lg font-bold text-white mb-3">Documentos del expediente</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {docs.map(doc => (
               <DocCard
                 key={doc.id}
                 doc={doc}
-                uploaded={Boolean(sale[doc.id])}
+                uploaded={isDocUploaded(sale, doc)}
                 analyzing={analyzingDocId === doc.id}
                 validation={sale.docValidations?.[doc.id]}
                 onUpload={() => triggerUpload(sale.id!, doc.id as string, doc.type)}
@@ -871,7 +915,7 @@ function SaleCard({
   sale, promoterName, onClick,
 }: { key?: React.Key | null; sale: Sale; promoterName: string; onClick: () => void }) {
   const docs = getDocsForSale(sale);
-  const uploaded = docs.filter(d => Boolean(sale[d.id])).length;
+  const uploaded = docs.filter(d => isDocUploaded(sale, d)).length;
   const total = docs.length;
   const progress = total ? Math.round((uploaded / total) * 100) : 0;
   const complete = isComplete(sale);
