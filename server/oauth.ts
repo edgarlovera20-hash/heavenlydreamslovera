@@ -76,12 +76,33 @@ function callbackUrl(req: Request, provider: OAuthProvider) {
   return `${appBaseUrl(req)}/api/auth/oauth/${provider}/callback`;
 }
 
+function isConfiguredValue(value: any) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  return !/^(TU_|MY_|change_me|localhost|https:\/\/crm\.tudominio\.com)/i.test(text);
+}
+
+function isValidGoogleClientId(value: any) {
+  return isConfiguredValue(value) && String(value).trim().endsWith('.apps.googleusercontent.com');
+}
+
+function isValidMicrosoftClientId(value: any) {
+  return isConfiguredValue(value) && /^[0-9a-f-]{36}$/i.test(String(value).trim());
+}
+
+function microsoftTenant() {
+  const tenant = String(process.env.MICROSOFT_OAUTH_TENANT || 'common').trim();
+  if (!tenant || tenant === 'commo') return 'common';
+  return tenant;
+}
+
 function providerConfig(provider: string) {
   if (provider !== 'google' && provider !== 'microsoft') throw new Error('Proveedor OAuth no soportado');
   const config = PROVIDERS[provider];
   const clientId = process.env[config.clientIdEnv];
   const clientSecret = process.env[config.clientSecretEnv];
-  if (!clientId || !clientSecret) {
+  const validClientId = provider === 'google' ? isValidGoogleClientId(clientId) : isValidMicrosoftClientId(clientId);
+  if (!validClientId || !isConfiguredValue(clientSecret)) {
     throw new Error(`${config.label} OAuth no configurado. Define ${config.clientIdEnv} y ${config.clientSecretEnv}.`);
   }
   return { provider, config, clientId, clientSecret } as const;
@@ -140,7 +161,7 @@ function renderOAuthResult(res: Response, payload: { session?: any; title: strin
 
 async function exchangeCode(provider: OAuthProvider, code: string, redirectUri: string) {
   const { config, clientId, clientSecret } = providerConfig(provider);
-  const tenant = process.env.MICROSOFT_OAUTH_TENANT || 'common';
+  const tenant = microsoftTenant();
   const res = await fetch(config.tokenUrl(provider === 'microsoft' ? tenant : undefined), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -255,7 +276,7 @@ export function oauthStart(req: Request, res: Response) {
         error: true,
       });
     }
-    const tenant = process.env.MICROSOFT_OAUTH_TENANT || 'common';
+    const tenant = microsoftTenant();
     const state = encodeState({
       provider,
       mode,
@@ -370,8 +391,23 @@ export async function oauthCallback(req: Request, res: Response) {
 }
 
 export function oauthStatus() {
+  const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const microsoftClientId = process.env.MICROSOFT_OAUTH_CLIENT_ID;
+  const microsoftClientSecret = process.env.MICROSOFT_OAUTH_CLIENT_SECRET;
   return {
-    google: Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET),
-    microsoft: Boolean(process.env.MICROSOFT_OAUTH_CLIENT_ID && process.env.MICROSOFT_OAUTH_CLIENT_SECRET),
+    google: isValidGoogleClientId(googleClientId) && isConfiguredValue(googleClientSecret),
+    microsoft: isValidMicrosoftClientId(microsoftClientId) && isConfiguredValue(microsoftClientSecret),
+    callbacks: {
+      google: '/api/auth/oauth/google/callback',
+      microsoft: '/api/auth/oauth/microsoft/callback',
+    },
+    missing: {
+      googleClientId: !isValidGoogleClientId(googleClientId),
+      googleClientSecret: !isConfiguredValue(googleClientSecret),
+      microsoftClientId: !isValidMicrosoftClientId(microsoftClientId),
+      microsoftClientSecret: !isConfiguredValue(microsoftClientSecret),
+      microsoftTenant: microsoftTenant(),
+    },
   };
 }
