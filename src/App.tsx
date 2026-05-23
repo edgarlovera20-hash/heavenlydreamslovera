@@ -234,7 +234,20 @@ export default function App() {
     else { setUsername(''); setPassword(''); setRememberMe(false); }
   };
 
-  const startOAuthLogin = (provider: 'google' | 'microsoft') => {
+  const startOAuthLogin = async (provider: 'google' | 'microsoft') => {
+    const providerLabel = provider === 'google' ? 'Google' : 'Microsoft';
+    setError('');
+    try {
+      const statusRes = await fetch('/api/auth/oauth/status');
+      const status = await statusRes.json();
+      if (!statusRes.ok || !status?.[provider]) {
+        setError(`${providerLabel} no está configurado en el servidor. Configura las credenciales OAuth en .env y reinicia la app.`);
+        return;
+      }
+    } catch {
+      setError('No se pudo validar OAuth con el servidor. Reinicia la app y revisa que /api/auth/oauth/status responda JSON.');
+      return;
+    }
     const params = new URLSearchParams({
       mode: 'login',
       role: pendingRole || 'ASESOR',

@@ -187,9 +187,22 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
     }
   };
 
-  const startOAuthRegistration = (provider: 'google' | 'microsoft') => {
+  const startOAuthRegistration = async (provider: 'google' | 'microsoft') => {
+    const providerLabel = provider === 'google' ? 'Google' : 'Microsoft';
     if (!acceptedTerms) {
       setErrorMsg('Debes aceptar los Términos y Condiciones para registrarte con Google o Microsoft.');
+      return;
+    }
+    setErrorMsg('');
+    try {
+      const statusRes = await fetch('/api/auth/oauth/status');
+      const status = await statusRes.json();
+      if (!statusRes.ok || !status?.[provider]) {
+        setErrorMsg(`${providerLabel} no está configurado en el servidor. Configura las credenciales OAuth en .env y reinicia la app.`);
+        return;
+      }
+    } catch {
+      setErrorMsg('No se pudo validar OAuth con el servidor. Reinicia la app y revisa que /api/auth/oauth/status responda JSON.');
       return;
     }
     const params = new URLSearchParams({
