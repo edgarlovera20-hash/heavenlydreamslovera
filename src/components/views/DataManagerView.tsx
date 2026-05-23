@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Database, Download, Upload, Trash2, FileText,
   RefreshCw, CheckCircle2, AlertTriangle, X, FileDown,
-  FolderArchive, ChevronDown, ChevronUp, Loader2,
+  FolderArchive, ChevronDown, ChevronUp, Loader2, Filter,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
@@ -55,6 +55,51 @@ const TABLES = [
 
 type TableId = typeof TABLES[number]['id'];
 
+const SMART_EXPORTS = [
+  { id: 'capturas', label: 'Capturas' },
+  { id: 'clientes', label: 'Clientes CRM' },
+  { id: 'morosidad', label: 'Morosidad' },
+  { id: 'folios', label: 'Estatus Folios' },
+  { id: 'usuarios', label: 'Usuarios' },
+] as const;
+
+const DEFAULT_EXPORT_FILTERS = {
+  fecha_desde: '',
+  fecha_hasta: '',
+  vendedor: '',
+  supervisor: '',
+  estatus: '',
+  colonia: '',
+  ciudad: '',
+  paquete: '',
+  instalacion: '',
+  morosidad: '',
+};
+
+type ExportFilterKey = keyof typeof DEFAULT_EXPORT_FILTERS;
+
+const EXPORT_FILTER_FIELDS: Array<{ key: ExportFilterKey; label: string; type?: string; placeholder?: string; options?: string[] }> = [
+  { key: 'fecha_desde', label: 'Desde', type: 'date' },
+  { key: 'fecha_hasta', label: 'Hasta', type: 'date' },
+  { key: 'vendedor', label: 'Vendedor', placeholder: 'ID o nombre' },
+  { key: 'supervisor', label: 'Supervisor', placeholder: 'ID o nombre' },
+  { key: 'estatus', label: 'Estatus', options: ['CAPTURADO', 'VALIDACION', 'PREAUTORIZADO', 'RECHAZADO', 'EN_REVISION', 'AGENDADO', 'INSTALADO', 'CANCELADO', 'PENDIENTE_DOCUMENTOS', 'ACTIVO', 'RIESGO', 'RETENCION'] },
+  { key: 'colonia', label: 'Colonia' },
+  { key: 'ciudad', label: 'Ciudad' },
+  { key: 'paquete', label: 'Paquete' },
+  { key: 'instalacion', label: 'Instalación', placeholder: 'Fecha o estatus' },
+  { key: 'morosidad', label: 'Morosidad', options: ['Preventiva', 'Baja', 'Media', 'Alta', 'Critica'] },
+];
+
+function buildExportQuery(format: 'csv' | 'excel' | 'pdf', filters: typeof DEFAULT_EXPORT_FILTERS) {
+  const params = new URLSearchParams({ format });
+  Object.entries(filters).forEach(([key, value]) => {
+    const clean = String(value || '').trim();
+    if (clean) params.set(key, clean);
+  });
+  return params.toString();
+}
+
 const COLOR_MAP: Record<string, { bg: string; border: string; text: string; badge: string }> = {
   blue:    { bg: 'bg-blue-500/10',    border: 'border-blue-500/30',    text: 'text-blue-400',    badge: 'bg-blue-500/20 text-blue-300' },
   cyan:    { bg: 'bg-cyan-500/10',    border: 'border-cyan-500/30',    text: 'text-cyan-400',    badge: 'bg-cyan-500/20 text-cyan-300' },
@@ -90,6 +135,7 @@ export default function DataManagerView() {
   const [importState, setImportState] = useState<ImportState | null>(null);
   const [importing, setImporting] = useState(false);
   const [expandAll, setExpandAll] = useState(false);
+  const [exportFilters, setExportFilters] = useState(DEFAULT_EXPORT_FILTERS);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const loadStats = useCallback(async () => {
@@ -108,7 +154,7 @@ export default function DataManagerView() {
     const exportKey = `${tableId}:${format}`;
     setExporting(exportKey);
     try {
-      const res = await fetch(`/api/export/${tableId}?format=${format}`);
+      const res = await fetch(`/api/export/${tableId}?${buildExportQuery(format, exportFilters)}`);
       if (!res.ok) throw new Error(await res.text());
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -120,6 +166,10 @@ export default function DataManagerView() {
     } catch (e) {
       toast.error('Error al exportar: ' + String(e));
     } finally { setExporting(null); }
+  };
+
+  const updateExportFilter = (key: ExportFilterKey, value: string) => {
+    setExportFilters(prev => ({ ...prev, [key]: value }));
   };
 
   // ── Download Template ───────────────────────────────────────
@@ -230,6 +280,82 @@ export default function DataManagerView() {
             <p className="text-[11px] text-slate-500 mt-0.5">{g.desc}</p>
           </div>
         ))}
+      </div>
+
+      {/* Filtered smart exports */}
+      <div className="bg-slate-900/90 border border-cyan-500/20 rounded-2xl p-5 space-y-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider">
+              <Filter className="w-4 h-4 text-cyan-300" />
+              Exportación filtrada / masiva
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Aplica filtros operativos y descarga Capturas, Clientes, Morosidad, Folios o Usuarios en CSV, Excel o PDF.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExportFilters(DEFAULT_EXPORT_FILTERS)}
+            className="px-3 py-2 rounded-xl border border-white/10 text-[11px] font-bold text-slate-300 hover:bg-white/5 transition-colors"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {EXPORT_FILTER_FIELDS.map(field => (
+            <label key={field.key} className="space-y-1.5">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500">{field.label}</span>
+              {field.options ? (
+                <select
+                  value={exportFilters[field.key]}
+                  onChange={e => updateExportFilter(field.key, e.target.value)}
+                  className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:ring-1 focus:ring-cyan-500"
+                >
+                  <option value="">Todos</option>
+                  {field.options.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+              ) : (
+                <input
+                  type={field.type || 'text'}
+                  value={exportFilters[field.key]}
+                  placeholder={field.placeholder || field.label}
+                  onChange={e => updateExportFilter(field.key, e.target.value)}
+                  className="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-slate-600 outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+              )}
+            </label>
+          ))}
+        </div>
+
+        <div className="divide-y divide-white/10 border-y border-white/10">
+          {SMART_EXPORTS.map(dataset => (
+            <div key={dataset.id} className="py-3 flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-xs font-bold text-slate-200">{dataset.label}</p>
+                <p className="text-[11px] text-slate-500">Endpoint /api/export/{dataset.id}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {(['csv', 'excel', 'pdf'] as const).map(format => {
+                  const isCurrent = exporting === `${dataset.id}:${format}`;
+                  return (
+                    <button
+                      key={format}
+                      type="button"
+                      onClick={() => handleExport(dataset.id, dataset.label, format)}
+                      disabled={isCurrent}
+                      className="min-w-16 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors border bg-cyan-500/10 border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-50"
+                    >
+                      {isCurrent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : format === 'pdf' ? <FileText className="w-3.5 h-3.5" /> : <FileDown className="w-3.5 h-3.5" />}
+                      {format.toUpperCase()}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Table Cards */}

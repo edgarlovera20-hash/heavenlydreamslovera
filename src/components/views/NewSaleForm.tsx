@@ -494,6 +494,23 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     setForm(prev => ({ ...prev, ...updates }));
   };
 
+  const applyResolvedAddress = (address: { codigoPostal?: string; colonia?: string; ciudad?: string; delegacion?: string }) => {
+    setForm(prev => {
+      const updates: Partial<CustomerCaptureData> = {};
+      const fillEmpty = (key: keyof CustomerCaptureData, value?: string) => {
+        const current = prev[key];
+        if (value && (!current || String(current).trim() === '')) {
+          (updates as any)[key] = value;
+        }
+      };
+      fillEmpty('codigoPostal', address.codigoPostal);
+      fillEmpty('colonia', address.colonia);
+      fillEmpty('ciudad', address.ciudad);
+      fillEmpty('delegacion', address.delegacion);
+      return Object.keys(updates).length ? { ...prev, ...updates } : prev;
+    });
+  };
+
   const getAvailablePackages = () => {
     return PACKAGE_CATALOG.filter((pkg) => {
       return (
@@ -930,6 +947,12 @@ const exportToPDF = async () => {
   ];
 
   const currentStepLabel = steps.find(s => s.id === step)?.label || '';
+  const documentIndicators = [
+    { label: 'INE', complete: Boolean(form.ineFrente && form.ineReverso) },
+    { label: 'CURP', complete: Boolean(form.curpDoc || form.curp) },
+    { label: 'Comprobante', complete: Boolean(form.comprobanteDomicilio) },
+    { label: 'GPS', complete: Boolean(form.coordenadas) },
+  ];
 
   return (
     <>
@@ -1003,6 +1026,26 @@ const exportToPDF = async () => {
               <h2 className="text-xl font-semibold text-white flex items-center gap-2 mb-6">
                 <FileText className="w-5 h-5 text-blue-400" /> Documento de Identidad (OCR)
               </h2>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
+                {documentIndicators.map(item => (
+                  <div
+                    key={item.label}
+                    className={cn(
+                      'rounded-xl border px-3 py-2 flex items-center gap-2',
+                      item.complete
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                    )}
+                  >
+                    {item.complete ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wider truncate">{item.label}</p>
+                      <p className="text-[10px] opacity-80">{item.complete ? 'Completo' : 'Pendiente'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
               
               <div className="flex gap-4 mb-6">
                 <button 
@@ -1316,7 +1359,10 @@ const exportToPDF = async () => {
                       value={form.calle || ''} onChange={e => updateForm({ calle: e.target.value })} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1.5">C.P.</label>
+                    <label className="flex items-center justify-between gap-2 text-sm font-medium text-slate-400 mb-1.5">
+                      <span>C.P.</span>
+                      {form.codigoPostal && <span className="text-[10px] text-cyan-300 uppercase tracking-wider">auto/verificado</span>}
+                    </label>
                     <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
                       value={form.codigoPostal || ''} onChange={e => updateForm({ codigoPostal: e.target.value })} />
                   </div>
@@ -1419,6 +1465,14 @@ const exportToPDF = async () => {
                 <span className="text-cyan-300 font-semibold">Dirección:</span> {buildInstallAddress(form) || 'Completa la vialidad, número y colonia para armar la dirección de instalación.'}
               </div>
 
+              {form.gpsTimestamp && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 mb-6 text-xs text-emerald-200">
+                  GPS capturado: {form.gpsLatitud?.toFixed(6)}, {form.gpsLongitud?.toFixed(6)}
+                  {typeof form.gpsPrecision === 'number' ? ` · precisión aprox. ${Math.round(form.gpsPrecision)} m` : ''}
+                  {form.codigoPostal ? ` · CP ${form.codigoPostal}` : ''}
+                </div>
+              )}
+
               {/* Mapa interactivo */}
               <div className="bg-slate-950/80 border border-white/10 rounded-xl p-4">
                 <label className="block text-sm font-medium text-white mb-3 flex items-center gap-2">
@@ -1434,6 +1488,7 @@ const exportToPDF = async () => {
                       gpsPrecision: location.accuracy,
                       gpsTimestamp: location.timestamp,
                     })}
+                    onAddressResolved={applyResolvedAddress}
                     searchAddress={buildInstallAddress(form)}
                   />
                 </Suspense>

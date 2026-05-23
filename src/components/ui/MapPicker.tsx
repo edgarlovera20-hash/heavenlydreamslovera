@@ -7,12 +7,57 @@ interface MapPickerProps {
   coords: string;
   onCoordsChange: (coords: string) => void;
   onLocationChange?: (location: { lat: number; lng: number; accuracy?: number; timestamp: string }) => void;
+  onAddressResolved?: (address: ResolvedAddress) => void;
   searchAddress?: string; // auto-search this address when provided
 }
+
+type ResolvedAddress = {
+  codigoPostal?: string;
+  colonia?: string;
+  ciudad?: string;
+  delegacion?: string;
+};
 
 function parseCoords(s: string): { lat: number; lng: number } | null {
   const m = s.match(/(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)/);
   return m ? { lat: parseFloat(m[1]), lng: parseFloat(m[2]) } : null;
+}
+
+function firstAddressValue(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function addressFromNominatim(result: any): ResolvedAddress {
+  const address = result?.address || {};
+  return {
+    codigoPostal: firstAddressValue(address.postcode),
+    colonia: firstAddressValue(
+      address.neighbourhood,
+      address.suburb,
+      address.quarter,
+      address.residential,
+      address.city_district,
+    ),
+    delegacion: firstAddressValue(
+      address.municipality,
+      address.county,
+      address.borough,
+      address.city_district,
+    ),
+    ciudad: firstAddressValue(
+      address.city,
+      address.town,
+      address.village,
+      address.state,
+    ),
+  };
+}
+
+function hasResolvedAddress(address: ResolvedAddress) {
+  return Boolean(address.codigoPostal || address.colonia || address.ciudad || address.delegacion);
 }
 
 /** Inner controller that has access to the map context, so we can flyTo when coords change. */
@@ -41,7 +86,7 @@ function ClickHandler({ onClick }: { onClick: (lng: number, lat: number) => void
   return null;
 }
 
-export function MapPicker({ coords, onCoordsChange, onLocationChange, searchAddress }: MapPickerProps) {
+export function MapPicker({ coords, onCoordsChange, onLocationChange, onAddressResolved, searchAddress }: MapPickerProps) {
   const initial = parseCoords(coords) ?? { lat: 19.4326, lng: -99.1332 };
   const [position, setPosition] = useState(initial);
   const [searching, setSearching] = useState(false);
@@ -57,10 +102,29 @@ export function MapPicker({ coords, onCoordsChange, onLocationChange, searchAddr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coords]);
 
-  const updateCoords = (lat: number, lng: number, accuracy?: number) => {
+  const emitResolvedAddress = (result: any) => {
+    const resolved = addressFromNominatim(result);
+    if (hasResolvedAddress(resolved)) onAddressResolved?.(resolved);
+  };
+
+  const reverseGeocode = async (lat: number, lng: number) => {
+    if (!onAddressResolved) return;
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${lat}&lon=${lng}`, {
+        headers: { 'Accept-Language': 'es' },
+      });
+      if (!res.ok) return;
+      emitResolvedAddress(await res.json());
+    } catch {
+      // La geocodificación inversa es asistida; no debe bloquear la captura manual.
+    }
+  };
+
+  const updateCoords = (lat: number, lng: number, accuracy?: number, shouldReverse = false) => {
     setPosition({ lat, lng });
     onCoordsChange(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     onLocationChange?.({ lat, lng, accuracy, timestamp: new Date().toISOString() });
+    if (shouldReverse) void reverseGeocode(lat, lng);
   };
 
   const geocode = async (query: string) => {
@@ -69,11 +133,12 @@ export function MapPicker({ coords, onCoordsChange, onLocationChange, searchAddr
     setError('');
     try {
       const q = encodeURIComponent(query + ', México');
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=mx`, {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=jsonv2&addressdetails=1&limit=1&countrycodes=mx`, {
         headers: { 'Accept-Language': 'es' },
       });
       const data = await res.json();
       if (!data.length) { setError('No se encontró la dirección — verifica los campos'); return; }
+      emitResolvedAddress(data[0]);
       updateCoords(parseFloat(data[0].lat), parseFloat(data[0].lon));
     } catch {
       setError('Error al buscar la dirección');
@@ -99,7 +164,7 @@ export function MapPicker({ coords, onCoordsChange, onLocationChange, searchAddr
     if (!navigator.geolocation) { setError('Geolocalización no soportada'); return; }
     setError('');
     navigator.geolocation.getCurrentPosition(
-      (pos) => updateCoords(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+      (pos) => updateCoords(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, true),
       () => setError('No se pudo obtener la ubicación'),
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -194,12 +259,12 @@ export function MapPicker({ coords, onCoordsChange, onLocationChange, searchAddr
           attributionControl={false}
         >
           <MapController lat={position.lat} lng={position.lng} />
-          <ClickHandler onClick={(lng, lat) => updateCoords(lat, lng)} />
+          <ClickHandler onClick={(lng, lat) => updateCoords(lat, lng, undefined, true)} />
           <MapMarker
             longitude={position.lng}
             latitude={position.lat}
             draggable
-            onDragEnd={({ lng, lat }) => updateCoords(lat, lng)}
+            onDragEnd={({ lng, lat }) => updateCoords(lat, lng, undefined, true)}
           >
             <MarkerContent>
               <div className="relative">
@@ -221,7 +286,7 @@ export function MapPicker({ coords, onCoordsChange, onLocationChange, searchAddr
             </MarkerContent>
           </MapMarker>
           <MapControls position="top-right" showZoom showLocate showFullscreen
-            onLocate={(c) => updateCoords(c.latitude, c.longitude)}
+            onLocate={(c) => updateCoords(c.latitude, c.longitude, undefined, true)}
           />
         </Map>
       </motion.div>

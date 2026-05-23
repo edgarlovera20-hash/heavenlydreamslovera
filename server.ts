@@ -763,6 +763,27 @@ async function startServer() {
     res.json((db as any).prepare('SELECT * FROM documentos_cliente WHERE id=?').get(req.params.id));
   }));
 
+  app.post("/api/drive/expedientes/audit", authOnly, wrap((req: any, res: any) => {
+    const body = req.body || {};
+    const action = body.action === 'import' ? 'IMPORT_DRIVE_FOLDER' : 'EXPORT_DRIVE_FOLDER';
+    const count = Number(body.salesImported ?? body.salesExported ?? 0);
+    const files = Number(body.filesUploaded ?? 0);
+    const folderId = body.folderId || body.rootFolderId || body.sourceFolderId || null;
+    logSystem(
+      req,
+      action,
+      'google_drive',
+      folderId,
+      `expedientes:${count};files:${files}`,
+      {
+        folderInput: body.folderInput || null,
+        rootFolderUrl: body.rootFolderUrl || null,
+        importedAt: body.importedAt || null,
+      },
+    );
+    res.json({ ok: true });
+  }));
+
   app.get("/api/clientes-crm", authOnly, wrap((req: any, res: any) => {
     if (canManage(req.auth)) return res.json(ClientesCrm.getAll());
     res.json((db as any).prepare('SELECT * FROM clientes_crm WHERE vendedor_asignado=? ORDER BY created_at DESC').all(req.auth.sub));
@@ -1444,7 +1465,11 @@ async function startServer() {
     const paquete = queryValue(query, 'paquete');
     if (fechaDesde) { where.push(`date(${alias}.fecha_captura) >= date(@fechaDesde)`); params.fechaDesde = fechaDesde; }
     if (fechaHasta) { where.push(`date(${alias}.fecha_captura) <= date(@fechaHasta)`); params.fechaHasta = fechaHasta; }
-    if (vendedor) { where.push(`${alias}.vendedor_id = @vendedor`); params.vendedor = vendedor; }
+    if (vendedor) {
+      where.push(`(${alias}.vendedor_id = @vendedor OR u.nombre LIKE @vendedorLike OR u.username LIKE @vendedorLike)`);
+      params.vendedor = vendedor;
+      params.vendedorLike = `%${vendedor}%`;
+    }
     if (supervisor) { where.push(`${alias}.supervisor_id = @supervisor`); params.supervisor = supervisor; }
     if (colonia) { where.push(`${alias}.colonia LIKE @colonia`); params.colonia = `%${colonia}%`; }
     if (ciudad) { where.push(`${alias}.ciudad LIKE @ciudad`); params.ciudad = `%${ciudad}%`; }
@@ -1498,6 +1523,27 @@ async function startServer() {
     }
 
     if (dataset === 'clientes') {
+      const where: string[] = [];
+      const params: Record<string, any> = {};
+      const fechaDesde = queryValue(query, 'fecha_desde') || queryValue(query, 'from');
+      const fechaHasta = queryValue(query, 'fecha_hasta') || queryValue(query, 'to');
+      const vendedor = queryValue(query, 'vendedor') || queryValue(query, 'vendedor_id');
+      const estatus = queryValue(query, 'estatus');
+      const colonia = queryValue(query, 'colonia');
+      const ciudad = queryValue(query, 'ciudad');
+      if (fechaDesde) { where.push('date(c.fecha_alta) >= date(@fechaDesde)'); params.fechaDesde = fechaDesde; }
+      if (fechaHasta) { where.push('date(c.fecha_alta) <= date(@fechaHasta)'); params.fechaHasta = fechaHasta; }
+      if (vendedor) {
+        where.push('(c.vendedor_asignado=@vendedor OR u.nombre LIKE @vendedorLike OR u.username LIKE @vendedorLike)');
+        params.vendedor = vendedor;
+        params.vendedorLike = `%${vendedor}%`;
+      }
+      if (estatus) {
+        where.push('(c.status_cliente=@estatus OR c.riesgo_cancelacion=@estatus)');
+        params.estatus = estatus;
+      }
+      if (colonia) { where.push('c.direccion LIKE @colonia'); params.colonia = `%${colonia}%`; }
+      if (ciudad) { where.push('c.direccion LIKE @ciudad'); params.ciudad = `%${ciudad}%`; }
       return (db as any).prepare(`
         SELECT
           c.folio AS Folio,
@@ -1515,13 +1561,34 @@ async function startServer() {
           COALESCE(u.nombre, c.vendedor_asignado, '') AS Vendedor
         FROM clientes_crm c
         LEFT JOIN users u ON u.uid = c.vendedor_asignado
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY c.created_at DESC
-      `).all();
+      `).all(params);
     }
 
     if (dataset === 'morosidad') {
+      const where: string[] = [];
+      const params: Record<string, any> = {};
       const status = queryValue(query, 'estatus') || queryValue(query, 'morosidad');
-      const where = status ? 'WHERE m.status_cobranza=@status' : '';
+      const fechaDesde = queryValue(query, 'fecha_desde') || queryValue(query, 'from');
+      const fechaHasta = queryValue(query, 'fecha_hasta') || queryValue(query, 'to');
+      const gestor = queryValue(query, 'vendedor') || queryValue(query, 'gestor');
+      if (fechaDesde) { where.push('date(m.fecha_vencimiento) >= date(@fechaDesde)'); params.fechaDesde = fechaDesde; }
+      if (fechaHasta) { where.push('date(m.fecha_vencimiento) <= date(@fechaHasta)'); params.fechaHasta = fechaHasta; }
+      if (gestor) {
+        where.push('(m.gestor_asignado=@gestor OR u.nombre LIKE @gestorLike OR u.username LIKE @gestorLike)');
+        params.gestor = gestor;
+        params.gestorLike = `%${gestor}%`;
+      }
+      if (status) {
+        const normalizedStatus = String(status).toLowerCase();
+        if (normalizedStatus === 'preventiva') where.push('m.dias_atraso BETWEEN 0 AND 7');
+        else if (normalizedStatus === 'baja') where.push('m.dias_atraso BETWEEN 8 AND 30');
+        else if (normalizedStatus === 'media') where.push('m.dias_atraso BETWEEN 31 AND 60');
+        else if (normalizedStatus === 'alta') where.push('m.dias_atraso BETWEEN 61 AND 90');
+        else if (normalizedStatus === 'critica' || normalizedStatus === 'crítica') where.push('m.dias_atraso > 90');
+        else { where.push('m.status_cobranza=@status'); params.status = status; }
+      }
       return (db as any).prepare(`
         SELECT
           m.folio AS Folio,
@@ -1544,14 +1611,32 @@ async function startServer() {
         FROM morosidad m
         LEFT JOIN clientes_crm c ON c.id=m.cliente_id
         LEFT JOIN users u ON u.uid=m.gestor_asignado
-        ${where}
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY m.dias_atraso DESC, m.created_at DESC
-      `).all(status ? { status } : {});
+      `).all(params);
     }
 
     if (dataset === 'folios') {
+      const where: string[] = [];
+      const params: Record<string, any> = {};
       const q = queryValue(query, 'q');
-      const where = q ? 'WHERE (e.folio LIKE @q OR c.cliente_nombre LIKE @q OR c.telefono LIKE @q)' : '';
+      const estatus = queryValue(query, 'estatus');
+      const instalacion = queryValue(query, 'instalacion');
+      const fechaDesde = queryValue(query, 'fecha_desde') || queryValue(query, 'from');
+      const fechaHasta = queryValue(query, 'fecha_hasta') || queryValue(query, 'to');
+      const vendedor = queryValue(query, 'vendedor') || queryValue(query, 'vendedor_id');
+      const supervisor = queryValue(query, 'supervisor') || queryValue(query, 'supervisor_id');
+      const colonia = queryValue(query, 'colonia');
+      const ciudad = queryValue(query, 'ciudad');
+      if (q) { where.push('(e.folio LIKE @q OR c.cliente_nombre LIKE @q OR c.telefono LIKE @q)'); params.q = `%${q}%`; }
+      if (estatus) { where.push('(e.status_actual=@estatus OR e.subestatus LIKE @estatusLike)'); params.estatus = estatus; params.estatusLike = `%${estatus}%`; }
+      if (instalacion) { where.push('(date(c.fecha_instalacion)=date(@instalacion) OR c.status_instalacion=@instalacion)'); params.instalacion = instalacion; }
+      if (fechaDesde) { where.push('date(e.fecha_movimiento) >= date(@fechaDesde)'); params.fechaDesde = fechaDesde; }
+      if (fechaHasta) { where.push('date(e.fecha_movimiento) <= date(@fechaHasta)'); params.fechaHasta = fechaHasta; }
+      if (vendedor) { where.push('c.vendedor_id=@vendedor'); params.vendedor = vendedor; }
+      if (supervisor) { where.push('c.supervisor_id=@supervisor'); params.supervisor = supervisor; }
+      if (colonia) { where.push('c.colonia LIKE @colonia'); params.colonia = `%${colonia}%`; }
+      if (ciudad) { where.push('c.ciudad LIKE @ciudad'); params.ciudad = `%${ciudad}%`; }
       return (db as any).prepare(`
         SELECT
           e.folio AS Folio,
@@ -1568,12 +1653,24 @@ async function startServer() {
           e.fecha_movimiento AS FechaMovimiento
         FROM estatus_folios e
         LEFT JOIN capturas c ON c.id=e.captura_id
-        ${where}
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY e.fecha_movimiento DESC
-      `).all(q ? { q: `%${q}%` } : {});
+      `).all(params);
     }
 
     if (dataset === 'usuarios') {
+      const where: string[] = [];
+      const params: Record<string, any> = {};
+      const estatus = queryValue(query, 'estatus');
+      const q = queryValue(query, 'q') || queryValue(query, 'vendedor');
+      if (estatus) {
+        const active = ['activo', 'active', '1', 'true'].includes(String(estatus).toLowerCase()) ? 1
+          : ['inactivo', 'inactive', '0', 'false'].includes(String(estatus).toLowerCase()) ? 0
+            : null;
+        if (active !== null) { where.push('activo=@active'); params.active = active; }
+        else { where.push('role=@role'); params.role = estatus; }
+      }
+      if (q) { where.push('(nombre LIKE @q OR email LIKE @q OR username LIKE @q)'); params.q = `%${q}%`; }
       return (db as any).prepare(`
         SELECT
           uid AS Id,
@@ -1586,8 +1683,9 @@ async function startServer() {
           CASE WHEN activo=1 THEN 'ACTIVO' ELSE 'INACTIVO' END AS Status,
           created_at AS Creado
         FROM users
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY nombre
-      `).all();
+      `).all(params);
     }
 
     return null;

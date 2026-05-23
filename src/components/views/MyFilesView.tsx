@@ -9,6 +9,12 @@ import {
 import { set, get } from 'idb-keyval';
 import { auth } from '../../lib/firebase';
 import { aiAgent } from '../../services/aiAgent';
+import {
+  exportExpedientesToDrive,
+  importExpedientesFromDrive,
+  isGoogleDriveConfigured,
+  parseDriveFolderId,
+} from '../../services/googleDriveFolders';
 import { toast } from 'sonner';
 
 // ──────────────────────────────────────────────
@@ -204,6 +210,9 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
   const [analyzingDocId, setAnalyzingDocId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isNotifying, setIsNotifying] = useState(false);
+  const [driveFolderInput, setDriveFolderInput] = useState('');
+  const [driveBusy, setDriveBusy] = useState<'import' | 'export' | null>(null);
+  const [driveLastUrl, setDriveLastUrl] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetRef = useRef<{ saleId: string; docId: string; type: DocType } | null>(null);
@@ -351,6 +360,66 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     }, 1100);
   };
 
+  const auditDriveOperation = async (action: 'import' | 'export', payload: Record<string, any>) => {
+    try {
+      await fetch('/api/drive/expedientes/audit', {
+        method: 'POST',
+        body: JSON.stringify({
+          action,
+          folderInput: driveFolderInput,
+          folderId: parseDriveFolderId(driveFolderInput),
+          ...payload,
+        }),
+      });
+    } catch {
+      // La auditoría no debe bloquear la operación de Drive del usuario.
+    }
+  };
+
+  const handleDriveExport = async () => {
+    if (sales.length === 0) {
+      toast.error('No hay expedientes visibles para exportar.');
+      return;
+    }
+    setDriveBusy('export');
+    try {
+      const result = await exportExpedientesToDrive(sales, driveFolderInput);
+      setDriveLastUrl(result.rootFolderUrl || '');
+      await auditDriveOperation('export', result);
+      toast.success(`Exportados ${result.salesExported} expedientes a Google Drive.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo exportar a Google Drive.');
+    } finally {
+      setDriveBusy(null);
+    }
+  };
+
+  const handleDriveImport = async () => {
+    setDriveBusy('import');
+    try {
+      const result = await importExpedientesFromDrive(driveFolderInput);
+      const next = persistSales(prev => {
+        const byId = new Map<string, Sale>();
+        prev.forEach(sale => {
+          if (sale.id) byId.set(sale.id, sale);
+        });
+        result.sales.forEach((sale: any) => {
+          const id = sale.id || sale.folio || crypto.randomUUID();
+          const normalized = { ...sale, id, fechaSolicitud: sale.fechaSolicitud || new Date().toISOString().slice(0, 10) } as Sale;
+          byId.set(id, { ...(byId.get(id) || {}), ...normalized });
+        });
+        return Array.from(byId.values());
+      });
+      setSales(canSeeAll ? next : next.filter(s => s.asesorId === myUid));
+      await auditDriveOperation('import', { sourceFolderId: result.sourceFolderId, salesImported: result.sales.length, importedAt: result.importedAt });
+      toast.success(`Importados ${result.sales.length} expedientes desde Google Drive.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo importar desde Google Drive.');
+    } finally {
+      setDriveBusy(null);
+    }
+  };
+
   // ──────────── NAVEGACIÓN ────────────
   const goRoot = () => setPath({ level: 'root' });
   const goYear = (year: number) => setPath({ level: 'year', year });
@@ -415,6 +484,63 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     </div>
   );
 
+  const DriveFoldersPanel = () => (
+    <div className="bg-slate-900/90 border border-blue-500/20 rounded-2xl p-4 space-y-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-white font-bold flex items-center gap-2">
+            <FolderOpen className="w-5 h-5 text-blue-300" />
+            Google Drive · Carpetas de expedientes
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            Exporta la estructura año/mes/día/folio a Drive o importa una carpeta raíz exportada por Heavenly Dreams.
+          </p>
+          {!isGoogleDriveConfigured() && (
+            <p className="text-[11px] text-amber-300 mt-2">
+              Configura <span className="font-mono">VITE_GOOGLE_DRIVE_CLIENT_ID</span> para activar la conexión real.
+            </p>
+          )}
+        </div>
+        {driveLastUrl && (
+          <a
+            href={driveLastUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-bold text-blue-300 hover:text-blue-200 underline underline-offset-4"
+          >
+            Abrir última carpeta
+          </a>
+        )}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_auto] gap-3">
+        <input
+          value={driveFolderInput}
+          onChange={e => setDriveFolderInput(e.target.value)}
+          placeholder="Pega enlace o ID de carpeta de Google Drive (opcional para exportar, obligatorio para importar)"
+          className="w-full bg-slate-950/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+        />
+        <button
+          type="button"
+          onClick={handleDriveImport}
+          disabled={driveBusy !== null || !driveFolderInput.trim()}
+          className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-45 disabled:cursor-not-allowed text-white font-bold rounded-xl border border-slate-600 transition-colors text-sm"
+        >
+          {driveBusy === 'import' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 text-emerald-300" />}
+          Importar carpetas
+        </button>
+        <button
+          type="button"
+          onClick={handleDriveExport}
+          disabled={driveBusy !== null || sales.length === 0}
+          className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-45 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors text-sm"
+        >
+          {driveBusy === 'export' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          Exportar carpetas
+        </button>
+      </div>
+    </div>
+  );
+
   // ──────────── BÚSQUEDA (override hierarchy when searching) ────────────
   if (searchTerm.trim()) {
     return (
@@ -454,6 +580,7 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
           subtitle="Navega por año, mes y día para encontrar cualquier expediente."
           icon={<FolderOpen className="w-7 h-7 text-blue-400" />}
         />
+        <DriveFoldersPanel />
         {years.length === 0 ? (
           <EmptyState msg="Cada venta que registres aparecerá agrupada por año, mes y día." />
         ) : (
