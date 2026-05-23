@@ -375,7 +375,7 @@ db.exec(`
 
 // Seed admin user if no users exist
 const userCount = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c;
-if (userCount === 0) {
+if (userCount === 0 && process.env.NODE_ENV !== 'production') {
   db.prepare(`
     INSERT INTO users (uid, nombre, email, username, role, password, zona, activo)
     VALUES (?, ?, ?, ?, ?, ?, ?, 1)
@@ -386,6 +386,22 @@ if (userCount === 0) {
 export default db;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+function pickAllowed(data: any, allowed: string[]) {
+  const out: Record<string, any> = {};
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(data, key)) out[key] = data[key];
+  }
+  return out;
+}
+
+function updateById(table: string, idColumn: string, id: string, data: any, allowed: string[]) {
+  const clean = pickAllowed(data || {}, allowed);
+  const keys = Object.keys(clean);
+  if (!keys.length) return { changes: 0 };
+  const fields = keys.map(k => `${k}=@${k}`).join(',');
+  return db.prepare(`UPDATE ${table} SET ${fields},updated_at=datetime('now') WHERE ${idColumn}=@id`).run({ ...clean, id });
+}
 
 export const Users = {
   getAll: () => db.prepare('SELECT * FROM users ORDER BY nombre').all(),
@@ -398,10 +414,7 @@ export const Users = {
     `);
     return stmt.run(data);
   },
-  update: (uid: string, data: any) => {
-    const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
-    return db.prepare(`UPDATE users SET ${fields},updated_at=datetime('now') WHERE uid=@uid`).run({ ...data, uid });
-  },
+  update: (uid: string, data: any) => updateById('users', 'uid', uid, data, ['nombre', 'email', 'username', 'role', 'password', 'zona', 'puesto', 'avatar', 'biometric_id', 'activo']),
   delete: (uid: string) => db.prepare("DELETE FROM users WHERE uid=?").run(uid),
 };
 
@@ -417,10 +430,7 @@ export const Ventas = {
       @direccion,@colonia,@municipio,@tipo_cliente,@tipo_servicio,@plan,@renta_mensual,@zona,@notas,
       @fecha_solicitud,@metadata)
   `).run(data),
-  update: (id: string, data: any) => {
-    const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
-    return db.prepare(`UPDATE ventas SET ${fields},updated_at=datetime('now') WHERE id=@id`).run({ ...data, id });
-  },
+  update: (id: string, data: any) => updateById('ventas', 'id', id, data, ['folio', 'asesor_id', 'asesor_nombre', 'status', 'nombres', 'apellidos', 'telefono', 'direccion', 'colonia', 'municipio', 'tipo_cliente', 'tipo_servicio', 'plan', 'renta_mensual', 'zona', 'notas', 'fecha_solicitud', 'fecha_instalacion', 'contrato_pdf', 'ine_pdf', 'comprobante_pdf', 'metadata']),
   delete: (id: string) => db.prepare('DELETE FROM ventas WHERE id=?').run(id),
 };
 
@@ -600,10 +610,7 @@ export const InventoryItems = {
     INSERT INTO inventory_items (id,sku,tipo,nombre,serial,estado,assigned_to,sale_id,notes)
     VALUES (@id,@sku,@tipo,@nombre,@serial,@estado,@assigned_to,@sale_id,@notes)
   `).run(data),
-  update: (id: string, data: any) => {
-    const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
-    return db.prepare(`UPDATE inventory_items SET ${fields},updated_at=datetime('now') WHERE id=@id`).run({ ...data, id });
-  },
+  update: (id: string, data: any) => updateById('inventory_items', 'id', id, data, ['sku', 'tipo', 'nombre', 'serial', 'estado', 'assigned_to', 'sale_id', 'notes']),
   delete: (id: string) => db.prepare('DELETE FROM inventory_items WHERE id=?').run(id),
 };
 
@@ -631,10 +638,7 @@ export const AutomationRules = {
     INSERT INTO automation_rules (id,name,event,conditions,actions,enabled)
     VALUES (@id,@name,@event,@conditions,@actions,@enabled)
   `).run(data),
-  update: (id: string, data: any) => {
-    const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
-    return db.prepare(`UPDATE automation_rules SET ${fields},updated_at=datetime('now') WHERE id=@id`).run({ ...data, id });
-  },
+  update: (id: string, data: any) => updateById('automation_rules', 'id', id, data, ['name', 'event', 'conditions', 'actions', 'enabled']),
   delete: (id: string) => db.prepare('DELETE FROM automation_rules WHERE id=?').run(id),
 };
 

@@ -85,13 +85,63 @@ const ALLOWED_TABLES = [
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT || 3000);
   app.use(express.json({ limit: '20mb' }));
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
   const ocrLimiter = rateLimit('ocr', 40, 15 * 60 * 1000);
   const authOnly = requireAuth;
   const opsOnly = requireRole('GERENTE', 'SUPERVISOR');
   const managerOnly = requireRole('GERENTE');
+
+  function canManage(auth: any) {
+    return ['GERENTE', 'SUPERVISOR'].includes(auth?.role);
+  }
+
+  function canAccessVenta(auth: any, venta: any) {
+    if (!auth || !venta) return false;
+    return canManage(auth) || venta.asesor_id === auth.sub;
+  }
+
+  function normalizeSiacRow(row: any) {
+    return {
+      id: row.id || randomUUID(),
+      folio_siac: row.folio_siac || row.folioSiac || row.folio || '',
+      fecha_captura: row.fecha_captura || row.fechaCaptura || null,
+      estrategia: row.estrategia || null,
+      promotor: row.promotor || null,
+      estatus_siac: row.estatus_siac || row.estatusSiac || row.estatus || null,
+      tipo_linea: row.tipo_linea || row.tipoLinea || null,
+      linea_contratada: row.linea_contratada || row.lineaContratada || null,
+      area: row.area || null,
+      division: row.division || null,
+      tienda: row.tienda || null,
+      paquete: row.paquete || null,
+      observaciones: row.observaciones || null,
+      respuesta_telmex: row.respuesta_telmex || row.respuestaTelmex || null,
+      motivo_rechazo: row.motivo_rechazo || row.motivoRechazo || null,
+      telefono_asignado: row.telefono_asignado || row.telefonoAsignado || null,
+      telefono_portado: row.telefono_portado || row.telefonoPortado || null,
+      os_alta: row.os_alta || row.osAlta || null,
+      fecha_os_alta: row.fecha_os_alta || row.fechaOsAlta || null,
+      estatus_pisa: row.estatus_pisa || row.estatusPisa || null,
+      fecha_cambio_estatus: row.fecha_cambio_estatus || row.fechaCambioEstatus || null,
+      tipo_cliente: row.tipo_cliente || row.tipoCliente || null,
+      tipo_servicio: row.tipo_servicio || row.tipoServicio || null,
+      correo: row.correo || row.email || null,
+      estatus_etapa: row.estatus_etapa || row.estatusEtapa || null,
+      campana: row.campana || row.campaña || null,
+      telefono_referencia: row.telefono_referencia || row.telefonoReferencia || null,
+      zona: row.zona || null,
+      distrito: row.distrito || null,
+      colonia: row.colonia || null,
+    };
+  }
+
+  function safeUser(user: any) {
+    if (!user) return user;
+    const { password: _password, ...safe } = user;
+    return safe;
+  }
 
   function assertManager(req: any, res: any) {
     const auth = getBearerAuth(req);
@@ -103,7 +153,7 @@ async function startServer() {
   }
 
   // ── USUARIOS ────────────────────────────────────────────────
-  app.get("/api/users", opsOnly, wrap((_req: any, res: any) => res.json(Users.getAll())));
+  app.get("/api/users", opsOnly, wrap((_req: any, res: any) => res.json(Users.getAll().map(safeUser))));
 
   app.post("/api/users", wrap((req: any, res: any) => {
     if (!req.body.fromRegistration) {
@@ -281,22 +331,33 @@ async function startServer() {
   // ── VENTAS ─────────────────────────────────────────────────
   app.get("/api/ventas", authOnly, wrap((req: any, res: any) => {
     const { asesor_id } = req.query;
+    const auth = req.auth;
+    if (!canManage(auth)) return res.json(Ventas.getByAsesor(auth.sub));
     res.json(asesor_id ? Ventas.getByAsesor(asesor_id as string) : Ventas.getAll());
   }));
 
   app.post("/api/ventas", authOnly, wrap((req: any, res: any) => {
+    const auth = req.auth;
     const data = {
       id: randomUUID(), status: 'pendiente',
       folio: null, ...req.body,
       metadata: req.body.metadata ? JSON.stringify(req.body.metadata) : null,
     };
+    if (!canManage(auth)) data.asesor_id = auth.sub;
     Ventas.create(data);
     AuditLog.insert({ accion: 'CREATE_VENTA', entidad: 'ventas', entidad_id: data.id, user_id: data.asesor_id, user_nombre: data.asesor_nombre, detalle: data.folio });
     res.json(Ventas.getById(data.id));
   }));
 
   const updateVenta = wrap((req: any, res: any) => {
+    const current = Ventas.getById(req.params.id);
+    if (!current) return res.status(404).json({ error: 'Venta no encontrada' });
+    if (!canAccessVenta(req.auth, current)) return res.status(403).json({ error: 'Permisos insuficientes' });
     const update = { ...req.body };
+    if (!canManage(req.auth)) {
+      delete update.asesor_id;
+      delete update.asesor_nombre;
+    }
     if (update.metadata && typeof update.metadata === 'object') update.metadata = JSON.stringify(update.metadata);
     Ventas.update(req.params.id, update);
     AuditLog.insert({ accion: 'UPDATE_VENTA', entidad: 'ventas', entidad_id: req.params.id, user_id: update.by || null, user_nombre: update.byName || null, detalle: update.status || null });
@@ -335,6 +396,24 @@ async function startServer() {
   app.delete("/api/siac", managerOnly, wrap((_req: any, res: any) => {
     SiacRecords.deleteAll();
     res.json({ ok: true });
+  }));
+
+  app.post("/api/siac/bulk", managerOnly, wrap((req: any, res: any) => {
+    const rows = Array.isArray(req.body) ? req.body : Array.isArray(req.body?.records) ? req.body.records : [];
+    if (!rows.length) return res.status(400).json({ error: 'records requerido' });
+    let imported = 0, skipped = 0;
+    for (const row of rows) {
+      const data = normalizeSiacRow(row);
+      if (!data.folio_siac) { skipped++; continue; }
+      try {
+        SiacRecords.upsert(data);
+        imported++;
+      } catch {
+        skipped++;
+      }
+    }
+    AuditLog.insert({ accion: 'BULK_IMPORT_SIAC', entidad: 'siac_records', entidad_id: null, user_id: req.auth?.sub || null, user_nombre: null, detalle: `imported:${imported};skipped:${skipped}` });
+    res.json({ imported, skipped });
   }));
 
   // ── TICKETS ────────────────────────────────────────────────

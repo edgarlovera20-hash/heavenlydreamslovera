@@ -2,16 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { Users, Bot, Smartphone, Download, Upload, Plus, Edit2, Power, AlertTriangle, FileText, BrainCircuit, Trash2, Key, Lock, Eye, EyeOff, BellRing, Loader2, CheckCircle2, QrCode, MessageCircle, Send, X, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { sendPushNotification, requestNotificationPermission } from '../../lib/notifications';
-import { auth } from '../../lib/firebase';
 import { AgentDesigner } from './AgentDesigner';
 import { toast } from 'sonner';
 
 type Tab = 'usuarios' | 'bot' | 'canales' | 'import_export' | 'integraciones' | 'notificaciones';
 
+function currentSessionRole() {
+  try {
+    return (JSON.parse(localStorage.getItem('hd_session') || '{}')?.role || '').toUpperCase();
+  } catch {
+    return '';
+  }
+}
+
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<Tab>('usuarios');
 
-  const role = (auth.currentUser?.role || '').toUpperCase();
+  const role = currentSessionRole();
   const canManageChannels = role === 'GERENTE' || role === 'ADMIN';
 
   const tabs = [
@@ -147,7 +154,7 @@ function NotificacionesTab() {
 }
 
 function IntegracionesTab() {
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(() => currentSessionRole() === 'GERENTE');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -163,19 +170,44 @@ function IntegracionesTab() {
 
   useEffect(() => {
     if (!isUnlocked) return;
-    const saved: any[] = JSON.parse(localStorage.getItem('adhdreams_apikeys') || '[]');
-    setKeys(saved);
-    const vk = localStorage.getItem('adhdreams_google_vision_key') || '';
-    setVisionKeySaved(vk);
-    setVisionKey(vk);
+    const loadSettings = async () => {
+      setIsLoading(true);
+      try {
+        const [keysRes, visionRes] = await Promise.all([
+          fetch('/api/settings/integration_keys'),
+          fetch('/api/settings/google_vision_key'),
+        ]);
+        if (keysRes.ok) {
+          const data = await keysRes.json();
+          setKeys(Array.isArray(data.value) ? data.value : []);
+        }
+        if (visionRes.ok) {
+          const data = await visionRes.json();
+          const vk = typeof data.value === 'string' ? data.value : '';
+          setVisionKeySaved(vk);
+          setVisionKey(vk);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadSettings();
   }, [isUnlocked]);
 
-  const handleSaveVisionKey = () => {
+  const handleSaveVisionKey = async () => {
     const trimmed = visionKey.trim();
-    localStorage.setItem('adhdreams_google_vision_key', trimmed);
+    const res = await fetch('/api/settings/google_vision_key', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: trimmed }),
+    });
+    if (!res.ok) {
+      toast.error('No se pudo guardar la API key en el servidor.');
+      return;
+    }
     setVisionKeySaved(trimmed);
     setVisionTestResult(null);
-    toast.success(trimmed ? 'API key de Google Vision guardada.' : 'API key eliminada.');
+    toast.success(trimmed ? 'API key de Google Vision guardada en servidor.' : 'API key eliminada.');
   };
 
   const handleTestVisionKey = async () => {
@@ -218,32 +250,48 @@ function IntegracionesTab() {
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === 'admin123' || password === 'admin') { 
+    if (currentSessionRole() === 'GERENTE') {
       setIsUnlocked(true);
       setError('');
     } else {
-      setError('Contraseña incorrecta (Usa: admin)');
+      setError('Solo GERENTE puede gestionar credenciales.');
     }
   };
 
-  const handleAdd = (e: React.FormEvent) => {
+  const persistKeys = async (nextKeys: any[]) => {
+    const res = await fetch('/api/settings/integration_keys', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: nextKeys }),
+    });
+    if (!res.ok) throw new Error('No se pudo guardar en el servidor');
+    setKeys(nextKeys);
+  };
+
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newService && newKey) {
       const newEntry = { id: `key-${Date.now()}`, service: newService, key: newKey, createdAt: new Date().toISOString() };
       const updated = [newEntry, ...keys];
-      setKeys(updated);
-      localStorage.setItem('adhdreams_apikeys', JSON.stringify(updated));
-      toast.success('Llave API guardada con éxito.');
-      setNewService('');
-      setNewKey('');
+      try {
+        await persistKeys(updated);
+        toast.success('Llave API guardada en servidor.');
+        setNewService('');
+        setNewKey('');
+      } catch {
+        toast.error('No se pudo guardar la llave API.');
+      }
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const updated = keys.filter(k => k.id !== id);
-    setKeys(updated);
-    localStorage.setItem('adhdreams_apikeys', JSON.stringify(updated));
-    toast.success('Llave eliminada.');
+    try {
+      await persistKeys(updated);
+      toast.success('Llave eliminada.');
+    } catch {
+      toast.error('No se pudo eliminar la llave.');
+    }
   };
 
   if (!isUnlocked) {
@@ -254,19 +302,19 @@ function IntegracionesTab() {
         </div>
         <h3 className="text-xl font-bold text-slate-100">Bóveda de Integraciones</h3>
         <p className="text-slate-400 text-sm text-center max-w-md">
-          Introduce la contraseña maestra para conectar nuevas aplicaciones y gestionar las credenciales/llaves API.
+          Las credenciales se gestionan con permisos del servidor. Solo GERENTE puede acceder.
         </p>
         <form onSubmit={handleUnlock} className="w-full max-w-sm space-y-3 mt-6">
           <input
             type="password"
             value={password}
             onChange={e => setPassword(e.target.value)}
-            placeholder="Contraseña maestra (admin)"
+            placeholder="Acceso protegido por rol"
             className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50 text-center tracking-widest"
           />
           {error && <p className="text-red-400 text-xs px-1 text-center font-medium">{error}</p>}
           <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl text-sm font-medium transition-all shadow-lg shadow-blue-500/20">
-            Desbloquear Bóveda
+            Verificar acceso
           </button>
         </form>
       </div>
@@ -643,7 +691,7 @@ const DEFAULT_CHANNELS: { whatsapp: ChannelState; telegram: ChannelState } = {
 
 function CanalesTab() {
   // Restricción de rol — solo GERENTE/ADMIN puede ver/configurar canales
-  const role = (auth.currentUser?.role || '').toUpperCase();
+  const role = currentSessionRole();
   const isAuthorized = role === 'GERENTE' || role === 'ADMIN';
 
   const [channels, setChannels] = useState<typeof DEFAULT_CHANNELS>(() => {

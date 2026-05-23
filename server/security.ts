@@ -4,8 +4,13 @@ import { AuditLog, Sessions, Users } from './db';
 
 const ACCESS_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-heavenly-dreams-change-me';
+const DEFAULT_JWT_SECRET = 'dev-heavenly-dreams-change-me';
+const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
 const ISSUER = 'heavenly-dreams-crm';
+
+if (process.env.NODE_ENV === 'production' && JWT_SECRET === DEFAULT_JWT_SECRET) {
+  throw new Error('JWT_SECRET es obligatorio en producción');
+}
 
 export type AppRole = 'GERENTE' | 'SUPERVISOR' | 'ASESOR';
 

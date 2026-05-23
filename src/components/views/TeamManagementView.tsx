@@ -8,8 +8,10 @@ import { toast } from 'sonner';
 interface TeamMember {
   uid: string;
   email: string;
+  nombre?: string;
   displayName?: string;
   role?: string;
+  activo?: number;
   active?: boolean;
   zona?: string;
   fechaIngreso?: string;
@@ -28,6 +30,19 @@ function getMemberStats(uid: string, period: string) {
 
 const ROLES = ['ASESOR', 'SUPERVISOR', 'GERENTE'];
 
+function normalizeMember(user: any): TeamMember {
+  return {
+    ...user,
+    displayName: user.displayName || user.nombre || user.username || user.email,
+    active: user.active ?? user.activo !== 0,
+  };
+}
+
+function normalizeQuotas(rows: any): Record<string, number> {
+  if (!Array.isArray(rows)) return rows || {};
+  return Object.fromEntries(rows.map(row => [row.user_id, Number(row.meta || 0)]));
+}
+
 export default function TeamManagementView() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [quotas, setQuotasState] = useState<Record<string, number>>({});
@@ -44,9 +59,9 @@ export default function TeamManagementView() {
         fetch('/api/ventas').then(r => r.ok ? r.json() : []),
         fetch('/api/quotas').then(r => r.ok ? r.json() : {}).catch(() => ({})),
       ]);
-      setMembers(usersRes.filter((u: any) => u.activo === 1));
+      setMembers(usersRes.map(normalizeMember));
       _allSalesCache = salesRes;
-      setQuotasState(quotasRes || {});
+      setQuotasState(normalizeQuotas(quotasRes));
     } catch { setMembers([]); }
   };
 
@@ -76,10 +91,15 @@ export default function TeamManagementView() {
   const saveMember = async () => {
     if (!editingMember) return;
     try {
+      const payload = {
+        nombre: editingMember.displayName || editingMember.nombre,
+        role: editingMember.role,
+        zona: editingMember.zona || null,
+      };
       await fetch(`/api/users/${editingMember.uid}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingMember),
+        body: JSON.stringify(payload),
       });
       setEditingMember(null);
       load();
