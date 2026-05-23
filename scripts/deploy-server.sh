@@ -43,6 +43,7 @@ if [ -f data/heavenlydreams.db ]; then
 fi
 
 if git ls-files --error-unmatch data/heavenlydreams.db >/dev/null 2>&1; then
+  git restore --source=HEAD -- data/heavenlydreams.db || true
   git update-index --skip-worktree data/heavenlydreams.db || true
 fi
 
