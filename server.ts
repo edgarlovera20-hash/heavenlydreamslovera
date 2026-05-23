@@ -263,6 +263,71 @@ function normalizeCurpProviderPayload(raw: any, input: any) {
   };
 }
 
+function normalizeCurpNamePart(value: any) {
+  return String(value || '')
+    .replace(/[Ññ]/g, 'X')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z]/g, '')
+    .toUpperCase();
+}
+
+function firstInternalVowel(value: string) {
+  return value.slice(1).match(/[AEIOU]/)?.[0] || 'X';
+}
+
+function firstInternalConsonant(value: string) {
+  return value.slice(1).match(/[BCDFGHJKLMNPQRSTVWXYZ]/)?.[0] || 'X';
+}
+
+function generateCurpFromPersonalData(input: any) {
+  const paterno = normalizeCurpNamePart(input.apellidoPaterno);
+  const materno = normalizeCurpNamePart(input.apellidoMaterno);
+  const nombres = normalizeCurpNamePart(input.nombres);
+  const fecha = String(input.fechaNacimiento || '').trim();
+  const sexo = String(input.sexo || '').trim().toUpperCase().slice(0, 1);
+  const estado = String(input.estadoNacimiento || '').trim().toUpperCase();
+  if (!paterno || !nombres || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !['H', 'M'].includes(sexo) || !CURP_STATES[estado]) {
+    return '';
+  }
+  const yy = fecha.slice(2, 4);
+  const mm = fecha.slice(5, 7);
+  const dd = fecha.slice(8, 10);
+  return `${paterno[0] || 'X'}${firstInternalVowel(paterno)}${materno[0] || 'X'}${nombres[0] || 'X'}${yy}${mm}${dd}${sexo}${estado}${firstInternalConsonant(paterno)}${firstInternalConsonant(materno)}${firstInternalConsonant(nombres)}00`;
+}
+
+async function checkGobMxCurpPortal() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch('https://www.gob.mx/curp/', {
+      headers: {
+        'User-Agent': 'HeavenlyDreamsCRM/1.0 (+https://www.gob.mx/curp/)',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      signal: controller.signal,
+    });
+    const html = await response.text();
+    const challengeDetected = /Challenge Validation|sec-container|sec-cpt-if/i.test(html);
+    return {
+      status: response.status,
+      ok: response.ok && !challengeDetected,
+      challengeDetected,
+      url: 'https://www.gob.mx/curp/',
+    };
+  } catch (err: any) {
+    return {
+      status: 0,
+      ok: false,
+      challengeDetected: false,
+      url: 'https://www.gob.mx/curp/',
+      error: err?.message || 'No se pudo consultar gob.mx',
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function consultCurpProvider(payload: any) {
   const providerUrl = process.env.CURP_API_URL || process.env.CURP_API_BASE_URL;
   if (!providerUrl) return null;
@@ -714,6 +779,54 @@ async function startServer() {
         ? 'CURP consultada con proveedor externo configurado.'
         : 'CURP validada localmente. Configura CURP_API_URL para consulta externa.',
       providerError: providerError || undefined,
+    });
+  }));
+
+  app.post("/api/curp/gobmx-agent", authOnly, wrap(async (req: any, res: any) => {
+    const payload = {
+      nombres: String(req.body?.nombres || '').trim(),
+      apellidoPaterno: String(req.body?.apellidoPaterno || '').trim(),
+      apellidoMaterno: String(req.body?.apellidoMaterno || '').trim(),
+      fechaNacimiento: String(req.body?.fechaNacimiento || '').trim(),
+      sexo: String(req.body?.sexo || '').trim().toUpperCase().slice(0, 1),
+      estadoNacimiento: String(req.body?.estadoNacimiento || '').trim().toUpperCase(),
+    };
+    const curp = generateCurpFromPersonalData(payload);
+    if (!curp) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Datos incompletos para generar CURP. Revisa nombre, apellido paterno, fecha, sexo y estado.',
+      });
+    }
+
+    const portal = await checkGobMxCurpPortal();
+    logSystem(
+      req,
+      'curp.gobmx_agent',
+      'curp',
+      curp,
+      portal.challengeDetected ? 'gob.mx requiere validacion anti-automatizacion' : 'gob.mx consultado por agente',
+      { ...payload, portal }
+    );
+
+    res.json({
+      ok: true,
+      curp,
+      nombres: payload.nombres,
+      apellidoPaterno: payload.apellidoPaterno,
+      apellidoMaterno: payload.apellidoMaterno,
+      sexo: payload.sexo === 'M' ? 'Mujer' : 'Hombre',
+      fechaNacimiento: payload.fechaNacimiento,
+      entidadNacimiento: CURP_STATES[payload.estadoNacimiento] || payload.estadoNacimiento,
+      status: portal.ok ? 'GOBMX_AGENT_READY' : 'GOBMX_AGENT_ASSISTED',
+      source: 'gobmx-agent',
+      official: false,
+      gobMxUrl: portal.url,
+      challengeDetected: portal.challengeDetected,
+      message: portal.challengeDetected
+        ? 'El portal gob.mx activo validacion anti-automatizacion. Se agrego la CURP generada con los datos capturados; abre gob.mx para confirmar o descargar.'
+        : 'El agente consulto gob.mx y agrego la CURP generada con los datos capturados.',
+      providerError: portal.error || undefined,
     });
   }));
 

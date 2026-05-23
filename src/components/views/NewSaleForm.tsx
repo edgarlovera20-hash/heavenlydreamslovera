@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, ProductCategory } from '../../configs/package-catalog';
-import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle, Search, Copy, Save } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle, Search, Copy, Save, Bot, ExternalLink } from 'lucide-react';
 import { set as idbSet, get as idbGet, del as idbDel } from 'idb-keyval';
 import { chatUrl } from '../../lib/channels';
 import { cn, formatCurrency } from '../../lib/utils';
@@ -335,6 +335,8 @@ type CurpLookupResult = {
   source?: string;
   official?: boolean;
   pdfUrl?: string;
+  gobMxUrl?: string;
+  challengeDetected?: boolean;
   message?: string;
   providerError?: string;
 };
@@ -540,6 +542,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved' | 'restored' | 'error'>('idle');
   const [draftUpdatedAt, setDraftUpdatedAt] = useState<string>('');
   const [curpLookupLoading, setCurpLookupLoading] = useState(false);
+  const [curpAgentLoading, setCurpAgentLoading] = useState(false);
   const [curpLookupResult, setCurpLookupResult] = useState<CurpLookupResult | null>(null);
   const [curpLookupError, setCurpLookupError] = useState('');
   const [portabilityChecking, setPortabilityChecking] = useState(false);
@@ -1140,6 +1143,74 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const handleGobMxCurpAgent = async () => {
+    const payload = {
+      nombres: form.nombres || '',
+      apellidoPaterno: form.apellidoPaterno || '',
+      apellidoMaterno: form.apellidoMaterno || '',
+      fechaNacimiento: form.fechaNacimiento || '',
+      sexo: form.sexo || '',
+      estadoNacimiento: form.estadoNacimiento || '',
+    };
+    const missing = [
+      ['nombres', 'nombre'],
+      ['apellidoPaterno', 'apellido paterno'],
+      ['fechaNacimiento', 'fecha de nacimiento'],
+      ['sexo', 'sexo'],
+      ['estadoNacimiento', 'estado de nacimiento'],
+    ].filter(([key]) => !String((payload as any)[key] || '').trim()).map(([, label]) => label);
+    if (missing.length > 0) {
+      toast.error(`Completa ${missing.join(', ')} para usar el agente gob.mx.`);
+      return;
+    }
+
+    setCurpAgentLoading(true);
+    setCurpLookupError('');
+    try {
+      const res = await fetch('/api/curp/gobmx-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.curp) throw new Error(data.error || 'No se pudo ejecutar el agente gob.mx.');
+      updateForm({ curp: normalizeCurpInput(data.curp) });
+      setCurpLookupResult(data);
+      if (data.challengeDetected) {
+        toast.success('Agente gob.mx agregó la CURP. El portal oficial requiere validación manual para confirmar/descargar.');
+      } else {
+        toast.success('Agente gob.mx agregó la CURP al formulario.');
+      }
+    } catch (err: any) {
+      const fallback = generateCurpFromForm(form);
+      if (fallback) {
+        updateForm({ curp: fallback });
+        setCurpLookupResult({
+          ok: true,
+          curp: fallback,
+          nombres: form.nombres,
+          apellidoPaterno: form.apellidoPaterno,
+          apellidoMaterno: form.apellidoMaterno,
+          sexo: form.sexo === 'M' ? 'Mujer' : 'Hombre',
+          fechaNacimiento: form.fechaNacimiento,
+          entidadNacimiento: CURP_STATE_OPTIONS.find(s => s.code === form.estadoNacimiento)?.name || form.estadoNacimiento,
+          status: 'GENERADA_LOCAL',
+          official: false,
+          source: 'local-fallback',
+          gobMxUrl: 'https://www.gob.mx/curp/',
+          message: err?.message || 'Agente gob.mx no disponible; se generó localmente.',
+        });
+        toast.success('CURP agregada en modo local. Verifica en gob.mx cuando el portal lo permita.');
+      } else {
+        const message = err?.message || 'No se pudo generar la CURP.';
+        setCurpLookupError(message);
+        toast.error(message);
+      }
+    } finally {
+      setCurpAgentLoading(false);
+    }
+  };
+
   const handleVerifyPortabilityNumber = async () => {
     const number = (form.numeroAPortar || '').replace(/\D/g, '').slice(0, 10);
     if (number.length !== 10) {
@@ -1196,10 +1267,29 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       return;
     }
     try {
-      await navigator.clipboard.writeText(curp);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(curp);
+      } else {
+        throw new Error('Clipboard API no disponible');
+      }
       toast.success('CURP copiada al portapapeles.');
     } catch {
-      toast.error('No se pudo copiar la CURP.');
+      try {
+        const input = document.createElement('textarea');
+        input.value = curp;
+        input.setAttribute('readonly', 'true');
+        input.style.position = 'fixed';
+        input.style.left = '-9999px';
+        document.body.appendChild(input);
+        input.focus();
+        input.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(input);
+        if (!copied) throw new Error('execCommand copy falló');
+        toast.success('CURP copiada al portapapeles.');
+      } catch {
+        toast.error('No se pudo copiar la CURP. Selecciona el campo CURP y usa Ctrl+C.');
+      }
     }
   };
 
@@ -1657,7 +1747,16 @@ const exportToPDF = async () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleGobMxCurpAgent}
+                        disabled={curpAgentLoading}
+                        className="rounded-xl bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 text-slate-950 px-4 py-2.5 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                      >
+                        {curpAgentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+                        Agente gob.mx
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -1715,6 +1814,17 @@ const exportToPDF = async () => {
                         PDF
                       </button>
                     </div>
+                    {(curpLookupResult?.gobMxUrl || curpLookupResult?.challengeDetected) && (
+                      <a
+                        href={curpLookupResult.gobMxUrl || 'https://www.gob.mx/curp/'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/80 hover:bg-slate-800 px-3 py-2 text-xs font-bold uppercase tracking-widest text-cyan-200"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Abrir portal oficial gob.mx
+                      </a>
+                    )}
 
                     {(curpLookupError || curpLookupResult) && (
                       <div className={cn(
@@ -1728,6 +1838,9 @@ const exportToPDF = async () => {
                             <span className="font-bold">{curpLookupResult?.curp}</span>
                             <span className="text-slate-300"> · {curpLookupResult?.status || 'VALIDADA'}</span>
                             <span className="text-slate-400"> · {curpLookupResult?.official ? 'Proveedor externo' : 'Modo local'}</span>
+                            {curpLookupResult?.message && (
+                              <span className="block text-cyan-100 mt-1">{curpLookupResult.message}</span>
+                            )}
                             {curpLookupResult?.providerError && (
                               <span className="block text-amber-200 mt-1">Proveedor no disponible: {curpLookupResult.providerError}</span>
                             )}
