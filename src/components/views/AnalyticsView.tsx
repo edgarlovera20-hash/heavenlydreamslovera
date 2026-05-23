@@ -3,10 +3,11 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, FunnelChart, Funnel, LabelList
 } from 'recharts';
-import { BarChart3, TrendingUp, Download, Calendar, RefreshCw } from 'lucide-react';
+import { BarChart3, Download, Calendar, MapPin, Percent, ReceiptText, Target } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
 import { exportToCSV, exportElementToPDF } from '../../lib/exportUtils';
 import { logAudit } from '../../lib/auditLog';
+import { loadSIAC } from '../../lib/siacParser';
 
 const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -14,16 +15,52 @@ function useSales(period: string) {
   const [all, setAll] = useState<any[]>([]);
   useEffect(() => {
     fetch('/api/ventas').then(r => r.ok ? r.json() : []).then((data: any[]) => {
-      setAll(data.map(s => ({
+      const source = Array.isArray(data) && data.length
+        ? data
+        : JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
+      setAll(source.map((s: any) => ({
         ...s,
         fechaSolicitud: s.fecha_solicitud || s.created_at,
-        rentaMensual: s.renta_mensual,
-        asesorId: s.asesor_id,
-        paqueteNombre: s.paquete_nombre,
+        rentaMensual: s.renta_mensual || s.rentaMensual,
+        asesorId: s.asesor_id || s.asesorId,
+        paqueteNombre: s.paquete_nombre || s.paqueteNombre,
       })));
-    }).catch(() => {});
+    }).catch(() => {
+      try {
+        setAll(JSON.parse(localStorage.getItem('adhdreams_sales') || '[]'));
+      } catch {
+        setAll([]);
+      }
+    });
   }, []);
   return useMemo(() => period === 'all' ? all : all.filter(s => (s.fechaSolicitud || '').startsWith(period)), [all, period]);
+}
+
+function normalizeStatus(value: unknown) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+}
+
+function isApprovedSale(s: any) {
+  const status = normalizeStatus(s.status || s.estatus_siac || s.estatusSiac);
+  return ['APROBADA', 'PROCEDIO', 'INSTALADO', 'ACTIVO'].some(key => status.includes(key));
+}
+
+function isPostedSale(s: any) {
+  const status = normalizeStatus(`${s.status || ''} ${s.estatus_pisa || ''} ${s.estatusPisa || ''} ${s.estatus_siac || ''}`);
+  return ['POSTEADA', 'POSTEO', 'PROCEDIO', 'INSTALADO', 'ACTIVO', 'APROBADA'].some(key => status.includes(key));
+}
+
+function isPaidSale(s: any) {
+  const status = normalizeStatus(`${s.status || ''} ${s.estatus_pago_cliente || ''} ${s.estatusPagoCliente || ''} ${s.statusPago || ''} ${s.pago || ''}`);
+  return ['PAGADO', 'PAGO REALIZADO', 'PAGO_REALIZADO', 'LIQUIDADO', 'AL CORRIENTE'].some(key => status.includes(key));
+}
+
+function zoneName(s: any) {
+  return String(s.colonia || s.zona || s.ciudad || s.delegacion || s.municipio || 'Sin zona');
+}
+
+function pct(value: number, total: number) {
+  return total > 0 ? Math.round((value / total) * 100) : 0;
 }
 
 // Build daily sales data for the selected period
@@ -41,17 +78,19 @@ function buildDailyData(sales: any[], period: string) {
 }
 
 function buildByAsesor(sales: any[], users: any[]) {
-  const map = new Map<string, { name: string; total: number; aprobadas: number; revenue: number }>();
+  const map = new Map<string, { id: string; name: string; total: number; aprobadas: number; rechazadas: number; posteadas: number; revenue: number }>();
   for (const s of sales) {
     const uid = s.asesorId || 'anonymous';
     if (!map.has(uid)) {
       const u = users.find((u: any) => u.uid === uid);
-      map.set(uid, { name: u?.displayName || u?.email?.split('@')[0] || 'Desconocido', total: 0, aprobadas: 0, revenue: 0 });
+      map.set(uid, { id: uid, name: u?.displayName || u?.email?.split('@')[0] || 'Desconocido', total: 0, aprobadas: 0, rechazadas: 0, posteadas: 0, revenue: 0 });
     }
     const e = map.get(uid)!;
     e.total++;
-    const st = (s.status || '').toUpperCase();
-    if (st === 'APROBADA' || st === 'PROCEDIO') { e.aprobadas++; e.revenue += Number(s.rentaMensual) || 0; }
+    const st = normalizeStatus(s.status);
+    if (isApprovedSale(s)) { e.aprobadas++; e.revenue += Number(s.rentaMensual) || 0; }
+    if (isPostedSale(s)) e.posteadas++;
+    if (st.includes('RECHAZADA') || st.includes('RECHAZADO')) e.rechazadas++;
   }
   return [...map.values()].sort((a, b) => b.aprobadas - a.aprobadas);
 }
@@ -74,6 +113,103 @@ function buildByPaquete(sales: any[]) {
   return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, value]) => ({ name, value }));
 }
 
+function buildOperationalEffectiveness(sales: any[]) {
+  const siacRecords = loadSIAC();
+  const totalCaptures = sales.length;
+  const approvedSales = sales.filter(isApprovedSale);
+  const postedSales = sales.filter(isPostedSale);
+  const paidSales = sales.filter(isPaidSale);
+  const totalPotentialRevenue = sales.reduce((sum, s) => sum + (Number(s.rentaMensual) || 0), 0);
+  const confirmedRevenue = approvedSales.reduce((sum, s) => sum + (Number(s.rentaMensual) || 0), 0);
+  const paidRevenue = paidSales.reduce((sum, s) => sum + (Number(s.rentaMensual) || 0), 0);
+  const siacPosted = siacRecords.filter(r => normalizeStatus(r.estatus).includes('POSTEADA')).length;
+  const siacRevenue = siacRecords
+    .filter(r => normalizeStatus(r.estatus).includes('POSTEADA'))
+    .reduce((sum, r) => sum + (Number(r.precio) || 0), 0);
+  const postedCount = Math.max(postedSales.length, siacPosted);
+  const postedBase = siacRecords.length || totalCaptures;
+  const byZone = new Map<string, { zona: string; clientes: number; pagos: number; ingresos: number; capturas: number; posteos: number }>();
+
+  for (const sale of sales) {
+    const key = zoneName(sale);
+    if (!byZone.has(key)) byZone.set(key, { zona: key, clientes: 0, pagos: 0, ingresos: 0, capturas: 0, posteos: 0 });
+    const row = byZone.get(key)!;
+    row.clientes++;
+    row.capturas++;
+    if (isPostedSale(sale)) row.posteos++;
+    if (isPaidSale(sale)) {
+      row.pagos++;
+      row.ingresos += Number(sale.rentaMensual) || 0;
+    }
+  }
+
+  for (const record of siacRecords) {
+    const key = record.zona || 'Sin zona';
+    if (!byZone.has(key)) byZone.set(key, { zona: key, clientes: 0, pagos: 0, ingresos: 0, capturas: 0, posteos: 0 });
+    const row = byZone.get(key)!;
+    if (normalizeStatus(record.estatus).includes('POSTEADA')) {
+      row.posteos++;
+      row.ingresos += Number(record.precio) || 0;
+    }
+  }
+
+  const zones = [...byZone.values()]
+    .map(row => ({
+      ...row,
+      efectividadPago: pct(row.pagos || row.posteos, row.clientes || row.capturas || row.posteos),
+    }))
+    .sort((a, b) => (b.ingresos || b.posteos) - (a.ingresos || a.posteos))
+    .slice(0, 10);
+
+  return {
+    incomeEffectiveness: pct(paidRevenue || confirmedRevenue || siacRevenue, totalPotentialRevenue || confirmedRevenue || siacRevenue),
+    postingEffectiveness: pct(postedCount, postedBase),
+    paidZoneCoverage: pct(zones.filter(z => z.pagos > 0 || z.ingresos > 0).length, zones.length),
+    paidRevenue,
+    confirmedRevenue,
+    siacRevenue,
+    postedCount,
+    postedBase,
+    zones,
+  };
+}
+
+function EffectivenessCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  color,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  detail: string;
+  color: 'emerald' | 'cyan' | 'yellow';
+}) {
+  const colors = {
+    emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    cyan: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20',
+    yellow: 'text-yellow-300 bg-yellow-500/10 border-yellow-500/20',
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-5">
+      <div className="flex items-center gap-3 mb-4">
+        <div className={cn('w-10 h-10 rounded-xl border flex items-center justify-center', colors[color])}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{label}</p>
+      </div>
+      <div className="flex items-end justify-between gap-4">
+        <p className="text-4xl font-black text-white">{value}</p>
+        <Percent className="w-5 h-5 text-slate-600 mb-2" />
+      </div>
+      <p className="text-xs text-slate-500 mt-2">{detail}</p>
+    </div>
+  );
+}
+
 export default function AnalyticsView() {
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const sales = useSales(period === 'all' ? 'all' : period);
@@ -85,9 +221,10 @@ export default function AnalyticsView() {
   const byAsesor = useMemo(() => buildByAsesor(sales, users), [sales, users]);
   const byStatus = useMemo(() => buildByStatus(sales), [sales]);
   const byPaquete = useMemo(() => buildByPaquete(sales), [sales]);
+  const effectiveness = useMemo(() => buildOperationalEffectiveness(sales), [sales]);
 
-  const approved = sales.filter(s => ['APROBADA','PROCEDIO'].includes((s.status||'').toUpperCase())).length;
-  const revenue = sales.filter(s => ['APROBADA','PROCEDIO'].includes((s.status||'').toUpperCase())).reduce((a, s) => a + (Number(s.rentaMensual) || 0), 0);
+  const approved = sales.filter(isApprovedSale).length;
+  const revenue = sales.filter(isApprovedSale).reduce((a, s) => a + (Number(s.rentaMensual) || 0), 0);
   const convRate = sales.length ? Math.round((approved / sales.length) * 100) : 0;
 
   const funnelData = [
@@ -162,6 +299,89 @@ export default function AnalyticsView() {
             <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">{k.label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Efectividad operativa */}
+      <div className="bg-slate-900/90 border border-cyan-500/20 rounded-2xl p-5 space-y-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-xs font-bold text-cyan-300 uppercase tracking-widest mb-1">Efectividad Operativa</p>
+            <h2 className="text-xl font-black text-white">Ingresos, posteos y pagos por zona</h2>
+            <p className="text-sm text-slate-400">Cruza capturas, SIAC y estados de pago para saber qué está convirtiendo y de dónde vienen los clientes que pagan.</p>
+          </div>
+          <button
+            onClick={() => exportToCSV(effectiveness.zones, `efectividad_zonas_${period}`)}
+            className="flex items-center gap-2 px-3 py-2 bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold hover:bg-cyan-500/20 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" /> Exportar zonas
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <EffectivenessCard
+            icon={ReceiptText}
+            label="Efectividad de ingresos"
+            value={`${effectiveness.incomeEffectiveness}%`}
+            detail={`${formatCurrency(effectiveness.paidRevenue || effectiveness.confirmedRevenue || effectiveness.siacRevenue)} confirmados`}
+            color="emerald"
+          />
+          <EffectivenessCard
+            icon={Target}
+            label="Efectividad de posteos"
+            value={`${effectiveness.postingEffectiveness}%`}
+            detail={`${effectiveness.postedCount}/${effectiveness.postedBase} posteados`}
+            color="cyan"
+          />
+          <EffectivenessCard
+            icon={MapPin}
+            label="Zonas con pagos"
+            value={`${effectiveness.paidZoneCoverage}%`}
+            detail={`${effectiveness.zones.filter(z => z.pagos > 0 || z.ingresos > 0).length} zonas con ingreso`}
+            color="yellow"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-5">
+          <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-4">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Pago de clientes por zona</p>
+            {effectiveness.zones.length === 0 ? <p className="text-slate-500 text-sm text-center py-10">Sin datos de zona o pago todavía.</p> : (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={effectiveness.zones} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
+                  <XAxis type="number" tick={{ fill: '#64748b', fontSize: 10 }} />
+                  <YAxis dataKey="zona" type="category" tick={{ fill: '#94a3b8', fontSize: 10 }} width={110} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 10 }} />
+                  <Bar dataKey="ingresos" fill="#10b981" radius={[0,4,4,0]} name="Ingresos $" />
+                  <Bar dataKey="posteos" fill="#0ea5e9" radius={[0,4,4,0]} name="Posteos" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-slate-950/55 overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ranking de zonas</p>
+            </div>
+            <div className="divide-y divide-white/5 max-h-[300px] overflow-y-auto custom-scrollbar">
+              {effectiveness.zones.length === 0 ? (
+                <div className="px-4 py-10 text-center text-sm text-slate-500">Sin zonas para mostrar.</div>
+              ) : effectiveness.zones.map(zone => (
+                <div key={zone.zona} className="px-4 py-3 flex items-center gap-3">
+                  <MapPin className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white truncate">{zone.zona}</p>
+                    <p className="text-[10px] text-slate-500">{zone.clientes || zone.capturas || zone.posteos} clientes · {zone.posteos} posteos · {zone.pagos} pagos</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-emerald-400">{formatCurrency(zone.ingresos)}</p>
+                    <p className="text-[10px] text-cyan-300">{zone.efectividadPago}% efec.</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Charts grid */}

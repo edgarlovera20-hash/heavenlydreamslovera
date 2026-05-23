@@ -224,7 +224,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
           {['GERENTE', 'SUPERVISOR'].includes(role) && (
             <NavGroup label="Administración Avanzada">
-              <NavItem icon={BarChart3} color="cyan" label="Analytics" active={activeSection === 'Analytics'} onClick={() => setActiveSection('Analytics')} />
+              <NavItem icon={BarChart3} color="cyan" label="Efectividad" active={activeSection === 'Analytics'} onClick={() => setActiveSection('Analytics')} />
               <NavItem icon={Users} color="blue" label="Equipo y Metas" active={activeSection === 'Equipo y Metas'} onClick={() => setActiveSection('Equipo y Metas')} />
               <NavItem icon={DollarSign} color="yellow" label="Comisiones" active={activeSection === 'Comisiones'} onClick={() => setActiveSection('Comisiones')} />
               <NavItem icon={CheckCircle2} color="green" label="Aprobaciones" active={activeSection === 'Aprobaciones'} onClick={() => setActiveSection('Aprobaciones')} />
@@ -395,7 +395,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   <QuickAction icon={AlertTriangle} label="Morosidad" color="red" onClick={() => setActiveSection('Morosidad')} />
                   <QuickAction icon={Headphones} label="Soporte" color="purple" onClick={() => setActiveSection('Soporte a Clientes')} />
                   {['GERENTE', 'SUPERVISOR'].includes(role) && <>
-                    <QuickAction icon={BarChart3} label="Analytics" color="cyan" onClick={() => setActiveSection('Analytics')} />
+                    <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
                     <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
                     <QuickAction icon={DollarSign} label="Comisiones" color="yellow" onClick={() => setActiveSection('Comisiones')} />
                     <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
