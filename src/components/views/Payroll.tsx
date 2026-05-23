@@ -4,6 +4,33 @@ import { cn, formatCurrency } from '../../lib/utils';
 
 type Tab = 'seguimiento' | 'comprobantes' | 'bancarios' | 'adelantos' | 'gestion';
 
+type PayrollReceipt = {
+  id: string;
+  fileName: string;
+  fileType: string;
+  fileData: string;
+  uploadedAt: string;
+};
+
+type BankData = {
+  banco: string;
+  titular: string;
+  cuenta: string;
+  clabe: string;
+};
+
+const PAYROLL_RECEIPTS_KEY = 'hd_payroll_transfer_receipts';
+const PAYROLL_BANK_DATA_KEY = 'hd_payroll_bank_data';
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 const mockUsers: { id: string; name: string }[] = JSON.parse(localStorage.getItem('adhdreams_users') || '[]').map((u: any) => ({ id: u.uid, name: u.displayName || u.nombre || u.email || 'Usuario' }));
 const mockSalesData: { folio_siac: string; estatus_pisa: string; monto_comision: number }[] = [];
 
@@ -120,44 +147,194 @@ function SeguimientoTab() {
 }
 
 function ComprobantesTab() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [receipts, setReceipts] = useState<PayrollReceipt[]>(() => readJson<PayrollReceipt[]>(PAYROLL_RECEIPTS_KEY, []));
+  const [uploadError, setUploadError] = useState('');
+
+  const persistReceipts = (next: PayrollReceipt[]) => {
+    setReceipts(next);
+    localStorage.setItem(PAYROLL_RECEIPTS_KEY, JSON.stringify(next));
+  };
+
+  const handleFiles = (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    const isAllowed = file.type.startsWith('image/') || file.type === 'application/pdf';
+    if (!isAllowed) {
+      setUploadError('Sube una captura de imagen o un PDF de la transferencia.');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setUploadError('El comprobante no debe superar 15 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const nextReceipt: PayrollReceipt = {
+        id: `${Date.now()}-${file.name}`,
+        fileName: file.name,
+        fileType: file.type,
+        fileData: String(reader.result || ''),
+        uploadedAt: new Date().toISOString(),
+      };
+      persistReceipts([nextReceipt, ...receipts]);
+      setUploadError('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.onerror = () => setUploadError('No se pudo leer el comprobante.');
+    reader.readAsDataURL(file);
+  };
+
+  const removeReceipt = (id: string) => {
+    persistReceipts(receipts.filter(item => item.id !== id));
+  };
+
   return (
     <div className="space-y-6">
-      <div className="border-2 border-dashed border-slate-700/50 rounded-2xl p-10 text-center hover:bg-slate-800/30 transition-colors cursor-pointer bg-slate-950/20">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={(event) => handleFiles(event.target.files)}
+      />
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          handleFiles(event.dataTransfer.files);
+        }}
+        className="w-full border-2 border-dashed border-slate-700/50 rounded-2xl p-10 text-center hover:bg-slate-800/30 transition-colors cursor-pointer bg-slate-950/20"
+      >
         <Upload className="w-10 h-10 text-slate-500 mx-auto mb-4" />
-        <h3 className="text-slate-100 font-medium mb-1">Subir Comprobante</h3>
-        <p className="text-slate-400 text-sm">Arrastra tu imagen o PDF aquí, o haz clic para seleccionar</p>
-      </div>
+        <h3 className="text-slate-100 font-medium mb-1">Subir captura o PDF de transferencia</h3>
+        <p className="text-slate-400 text-sm">Acepta captura JPG/PNG o PDF del comprobante de transferencia bancaria</p>
+      </button>
+      {uploadError && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" />
+          {uploadError}
+        </div>
+      )}
       
-      <h3 className="text-slate-100 font-medium">Historial de Comprobantes</h3>
-      <div className="text-center py-10 text-slate-500 text-sm bg-slate-950/85 rounded-xl border border-white/5">
-        No hay comprobantes subidos aún.
+      <h3 className="text-slate-100 font-medium">Historial de comprobantes de transferencia</h3>
+      <div className="space-y-3">
+        {receipts.length === 0 ? (
+          <div className="text-center py-10 text-slate-500 text-sm bg-slate-950/85 rounded-xl border border-white/5">
+            No hay capturas o PDFs de transferencia subidos aún.
+          </div>
+        ) : receipts.map(receipt => (
+          <div key={receipt.id} className="bg-slate-950/80 border border-white/5 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <FileText className="w-5 h-5 text-blue-300 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-slate-100 font-medium truncate">{receipt.fileName}</p>
+                <p className="text-xs text-slate-500">
+                  {new Date(receipt.uploadedAt).toLocaleString('es-MX')} · {receipt.fileType || 'archivo'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={receipt.fileData}
+                download={receipt.fileName}
+                className="px-3 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-200 text-xs font-bold border border-blue-500/20 flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Descargar
+              </a>
+              <button
+                type="button"
+                onClick={() => removeReceipt(receipt.id)}
+                className="px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-200 text-xs font-bold border border-red-500/20"
+              >
+                Quitar
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
 function BancariosTab() {
+  const [bankData, setBankData] = useState<BankData>(() => readJson<BankData>(PAYROLL_BANK_DATA_KEY, {
+    banco: '',
+    titular: '',
+    cuenta: '',
+    clabe: '',
+  }));
+  const [saved, setSaved] = useState(false);
+
+  const updateBankData = (patch: Partial<BankData>) => {
+    setBankData(prev => ({ ...prev, ...patch }));
+    setSaved(false);
+  };
+
+  const saveBankData = () => {
+    localStorage.setItem(PAYROLL_BANK_DATA_KEY, JSON.stringify(bankData));
+    setSaved(true);
+  };
+
   return (
-    <div className="max-w-md space-y-5">
+    <div className="max-w-2xl space-y-5">
+      <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-100">
+        Puedes registrar cualquier banco o institución de pago. No está limitado a BBVA.
+      </div>
       <div>
-        <label className="block text-sm font-medium text-slate-400 mb-1.5">Banco</label>
-        <input type="text" className="w-full bg-slate-950/80 border border-white/5 rounded-xl p-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50" value="BBVA" readOnly />
+        <label className="block text-sm font-medium text-slate-400 mb-1.5">Banco o institución</label>
+        <input
+          type="text"
+          className="w-full bg-slate-950/80 border border-white/5 rounded-xl p-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+          value={bankData.banco}
+          onChange={(event) => updateBankData({ banco: event.target.value })}
+          placeholder="Ej. BBVA, Banorte, Santander, Mercado Pago, Nu, Banco Azteca..."
+        />
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-400 mb-1.5">Titular de la cuenta</label>
-        <input type="text" className="w-full bg-slate-950/80 border border-white/5 rounded-xl p-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50" value="Edgar Lovera" readOnly />
+        <input
+          type="text"
+          className="w-full bg-slate-950/80 border border-white/5 rounded-xl p-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+          value={bankData.titular}
+          onChange={(event) => updateBankData({ titular: event.target.value })}
+          placeholder="Nombre completo del titular"
+        />
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-400 mb-1.5">Número de cuenta</label>
-        <input type="text" className="w-full bg-slate-950/80 border border-white/5 rounded-xl p-3 text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500/50" value="**** **** **** 1234" readOnly />
+        <input
+          type="text"
+          inputMode="numeric"
+          className="w-full bg-slate-950/80 border border-white/5 rounded-xl p-3 text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+          value={bankData.cuenta}
+          onChange={(event) => updateBankData({ cuenta: event.target.value.replace(/[^\d\s-]/g, '') })}
+          placeholder="Cuenta, tarjeta o referencia bancaria"
+        />
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-400 mb-1.5">CLABE Interbancaria</label>
-        <input type="text" className="w-full bg-slate-950/80 border border-white/5 rounded-xl p-3 text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500/50" value="*** *** *** *** **56 7" readOnly />
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={18}
+          className="w-full bg-slate-950/80 border border-white/5 rounded-xl p-3 text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+          value={bankData.clabe}
+          onChange={(event) => updateBankData({ clabe: event.target.value.replace(/\D/g, '').slice(0, 18) })}
+          placeholder="18 dígitos si aplica"
+        />
       </div>
-      <button className="bg-slate-800/80 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors ring-1 ring-white/5">
-        Editar Datos
+      <button
+        type="button"
+        onClick={saveBankData}
+        className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors ring-1 ring-white/5"
+      >
+        Guardar datos bancarios
       </button>
+      {saved && <p className="text-emerald-400 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Datos bancarios guardados.</p>}
     </div>
   );
 }
