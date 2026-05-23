@@ -50,6 +50,7 @@ service-account*.json
 # Runtime document storage
 data/document_storage/
 data/backups/
+data/*.db
 
 # SQLite WAL / SHM (runtime files, not source)
 data/*.db-wal

@@ -30,12 +30,29 @@ if [ ! -d .git ]; then
   exit 1
 fi
 
+DB_BACKUP=""
+if command -v pm2 >/dev/null 2>&1 && pm2 describe "${APP_NAME}" >/dev/null 2>&1; then
+  pm2 stop "${APP_NAME}" >/dev/null 2>&1 || true
+fi
+
+mkdir -p data/backups
+if [ -f data/heavenlydreams.db ]; then
+  DB_BACKUP="data/backups/heavenlydreams.predeploy.$(date +%Y%m%d%H%M%S).db"
+  cp -f data/heavenlydreams.db "${DB_BACKUP}"
+  rm -f data/heavenlydreams.db-wal data/heavenlydreams.db-shm
+fi
+
 git fetch origin "${BRANCH}"
 git checkout "${BRANCH}"
 git pull --ff-only origin "${BRANCH}"
 
+if [ -n "${DB_BACKUP}" ] && [ -f "${DB_BACKUP}" ]; then
+  cp -f "${DB_BACKUP}" data/heavenlydreams.db
+  rm -f data/heavenlydreams.db-wal data/heavenlydreams.db-shm
+fi
+
 if [ -f package-lock.json ]; then
-  npm ci
+  npm ci || npm install
 else
   npm install
 fi
