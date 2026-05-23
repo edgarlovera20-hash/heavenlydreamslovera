@@ -189,6 +189,103 @@ function normalizeDocumentStatus(status: any) {
   return `⚠ ${value || 'PENDIENTE'}`;
 }
 
+const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+const CURP_STATES: Record<string, string> = {
+  AS: 'Aguascalientes',
+  BC: 'Baja California',
+  BS: 'Baja California Sur',
+  CC: 'Campeche',
+  CL: 'Coahuila',
+  CM: 'Colima',
+  CS: 'Chiapas',
+  CH: 'Chihuahua',
+  DF: 'Ciudad de Mexico',
+  DG: 'Durango',
+  GT: 'Guanajuato',
+  GR: 'Guerrero',
+  HG: 'Hidalgo',
+  JC: 'Jalisco',
+  MC: 'Estado de Mexico',
+  MN: 'Michoacan',
+  MS: 'Morelos',
+  NT: 'Nayarit',
+  NL: 'Nuevo Leon',
+  OC: 'Oaxaca',
+  PL: 'Puebla',
+  QT: 'Queretaro',
+  QR: 'Quintana Roo',
+  SP: 'San Luis Potosi',
+  SL: 'Sinaloa',
+  SR: 'Sonora',
+  TC: 'Tabasco',
+  TS: 'Tamaulipas',
+  TL: 'Tlaxcala',
+  VZ: 'Veracruz',
+  YN: 'Yucatan',
+  ZS: 'Zacatecas',
+  NE: 'Nacido en el extranjero',
+};
+
+function normalizeCurp(value: any) {
+  return String(value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 18);
+}
+
+function pickProviderField(source: any, ...keys: string[]) {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+  }
+  return '';
+}
+
+function inferBirthDateFromCurp(curp: string) {
+  const yy = Number(curp.slice(4, 6));
+  const mm = curp.slice(6, 8);
+  const dd = curp.slice(8, 10);
+  const currentYY = Number(String(new Date().getFullYear()).slice(-2));
+  const year = yy <= currentYY ? 2000 + yy : 1900 + yy;
+  return `${year}-${mm}-${dd}`;
+}
+
+function normalizeCurpProviderPayload(raw: any, input: any) {
+  const source = raw?.data || raw?.result || raw?.persona || raw?.curp || raw || {};
+  const curp = normalizeCurp(pickProviderField(source, 'curp', 'CURP') || input.curp);
+  return {
+    curp,
+    nombres: pickProviderField(source, 'nombres', 'nombre', 'name') || input.nombres || '',
+    apellidoPaterno: pickProviderField(source, 'apellidoPaterno', 'apellido_paterno', 'primerApellido', 'paterno') || input.apellidoPaterno || '',
+    apellidoMaterno: pickProviderField(source, 'apellidoMaterno', 'apellido_materno', 'segundoApellido', 'materno') || input.apellidoMaterno || '',
+    sexo: pickProviderField(source, 'sexo', 'genero', 'gender') || (curp[10] === 'M' ? 'Mujer' : curp[10] === 'H' ? 'Hombre' : ''),
+    fechaNacimiento: pickProviderField(source, 'fechaNacimiento', 'fecha_nacimiento', 'birthDate') || (curp ? inferBirthDateFromCurp(curp) : ''),
+    entidadNacimiento: pickProviderField(source, 'entidadNacimiento', 'estadoNacimiento', 'entidad', 'estado') || CURP_STATES[curp.slice(11, 13)] || '',
+    status: pickProviderField(source, 'status', 'estatus', 'estadoCurp') || 'CONSULTADO',
+    pdfUrl: pickProviderField(source, 'pdfUrl', 'pdf_url', 'PDF_URL', 'downloadUrl', 'download_url'),
+  };
+}
+
+async function consultCurpProvider(payload: any) {
+  const providerUrl = process.env.CURP_API_URL || process.env.CURP_API_BASE_URL;
+  if (!providerUrl) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (process.env.CURP_API_KEY) headers.Authorization = `Bearer ${process.env.CURP_API_KEY}`;
+    const response = await fetch(providerUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!response.ok) throw new Error(data?.error || data?.message || `Proveedor CURP respondió ${response.status}`);
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const EXPORT_HEADERS: Record<string, string[]> = {
   capturas: ['Folio', 'Cliente', 'Vendedor', 'Telefono', 'Colonia', 'Ciudad', 'Paquete', 'INE', 'Contrato', 'Comprobante', 'StatusCaptura', 'StatusValidacion', 'StatusInstalacion', 'StatusDocumentos', 'FechaCaptura', 'FechaInstalacion', 'Direccion', 'Latitud', 'Longitud'],
   clientes: ['Folio', 'Cliente', 'Telefono', 'WhatsApp', 'Correo', 'Direccion', 'FechaAlta', 'Pipeline', 'UltimoContacto', 'ProximoSeguimiento', 'Satisfaccion', 'RiesgoCancelacion', 'Vendedor'],
@@ -519,6 +616,54 @@ async function startServer() {
     const { refreshToken } = req.body;
     if (refreshToken) Sessions.revoke(refreshToken);
     res.json({ ok: true });
+  }));
+
+  app.post("/api/curp/lookup", authOnly, wrap(async (req: any, res: any) => {
+    const curp = normalizeCurp(req.body?.curp);
+    if (!curp) return res.status(400).json({ error: 'CURP requerida' });
+    if (!CURP_RE.test(curp)) return res.status(400).json({ error: 'Formato de CURP inválido' });
+
+    const payload = {
+      curp,
+      nombres: String(req.body?.nombres || '').trim(),
+      apellidoPaterno: String(req.body?.apellidoPaterno || '').trim(),
+      apellidoMaterno: String(req.body?.apellidoMaterno || '').trim(),
+    };
+
+    let providerError = '';
+    let normalized = normalizeCurpProviderPayload(null, payload);
+    let official = false;
+    let source = 'local';
+    try {
+      const providerData = await consultCurpProvider(payload);
+      if (providerData) {
+        normalized = normalizeCurpProviderPayload(providerData, payload);
+        official = true;
+        source = 'provider';
+      }
+    } catch (err: any) {
+      providerError = err?.message || 'Proveedor CURP no disponible';
+    }
+
+    logSystem(
+      req,
+      'curp.lookup',
+      'curp',
+      curp,
+      official ? 'Consulta CURP con proveedor externo' : 'Validacion local de CURP',
+      { source, providerError: providerError || null }
+    );
+    res.json({
+      ok: true,
+      ...normalized,
+      official,
+      source,
+      status: official ? normalized.status : 'VALIDADA_FORMATO_LOCAL',
+      message: official
+        ? 'CURP consultada con proveedor externo configurado.'
+        : 'CURP validada localmente. Configura CURP_API_URL para consulta externa.',
+      providerError: providerError || undefined,
+    });
   }));
 
   app.post("/api/auth/passkey/continue", authOnly, wrap((req: any, res: any) => {

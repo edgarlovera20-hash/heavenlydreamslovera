@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, ProductCategory } from '../../configs/package-catalog';
-import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle, Search, Copy, Save } from 'lucide-react';
+import { set as idbSet, get as idbGet, del as idbDel } from 'idb-keyval';
 import { chatUrl } from '../../lib/channels';
 import { cn, formatCurrency } from '../../lib/utils';
 import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
@@ -307,6 +308,56 @@ function ocrJobKey(images: string[]) {
   return images.map(img => `${img.length}:${img.slice(0, 48)}:${img.slice(-48)}`).join('|');
 }
 
+const NEW_SALE_DRAFT_PREFIX = 'hd_new_sale_draft_v2';
+const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+
+type CurpLookupResult = {
+  ok?: boolean;
+  curp?: string;
+  nombres?: string;
+  apellidoPaterno?: string;
+  apellidoMaterno?: string;
+  sexo?: string;
+  fechaNacimiento?: string;
+  entidadNacimiento?: string;
+  status?: string;
+  source?: string;
+  official?: boolean;
+  pdfUrl?: string;
+  message?: string;
+  providerError?: string;
+};
+
+function normalizeCurpInput(value?: string) {
+  return (value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 18);
+}
+
+function getDraftKey() {
+  return `${NEW_SALE_DRAFT_PREFIX}:${getCurrentUserId()}`;
+}
+
+function isDraftWorthSaving(form: Partial<CustomerCaptureData>) {
+  const meaningfulKeys: Array<keyof CustomerCaptureData> = [
+    'nombres', 'apellidoPaterno', 'apellidoMaterno', 'curp', 'folioIne',
+    'telefonoTitular', 'telefonoReferencia', 'correo', 'ineFrente',
+    'ineReverso', 'curpDoc', 'comprobanteDomicilio', 'calle',
+    'codigoPostal', 'colonia', 'ciudad', 'delegacion', 'coordenadas',
+    'packageId', 'paqueteNombre', 'numeroAPortar', 'anexoPortabilidad',
+  ];
+  return meaningfulKeys.some(key => {
+    const value = form[key];
+    return value !== undefined && value !== null && String(value).trim() !== '';
+  });
+}
+
+function looksLikePdfDataUrl(value?: string) {
+  return Boolean(value?.startsWith('data:application/pdf'));
+}
+
+function detectDocumentMime(images: string[]) {
+  return images.some(looksLikePdfDataUrl) ? 'application/pdf' : 'image/png';
+}
+
 export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<Partial<CustomerCaptureData>>({
@@ -330,6 +381,11 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
 
   const [showAnexo, setShowAnexo] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved' | 'restored' | 'error'>('idle');
+  const [draftUpdatedAt, setDraftUpdatedAt] = useState<string>('');
+  const [curpLookupLoading, setCurpLookupLoading] = useState(false);
+  const [curpLookupResult, setCurpLookupResult] = useState<CurpLookupResult | null>(null);
+  const [curpLookupError, setCurpLookupError] = useState('');
 
   // Field validation state
   type ValidationState = 'idle' | 'checking' | 'ok' | 'error';
@@ -361,6 +417,9 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string>('');
   const pendingOcrJobsRef = useRef<Set<string>>(new Set());
   const receiptRef = useRef<HTMLDivElement>(null);
+  const draftKeyRef = useRef(getDraftKey());
+  const draftLoadedRef = useRef(false);
+  const draftTimerRef = useRef<number | null>(null);
   
   const sigCanvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -470,6 +529,48 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const draft = await idbGet(draftKeyRef.current) as { form?: Partial<CustomerCaptureData>; step?: number; updatedAt?: string } | undefined;
+        if (!active) return;
+        if (draft?.form && isDraftWorthSaving(draft.form)) {
+          setForm(prev => ({ ...prev, ...draft.form }));
+          if (draft.step) setStep(Math.min(Math.max(Number(draft.step) || 1, 1), 5));
+          setDraftUpdatedAt(draft.updatedAt || '');
+          setDraftStatus('restored');
+          toast.success('Borrador recuperado. La captura se autoguarda mientras trabajas.');
+        }
+      } catch (err) {
+        console.warn('No se pudo recuperar el borrador de venta:', err);
+      } finally {
+        draftLoadedRef.current = true;
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!draftLoadedRef.current || !isDraftWorthSaving(form)) return;
+    if (draftTimerRef.current) window.clearTimeout(draftTimerRef.current);
+    setDraftStatus('saving');
+    draftTimerRef.current = window.setTimeout(async () => {
+      try {
+        const updatedAt = new Date().toISOString();
+        await idbSet(draftKeyRef.current, { form, step, updatedAt });
+        setDraftUpdatedAt(updatedAt);
+        setDraftStatus('saved');
+      } catch (err) {
+        console.warn('No se pudo autoguardar la captura:', err);
+        setDraftStatus('error');
+      }
+    }, 650);
+    return () => {
+      if (draftTimerRef.current) window.clearTimeout(draftTimerRef.current);
+    };
+  }, [form, step]);
+
   const isPhone10 = (v?: string) => !!v && /^\d{10}$/.test(v.replace(/\D/g, ''));
 
   const handleNext = () => {
@@ -559,7 +660,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     setIsOcrLoading(true);
     setOcrProgress(10);
     try {
-      const result = await aiAgent.analyzeDocument(imgs, 'image/png', setOcrProgress);
+      const result = await aiAgent.analyzeDocument(imgs, detectDocumentMime(imgs), setOcrProgress);
       const merged: Record<string, string> = {};
       if (result) {
         for (const [k, v] of Object.entries(result)) {
@@ -597,7 +698,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     // Disparamos sin await — corre en background
     (async () => {
       try {
-        const result = await aiAgent.analyzeDocument(imgs, 'image/png');
+        const result = await aiAgent.analyzeDocument(imgs, detectDocumentMime(imgs));
         // Smart merge: usamos un setForm con función para acceder al estado MÁS RECIENTE
         // y solo rellenar campos vacíos (no sobrescribir lo que el usuario escribió)
         let filledCount = 0;
@@ -642,15 +743,13 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     })();
   };
 
-  // Subir comprobante de domicilio (CFE/Izzi/Totalplay/Telmex) — guarda y dispara OCR en background.
+  // Subir comprobante de domicilio — guarda el archivo; el escaneo se ejecuta con botón explícito.
   const handleComprobanteUpload = async (file: File | undefined) => {
     if (!file) return;
     try {
       const base64 = await optimizeImageForOcr(file);
       updateForm({ comprobanteDomicilio: base64 });
-      toast.info('📸 Comprobante cargado — IA extrayendo domicilio en segundo plano. Puedes seguir avanzando.', { duration: 4000 });
-      // Disparar OCR de comprobante en background (no bloquea)
-      runComprobanteOcrInBackground(base64);
+      toast.info('Comprobante cargado. Presiona "Escanear comprobante" para autollenar el domicilio.', { duration: 4500 });
     } catch (err: any) {
       toast.error(err?.message || 'No se pudo leer el archivo.');
     }
@@ -784,29 +883,21 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     }
   };
 
-  // Al subir un documento, se guarda Y se dispara OCR en background automáticamente.
-  // El usuario puede seguir avanzando con el formulario mientras la IA procesa.
+  // Al subir un documento, se guarda y queda listo para escanear con el botón explícito.
   const handleFileSelect = (slot: 'frente' | 'reverso' | 'curp') => async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
       const base64 = await optimizeImageForOcr(file);
-      // Calculamos las imágenes que estarán disponibles después de actualizar
-      let imgsForOcr: string[] = [];
       if (slot === 'frente') {
         updateForm({ ineFrente: base64 });
-        imgsForOcr = [base64];
-        if (form.ineReverso) imgsForOcr.push(form.ineReverso);
       } else if (slot === 'reverso') {
         updateForm({ ineReverso: base64 });
-        imgsForOcr = form.ineFrente ? [form.ineFrente, base64] : [base64];
       } else {
         updateForm({ curpDoc: base64 });
-        imgsForOcr = [base64];
       }
-      toast.info('📸 Imagen cargada — la IA está extrayendo los datos en segundo plano. Puedes seguir avanzando.', { duration: 4000 });
-      // Disparar OCR en background SIN await — no bloquea la UI
-      runOcrInBackground(imgsForOcr);
+      const fileKind = file.type === 'application/pdf' ? 'PDF' : 'archivo';
+      toast.info(`${fileKind} cargado. Presiona "Iniciar auto escáner" para rellenar los datos.`, { duration: 4500 });
     } catch (err: any) {
       toast.error(err?.message || 'No se pudo leer el archivo.');
     }
@@ -823,7 +914,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       if (form.curpDoc) imgs.push(form.curpDoc);
     }
     if (imgs.length === 0) {
-      toast.error('Sube al menos una imagen antes de escanear.');
+      toast.error('Sube al menos una imagen o PDF antes de escanear.');
       return;
     }
     await runOcrOnImages(imgs);
@@ -833,6 +924,121 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     if (slot === 'frente') updateForm({ ineFrente: undefined });
     else if (slot === 'reverso') updateForm({ ineReverso: undefined });
     else updateForm({ curpDoc: undefined });
+  };
+
+  const clearCurrentDraft = async () => {
+    try {
+      await idbDel(draftKeyRef.current);
+      setDraftStatus('idle');
+      setDraftUpdatedAt('');
+      toast.success('Borrador eliminado.');
+    } catch {
+      toast.error('No se pudo eliminar el borrador.');
+    }
+  };
+
+  const mergeCurpResultIntoForm = (data: CurpLookupResult) => {
+    setForm(prev => {
+      const updates: Partial<CustomerCaptureData> = {};
+      const fill = (key: keyof CustomerCaptureData, value?: string) => {
+        if (value && (!(prev as any)[key] || String((prev as any)[key]).trim() === '')) {
+          (updates as any)[key] = value;
+        }
+      };
+      if (data.curp) updates.curp = normalizeCurpInput(data.curp);
+      fill('nombres', data.nombres);
+      fill('apellidoPaterno', data.apellidoPaterno);
+      fill('apellidoMaterno', data.apellidoMaterno);
+      return Object.keys(updates).length ? { ...prev, ...updates } : prev;
+    });
+  };
+
+  const handleCurpLookup = async () => {
+    const curp = normalizeCurpInput(form.curp);
+    if (!CURP_RE.test(curp)) {
+      setCurpLookupError('Escribe una CURP válida de 18 caracteres.');
+      toast.error('Escribe una CURP válida para consultar.');
+      return;
+    }
+    setCurpLookupLoading(true);
+    setCurpLookupError('');
+    try {
+      const res = await fetch('/api/curp/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          curp,
+          nombres: form.nombres || '',
+          apellidoPaterno: form.apellidoPaterno || '',
+          apellidoMaterno: form.apellidoMaterno || '',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'No se pudo consultar la CURP.');
+      setCurpLookupResult(data);
+      mergeCurpResultIntoForm(data);
+      toast.success(data.official ? 'CURP consultada con proveedor externo.' : 'CURP validada en modo local. PDF listo para descargar.');
+    } catch (err: any) {
+      const message = err?.message || 'No se pudo consultar la CURP.';
+      setCurpLookupError(message);
+      toast.error(message);
+    } finally {
+      setCurpLookupLoading(false);
+    }
+  };
+
+  const copyCurpToClipboard = async () => {
+    const curp = normalizeCurpInput(form.curp);
+    if (!curp) {
+      toast.error('No hay CURP para copiar.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(curp);
+      toast.success('CURP copiada al portapapeles.');
+    } catch {
+      toast.error('No se pudo copiar la CURP.');
+    }
+  };
+
+  const downloadCurpPdf = async () => {
+    const curp = normalizeCurpInput(curpLookupResult?.curp || form.curp);
+    if (!CURP_RE.test(curp)) {
+      toast.error('Consulta o escribe una CURP válida antes de descargar.');
+      return;
+    }
+    if (curpLookupResult?.pdfUrl) {
+      const link = document.createElement('a');
+      link.href = curpLookupResult.pdfUrl;
+      link.download = `CURP_${curp}.pdf`;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.click();
+      return;
+    }
+    const { default: jsPDF } = await import('jspdf');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const fullName = [
+      curpLookupResult?.nombres || form.nombres,
+      curpLookupResult?.apellidoPaterno || form.apellidoPaterno,
+      curpLookupResult?.apellidoMaterno || form.apellidoMaterno,
+    ].filter(Boolean).join(' ').trim() || 'Sin nombre capturado';
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(16);
+    pdf.text('Consulta CURP - Heavenly Dreams CRM', 18, 24);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(11);
+    pdf.text(`CURP: ${curp}`, 18, 42);
+    pdf.text(`Nombre: ${fullName}`, 18, 52);
+    pdf.text(`Sexo: ${curpLookupResult?.sexo || 'No disponible'}`, 18, 62);
+    pdf.text(`Fecha de nacimiento: ${curpLookupResult?.fechaNacimiento || 'No disponible'}`, 18, 72);
+    pdf.text(`Entidad: ${curpLookupResult?.entidadNacimiento || 'No disponible'}`, 18, 82);
+    pdf.text(`Estatus: ${curpLookupResult?.status || 'VALIDADA_FORMATO_LOCAL'}`, 18, 92);
+    pdf.text(`Fuente: ${curpLookupResult?.official ? 'Proveedor externo configurado' : 'Validacion local del CRM'}`, 18, 102);
+    pdf.setFontSize(9);
+    pdf.text('Este PDF fue generado desde el modulo de captura para adjuntarse al expediente interno.', 18, 122, { maxWidth: 170 });
+    pdf.save(`CURP_${curp}.pdf`);
   };
 
 const exportToPDF = async () => {
@@ -926,6 +1132,9 @@ const exportToPDF = async () => {
       
       // 3. Export PDF
       await exportToPDF();
+      await idbDel(draftKeyRef.current);
+      setDraftStatus('idle');
+      setDraftUpdatedAt('');
       
       toast.success('Venta registrada con éxito en el sistema.');
       onBack();
@@ -985,6 +1194,33 @@ const exportToPDF = async () => {
         <div>
           <h1 className="text-2xl font-bold text-white">Registrar Nueva Venta</h1>
           <p className="text-slate-400 text-sm">Captura de expediente y selección de paquete</p>
+        </div>
+        <div className="ml-auto hidden sm:flex flex-col items-end gap-1">
+          <div className={cn(
+            'inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11px] font-semibold',
+            draftStatus === 'error'
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+              : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+          )}
+          title={draftUpdatedAt ? `Ultimo guardado: ${new Date(draftUpdatedAt).toLocaleString()}` : 'La captura se guarda automaticamente'}>
+            {draftStatus === 'saving' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            {draftStatus === 'saving'
+              ? 'Autoguardando'
+              : draftStatus === 'restored'
+                ? 'Borrador recuperado'
+                : draftStatus === 'error'
+                  ? 'Autoguardado falló'
+                  : 'Autoguardado activo'}
+          </div>
+          {(draftStatus === 'saved' || draftStatus === 'restored') && (
+            <button
+              type="button"
+              onClick={clearCurrentDraft}
+              className="text-[10px] uppercase tracking-widest text-slate-400 hover:text-white"
+            >
+              Borrar borrador
+            </button>
+          )}
         </div>
       </div>
 
@@ -1063,9 +1299,9 @@ const exportToPDF = async () => {
               </div>
 
               {/* Inputs ocultos — archivo y cámara para cada slot */}
-              <input type="file" ref={frenteInputRef} onChange={handleFileSelect(docType === 'ine' ? 'frente' : 'curp')} accept="image/*" className="hidden" />
+              <input type="file" ref={frenteInputRef} onChange={handleFileSelect(docType === 'ine' ? 'frente' : 'curp')} accept="image/*,application/pdf" className="hidden" />
               <input type="file" id="frente-cam" onChange={handleFileSelect(docType === 'ine' ? 'frente' : 'curp')} accept="image/*" capture="environment" className="hidden" />
-              <input type="file" ref={reversoInputRef} onChange={handleFileSelect('reverso')} accept="image/*" className="hidden" />
+              <input type="file" ref={reversoInputRef} onChange={handleFileSelect('reverso')} accept="image/*,application/pdf" className="hidden" />
               <input type="file" id="reverso-cam" onChange={handleFileSelect('reverso')} accept="image/*" capture="environment" className="hidden" />
 
               {/* Zonas de carga con preview */}
@@ -1127,7 +1363,7 @@ const exportToPDF = async () => {
                       </div>
                     )}
 
-                    {/* Botón de re-escanear manual (siempre disponible) */}
+                    {/* Botón explícito de auto escáner (siempre disponible después de subir archivos) */}
                     {isOcrLoading ? (
                       <div className="bg-gradient-to-r from-blue-600/20 via-blue-500/15 to-blue-600/20 border border-blue-500/30 rounded-2xl p-4 flex items-center gap-4">
                         <Loader2 className="w-5 h-5 text-blue-400 animate-spin shrink-0" />
@@ -1147,7 +1383,7 @@ const exportToPDF = async () => {
                         className="group w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/30 ring-1 ring-white/10"
                       >
                         <ScanLine className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                        <span>{form.curp || form.nombres ? 'Volver a escanear (sobrescribe)' : 'Forzar escaneo manual'}</span>
+                        <span>{form.curp || form.nombres ? 'Iniciar auto escáner de nuevo' : 'Iniciar auto escáner'}</span>
                         <Sparkles className="w-3.5 h-3.5 opacity-80" />
                       </button>
                     )}
@@ -1180,7 +1416,10 @@ const exportToPDF = async () => {
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1.5">CURP</label>
                   <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500 uppercase font-mono" 
-                    value={form.curp || ''} onChange={e => updateForm({ curp: e.target.value })} />
+                    value={form.curp || ''} onChange={e => {
+                      updateForm({ curp: normalizeCurpInput(e.target.value) });
+                      setCurpLookupError('');
+                    }} />
                 </div>
                 {docType === 'ine' && (
                   <div>
@@ -1189,6 +1428,67 @@ const exportToPDF = async () => {
                       value={form.folioIne || ''} onChange={e => updateForm({ folioIne: e.target.value })} />
                   </div>
                 )}
+                <div className="md:col-span-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4 space-y-3">
+                  <div className="flex flex-col md:flex-row md:items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-cyan-200 font-bold uppercase tracking-widest text-xs">
+                        <Search className="w-4 h-4" />
+                        Consulta CURP
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Busca la CURP, copia el resultado y descarga un PDF para el expediente.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto">
+                      <button
+                        type="button"
+                        onClick={handleCurpLookup}
+                        disabled={curpLookupLoading}
+                        className="rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 px-4 py-2.5 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                      >
+                        {curpLookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        Consultar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={copyCurpToClipboard}
+                        disabled={!form.curp}
+                        className="rounded-xl border border-white/10 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-slate-200 px-4 py-2.5 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+                      >
+                        <Copy className="w-4 h-4" />
+                        Copiar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={downloadCurpPdf}
+                        disabled={!form.curp}
+                        className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 text-emerald-200 px-4 py-2.5 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        PDF
+                      </button>
+                    </div>
+                  </div>
+                  {(curpLookupError || curpLookupResult) && (
+                    <div className={cn(
+                      'rounded-xl border px-3 py-2 text-xs',
+                      curpLookupError
+                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                    )}>
+                      {curpLookupError || (
+                        <>
+                          <span className="font-bold">{curpLookupResult?.curp}</span>
+                          <span className="text-slate-300"> · {curpLookupResult?.status || 'VALIDADA'}</span>
+                          <span className="text-slate-400"> · {curpLookupResult?.official ? 'Proveedor externo' : 'Modo local'}</span>
+                          {curpLookupResult?.providerError && (
+                            <span className="block text-amber-200 mt-1">Proveedor no disponible: {curpLookupResult.providerError}</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
                 {/* Teléfono Titular — validación EN VIVO 10 dígitos */}
                 <div>
                   <label className="text-sm font-medium text-slate-400 mb-1.5 flex items-center gap-2">
@@ -2200,9 +2500,17 @@ function UploadSlot({
   disabled?: boolean;
 }) {
   if (image) {
+    const isPdf = looksLikePdfDataUrl(image);
     return (
       <div className="relative group rounded-xl overflow-hidden border border-emerald-500/30 bg-emerald-500/5">
-        <img src={image} alt={title} className="w-full h-44 object-contain bg-slate-950" />
+        {isPdf ? (
+          <div className="w-full h-44 bg-slate-950 flex flex-col items-center justify-center gap-2 text-emerald-200">
+            <FileText className="w-10 h-10" />
+            <span className="text-xs font-bold uppercase tracking-widest">PDF cargado</span>
+          </div>
+        ) : (
+          <img src={image} alt={title} className="w-full h-44 object-contain bg-slate-950" />
+        )}
         <div className="absolute inset-x-0 top-0 p-2 flex items-start justify-between gap-2 bg-gradient-to-b from-black/80 to-transparent">
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
             <CheckCircle2 className="w-3 h-3" />
