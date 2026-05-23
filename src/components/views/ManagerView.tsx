@@ -2,10 +2,10 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   BarChart3, Users, DollarSign, Activity, Bell, Search,
   LogOut, TrendingUp, ArrowUpRight, ArrowDownRight,
-  LayoutDashboard, Settings as SettingsIcon, FileText, PieChart, ChevronLeft, ChevronRight,
+  LayoutDashboard, Settings as SettingsIcon, PieChart, ChevronLeft, ChevronRight,
   User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, ImagePlus, Gamepad2, FolderOpen,
   Cpu, Database, Smartphone, Sun, Moon, X, Crown, Zap, Bot, Home, MessageSquare,
-  MapPin, UserPlus, WifiOff, RefreshCw, CheckCircle2, Shield, Package, Boxes, FileSpreadsheet, PhoneCall
+  MapPin, WifiOff, RefreshCw, CheckCircle2, Shield, Package, Boxes, FileSpreadsheet, PhoneCall
 } from 'lucide-react';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
@@ -22,14 +22,10 @@ const ConsultasSeguimiento = lazy(() => import('./ConsultasSeguimiento'));
 const Game = lazy(() => import('./Game'));
 const CustomerSupport = lazy(() => import('./CustomerSupport'));
 const Morosidad = lazy(() => import('./Morosidad'));
-const ContractsManager = lazy(() => import('./ContractsManager'));
 const MyFilesView = lazy(() => import('./MyFilesView'));
 const Integrations = lazy(() => import('./Integrations'));
 const AgentDesigner = lazy(() => import('./AgentDesigner').then(m => ({ default: m.AgentDesigner })));
-const QuickQuote = lazy(() => import('./QuickQuote'));
-const SalesScriptView = lazy(() => import('./SalesScriptView'));
 const ZoneHistoryView = lazy(() => import('./ZoneHistoryView'));
-const ReferralsView = lazy(() => import('./ReferralsView'));
 const AnalyticsView = lazy(() => import('./AnalyticsView'));
 const TeamManagementView = lazy(() => import('./TeamManagementView'));
 const CommissionsView = lazy(() => import('./CommissionsView'));
@@ -218,15 +214,11 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </NavGroup>
 
           <NavGroup label="Promotor de Campo">
-            <NavItem icon={Zap} color="yellow" label="Cotizador Rápido" active={activeSection === 'Cotizador Rápido'} onClick={() => setActiveSection('Cotizador Rápido')} />
-            <NavItem icon={Bot} color="purple" label="Scripts de Venta" active={activeSection === 'Scripts de Venta'} onClick={() => setActiveSection('Scripts de Venta')} />
             <NavItem icon={MapPin} color="cyan" label="Historial por Zona" active={activeSection === 'Historial por Zona'} onClick={() => setActiveSection('Historial por Zona')} />
-            <NavItem icon={UserPlus} color="green" label="Referidos" active={activeSection === 'Referidos'} onClick={() => setActiveSection('Referidos')} />
           </NavGroup>
 
           <NavGroup label="Administración">
             <NavItem icon={Wallet} color="yellow" label="Nóminas" active={activeSection === 'Nóminas'} onClick={() => setActiveSection('Nóminas')} />
-            <NavItem icon={FileText} color="blue" label="Contratos" active={activeSection === 'Contratos'} onClick={() => setActiveSection('Contratos')} />
             {role === 'GERENTE' && <NavItem icon={SettingsIcon} color="slate" label="Ajustes" active={activeSection === 'Ajustes'} onClick={() => setActiveSection('Ajustes')} />}
           </NavGroup>
 
@@ -399,10 +391,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <QuickAction icon={ClipboardCheck} label="Nueva Captura" color="green" onClick={() => setActiveSection('Captura y Validación')} />
                   <QuickAction icon={FileSearch} label="Consultas" color="cyan" onClick={() => setActiveSection('Consulta y Seguimiento')} />
-                  <QuickAction icon={Zap} label="Cotizador" color="yellow" onClick={() => setActiveSection('Cotizador Rápido')} />
-                  <QuickAction icon={Bot} label="Scripts IA" color="purple" onClick={() => setActiveSection('Scripts de Venta')} />
                   <QuickAction icon={MapPin} label="Por Zona" color="cyan" onClick={() => setActiveSection('Historial por Zona')} />
-                  <QuickAction icon={Users} label="Referidos" color="green" onClick={() => setActiveSection('Referidos')} />
                   <QuickAction icon={AlertTriangle} label="Morosidad" color="red" onClick={() => setActiveSection('Morosidad')} />
                   <QuickAction icon={Headphones} label="Soporte" color="purple" onClick={() => setActiveSection('Soporte a Clientes')} />
                   {['GERENTE', 'SUPERVISOR'].includes(role) && <>
@@ -503,16 +492,12 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Anuncios' && <Announcements />}
             {activeSection === 'Captura y Validación' && <CaptureValidation />}
             {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
-            {activeSection === 'Contratos' && <ContractsManager />}
             {activeSection === 'Soporte a Clientes' && <CustomerSupport />}
             {activeSection === 'Morosidad' && <Morosidad />}
             {activeSection === 'Juego' && <Game />}
             {activeSection === 'Integraciones' && <Integrations />}
             {activeSection === 'Documentación' && <MyFilesView onBack={() => setActiveSection('Dashboard')} />}
-            {activeSection === 'Cotizador Rápido' && <QuickQuote />}
-            {activeSection === 'Scripts de Venta' && <SalesScriptView />}
             {activeSection === 'Historial por Zona' && <ZoneHistoryView />}
-            {activeSection === 'Referidos' && <ReferralsView />}
             {activeSection === 'Analytics' && <AnalyticsView />}
             {activeSection === 'Equipo y Metas' && <TeamManagementView />}
             {activeSection === 'Comisiones' && <CommissionsView />}
@@ -531,7 +516,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Contratos', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Cotizador Rápido', 'Scripts de Venta', 'Historial por Zona', 'Referidos', 'Analytics', 'Equipo y Metas', 'Comisiones', 'Aprobaciones', 'Territorios', 'Catálogo', 'Inventario', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Comisiones', 'Aprobaciones', 'Territorios', 'Catálogo', 'Inventario', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>

@@ -2,7 +2,7 @@ import React, { useState, lazy, Suspense } from 'react';
 import {
   Home, User, Wallet, Headphones,
   Bell, LogOut, PlusCircle, Activity,
-  FileText, ChevronLeft, Menu, Users, Gamepad2, ClipboardCheck, FileSearch, Megaphone, X, LayoutDashboard, AlertTriangle, SettingsIcon, FolderOpen, Zap
+  ChevronLeft, Menu, Users, Gamepad2, ClipboardCheck, FileSearch, Megaphone, X, LayoutDashboard, AlertTriangle, SettingsIcon, FolderOpen, Zap
 } from 'lucide-react';
 import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
@@ -15,7 +15,6 @@ const CaptureValidation = lazy(() => import('./CaptureValidation'));
 const ConsultasSeguimiento = lazy(() => import('./ConsultasSeguimiento'));
 const Payroll = lazy(() => import('./Payroll'));
 const Announcements = lazy(() => import('./Announcements'));
-const ContractsManager = lazy(() => import('./ContractsManager'));
 const CustomerSupport = lazy(() => import('./CustomerSupport'));
 const Morosidad = lazy(() => import('./Morosidad'));
 const Settings = lazy(() => import('./Settings'));
@@ -65,7 +64,6 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
       { id: 'Soporte a Clientes', label: 'Soporte', icon: Headphones, color: 'cyan' },
       { id: 'Morosidad', label: 'Morosidad', icon: AlertTriangle, color: 'red' },
       { id: 'Anuncios', label: 'Anuncios', icon: Megaphone, color: 'orange' },
-      { id: 'Contratos', label: 'Contratos', icon: FileText, color: 'blue' },
       { id: 'Juego', label: 'Juego', icon: Gamepad2, color: 'pink' },
       { id: 'Integraciones', label: 'Integraciones', icon: Zap, color: 'yellow' },
       { id: 'Ajustes', label: 'Ajustes', icon: SettingsIcon, color: 'blue' },
@@ -128,13 +126,12 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
           {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
           {activeSection === 'Nóminas' && <Payroll />}
           {activeSection === 'Anuncios' && <Announcements />}
-          {activeSection === 'Contratos' && <ContractsManager />}
           {activeSection === 'Soporte a Clientes' && <CustomerSupport />}
           {activeSection === 'Morosidad' && <Morosidad />}
           {activeSection === 'Ajustes' && <Settings />}
           {activeSection === 'Integraciones' && <Integrations />}
         </Suspense>
-        {!['Perfil', 'Documentación', 'Juego', 'Captura y Validación', 'Consulta y Seguimiento', 'Nóminas', 'Anuncios', 'Contratos', 'Soporte a Clientes', 'Morosidad', 'Ajustes', 'Integraciones'].includes(activeSection) && (
+        {!['Perfil', 'Documentación', 'Juego', 'Captura y Validación', 'Consulta y Seguimiento', 'Nóminas', 'Anuncios', 'Soporte a Clientes', 'Morosidad', 'Ajustes', 'Integraciones'].includes(activeSection) && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-cyber-electric/50">
               <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
