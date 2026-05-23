@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
@@ -428,6 +429,7 @@ function emptyRowForHeaders(dataset: string) {
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
+  const HOST = process.env.HOST?.trim();
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '20mb' }));
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
@@ -2498,11 +2500,13 @@ async function startServer() {
       .catch(e => console.warn('[TG] Error auto-reconectando:', e.message));
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const onListening = () => {
     console.log(`[DB] Base de datos: data/heavenlydreams.db`);
     console.log(`[SIAC] Registros en DB: ${SiacRecords.count()}`);
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+    console.log(`Server running on http://${HOST || 'localhost'}:${PORT}`);
+  };
+  if (HOST) app.listen(PORT, HOST, onListening);
+  else app.listen(PORT, onListening);
 }
 
 startServer();
