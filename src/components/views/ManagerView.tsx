@@ -512,7 +512,12 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Config. Llamadas' && <ValidationConfigView />}
             {activeSection === 'Hub de Agentes' && <AgentHubView />}
             {activeSection === 'Gestión de Usuarios' && <UserManagementView />}
-            {activeSection === 'Chats' && <ChatsView />}
+            {activeSection === 'Chats' && (
+              <ChatsView
+                onOpenSettings={() => setActiveSection('Ajustes')}
+                onOpenAgents={() => setActiveSection('Hub de Agentes')}
+              />
+            )}
             {activeSection === 'Seguimiento de Clientes' && <CustomerFollowUpView />}
           </Suspense>
 
