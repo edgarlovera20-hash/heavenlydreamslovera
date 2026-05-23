@@ -35,6 +35,7 @@ async function readFileAsText(file: File): Promise<string> {
 const TABLES = [
   { id: 'capturas',           label: 'Capturas',           color: 'cyan',    desc: 'Solicitudes completas con estados, GPS y dirección' },
   { id: 'documentos_cliente', label: 'Documentos Cliente', color: 'emerald', desc: 'INE, comprobante, contrato y validación documental' },
+  { id: 'document_files',     label: 'Archivos Expediente', color: 'blue',    desc: 'Archivos físicos con hash SHA-256 y revisión del archivero' },
   { id: 'clientes_crm',       label: 'CRM Clientes',       color: 'sky',     desc: 'Pipeline de bienvenida, seguimiento y retención' },
   { id: 'estatus_folios',     label: 'Estatus Folios',     color: 'teal',    desc: 'Consulta operativa de avance por folio' },
   { id: 'morosidad',          label: 'Morosidad',          color: 'amber',   desc: 'Cobranza, niveles de atraso y convenios' },

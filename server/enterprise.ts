@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import db, { AiJobs, AuditLog, AutomationRules, Metrics } from './db';
 import { infraMode, queueJob } from './infra';
+import { getReadinessGates } from './readiness';
 
 type ProviderName = 'claude' | 'gemini' | 'openai';
 
@@ -164,11 +165,18 @@ export function fireAutomationRules(event: string, payload: any, actor: any) {
 export function enterpriseHealth() {
   const ai = Object.fromEntries(PROVIDERS.map(p => [p.name, { configured: p.configured() }]));
   const infra = infraMode();
+  const readiness = getReadinessGates();
   return {
     mode: process.env.NODE_ENV || 'development',
     database: infra.database,
     eventBus: infra.eventBus,
     queues: infra.queues,
     ai,
+    readiness: {
+      ok: readiness.filter(g => g.status === 'ok').length,
+      warning: readiness.filter(g => g.status === 'warning').length,
+      critical: readiness.filter(g => g.status === 'critical').length,
+      total: readiness.length,
+    },
   };
 }

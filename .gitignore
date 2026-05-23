@@ -38,10 +38,18 @@ Thumbs.db
 # WhatsApp Web session
 .wwebjs_auth/
 .wwebjs_cache/
+.baileys_auth/
 
 # Private keys (NEVER COMMIT)
 *.pem
 *.key
+server/google-vision-credentials.json
+google-vision-credentials.json
+service-account*.json
+
+# Runtime document storage
+data/document_storage/
+data/backups/
 
 # SQLite WAL / SHM (runtime files, not source)
 data/*.db-wal

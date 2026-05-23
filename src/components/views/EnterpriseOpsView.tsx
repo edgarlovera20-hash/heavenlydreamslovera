@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, Bot, Boxes, GitBranch, Play, RefreshCw, ShieldCheck, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, Bot, Boxes, CheckCircle2, GitBranch, Play, RefreshCw, ShieldCheck, Zap } from 'lucide-react';
 
 const SESSION_KEY = 'hd_session';
 
@@ -30,6 +30,7 @@ export default function EnterpriseOpsView() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
+  const [readiness, setReadiness] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [aiText, setAiText] = useState('No puedo pagar hoy, pero el viernes liquido el atraso.');
   const [aiResult, setAiResult] = useState<any>(null);
@@ -39,14 +40,16 @@ export default function EnterpriseOpsView() {
   const load = async () => {
     setLoading(true);
     try {
-      const [healthRes, metricsRes, inventoryRes, rulesRes, jobsRes] = await Promise.all([
+      const [healthRes, readinessRes, metricsRes, inventoryRes, rulesRes, jobsRes] = await Promise.all([
         fetch('/api/enterprise/health'),
+        fetch('/api/enterprise/readiness', { headers }),
         fetch('/api/enterprise/metrics', { headers }),
         fetch('/api/inventory'),
         fetch('/api/automation/rules', { headers }),
         fetch('/api/ai/jobs', { headers }),
       ]);
       if (healthRes.ok) setHealth(await healthRes.json());
+      if (readinessRes.ok) setReadiness(await readinessRes.json());
       if (metricsRes.ok) setMetrics(await metricsRes.json());
       if (inventoryRes.ok) setInventory(await inventoryRes.json());
       if (rulesRes.ok) setRules(await rulesRes.json());
@@ -77,6 +80,12 @@ export default function EnterpriseOpsView() {
       {value}
     </span>
   );
+
+  const gateStyle = (gateStatus: string) => {
+    if (gateStatus === 'ok') return 'border-emerald-400/20 bg-emerald-400/5 text-emerald-200';
+    if (gateStatus === 'critical') return 'border-rose-400/30 bg-rose-400/10 text-rose-200';
+    return 'border-amber-400/25 bg-amber-400/5 text-amber-200';
+  };
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
@@ -110,6 +119,27 @@ export default function EnterpriseOpsView() {
                 </p>
               </div>
             ))}
+          </div>
+        </Panel>
+
+        <Panel title="Readiness 1000" icon={readiness?.critical ? AlertTriangle : CheckCircle2}>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-3xl font-black text-white">{readiness?.score ?? '—'}%</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest">
+                {readiness?.ok || 0} ok · {readiness?.warning || 0} avisos · {readiness?.critical || 0} críticos
+              </p>
+            </div>
+            {status(readiness?.connections?.postgres ? 'postgres ok' : health?.database || 'sqlite')}
+          </div>
+          <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+            {(readiness?.gates || []).slice(0, 15).map((gate: any) => (
+              <div key={gate.id} className={`rounded-lg border p-2 ${gateStyle(gate.status)}`}>
+                <p className="text-[11px] font-black uppercase tracking-wider">{gate.label}</p>
+                <p className="text-[10px] opacity-80 mt-0.5">{gate.detail}</p>
+              </div>
+            ))}
+            {!readiness && <p className="text-xs text-slate-500">Cargando checklist empresarial.</p>}
           </div>
         </Panel>
 

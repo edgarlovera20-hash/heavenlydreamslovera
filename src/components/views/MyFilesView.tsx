@@ -73,6 +73,8 @@ interface DocValidation {
   fileName?: string;
   fileSize?: number;
   mimeType?: string;
+  backendFileId?: string;
+  downloadUrl?: string;
 }
 
 interface Step {
@@ -255,6 +257,24 @@ async function analyzeManipulation(
   return { ...baseValidation, isManipulated: false, confidence: 0.5 };
 }
 
+function toServerDocType(docId: string) {
+  const map: Record<string, string> = {
+    ineFrente: 'INE_FRONTAL',
+    ineReverso: 'INE_REVERSO',
+    curpDoc: 'CURP',
+    comprobanteDomicilio: 'COMPROBANTE_DOMICILIO',
+    gpsEvidence: 'UBICACION_GPS',
+    anexoPortabilidad: 'ANEXO_PORTABILIDAD_1',
+    anexoPortabilidad2: 'ANEXO_PORTABILIDAD_2',
+    capturaSiac: 'CAPTURA_SIAC',
+    contratoFirmado: 'SOLICITUD_FIRMADA',
+    solicitudFirmada: 'SOLICITUD_FIRMADA',
+    videofirma: 'VIDEO_FIRMA',
+    audioLlamada: 'AUDIO_LLAMADA',
+  };
+  return map[docId] || docId.toUpperCase();
+}
+
 async function hashFile(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest('SHA-256', buffer);
@@ -396,7 +416,7 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
         r.readAsDataURL(file);
       });
 
-      const validation = {
+      const validation: DocValidation = {
         ...(await analyzeManipulation(file, base64, target.type)),
         checkedBy: 'Agente Archivero',
         sha256: await hashFile(file),
@@ -414,6 +434,27 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
 
       // Save base64 in IndexedDB for large media support
       await set(`file_${target.saleId}_${target.docId}`, base64);
+
+      try {
+        const uploadRes = await fetch('/api/document-files', {
+          method: 'POST',
+          body: JSON.stringify({
+            saleId: target.saleId,
+            captureId: target.saleId,
+            docType: toServerDocType(target.docId),
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            contentBase64: base64,
+          }),
+        });
+        if (uploadRes.ok) {
+          const uploaded = await uploadRes.json();
+          validation.backendFileId = uploaded.file?.id;
+          validation.downloadUrl = uploaded.file?.id ? `/api/document-files/${uploaded.file.id}/download` : undefined;
+        }
+      } catch {
+        // El IndexedDB local mantiene respaldo offline si el backend no está disponible.
+      }
 
       // Persistir solo bandera en localStorage
       persistSales(prev => prev.map(s => {
@@ -797,6 +838,15 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
   // ──────────── FOLIO → DETALLE DEL EXPEDIENTE ────────────
   const handleDownloadDoc = async (saleId: string, docId: string, name: string) => {
     try {
+      const sale = sales.find(s => s.id === saleId);
+      const backendUrl = sale?.docValidations?.[docId]?.downloadUrl;
+      if (backendUrl) {
+        const a = document.createElement('a');
+        a.href = backendUrl;
+        a.download = `${name}_${saleId}`;
+        a.click();
+        return;
+      }
       const base64 = await get(`file_${saleId}_${docId}`);
       if (!base64) {
         toast.error('El archivo no se encontró en la base de datos local.');

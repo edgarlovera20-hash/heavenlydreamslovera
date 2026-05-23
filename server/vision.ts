@@ -1,16 +1,23 @@
 import { GoogleAuth } from 'google-auth-library';
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const CREDENTIALS_PATH = join(__dirname, 'google-vision-credentials.json');
 
 let auth: GoogleAuth | null = null;
 
+function readVisionCredentials() {
+  const inlineJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (inlineJson) return JSON.parse(inlineJson);
+
+  const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (credentialsPath) return JSON.parse(readFileSync(credentialsPath, 'utf-8'));
+
+  throw new Error(
+    'Google Vision no configurado. Define GOOGLE_APPLICATION_CREDENTIALS_JSON o GOOGLE_APPLICATION_CREDENTIALS; no subas service accounts al repo.',
+  );
+}
+
 function getAuth(): GoogleAuth {
   if (!auth) {
-    const credentials = JSON.parse(readFileSync(CREDENTIALS_PATH, 'utf-8'));
+    const credentials = readVisionCredentials();
     auth = new GoogleAuth({
       credentials,
       scopes: ['https://www.googleapis.com/auth/cloud-vision'],

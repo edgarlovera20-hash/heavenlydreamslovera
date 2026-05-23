@@ -10,7 +10,7 @@ import db, {
   Referrals, Quotas, CommissionRules, PackageCatalog,
   Nominas, Territories, ValidationRequests, Announcements,
   InventoryItems, AutomationRules, AiJobs, Metrics, Sessions,
-  Capturas, DocumentosCliente, ClientesCrm, EstatusFolios, LogsSistema,
+  Capturas, DocumentosCliente, DocumentFiles, ClientesCrm, EstatusFolios, LogsSistema,
 } from "./server/db";
 import { importSiacCSV } from "./server/siac-importer";
 import { getBearerAuth, issueSession, rateLimit, requireAuth, requireRole, rotateRefreshToken } from "./server/security";
@@ -31,6 +31,9 @@ import {
   verifyAuthentication,
   verifyRegistration,
 } from "./server/webauthn";
+import { getEnterpriseReadiness } from "./server/readiness";
+import { readStoredDocument, storeDocument } from "./server/document-storage";
+import { buildValidationTwiML, createTwilioCall, twilioConfigured } from "./server/twilio";
 
 function wrap(fn: Function) {
   return async (req: any, res: any) => {
@@ -84,13 +87,19 @@ const ALLOWED_TABLES = [
   'commission_rules', 'quotas', 'validation_requests', 'inventory_items',
   'automation_rules', 'ai_jobs', 'metrics', 'system_events', 'sessions',
   'capturas', 'documentos_cliente', 'clientes_crm', 'morosidad',
-  'estatus_folios', 'logs_sistema',
+  'estatus_folios', 'logs_sistema', 'document_files',
 ];
 
 const DOCUMENT_TYPES = [
   'INE_FRONTAL',
   'INE_REVERSO',
   'COMPROBANTE_DOMICILIO',
+  'ANEXO_PORTABILIDAD_1',
+  'ANEXO_PORTABILIDAD_2',
+  'CAPTURA_SIAC',
+  'SOLICITUD_FIRMADA',
+  'VIDEO_FIRMA',
+  'AUDIO_LLAMADA',
   'PAGARE',
   'CONTRATO',
   'FOTO_CASA',
@@ -421,6 +430,7 @@ async function startServer() {
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '20mb' }));
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
+  const registrationLimiter = rateLimit('registration', 8, 60 * 60 * 1000);
   const ocrLimiter = rateLimit('ocr', 40, 15 * 60 * 1000);
   const authOnly = requireAuth;
   const opsOnly = requireRole('GERENTE', 'SUPERVISOR');
@@ -502,9 +512,14 @@ async function startServer() {
     const docMap: Array<{ type: typeof DOCUMENT_TYPES[number]; value: any; name: string }> = [
       { type: 'INE_FRONTAL', value: meta.ineFrente, name: 'INE frontal' },
       { type: 'INE_REVERSO', value: meta.ineReverso, name: 'INE reverso' },
-      { type: 'COMPROBANTE_DOMICILIO', value: meta.comprobanteDomicilio, name: 'Comprobante domicilio' },
       { type: 'CURP', value: meta.curpDoc || meta.curp, name: 'CURP' },
-      { type: 'CONTRATO', value: meta.anexoPortabilidad || meta.contratoPdf, name: 'Contrato' },
+      { type: 'COMPROBANTE_DOMICILIO', value: meta.comprobanteDomicilio, name: 'Comprobante domicilio' },
+      { type: 'ANEXO_PORTABILIDAD_1', value: meta.anexoPortabilidad, name: 'Anexo portabilidad 1' },
+      { type: 'ANEXO_PORTABILIDAD_2', value: meta.anexoPortabilidad2, name: 'Anexo portabilidad 2' },
+      { type: 'CAPTURA_SIAC', value: meta.capturaSiac || meta.folioSiac, name: 'Captura SIAC' },
+      { type: 'SOLICITUD_FIRMADA', value: meta.contratoFirmado || meta.solicitudFirmada || meta.contratoPdf, name: 'Solicitud firmada' },
+      { type: 'VIDEO_FIRMA', value: meta.videofirma, name: 'Video firma' },
+      { type: 'AUDIO_LLAMADA', value: meta.audioLlamada, name: 'Audio llamada validacion' },
       { type: 'UBICACION_GPS', value: meta.coordenadas || sale.coordenadas, name: 'Ubicacion GPS' },
     ];
     const missingDocs = docMap.filter(doc => !doc.value).map(doc => doc.type);
@@ -660,13 +675,18 @@ async function startServer() {
   // ── USUARIOS ────────────────────────────────────────────────
   app.get("/api/users", opsOnly, wrap((_req: any, res: any) => res.json(Users.getAll().map(safeUser))));
 
-  app.post("/api/users", wrap((req: any, res: any) => {
+  app.post("/api/users", registrationLimiter, wrap((req: any, res: any) => {
     if (!req.body.fromRegistration) {
       try {
         if (!assertManager(req, res)) return;
       } catch {
         return res.status(401).json({ error: 'Token requerido' });
       }
+    } else if (process.env.NODE_ENV === 'production' && process.env.PUBLIC_REGISTRATION_ENABLED !== 'true') {
+      return res.status(403).json({
+        error: 'Registro público deshabilitado en producción. Solicita una invitación a gerencia.',
+        code: 'PUBLIC_REGISTRATION_DISABLED',
+      });
     }
     // Si viene de registro público usa activo=2 (pendiente); si lo crea un admin usa activo=1
     const defaultActivo = req.body.fromRegistration ? 2 : 1;
@@ -1098,6 +1118,110 @@ async function startServer() {
     res.json(DocumentosCliente.getByCaptura(req.params.id));
   }));
 
+  app.get("/api/document-files", authOnly, wrap((req: any, res: any) => {
+    const capturaId = String(req.query.captura_id || req.query.captureId || '');
+    if (capturaId) {
+      const captura = Capturas.getById(capturaId) as any;
+      if (captura && !canManage(req.auth) && captura.vendedor_id !== req.auth.sub) {
+        return res.status(403).json({ error: 'Permisos insuficientes' });
+      }
+      return res.json(DocumentFiles.getByCapture(capturaId));
+    }
+    if (!canManage(req.auth)) return res.status(403).json({ error: 'Permisos insuficientes' });
+    res.json(DocumentFiles.getAll(300));
+  }));
+
+  app.post("/api/document-files", authOnly, wrap((req: any, res: any) => {
+    const body = req.body || {};
+    if (!body.contentBase64 || !body.fileName || !body.docType) {
+      return res.status(400).json({ error: 'contentBase64, fileName y docType son requeridos' });
+    }
+
+    const captura = body.captureId ? Capturas.getById(body.captureId) as any : null;
+    if (captura && !canManage(req.auth) && captura.vendedor_id !== req.auth.sub) {
+      return res.status(403).json({ error: 'Permisos insuficientes' });
+    }
+
+    const stored = storeDocument({
+      contentBase64: body.contentBase64,
+      fileName: body.fileName,
+      mimeType: body.mimeType,
+      captureId: body.captureId || null,
+      saleId: body.saleId || null,
+      docType: body.docType,
+    });
+
+    const row = {
+      id: stored.id,
+      captura_id: body.captureId || null,
+      venta_id: body.saleId || null,
+      tipo_documento: String(body.docType).toUpperCase(),
+      archivo_nombre: stored.fileName,
+      mime_type: stored.mimeType,
+      size_bytes: stored.sizeBytes,
+      sha256: stored.sha256,
+      storage_provider: stored.storageProvider,
+      storage_path: stored.storagePath,
+      review_status: 'PENDIENTE',
+      manipulation_score: null,
+      review_notes: null,
+      uploaded_by: req.auth?.sub || null,
+    };
+    DocumentFiles.create(row);
+    if (row.captura_id) {
+      DocumentosCliente.upsert({
+        id: randomUUID(),
+        captura_id: row.captura_id,
+        tipo_documento: row.tipo_documento,
+        archivo_url: `/api/document-files/${row.id}/download`,
+        archivo_nombre: row.archivo_nombre,
+        status_documento: 'SUBIDO',
+        validado_por: null,
+        fecha_validacion: null,
+        observaciones: `sha256:${row.sha256}`,
+      });
+    }
+    logSystem(req, 'UPLOAD_DOCUMENT_FILE', 'document_files', row.id, row.tipo_documento, {
+      captureId: row.captura_id,
+      saleId: row.venta_id,
+      sha256: row.sha256,
+      sizeBytes: row.size_bytes,
+    });
+    recordMetric('document.uploaded', 1, { tipo: row.tipo_documento });
+    res.json({ ok: true, file: { ...row, storage_path: undefined } });
+  }));
+
+  app.get("/api/document-files/:id/download", authOnly, wrap((req: any, res: any) => {
+    const file = DocumentFiles.getById(req.params.id) as any;
+    if (!file) return res.status(404).json({ error: 'Archivo no encontrado' });
+    if (file.captura_id) {
+      const captura = Capturas.getById(file.captura_id) as any;
+      if (captura && !canManage(req.auth) && captura.vendedor_id !== req.auth.sub) {
+        return res.status(403).json({ error: 'Permisos insuficientes' });
+      }
+    } else if (!canManage(req.auth)) {
+      return res.status(403).json({ error: 'Permisos insuficientes' });
+    }
+    const buffer = readStoredDocument(file.storage_path);
+    res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${String(file.archivo_nombre || file.id).replace(/"/g, '')}"`);
+    res.setHeader('X-Document-SHA256', file.sha256);
+    res.send(buffer);
+  }));
+
+  app.patch("/api/document-files/:id/review", opsOnly, wrap((req: any, res: any) => {
+    const allowed = new Set(['PENDIENTE', 'VALIDADO', 'SOSPECHOSO', 'RECHAZADO']);
+    const review_status = String(req.body?.review_status || '').toUpperCase();
+    if (!allowed.has(review_status)) return res.status(400).json({ error: 'review_status invalido' });
+    DocumentFiles.updateReview(req.params.id, {
+      review_status,
+      manipulation_score: req.body?.manipulation_score ?? null,
+      review_notes: req.body?.review_notes || null,
+    });
+    logSystem(req, 'REVIEW_DOCUMENT_FILE', 'document_files', req.params.id, review_status, req.body || {});
+    res.json(DocumentFiles.getById(req.params.id));
+  }));
+
   app.patch("/api/documentos-cliente/:id", opsOnly, wrap((req: any, res: any) => {
     const allowed = ['status_documento', 'validado_por', 'fecha_validacion', 'observaciones'];
     const update: Record<string, any> = {};
@@ -1368,6 +1492,10 @@ async function startServer() {
     res.json(enterpriseHealth());
   }));
 
+  app.get("/api/enterprise/readiness", requireRole('GERENTE', 'SUPERVISOR'), wrap(async (_req: any, res: any) => {
+    res.json(await getEnterpriseReadiness());
+  }));
+
   app.post("/api/enterprise/events", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
     res.json(recordEvent(req.body.event, req.body.payload || {}, (req as any).auth));
   }));
@@ -1594,6 +1722,26 @@ async function startServer() {
     const tg = getTelegramMessages(100);
     const all = [...wa, ...tg].sort((a, b) => a.timestamp - b.timestamp);
     res.json(all.slice(-150));
+  }));
+
+  // ── TWILIO VOICE AGENT ───────────────────────────────────
+  app.get("/api/twilio/status", opsOnly, wrap((_req: any, res: any) => {
+    res.json({ configured: twilioConfigured(), from: process.env.TWILIO_FROM_NUMBER || null });
+  }));
+
+  app.post("/api/twilio/calls", opsOnly, wrap(async (req: any, res: any) => {
+    const to = normalizePhone10(req.body?.to || req.body?.phone);
+    if (to.length !== 10) return res.status(400).json({ error: 'Telefono destino debe tener 10 digitos' });
+    const message = String(req.body?.message || 'Hola, te llamamos de Heavenly Dreams para validar tu solicitud.').slice(0, 900);
+    const result = await createTwilioCall(`+52${to}`, message);
+    logSystem(req, 'TWILIO_CALL_CREATED', 'twilio', result.sid || to, `to:${to}`, { sid: result.sid, status: result.status });
+    recordMetric('twilio.call.created', 1, { status: result.status || 'created' });
+    res.json({ ok: true, sid: result.sid, status: result.status, to });
+  }));
+
+  app.get("/api/twilio/voice-agent", wrap((req: any, res: any) => {
+    res.setHeader('Content-Type', 'text/xml; charset=utf-8');
+    res.send(buildValidationTwiML(String(req.query.message || '')));
   }));
 
   // ── AGENTES AUTÓNOMOS ─────────────────────────────────────

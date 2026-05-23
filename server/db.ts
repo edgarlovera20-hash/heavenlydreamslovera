@@ -394,6 +394,29 @@ db.exec(`
     FOREIGN KEY (validado_por) REFERENCES users(uid) ON DELETE SET NULL
   );
 
+  -- Archivos fisicos asociados a expedientes, con huella para agente archivero
+  CREATE TABLE IF NOT EXISTS document_files (
+    id                 TEXT PRIMARY KEY,
+    captura_id         TEXT,
+    venta_id           TEXT,
+    tipo_documento     TEXT NOT NULL,
+    archivo_nombre     TEXT NOT NULL,
+    mime_type          TEXT,
+    size_bytes         INTEGER NOT NULL DEFAULT 0,
+    sha256             TEXT NOT NULL,
+    storage_provider   TEXT NOT NULL DEFAULT 'local',
+    storage_path       TEXT NOT NULL,
+    review_status      TEXT NOT NULL DEFAULT 'PENDIENTE',
+    manipulation_score REAL,
+    review_notes       TEXT,
+    uploaded_by        TEXT,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (captura_id) REFERENCES capturas(id) ON DELETE CASCADE,
+    FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
+    FOREIGN KEY (uploaded_by) REFERENCES users(uid) ON DELETE SET NULL
+  );
+
   -- CRM de clientes para seguimiento, bienvenida, retencion y cobranza preventiva
   CREATE TABLE IF NOT EXISTS clientes_crm (
     id                    TEXT PRIMARY KEY,
@@ -538,6 +561,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_capturas_geo     ON capturas (colonia, ciudad, paquete);
   CREATE INDEX IF NOT EXISTS idx_docs_captura     ON documentos_cliente (captura_id, tipo_documento);
   CREATE INDEX IF NOT EXISTS idx_docs_status      ON documentos_cliente (status_documento);
+  CREATE INDEX IF NOT EXISTS idx_doc_files_capture ON document_files (captura_id, tipo_documento);
+  CREATE INDEX IF NOT EXISTS idx_doc_files_sha     ON document_files (sha256);
+  CREATE INDEX IF NOT EXISTS idx_doc_files_review  ON document_files (review_status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_clientes_folio   ON clientes_crm (folio);
   CREATE INDEX IF NOT EXISTS idx_clientes_status  ON clientes_crm (status_cliente, proximo_seguimiento);
   CREATE INDEX IF NOT EXISTS idx_morosidad_status ON morosidad (status_cobranza, dias_atraso DESC);
@@ -917,6 +943,19 @@ export const DocumentosCliente = {
       observaciones=excluded.observaciones,
       updated_at=datetime('now')
   `).run(data),
+};
+
+export const DocumentFiles = {
+  getAll: (limit = 300) => db.prepare('SELECT * FROM document_files ORDER BY created_at DESC LIMIT ?').all(limit),
+  getById: (id: string) => db.prepare('SELECT * FROM document_files WHERE id=?').get(id),
+  getByCapture: (captureId: string) => db.prepare('SELECT * FROM document_files WHERE captura_id=? ORDER BY created_at DESC').all(captureId),
+  create: (data: any) => db.prepare(`
+    INSERT INTO document_files
+      (id,captura_id,venta_id,tipo_documento,archivo_nombre,mime_type,size_bytes,sha256,storage_provider,storage_path,review_status,manipulation_score,review_notes,uploaded_by)
+    VALUES
+      (@id,@captura_id,@venta_id,@tipo_documento,@archivo_nombre,@mime_type,@size_bytes,@sha256,@storage_provider,@storage_path,@review_status,@manipulation_score,@review_notes,@uploaded_by)
+  `).run(data),
+  updateReview: (id: string, data: any) => updateById('document_files', 'id', id, data, ['review_status', 'manipulation_score', 'review_notes']),
 };
 
 export const ClientesCrm = {

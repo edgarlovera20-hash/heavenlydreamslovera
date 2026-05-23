@@ -48,6 +48,31 @@ export async function postgresAvailable() {
   }
 }
 
+export async function redisAvailable() {
+  if (!process.env.REDIS_URL) return false;
+  try {
+    const client = await getRedisClient();
+    if (!client) return false;
+    const pong = await client.ping();
+    return pong === 'PONG';
+  } catch {
+    return false;
+  }
+}
+
+export async function checkInfraConnections() {
+  const [postgres, redis] = await Promise.all([
+    postgresAvailable(),
+    redisAvailable(),
+  ]);
+  const activeQueues = redis ? await getQueues().catch(() => null) : null;
+  return {
+    postgres,
+    redis,
+    bullmq: Boolean(activeQueues),
+  };
+}
+
 export function infraMode() {
   return {
     database: process.env.DATABASE_URL ? 'postgres' : 'sqlite',
