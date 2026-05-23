@@ -1,8 +1,28 @@
-import React, { useState, useRef } from 'react';
-import { Download, Upload, CreditCard, FileText, Banknote, Search, Calendar, TrendingUp, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  Banknote,
+  Calendar,
+  CheckCircle2,
+  CreditCard,
+  DollarSign,
+  Download,
+  FileText,
+  Loader2,
+  Search,
+  Upload,
+  Users,
+} from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
 
-type Tab = 'seguimiento' | 'comprobantes' | 'bancarios' | 'adelantos' | 'gestion';
+type Tab =
+  | 'seguimiento'
+  | 'comprobantes'
+  | 'bancarios'
+  | 'adelantos'
+  | 'gestion'
+  | 'subirComprobantes'
+  | 'verAdelantos';
 
 type PayrollReceipt = {
   id: string;
@@ -19,8 +39,48 @@ type BankData = {
   clabe: string;
 };
 
+type PayrollAdvance = {
+  id: string;
+  amount: number;
+  reason: string;
+  requestedAt: string;
+  status: 'Pendiente' | 'Aprobado' | 'Rechazado' | 'Pagado';
+};
+
+type PayrollUser = {
+  id: string;
+  name: string;
+  role?: string;
+};
+
+type PayrollSale = {
+  id: string;
+  folio: string;
+  client: string;
+  packageName: string;
+  status: string;
+  commission: number;
+  date: Date | null;
+  userId: string;
+};
+
+type PayrollQueryResult = {
+  userLabel: string;
+  sales: PayrollSale[];
+  subtotal: number;
+  discounts: number;
+  total: number;
+  weekStart: Date;
+  weekEnd: Date;
+  paymentDate: Date;
+};
+
 const PAYROLL_RECEIPTS_KEY = 'hd_payroll_transfer_receipts';
 const PAYROLL_BANK_DATA_KEY = 'hd_payroll_bank_data';
+const PAYROLL_ADVANCES_KEY = 'hd_payroll_advances';
+const PAYROLL_HISTORY_KEY = 'hd_payroll_history';
+const COMPANY_NAME = 'HEAVENLY DREAMS SAS DE CV';
+const COMPANY_ADDRESS = 'Avenida Tláhuac 3632, Interior A301, Colonia Culhuacán CTM Zona VIII, Código Postal 09800, Iztapalapa, Ciudad de México';
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -31,129 +91,486 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-const mockUsers: { id: string; name: string }[] = JSON.parse(localStorage.getItem('adhdreams_users') || '[]').map((u: any) => ({ id: u.uid, name: u.displayName || u.nombre || u.email || 'Usuario' }));
-const mockSalesData: { folio_siac: string; estatus_pisa: string; monto_comision: number }[] = [];
+function writeJson<T>(key: string, value: T) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getCurrentUser(): PayrollUser {
+  const hdSession = readJson<any>('hd_session', {});
+  const oldSession = readJson<any>('adhdreams_current_user', {});
+  const user = hdSession?.user || hdSession || oldSession || {};
+  const id = String(user.uid || user.id || user.sub || user.email || 'current-user');
+  const name = String(user.displayName || user.nombre || user.name || user.email || 'Edgar Lovera');
+  const role = String(user.role || user.rol || '').toUpperCase();
+  return { id, name, role };
+}
+
+function getPayrollUsers(): PayrollUser[] {
+  const storedUsers = readJson<any[]>('adhdreams_users', []);
+  const current = getCurrentUser();
+  const users: PayrollUser[] = storedUsers
+    .map(user => ({
+      id: String(user.uid || user.id || user.email || ''),
+      name: String(user.displayName || user.nombre || user.name || user.email || 'Usuario'),
+      role: String(user.role || user.rol || '').toUpperCase(),
+    }))
+    .filter(user => user.id);
+
+  if (!users.some(user => user.id === current.id)) {
+    users.unshift(current);
+  }
+
+  return users.length ? users : [{ id: 'edgar-lovera', name: 'Edgar Lovera' }];
+}
+
+function getCurrentISOWeek(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return { year: d.getUTCFullYear(), week };
+}
+
+function getISOWeekRange(year: number, week: number) {
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = jan4.getDay() || 7;
+  const monday = new Date(jan4);
+  monday.setDate(jan4.getDate() - jan4Day + 1 + (week - 1) * 7);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return { start: monday, end: sunday };
+}
+
+function parseDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [day, month, year] = raw.split('/').map(Number);
+    const parsed = new Date(year, month - 1, day);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function dateInISOWeek(date: Date | null, year: number, week: number) {
+  if (!date) return false;
+  const info = getCurrentISOWeek(date);
+  return info.year === year && info.week === week;
+}
+
+function formatReceiptDate(date: Date) {
+  return date.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).replace(/\./g, '');
+}
+
+function buildClientName(record: any) {
+  return [
+    record.nombres || record.nombre || record.cliente_nombre || record.cliente,
+    record.apellidoPaterno || record.apellido_paterno,
+    record.apellidoMaterno || record.apellido_materno,
+  ].filter(Boolean).join(' ').trim() || 'Cliente sin nombre';
+}
+
+function buildPayrollSales(year: number, week: number, userId: string): PayrollSale[] {
+  const rawSales = readJson<any[]>('adhdreams_sales', []);
+  return rawSales
+    .map((sale, index) => {
+      const date = parseDate(sale.fechaSolicitud || sale.fecha_solicitud || sale.fecha_captura || sale.fecha_os_alta || sale.created_at || sale.createdAt);
+      const ownerId = String(sale.asesorId || sale.vendedor_id || sale.userId || sale.promotor_id || '');
+      return {
+        id: String(sale.id || sale.folio || sale.folio_siac || `sale-${index}`),
+        folio: String(sale.folioSiac || sale.folio_siac || sale.folio || sale.os_alta || `VT-${index + 1}`),
+        client: buildClientName(sale),
+        packageName: String(sale.paqueteNombre || sale.packageName || sale.paquete || sale.tipoServicio || sale.tipo_servicio || 'Sin paquete'),
+        status: String(sale.estatus_pisa || sale.estatus_siac || sale.status || sale.status_captura || 'CAPTURADO'),
+        commission: Number(sale.monto_comision || sale.comision || sale.commission || sale.comision_total || 0),
+        date,
+        userId: ownerId,
+      };
+    })
+    .filter(sale => dateInISOWeek(sale.date, year, week))
+    .filter(sale => userId === 'all' || !sale.userId || sale.userId === userId);
+}
+
+function buildPayrollResult(year: number, week: number, userId: string, users: PayrollUser[]): PayrollQueryResult {
+  const { start, end } = getISOWeekRange(year, week);
+  const sales = buildPayrollSales(year, week, userId);
+  const subtotal = sales.reduce((sum, sale) => sum + sale.commission, 0);
+  const userLabel = userId === 'all'
+    ? 'Todos los usuarios'
+    : users.find(user => user.id === userId)?.name || 'Usuario';
+
+  return {
+    userLabel,
+    sales,
+    subtotal,
+    discounts: 0,
+    total: subtotal,
+    weekStart: start,
+    weekEnd: end,
+    paymentDate: new Date(),
+  };
+}
+
+async function exportElementToPDF(element: HTMLDivElement | null, fileName: string) {
+  if (!element) return;
+  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ]);
+  const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff' });
+  const imgData = canvas.toDataURL('image/png');
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+  pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+  pdf.save(fileName);
+}
 
 export default function Payroll() {
   const [activeTab, setActiveTab] = useState<Tab>('seguimiento');
-  const isAdmin = (['GERENTE', 'ADMIN', 'ADMINISTRACION'].includes((JSON.parse(localStorage.getItem('adhdreams_current_user') || '{}').role || '').toUpperCase()));
+  const currentUser = getCurrentUser();
+  const isAdmin = ['GERENTE', 'ADMIN', 'ADMINISTRACION', 'SUPERUSER'].includes((currentUser.role || '').toUpperCase());
 
-  const tabs = [
-    { id: 'seguimiento', label: 'Mi Seguimiento', icon: TrendingUp },
+  const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
+    { id: 'seguimiento', label: 'Mi Seguimiento', icon: Calendar },
     { id: 'comprobantes', label: 'Mis Comprobantes', icon: FileText },
     { id: 'bancarios', label: 'Datos Bancarios', icon: CreditCard },
     { id: 'adelantos', label: 'Adelantos', icon: Banknote },
-    ...(isAdmin ? [{ id: 'gestion', label: 'Gestión de Nóminas', icon: Download }] : []),
+    { id: 'gestion', label: 'Gestión Nóminas', icon: Users },
+    { id: 'subirComprobantes', label: 'Subir Comprobantes', icon: Upload },
+    { id: 'verAdelantos', label: 'Ver Adelantos', icon: DollarSign },
   ];
 
   return (
     <div className="p-6 w-full space-y-6">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100 mb-1 tracking-tight">Nóminas y Comisiones</h1>
-          <p className="text-slate-400 text-sm">Gestiona tus pagos, comprobantes y datos bancarios.</p>
+          <h1 className="text-4xl font-black text-slate-100 mb-2 tracking-tight">Nóminas</h1>
+          <p className="text-blue-200 text-xl">Gestiona comisiones, comprobantes y adelantos</p>
         </div>
       </div>
 
-      {/* Horizontal Scrollable Tabs */}
-      <div className="w-full overflow-x-auto pb-2 hide-scrollbar">
-        <div className="flex gap-2 min-w-max">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as Tab)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap",
-                activeTab === tab.id 
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-500/25 ring-1 ring-white/10" 
-                  : "bg-slate-900/90 text-slate-400 hover:bg-slate-800/50 hover:text-slate-100 border border-white/5"
-              )}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
+      <div className="rounded-2xl border border-blue-400/20 bg-blue-900/45 p-2 shadow-xl shadow-black/20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  'flex items-center justify-center gap-3 px-5 py-4 rounded-xl text-lg font-bold transition-all whitespace-nowrap',
+                  activeTab === tab.id
+                    ? 'bg-slate-950 text-slate-100 shadow-lg ring-1 ring-black/30'
+                    : 'text-slate-200 hover:bg-slate-950/50 hover:text-white'
+                )}
+              >
+                <Icon className="w-6 h-6" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Tab Content */}
-      <div className="bg-slate-900/90 backdrop-blur-md border border-white/5 rounded-2xl p-6 min-h-[500px] shadow-xl">
-        {activeTab === 'seguimiento' && <SeguimientoTab />}
+      <div className="min-h-[500px]">
+        {activeTab === 'seguimiento' && <PayrollWeekWorkbench isAdmin={isAdmin} />}
         {activeTab === 'comprobantes' && <ComprobantesTab />}
         {activeTab === 'bancarios' && <BancariosTab />}
         {activeTab === 'adelantos' && <AdelantosTab />}
-        {activeTab === 'gestion' && <GestionTab isAdmin={isAdmin} />}
+        {activeTab === 'gestion' && <PayrollWeekWorkbench isAdmin={isAdmin} managementMode />}
+        {activeTab === 'subirComprobantes' && <ComprobantesTab focusUpload />}
+        {activeTab === 'verAdelantos' && <VerAdelantosTab />}
       </div>
     </div>
   );
 }
 
-function SeguimientoTab() {
-  const sales = [
-    { id: 'VT-1001', client: 'Juan Pérez', package: 'Triple Play', commission: 500, status: 'Pagado' },
-    { id: 'VT-1002', client: 'María García', package: 'Doble Play', commission: 350, status: 'Pendiente' },
-  ];
+function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: boolean; managementMode?: boolean }) {
+  const users = useMemo(() => getPayrollUsers(), []);
+  const currentWeek = useMemo(() => getCurrentISOWeek(), []);
+  const currentUser = getCurrentUser();
+  const defaultUserId = managementMode || isAdmin ? 'all' : currentUser.id;
+  const [year, setYear] = useState(String(currentWeek.year));
+  const [week, setWeek] = useState(String(currentWeek.week));
+  const [userId, setUserId] = useState(defaultUserId);
+  const [paymentMethod, setPaymentMethod] = useState('Transferencia bancaria');
+  const [isExporting, setIsExporting] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [queryResult, setQueryResult] = useState<PayrollQueryResult>(() =>
+    buildPayrollResult(currentWeek.year, currentWeek.week, defaultUserId, users)
+  );
+  const receiptRef = useRef<HTMLDivElement>(null);
+
+  const runSearch = () => {
+    const parsedYear = Number(year) || currentWeek.year;
+    const parsedWeek = Number(week) || currentWeek.week;
+    setQueryResult(buildPayrollResult(parsedYear, parsedWeek, userId, users));
+    setSaved(false);
+  };
+
+  const savePayroll = () => {
+    const history = readJson<any[]>(PAYROLL_HISTORY_KEY, []);
+    const entry = {
+      id: `${Date.now()}-${queryResult.userLabel}`,
+      year: Number(year),
+      week: Number(week),
+      userId,
+      userLabel: queryResult.userLabel,
+      paymentMethod,
+      sales: queryResult.sales,
+      subtotal: queryResult.subtotal,
+      discounts: queryResult.discounts,
+      total: queryResult.total,
+      createdAt: new Date().toISOString(),
+    };
+    writeJson(PAYROLL_HISTORY_KEY, [entry, ...history]);
+    setSaved(true);
+  };
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      await exportElementToPDF(
+        receiptRef.current,
+        `Nomina_S${week}_${queryResult.userLabel.replace(/\s+/g, '_')}.pdf`
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-950/80 border border-white/5 rounded-xl p-5 shadow-inner">
-          <div className="text-slate-500 text-[10px] uppercase tracking-wider font-medium mb-1">VENTAS SEMANA</div>
-          <div className="text-2xl font-mono font-bold text-slate-100">2</div>
+    <div className="space-y-8">
+      <section className="rounded-2xl border border-blue-300/25 bg-slate-900/70 p-6 shadow-xl">
+        <div className="flex items-start gap-4 mb-6">
+          <Search className="w-9 h-9 text-slate-100 mt-1" />
+          <div>
+            <h2 className="text-2xl font-black text-slate-100">Búsqueda por Año y Semana</h2>
+            <p className="text-blue-200 text-lg">Busca tus folios posteados por semana para generar el formato de nómina</p>
+          </div>
         </div>
-        <div className="bg-slate-950/80 border border-white/5 rounded-xl p-5 shadow-inner">
-          <div className="text-slate-500 text-[10px] uppercase tracking-wider font-medium mb-1">COMISIÓN ACUMULADA</div>
-          <div className="text-2xl font-mono font-bold text-emerald-400">{formatCurrency(850)}</div>
-        </div>
-        <div className="bg-slate-950/80 border border-white/5 rounded-xl p-5 shadow-inner">
-          <div className="text-slate-500 text-[10px] uppercase tracking-wider font-medium mb-1">SEMANA ACTIVA</div>
-          <div className="text-2xl font-mono font-bold text-slate-100">Semana 42</div>
-        </div>
-      </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="text-slate-500 border-b border-white/5">
-            <tr>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px]">Folio VT</th>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px]">Cliente</th>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px]">Paquete</th>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px] text-right">Comisión</th>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px] text-right">Estado</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {sales.map(sale => (
-              <tr key={sale.id} className="hover:bg-slate-800/30 transition-colors">
-                <td className="py-4 font-mono font-medium text-slate-100">{sale.id}</td>
-                <td className="py-4 text-slate-300">{sale.client}</td>
-                <td className="py-4 text-slate-300">{sale.package}</td>
-                <td className="py-4 text-right text-emerald-400 font-mono font-medium">{formatCurrency(sale.commission)}</td>
-                <td className="py-4 text-right">
-                  <span className={cn(
-                    "px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider",
-                    sale.status === 'Pagado' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                  )}>
-                    {sale.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        <div className="grid grid-cols-1 md:grid-cols-[180px_180px_1fr_auto] gap-5 items-end">
+          <div>
+            <label className="block text-lg font-bold text-slate-100 mb-2">Año</label>
+            <input
+              type="number"
+              className="w-full bg-blue-950/45 border border-blue-300/20 rounded-xl px-5 py-4 text-2xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+              value={year}
+              onChange={(event) => setYear(event.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-lg font-bold text-slate-100 mb-2">Semana</label>
+            <input
+              type="number"
+              min={1}
+              max={53}
+              className="w-full bg-blue-950/45 border border-blue-300/20 rounded-xl px-5 py-4 text-2xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+              value={week}
+              onChange={(event) => setWeek(event.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-lg font-bold text-slate-100 mb-2">Usuario</label>
+            <select
+              className="w-full bg-blue-950/45 border border-blue-300/20 rounded-xl px-5 py-4 text-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+              value={userId}
+              onChange={(event) => setUserId(event.target.value)}
+            >
+              {(managementMode || isAdmin) && <option value="all">Todos los usuarios</option>}
+              {users.map(user => (
+                <option key={user.id} value={user.id}>{user.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={runSearch}
+            className="h-[62px] px-8 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-lg font-black shadow-lg shadow-blue-500/20 flex items-center justify-center gap-3"
+          >
+            <Search className="w-5 h-5" />
+            Buscar
+          </button>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <SummaryCard label="Folios encontrados" value={String(queryResult.sales.length)} />
+        <SummaryCard label="Comisión acumulada" value={formatCurrency(queryResult.subtotal)} accent="emerald" />
+        <SummaryCard label="Semana activa" value={`Semana ${week}`} />
+      </section>
+
+      <section className="rounded-2xl border border-blue-300/25 bg-slate-900/70 p-4 md:p-7">
+        <div className="mb-5 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-black text-slate-100">Formato de recibo</h3>
+            <p className="text-slate-400">Genera, descarga y registra la nómina por semana.</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={paymentMethod}
+              onChange={(event) => setPaymentMethod(event.target.value)}
+              className="bg-slate-950/80 border border-white/10 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+              placeholder="Metodo de pago"
+            />
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={isExporting}
+              className="bg-slate-800/90 hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
+            >
+              {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              PDF
+            </button>
+            <button
+              type="button"
+              onClick={savePayroll}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Registrar
+            </button>
+          </div>
+        </div>
+
+        {saved && (
+          <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4" />
+            Nómina registrada en historial local.
+          </div>
+        )}
+
+        <PayrollReceiptPreview
+          ref={receiptRef}
+          year={Number(year) || currentWeek.year}
+          week={Number(week) || currentWeek.week}
+          result={queryResult}
+          paymentMethod={paymentMethod}
+        />
+      </section>
     </div>
   );
 }
 
-function ComprobantesTab() {
+function SummaryCard({ label, value, accent }: { label: string; value: string; accent?: 'emerald' }) {
+  return (
+    <div className="bg-slate-950/80 border border-white/5 rounded-xl p-5 shadow-inner">
+      <div className="text-slate-500 text-xs uppercase tracking-widest font-bold mb-2">{label}</div>
+      <div className={cn('text-3xl font-mono font-black text-slate-100', accent === 'emerald' && 'text-emerald-400')}>{value}</div>
+    </div>
+  );
+}
+
+const PayrollReceiptPreview = React.forwardRef<HTMLDivElement, {
+  year: number;
+  week: number;
+  result: PayrollQueryResult;
+  paymentMethod: string;
+}>(({ year, week, result, paymentMethod }, ref) => {
+  return (
+    <div className="bg-white text-slate-900 p-6 md:p-12 rounded-lg max-w-5xl mx-auto shadow-2xl" ref={ref}>
+      <header className="grid grid-cols-[140px_1fr] gap-8 items-center pb-10 border-b-2 border-slate-900">
+        <img src="/logo.png" alt="Heavenly Dreams" className="w-28 h-28 rounded-full object-cover shadow-md" />
+        <div className="text-center">
+          <h2 className="text-3xl md:text-4xl font-black tracking-wide">{COMPANY_NAME}</h2>
+          <p className="text-lg text-slate-600 mt-4 leading-relaxed">{COMPANY_ADDRESS}</p>
+        </div>
+      </header>
+
+      <section className="text-center my-12">
+        <h3 className="text-3xl font-black">RECIBO DE PAGO DE COMISIONES</h3>
+        <p className="text-xl text-slate-600 mt-2">Semana {week} del Año {year}</p>
+      </section>
+
+      <section className="space-y-6 text-xl leading-relaxed">
+        <p>
+          Yo, <strong><u>{result.userLabel}</u></strong>, recibo el pago de mis comisiones por mis ventas posteadas de
+          la empresa <strong>Heavenly Dreams SAS de CV</strong> y del gerente <strong>Edgar David Lovera Juárez</strong>,
+          correspondiente a la semana en curso.
+        </p>
+        <p>
+          Recibiendo el pago el día <strong><u>{formatReceiptDate(result.paymentDate)}</u></strong>, que abarca mis ventas
+          posteadas del día <strong><u>{formatReceiptDate(result.weekStart)}</u></strong> al día <strong><u>{formatReceiptDate(result.weekEnd)}</u></strong>.
+        </p>
+        <p>
+          Recibiendo y aceptando el esquema de comisiones, recibiendo el pago por un total de{' '}
+          <strong>{formatCurrency(result.total)}</strong> vía <strong><u>{paymentMethod || '____________________'}</u></strong>.
+        </p>
+      </section>
+
+      <section className="mt-12">
+        <h4 className="text-2xl font-black mb-6">Detalle de Ventas Posteadas</h4>
+        <div className="border border-slate-400 rounded overflow-hidden">
+          <table className="w-full text-base">
+            <thead className="bg-slate-100">
+              <tr>
+                <th className="p-3 text-left border-b border-slate-300">Folio</th>
+                <th className="p-3 text-left border-b border-slate-300">Cliente</th>
+                <th className="p-3 text-left border-b border-slate-300">Paquete</th>
+                <th className="p-3 text-left border-b border-slate-300">Estatus</th>
+                <th className="p-3 text-right border-b border-slate-300">Comisión</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.sales.length ? result.sales.map(sale => (
+                <tr key={sale.id}>
+                  <td className="p-3 border-b border-slate-200 font-mono">{sale.folio}</td>
+                  <td className="p-3 border-b border-slate-200">{sale.client}</td>
+                  <td className="p-3 border-b border-slate-200">{sale.packageName}</td>
+                  <td className="p-3 border-b border-slate-200">{sale.status}</td>
+                  <td className="p-3 border-b border-slate-200 text-right font-bold">{formatCurrency(sale.commission)}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={5} className="p-12 text-center text-slate-500 text-xl">
+                    No hay folios posteados en esta semana
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-20 grid grid-cols-1 md:grid-cols-2 gap-12 text-center">
+        <div>
+          <div className="border-b-2 border-slate-900 w-72 mx-auto mb-4" />
+          <p className="font-black">Firma del Promotor/Supervisor</p>
+          <p className="text-sm text-slate-500 mt-1">{result.userLabel}</p>
+        </div>
+        <div>
+          <div className="border-b-2 border-slate-900 w-72 mx-auto mb-4" />
+          <p className="font-black">Firma del Gerente</p>
+          <p className="text-sm text-slate-500 mt-1">Edgar David Lovera Juárez</p>
+        </div>
+      </section>
+    </div>
+  );
+});
+
+PayrollReceiptPreview.displayName = 'PayrollReceiptPreview';
+
+function ComprobantesTab({ focusUpload = false }: { focusUpload?: boolean }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [receipts, setReceipts] = useState<PayrollReceipt[]>(() => readJson<PayrollReceipt[]>(PAYROLL_RECEIPTS_KEY, []));
   const [uploadError, setUploadError] = useState('');
 
   const persistReceipts = (next: PayrollReceipt[]) => {
     setReceipts(next);
-    localStorage.setItem(PAYROLL_RECEIPTS_KEY, JSON.stringify(next));
+    writeJson(PAYROLL_RECEIPTS_KEY, next);
   };
 
   const handleFiles = (files: FileList | null) => {
@@ -190,7 +607,7 @@ function ComprobantesTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="bg-slate-900/90 backdrop-blur-md border border-white/5 rounded-2xl p-6 shadow-xl space-y-6">
       <input
         ref={fileInputRef}
         type="file"
@@ -206,7 +623,10 @@ function ComprobantesTab() {
           event.preventDefault();
           handleFiles(event.dataTransfer.files);
         }}
-        className="w-full border-2 border-dashed border-slate-700/50 rounded-2xl p-10 text-center hover:bg-slate-800/30 transition-colors cursor-pointer bg-slate-950/20"
+        className={cn(
+          'w-full border-2 border-dashed border-slate-700/50 rounded-2xl p-10 text-center hover:bg-slate-800/30 transition-colors cursor-pointer bg-slate-950/20',
+          focusUpload && 'border-blue-400/60 bg-blue-500/10'
+        )}
       >
         <Upload className="w-10 h-10 text-slate-500 mx-auto mb-4" />
         <h3 className="text-slate-100 font-medium mb-1">Subir captura o PDF de transferencia</h3>
@@ -218,7 +638,7 @@ function ComprobantesTab() {
           {uploadError}
         </div>
       )}
-      
+
       <h3 className="text-slate-100 font-medium">Historial de comprobantes de transferencia</h3>
       <div className="space-y-3">
         {receipts.length === 0 ? (
@@ -275,14 +695,14 @@ function BancariosTab() {
   };
 
   const saveBankData = () => {
-    localStorage.setItem(PAYROLL_BANK_DATA_KEY, JSON.stringify(bankData));
+    writeJson(PAYROLL_BANK_DATA_KEY, bankData);
     setSaved(true);
   };
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="bg-slate-900/90 backdrop-blur-md border border-white/5 rounded-2xl p-6 shadow-xl max-w-3xl space-y-5">
       <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-100">
-        Puedes registrar cualquier banco o institución de pago. No está limitado a BBVA.
+        Puedes registrar cualquier banco o institución de pago. No está limitado a un banco específico.
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-400 mb-1.5">Banco o institución</label>
@@ -340,302 +760,106 @@ function BancariosTab() {
 }
 
 function AdelantosTab() {
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const [advances, setAdvances] = useState<PayrollAdvance[]>(() => readJson<PayrollAdvance[]>(PAYROLL_ADVANCES_KEY, []));
+  const [message, setMessage] = useState('');
+
+  const submitAdvance = () => {
+    const numericAmount = Number(amount);
+    if (!numericAmount || numericAmount <= 0) {
+      setMessage('Captura un monto válido.');
+      return;
+    }
+    const next: PayrollAdvance = {
+      id: `${Date.now()}`,
+      amount: numericAmount,
+      reason: reason.trim() || 'Sin motivo capturado',
+      requestedAt: new Date().toISOString(),
+      status: 'Pendiente',
+    };
+    const updated = [next, ...advances];
+    setAdvances(updated);
+    writeJson(PAYROLL_ADVANCES_KEY, updated);
+    setAmount('');
+    setReason('');
+    setMessage('Solicitud de adelanto registrada.');
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="bg-slate-950/80 border border-white/5 rounded-2xl p-6 max-w-md shadow-inner">
+    <div className="bg-slate-900/90 backdrop-blur-md border border-white/5 rounded-2xl p-6 shadow-xl space-y-6">
+      <div className="bg-slate-950/80 border border-white/5 rounded-2xl p-6 max-w-xl shadow-inner">
         <h3 className="text-slate-100 font-medium mb-5">Solicitar Adelanto</h3>
         <div className="space-y-5">
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-1.5">Monto Solicitado</label>
-            <input type="number" className="w-full bg-slate-900/90 border border-white/5 rounded-xl p-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50" placeholder="$0.00" />
+            <input
+              type="number"
+              className="w-full bg-slate-900/90 border border-white/5 rounded-xl p-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+              placeholder="$0.00"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-1.5">Motivo</label>
-            <textarea className="w-full bg-slate-900/90 border border-white/5 rounded-xl p-3 text-slate-100 resize-none h-24 focus:outline-none focus:ring-1 focus:ring-blue-500/50" placeholder="Razón del adelanto..." />
+            <textarea
+              className="w-full bg-slate-900/90 border border-white/5 rounded-xl p-3 text-slate-100 resize-none h-24 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+              placeholder="Razón del adelanto..."
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
           </div>
-          <button className="w-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl text-sm font-medium transition-all shadow-lg shadow-blue-500/20">
+          <button
+            type="button"
+            onClick={submitAdvance}
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl text-sm font-medium transition-all shadow-lg shadow-blue-500/20"
+          >
             Enviar Solicitud
           </button>
+          {message && <p className="text-sm text-blue-200">{message}</p>}
         </div>
       </div>
     </div>
   );
 }
 
-function GestionTab({ isAdmin }: { isAdmin: boolean }) {
-  type UIState = 'IDLE' | 'LOADING' | 'PREVIEW' | 'SUCCESS';
-  
-  const [uiState, setUiState] = useState<UIState>('IDLE');
-  const [year, setYear] = useState(new Date().getFullYear().toString());
-  const [week, setWeek] = useState('16');
-  const [userId, setUserId] = useState(isAdmin ? 'UUID-123' : 'all');
-  const [paymentMethod, setPaymentMethod] = useState('Transferencia Bancaria');
-  const [receiptData, setReceiptData] = useState<any>(null);
-  const receiptRef = useRef<HTMLDivElement>(null);
-
-  const handleFetchData = async () => {
-    setUiState('LOADING');
-    
-    // Simulate API Call
-    setTimeout(() => {
-      const selectedUser = mockUsers.find(u => u.id === userId) || mockUsers[0];
-      const sales = userId === 'all' ? [] : mockSalesData; // Empty if 'all' selected for demo
-      
-      const subtotal = sales.reduce((acc, v) => acc + v.monto_comision, 0);
-      const descuentos = 0; // Simulate no advances for now
-      const total_neto = subtotal - descuentos;
-
-      setReceiptData({
-        header: {
-          empresa: "ADHDREAMS SAS DE CV",
-          titulo: "Recibo de Pago de Comisiones",
-          semana: parseInt(week),
-          anio: parseInt(year)
-        },
-        personal: {
-          promotor_id: selectedUser.id,
-          nombre_promotor: selectedUser.name,
-          gerente_nombre: "Edgar David Lovera Juárez"
-        },
-        periodo: {
-          fecha_pago: new Date().toISOString().split('T')[0],
-          ventas_desde: "2026-04-13",
-          ventas_hasta: "2026-04-19"
-        },
-        metodo_pago: paymentMethod,
-        detalle_ventas: sales,
-        totales: {
-          subtotal,
-          descuentos,
-          total_neto
-        }
-      });
-      
-      setUiState('PREVIEW');
-    }, 1000);
-  };
-
-  const handleSave = () => {
-    // Simulate POST request
-    // INSERT INTO payroll_history (promotor_id, week, year, amount, metadata_json) VALUES (...)
-    setUiState('SUCCESS');
-    setTimeout(() => setUiState('IDLE'), 3000);
-  };
-
-  const exportToPDF = async () => {
-    if (!receiptRef.current || !receiptData) return;
-
-    try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf'),
-      ]);
-      const canvas = await html2canvas(receiptRef.current, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Nomina_S${receiptData.header.semana}_${receiptData.personal.nombre_promotor.replace(/\s+/g, '_')}.pdf`);
-    } catch (error) {
-      console.error("Error generating PDF", error);
-    }
-  };
+function VerAdelantosTab() {
+  const advances = readJson<PayrollAdvance[]>(PAYROLL_ADVANCES_KEY, []);
 
   return (
-    <div className="space-y-6">
-      {/* Filters */}
-      <div className="flex flex-wrap gap-4 mb-8 bg-slate-950/85 p-4 rounded-xl border border-white/5">
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">Asesor</label>
-          <select 
-            className="w-full bg-slate-900/90 border border-white/10 rounded-xl px-4 py-2.5 text-slate-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50 appearance-none"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            disabled={!isAdmin}
-          >
-            {isAdmin && <option value="all">Seleccionar asesor...</option>}
-            {mockUsers.map(u => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
+    <div className="bg-slate-900/90 backdrop-blur-md border border-white/5 rounded-2xl p-6 shadow-xl space-y-5">
+      <h3 className="text-slate-100 font-bold text-xl">Ver Adelantos</h3>
+      {advances.length === 0 ? (
+        <div className="text-center py-16 text-slate-500 bg-slate-950/80 rounded-xl border border-white/5">
+          No hay adelantos registrados.
         </div>
-        <div className="w-32">
-          <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">Semana</label>
-          <input 
-            type="number" 
-            className="w-full bg-slate-900/90 border border-white/10 rounded-xl px-4 py-2.5 text-slate-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50" 
-            value={week}
-            onChange={(e) => setWeek(e.target.value)}
-          />
-        </div>
-        <div className="w-32">
-          <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">Año</label>
-          <input 
-            type="number" 
-            className="w-full bg-slate-900/90 border border-white/10 rounded-xl px-4 py-2.5 text-slate-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50" 
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
-          />
-        </div>
-        <div className="flex items-end">
-          <button 
-            onClick={handleFetchData}
-            disabled={uiState === 'LOADING' || userId === 'all'}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-all h-[42px] flex items-center shadow-lg shadow-blue-500/20"
-          >
-            {uiState === 'LOADING' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Generar Recibo'}
-          </button>
-        </div>
-      </div>
-
-      {/* UI States */}
-      {uiState === 'IDLE' && (
-        <div className="text-center py-20 text-slate-500 bg-slate-950/20 rounded-2xl border border-white/5 border-dashed">
-          <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>Selecciona un asesor y haz clic en "Generar Recibo" para ver la nómina.</p>
-        </div>
-      )}
-
-      {uiState === 'LOADING' && (
-        <div className="text-center py-20 text-slate-500 bg-slate-950/20 rounded-2xl border border-white/5">
-          <Loader2 className="w-10 h-10 mx-auto mb-4 animate-spin text-blue-500" />
-          <p>Consultando base de datos...</p>
-        </div>
-      )}
-
-      {uiState === 'SUCCESS' && (
-        <div className="text-center py-20 text-emerald-500 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
-          <CheckCircle2 className="w-12 h-12 mx-auto mb-4" />
-          <h3 className="text-lg font-bold mb-1">¡Nómina Registrada!</h3>
-          <p className="text-emerald-400/80 text-sm">El historial ha sido actualizado correctamente.</p>
-        </div>
-      )}
-
-      {uiState === 'PREVIEW' && receiptData && (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* Editable Fields outside the receipt for clean PDF */}
-          <div className="mb-6 flex items-center gap-4 bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl">
-            <label className="text-sm font-medium text-blue-400 whitespace-nowrap">Método de Pago:</label>
-            <input 
-              type="text" 
-              value={paymentMethod}
-              onChange={(e) => {
-                setPaymentMethod(e.target.value);
-                setReceiptData({...receiptData, metodo_pago: e.target.value});
-              }}
-              className="bg-black/40 border border-blue-500/30 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1 max-w-xs"
-            />
-          </div>
-
-          {/* Receipt Template (Target for PDF) */}
-          <div className="bg-white text-slate-900 p-10 rounded-sm max-w-3xl mx-auto shadow-2xl relative" ref={receiptRef}>
-            <div className="text-center border-b-2 border-slate-900 pb-5 mb-8">
-              <h2 className="font-bold text-2xl tracking-tight">{receiptData.header.empresa}</h2>
-              <p className="text-sm text-slate-600 mt-1">Avenida Tláhuac 3632, Interior A301, Colonia Culhuacán CTM Zona VIII, C.P. 09800, Iztapalapa, CDMX</p>
-              <h3 className="font-bold mt-4 text-lg">{receiptData.header.titulo}</h3>
-              <p className="text-sm font-medium">Semana {receiptData.header.semana} del Año {receiptData.header.anio}</p>
-            </div>
-
-            <div className="space-y-5 text-sm text-justify leading-relaxed">
-              <p>
-                Yo, <strong>{receiptData.personal.nombre_promotor}</strong>, recibo el pago de mis comisiones por mis ventas 
-                posteadas de la empresa Heavenly Dreams SAS de CV y del gerente {receiptData.personal.gerente_nombre}, 
-                correspondiente a la semana en curso.
-              </p>
-              <p>
-                Recibiendo el pago el día <strong>{receiptData.periodo.fecha_pago}</strong>, que abarca mis ventas posteadas 
-                del día <strong>{receiptData.periodo.ventas_desde}</strong> al día <strong>{receiptData.periodo.ventas_hasta}</strong>.
-              </p>
-              <p>
-                Recibiendo y aceptando el esquema de comisiones, recibiendo el pago por un 
-                total neto de <strong>{formatCurrency(receiptData.totales.total_neto)}</strong> vía <strong>{receiptData.metodo_pago}</strong>.
-              </p>
-            </div>
-
-            <div className="mt-10">
-              <table className="w-full text-sm border-collapse border border-slate-300">
-                <thead className="bg-slate-200/50">
-                  <tr>
-                    <th className="border border-slate-300 p-3 text-left font-semibold">Folio SIAC</th>
-                    <th className="border border-slate-300 p-3 text-left font-semibold">Estatus PISA</th>
-                    <th className="border border-slate-300 p-3 text-right font-semibold">Comisión</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {receiptData.detalle_ventas.length > 0 ? (
-                    receiptData.detalle_ventas.map((venta: any, idx: number) => (
-                      <tr key={idx}>
-                        <td className="border border-slate-300 p-3">{venta.folio_siac}</td>
-                        <td className="border border-slate-300 p-3">{venta.estatus_pisa}</td>
-                        <td className="border border-slate-300 p-3 text-right">{formatCurrency(venta.monto_comision)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={3} className="border border-slate-300 p-6 text-center italic text-slate-500 bg-slate-50/50">
-                        No hay folios posteados en esta semana
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                {receiptData.detalle_ventas.length > 0 && (
-                  <tfoot className="bg-slate-50 font-semibold">
-                    <tr>
-                      <td colSpan={2} className="border border-slate-300 p-3 text-right">Subtotal:</td>
-                      <td className="border border-slate-300 p-3 text-right">{formatCurrency(receiptData.totales.subtotal)}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} className="border border-slate-300 p-3 text-right text-red-600">Descuentos/Adelantos:</td>
-                      <td className="border border-slate-300 p-3 text-right text-red-600">-{formatCurrency(receiptData.totales.descuentos)}</td>
-                    </tr>
-                    <tr className="bg-slate-200">
-                      <td colSpan={2} className="border border-slate-300 p-3 text-right text-lg">Total Neto:</td>
-                      <td className="border border-slate-300 p-3 text-right text-lg">{formatCurrency(receiptData.totales.total_neto)}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-
-            <div className="mt-24 grid grid-cols-2 gap-10 text-center">
-              <div>
-                <div className="border-b border-slate-900 w-56 mx-auto mb-3"></div>
-                <p className="text-sm font-bold">Firma del Promotor/Supervisor</p>
-                <p className="text-xs text-slate-600 mt-1">{receiptData.personal.nombre_promotor}</p>
-              </div>
-              <div>
-                <div className="border-b border-slate-900 w-56 mx-auto mb-3"></div>
-                <p className="text-sm font-bold">Firma del Gerente</p>
-                <p className="text-xs text-slate-600 mt-1">{receiptData.personal.gerente_nombre}</p>
-              </div>
-            </div>
-
-            <div className="mt-16 text-center text-xs text-slate-500">
-              <p>Documento generado el {new Date().toLocaleString()}</p>
-              <p className="mt-1">Heavenly Dreams SAS de CV — Todos los derechos reservados.</p>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex justify-center gap-4 mt-8">
-            <button 
-              onClick={exportToPDF}
-              className="bg-slate-800/80 hover:bg-slate-700 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-colors h-11 flex items-center ring-1 ring-white/5 gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Descargar PDF
-            </button>
-            <button 
-              onClick={handleSave}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-all h-11 flex items-center shadow-lg shadow-emerald-500/20 gap-2"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              Registrar Nómina
-            </button>
-          </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-slate-500 border-b border-white/5">
+              <tr>
+                <th className="pb-4 font-medium uppercase tracking-wider text-[11px]">Fecha</th>
+                <th className="pb-4 font-medium uppercase tracking-wider text-[11px]">Motivo</th>
+                <th className="pb-4 font-medium uppercase tracking-wider text-[11px] text-right">Monto</th>
+                <th className="pb-4 font-medium uppercase tracking-wider text-[11px] text-right">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {advances.map(advance => (
+                <tr key={advance.id} className="hover:bg-slate-800/30">
+                  <td className="py-4 text-slate-300">{new Date(advance.requestedAt).toLocaleDateString('es-MX')}</td>
+                  <td className="py-4 text-slate-300">{advance.reason}</td>
+                  <td className="py-4 text-right text-emerald-400 font-mono font-bold">{formatCurrency(advance.amount)}</td>
+                  <td className="py-4 text-right">
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                      {advance.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
