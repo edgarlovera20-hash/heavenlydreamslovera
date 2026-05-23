@@ -285,6 +285,11 @@ export async function oauthCallback(req: Request, res: Response) {
   const provider = String(req.params.provider || '') as OAuthProvider;
   try {
     providerConfig(provider);
+    const providerError = String(req.query.error || '');
+    if (providerError) {
+      const description = String(req.query.error_description || req.query.error_uri || '').trim();
+      throw new Error(description || `Microsoft devolvió error OAuth: ${providerError}`);
+    }
     const code = String(req.query.code || '');
     const state = decodeState(String(req.query.state || ''));
     if (!code) throw new Error('Código OAuth faltante');
