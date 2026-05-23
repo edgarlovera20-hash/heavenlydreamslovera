@@ -317,7 +317,7 @@ export default function App() {
                 <MatrixText text="Heavenly Dreams" className="text-2xl sm:text-3xl md:text-5xl font-bold font-sans uppercase tracking-[0.1em] sm:tracking-[0.15em] flex-nowrap" />
               </h1>
               <p className="text-cyber-electric/80 max-w-md mx-auto font-medium uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[10px] sm:text-sm px-4">
-                Heavenly Dreams Sas De Cv
+                TU DREAM TEAM COMIENZA AQUI
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-700 px-4 sm:px-0">

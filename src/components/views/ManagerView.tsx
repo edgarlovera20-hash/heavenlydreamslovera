@@ -157,7 +157,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           <div className="text-center">
             <h1 className="text-sm font-black text-white tracking-[0.15em] leading-none uppercase">Heavenly Dreams</h1>
             <p className="text-[7px] text-yellow-400 tracking-[0.2em] font-bold mt-1 uppercase leading-tight drop-shadow-[0_0_5px_rgba(250,204,21,0.5)]">
-              Heavenly Dreams Sas De Cv
+              TU DREAM TEAM COMIENZA AQUI
             </p>
           </div>
         </div>

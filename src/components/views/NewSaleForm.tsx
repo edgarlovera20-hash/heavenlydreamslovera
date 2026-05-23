@@ -41,9 +41,21 @@ interface CustomerCaptureData {
   // Address Data
   mismaDireccionIne: boolean;
   comprobanteDomicilio?: string;
+  prefijoCalle?: string;
   calle: string;
   numeroExterior: string;
   numeroInterior?: string;
+  edificio?: string;
+  departamento?: string;
+  piso?: string;
+  torre?: string;
+  manzana?: string;
+  lote?: string;
+  privada?: string;
+  sector?: string;
+  etapa?: string;
+  unidadHabitacional?: string;
+  referencias?: string;
   codigoPostal: string;
   colonia: string;
   ciudad: string;
@@ -51,6 +63,10 @@ interface CustomerCaptureData {
   entrecalle1: string;
   entrecalle2: string;
   coordenadas: string;
+  gpsLatitud?: number;
+  gpsLongitud?: number;
+  gpsPrecision?: number;
+  gpsTimestamp?: string;
 
   packageId: string;
   paqueteNombre: string;
@@ -90,6 +106,167 @@ const PLATAFORMAS_ADICIONALES = [
   { id: 'star_tv', provider: 'StarTV Stream', name: 'Suscripción StarTV Stream', price: 99 },
   { id: 'f1_tv', provider: 'F1 TV', name: 'Suscripción F1 TV Pro', price: 129 },
 ];
+
+const STREET_PREFIX_OPTIONS = [
+  'Calle',
+  'Avenida',
+  'Av.',
+  'Boulevard',
+  'Blvd.',
+  'Calzada',
+  'Calz.',
+  'Prolongación',
+  'Prol.',
+  'Circuito',
+  'Circ.',
+  'Privada',
+  'Priv.',
+  'Cerrada',
+  'Cda.',
+  'Retorno',
+  'Andador',
+  'And.',
+  'Camino',
+  'Carretera',
+  'Carr.',
+  'Autopista',
+  'Libramiento',
+  'Periférico',
+  'Eje',
+  'Eje vial',
+  'Diagonal',
+  'Tránsito',
+  'Vía',
+  'Via',
+  'Viaducto',
+  'Paseo',
+  'Pasaje',
+  'Corredor',
+  'Rinconada',
+  'Glorieta',
+  'Plaza',
+  'Jardín',
+  'Unidad habitacional',
+  'Callejón',
+  'Camellón',
+  'Malecón',
+  'Costera',
+  'Avenida principal',
+] as const;
+
+function normalizeAddressToken(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+const STREET_PREFIX_MATCHERS = STREET_PREFIX_OPTIONS
+  .map(label => ({ label, normalized: normalizeAddressToken(label) }))
+  .sort((a, b) => b.normalized.length - a.normalized.length);
+
+function cleanField(value: unknown) {
+  return typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
+}
+
+function pickFirst(...values: unknown[]) {
+  for (const value of values) {
+    const cleaned = cleanField(value);
+    if (cleaned) return cleaned;
+  }
+  return '';
+}
+
+function splitStreetPrefix(raw: unknown): { prefijoCalle?: string; calle?: string } {
+  const value = cleanField(raw);
+  if (!value) return {};
+
+  const rawWords = value.split(/\s+/);
+  const normalizedWords = rawWords.map(word => normalizeAddressToken(word)).filter(Boolean);
+
+  for (const matcher of STREET_PREFIX_MATCHERS) {
+    const prefixWords = matcher.normalized.split(' ').filter(Boolean);
+    if (prefixWords.length === 0) continue;
+    const matches = prefixWords.every((word, index) => normalizedWords[index] === word);
+    if (matches) {
+      return {
+        prefijoCalle: matcher.label,
+        calle: rawWords.slice(prefixWords.length).join(' ').trim(),
+      };
+    }
+  }
+
+  return { calle: value };
+}
+
+function addressFieldsFromOcr(fields: Record<string, any>) {
+  const streetParts = splitStreetPrefix(pickFirst(fields.calle, fields.vialidad, fields.direccion));
+  return {
+    prefijoCalle: pickFirst(
+      fields.prefijoCalle,
+      fields.tipoVialidad,
+      fields.tipo_vialidad,
+      fields.vialidadTipo,
+      fields.tipoCalle,
+      streetParts.prefijoCalle,
+    ),
+    calle: pickFirst(streetParts.calle, fields.nombreVialidad, fields.calle),
+    numeroExterior: pickFirst(fields.numeroExterior, fields.numExterior, fields.noExterior, fields.ext),
+    numeroInterior: pickFirst(fields.numeroInterior, fields.numInterior, fields.noInterior, fields.int),
+    edificio: pickFirst(fields.edificio, fields.edif, fields.torre, fields.bloque),
+    departamento: pickFirst(fields.departamento, fields.depto, fields.dept, fields.numeroDepartamento, fields.noDepartamento),
+    piso: pickFirst(fields.piso, fields.nivel),
+    torre: pickFirst(fields.torre),
+    manzana: pickFirst(fields.manzana, fields.mz),
+    lote: pickFirst(fields.lote, fields.lt),
+    privada: pickFirst(fields.privada, fields.priv),
+    sector: pickFirst(fields.sector),
+    etapa: pickFirst(fields.etapa),
+    unidadHabitacional: pickFirst(fields.unidadHabitacional, fields.unidad_habitacional, fields.unidad),
+    referencias: pickFirst(fields.referencias, fields.referencia),
+    colonia: pickFirst(fields.colonia, fields.fraccionamiento),
+    codigoPostal: pickFirst(fields.codigoPostal, fields.cp, fields.postal),
+    delegacion: pickFirst(fields.delegacion, fields.municipio, fields.alcaldia),
+    ciudad: pickFirst(fields.ciudad, fields.estado),
+  };
+}
+
+function buildStreetLine(data: Partial<CustomerCaptureData>) {
+  const calle = cleanField(data.calle);
+  if (!calle) return '';
+  return `${data.prefijoCalle || 'Calle'} ${calle}`.trim();
+}
+
+function buildAddressUnitLine(data: Partial<CustomerCaptureData>) {
+  return [
+    data.numeroExterior ? `Ext. ${data.numeroExterior}` : '',
+    data.numeroInterior ? `Int. ${data.numeroInterior}` : '',
+    data.edificio ? `Edif. ${data.edificio}` : '',
+    data.departamento ? `Dept. ${data.departamento}` : '',
+    data.piso ? `Piso ${data.piso}` : '',
+    data.torre ? `Torre ${data.torre}` : '',
+    data.manzana ? `Mz. ${data.manzana}` : '',
+    data.lote ? `Lt. ${data.lote}` : '',
+    data.privada ? `Privada ${data.privada}` : '',
+    data.sector ? `Sector ${data.sector}` : '',
+    data.etapa ? `Etapa ${data.etapa}` : '',
+    data.unidadHabitacional ? `U.H. ${data.unidadHabitacional}` : '',
+  ].filter(Boolean).join(' ');
+}
+
+function buildInstallAddress(data: Partial<CustomerCaptureData>) {
+  return [
+    buildStreetLine(data),
+    buildAddressUnitLine(data),
+    data.colonia ? `Col. ${data.colonia}` : '',
+    data.delegacion,
+    data.ciudad,
+    data.codigoPostal ? `CP ${data.codigoPostal}` : '',
+  ].filter(Boolean).join(', ');
+}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -140,6 +317,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     categoriaProducto: 'infinitum_puro',
     streamingElegido: 'ninguno',
     mismaDireccionIne: true,
+    prefijoCalle: 'Calle',
     coordenadas: ''
   });
   
@@ -478,6 +656,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
         if (!res.ok) throw new Error(`OCR error (${res.status})`);
         const data = await res.json();
         const f = data.fields || {};
+        const addressFields = addressFieldsFromOcr(f);
         let filled = 0;
         setForm(prev => {
           const updates: any = {};
@@ -488,13 +667,28 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
               filled++;
             }
           };
-          tryFill('calle', f.calle);
-          tryFill('numeroExterior', f.numeroExterior);
-          tryFill('numeroInterior', f.numeroInterior);
-          tryFill('colonia', f.colonia);
-          tryFill('codigoPostal', f.codigoPostal);
-          tryFill('delegacion', f.delegacion);
-          tryFill('ciudad', f.ciudad);
+          if (addressFields.prefijoCalle && (!prev.prefijoCalle || prev.prefijoCalle === 'Calle')) {
+            updates.prefijoCalle = addressFields.prefijoCalle;
+            filled++;
+          }
+          tryFill('calle', addressFields.calle);
+          tryFill('numeroExterior', addressFields.numeroExterior);
+          tryFill('numeroInterior', addressFields.numeroInterior);
+          tryFill('edificio', addressFields.edificio);
+          tryFill('departamento', addressFields.departamento);
+          tryFill('piso', addressFields.piso);
+          tryFill('torre', addressFields.torre);
+          tryFill('manzana', addressFields.manzana);
+          tryFill('lote', addressFields.lote);
+          tryFill('privada', addressFields.privada);
+          tryFill('sector', addressFields.sector);
+          tryFill('etapa', addressFields.etapa);
+          tryFill('unidadHabitacional', addressFields.unidadHabitacional);
+          tryFill('referencias', addressFields.referencias);
+          tryFill('colonia', addressFields.colonia);
+          tryFill('codigoPostal', addressFields.codigoPostal);
+          tryFill('delegacion', addressFields.delegacion);
+          tryFill('ciudad', addressFields.ciudad);
           return { ...prev, ...updates };
         });
         setTimeout(() => {
@@ -537,14 +731,27 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       if (!res.ok) throw new Error(`OCR error (${res.status})`);
       const data = await res.json();
       const f = data.fields || {};
+      const addressFields = addressFieldsFromOcr(f);
       const updates: any = {};
-      if (f.calle)         updates.calle = f.calle;
-      if (f.numeroExterior) updates.numeroExterior = f.numeroExterior;
-      if (f.numeroInterior) updates.numeroInterior = f.numeroInterior;
-      if (f.colonia)       updates.colonia = f.colonia;
-      if (f.codigoPostal)  updates.codigoPostal = f.codigoPostal;
-      if (f.delegacion)    updates.delegacion = f.delegacion;
-      if (f.ciudad)        updates.ciudad = f.ciudad;
+      if (addressFields.prefijoCalle)   updates.prefijoCalle = addressFields.prefijoCalle;
+      if (addressFields.calle)          updates.calle = addressFields.calle;
+      if (addressFields.numeroExterior) updates.numeroExterior = addressFields.numeroExterior;
+      if (addressFields.numeroInterior) updates.numeroInterior = addressFields.numeroInterior;
+      if (addressFields.edificio)       updates.edificio = addressFields.edificio;
+      if (addressFields.departamento)   updates.departamento = addressFields.departamento;
+      if (addressFields.piso)           updates.piso = addressFields.piso;
+      if (addressFields.torre)          updates.torre = addressFields.torre;
+      if (addressFields.manzana)        updates.manzana = addressFields.manzana;
+      if (addressFields.lote)           updates.lote = addressFields.lote;
+      if (addressFields.privada)        updates.privada = addressFields.privada;
+      if (addressFields.sector)         updates.sector = addressFields.sector;
+      if (addressFields.etapa)          updates.etapa = addressFields.etapa;
+      if (addressFields.unidadHabitacional) updates.unidadHabitacional = addressFields.unidadHabitacional;
+      if (addressFields.referencias)    updates.referencias = addressFields.referencias;
+      if (addressFields.colonia)        updates.colonia = addressFields.colonia;
+      if (addressFields.codigoPostal)   updates.codigoPostal = addressFields.codigoPostal;
+      if (addressFields.delegacion)     updates.delegacion = addressFields.delegacion;
+      if (addressFields.ciudad)         updates.ciudad = addressFields.ciudad;
       const count = Object.keys(updates).length;
       if (count > 0) {
         updateForm(updates);
@@ -650,25 +857,34 @@ const exportToPDF = async () => {
       }
       
       // 2. Save to server API
+      const direccionInstalacion = buildInstallAddress(form);
+      const apellidos = [form.apellidoPaterno, form.apellidoMaterno].filter(Boolean).join(' ').trim();
       const saleData = {
         folio: form.folio,
         folio_siac: form.folioSiac,
         servicio_siac: form.servicioSiac,
         nombres: form.nombres,
+        apellidos,
         apellido_paterno: form.apellidoPaterno,
         apellido_materno: form.apellidoMaterno,
         curp: form.curp,
+        telefono: form.telefonoTitular,
         telefono_titular: form.telefonoTitular,
         correo: form.correo,
-        calle: form.calle,
+        direccion: direccionInstalacion,
+        calle: buildStreetLine(form),
         colonia: form.colonia,
         ciudad: form.ciudad,
         codigo_postal: form.codigoPostal,
+        municipio: form.delegacion,
         delegacion: form.delegacion,
         coordenadas: form.coordenadas,
         package_id: form.packageId,
+        plan: form.paqueteNombre,
         paquete_nombre: form.paqueteNombre,
         renta_mensual: form.rentaMensual,
+        zona: form.ciudad || form.delegacion,
+        notas: direccionInstalacion,
         tipo_cliente: form.tipoCliente,
         tipo_servicio: form.tipoServicio,
         categoria_producto: form.categoriaProducto,
@@ -679,7 +895,7 @@ const exportToPDF = async () => {
         asesor_id: getCurrentUserId(),
         status: 'pendiente',
         fecha_solicitud: new Date().toISOString(),
-        metadata: JSON.stringify(form),
+        metadata: form,
       };
       const apiRes = await fetch('/api/ventas', {
         method: 'POST',
@@ -1081,53 +1297,126 @@ const exportToPDF = async () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Calle</label>
-                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
-                    value={form.calle || ''} onChange={e => updateForm({ calle: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5">C.P.</label>
-                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
-                    value={form.codigoPostal || ''} onChange={e => updateForm({ codigoPostal: e.target.value })} />
+                <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)_220px] gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Tipo de vialidad</label>
+                    <select
+                      className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500 outline-none"
+                      value={form.prefijoCalle || 'Calle'}
+                      onChange={e => updateForm({ prefijoCalle: e.target.value })}
+                    >
+                      {STREET_PREFIX_OPTIONS.map(prefix => (
+                        <option key={prefix} value={prefix} className="bg-slate-950 text-white">{prefix}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Calle</label>
+                    <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                      value={form.calle || ''} onChange={e => updateForm({ calle: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">C.P.</label>
+                    <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                      value={form.codigoPostal || ''} onChange={e => updateForm({ codigoPostal: e.target.value })} />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1.5">No. Exterior</label>
-                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
                     value={form.numeroExterior || ''} onChange={e => updateForm({ numeroExterior: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1.5">No. Interior</label>
-                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
                     value={form.numeroInterior || ''} onChange={e => updateForm({ numeroInterior: e.target.value })} />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Edificio</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.edificio || ''} onChange={e => updateForm({ edificio: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Dept.</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.departamento || ''} onChange={e => updateForm({ departamento: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Piso</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.piso || ''} onChange={e => updateForm({ piso: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Torre</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.torre || ''} onChange={e => updateForm({ torre: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Mz.</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.manzana || ''} onChange={e => updateForm({ manzana: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Lt.</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.lote || ''} onChange={e => updateForm({ lote: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Privada</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.privada || ''} onChange={e => updateForm({ privada: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Sector</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.sector || ''} onChange={e => updateForm({ sector: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Etapa</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.etapa || ''} onChange={e => updateForm({ etapa: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Unidad Habitacional</label>
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                    value={form.unidadHabitacional || ''} onChange={e => updateForm({ unidadHabitacional: e.target.value })} />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1.5">Colonia</label>
-                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
                     value={form.colonia || ''} onChange={e => updateForm({ colonia: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1.5">Ciudad</label>
-                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
                     value={form.ciudad || ''} onChange={e => updateForm({ ciudad: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1.5">Delegación / Municipio</label>
-                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
+                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
                     value={form.delegacion || ''} onChange={e => updateForm({ delegacion: e.target.value })} />
                 </div>
                 <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1.5">Entrecalle 1</label>
-                    <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
+                    <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
                       value={form.entrecalle1 || ''} onChange={e => updateForm({ entrecalle1: e.target.value })} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1.5">Entrecalle 2</label>
-                    <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
+                    <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
                       value={form.entrecalle2 || ''} onChange={e => updateForm({ entrecalle2: e.target.value })} />
                   </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Referencias</label>
+                    <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500"
+                      value={form.referencias || ''} onChange={e => updateForm({ referencias: e.target.value })} />
+                  </div>
                 </div>
+              </div>
+
+              <div className="bg-slate-950/60 border border-cyan-400/10 rounded-xl px-4 py-3 mb-6 text-sm text-slate-300">
+                <span className="text-cyan-300 font-semibold">Dirección:</span> {buildInstallAddress(form) || 'Completa la vialidad, número y colonia para armar la dirección de instalación.'}
               </div>
 
               {/* Mapa interactivo */}
@@ -1139,7 +1428,13 @@ const exportToPDF = async () => {
                   <MapPicker
                     coords={form.coordenadas || ''}
                     onCoordsChange={c => updateForm({ coordenadas: c })}
-                    searchAddress={[form.calle, form.colonia, form.delegacion, form.ciudad].filter(Boolean).join(', ')}
+                    onLocationChange={location => updateForm({
+                      gpsLatitud: location.lat,
+                      gpsLongitud: location.lng,
+                      gpsPrecision: location.accuracy,
+                      gpsTimestamp: location.timestamp,
+                    })}
+                    searchAddress={buildInstallAddress(form)}
                   />
                 </Suspense>
               </div>
@@ -1587,10 +1882,10 @@ const exportToPDF = async () => {
               <section className="mb-4">
                 <h3 className="font-bold bg-gray-200 px-2 py-1 mb-2 text-sm uppercase">📍 Domicilio de Instalación</h3>
                 <div className="grid grid-cols-1 gap-2 text-sm px-2">
-                  <div><strong>Calle y Núm:</strong> {form.calle || '[Calle]'} Ext: {form.numeroExterior || '[Ext]'} {form.numeroInterior ? `Int: ${form.numeroInterior}` : ''}</div>
+                  <div><strong>Calle y Núm:</strong> {buildStreetLine(form) || '[Calle]'} {buildAddressUnitLine(form) || 'Ext: [Ext]'}</div>
                   <div><strong>Ubicación:</strong> Col. {form.colonia || '[Colonia]'}, {form.delegacion || '[Delegación]'}, CP {form.codigoPostal || '[CP]'}, {form.ciudad || '[Ciudad]'}</div>
-                  <div><strong>Referencias:</strong> Entre {form.entrecalle1 || '[Calle 1]'} y {form.entrecalle2 || '[Calle 2]'}</div>
-                  <div><strong>GPS:</strong> {form.coordenadas || '[Coordenadas 📍]'}</div>
+                  <div><strong>Referencias:</strong> Entre {form.entrecalle1 || '[Calle 1]'} y {form.entrecalle2 || '[Calle 2]'} {form.referencias ? `· ${form.referencias}` : ''}</div>
+                  <div><strong>GPS:</strong> {form.coordenadas || '[Coordenadas 📍]'} {form.gpsPrecision ? `Precisión: ${Math.round(form.gpsPrecision)} m` : ''}</div>
                 </div>
               </section>
 

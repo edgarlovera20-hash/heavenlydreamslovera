@@ -10,6 +10,7 @@ import db, {
   Referrals, Quotas, CommissionRules, PackageCatalog,
   Nominas, Territories, ValidationRequests, Announcements,
   InventoryItems, AutomationRules, AiJobs, Metrics, Sessions,
+  Capturas, DocumentosCliente, ClientesCrm, EstatusFolios, LogsSistema,
 } from "./server/db";
 import { importSiacCSV } from "./server/siac-importer";
 import { getBearerAuth, issueSession, rateLimit, requireAuth, requireRole, rotateRefreshToken } from "./server/security";
@@ -82,7 +83,124 @@ const ALLOWED_TABLES = [
   'territories', 'nominas', 'announcements', 'package_catalog',
   'commission_rules', 'quotas', 'validation_requests', 'inventory_items',
   'automation_rules', 'ai_jobs', 'metrics', 'system_events', 'sessions',
+  'capturas', 'documentos_cliente', 'clientes_crm', 'morosidad',
+  'estatus_folios', 'logs_sistema',
 ];
+
+const DOCUMENT_TYPES = [
+  'INE_FRONTAL',
+  'INE_REVERSO',
+  'COMPROBANTE_DOMICILIO',
+  'PAGARE',
+  'CONTRATO',
+  'FOTO_CASA',
+  'UBICACION_GPS',
+  'RFC',
+  'CURP',
+  'ESTADO_CUENTA',
+] as const;
+
+function escapeXml(value: any) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function toExcelXml(rows: any[], sheetName = 'Exportacion') {
+  const headers = rows.length ? Object.keys(rows[0]) : ['Sin datos'];
+  const rowXml = [
+    `<Row>${headers.map(h => `<Cell><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`).join('')}</Row>`,
+    ...rows.map(row => `<Row>${headers.map(h => `<Cell><Data ss:Type="String">${escapeXml(row[h])}</Data></Cell>`).join('')}</Row>`),
+  ].join('');
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Worksheet ss:Name="${escapeXml(sheetName).slice(0, 31)}"><Table>${rowXml}</Table></Worksheet>
+</Workbook>`;
+}
+
+function escapePdfText(value: any) {
+  return String(value ?? '')
+    .replace(/[✓⚠✖]/g, m => ({ '✓': '+', '⚠': '!', '✖': 'x' }[m] || m))
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[\\()]/g, '\\$&');
+}
+
+function toSimplePdf(rows: any[], title: string) {
+  const headers = rows.length ? Object.keys(rows[0]) : ['Sin datos'];
+  const lines = [
+    title,
+    `Generado: ${new Date().toISOString()}`,
+    `Registros: ${rows.length}`,
+    '',
+    headers.join(' | '),
+    '-'.repeat(110),
+    ...rows.map(row => headers.map(h => String(row[h] ?? '').replace(/\s+/g, ' ').slice(0, 42)).join(' | ')),
+  ];
+  const wrapped: string[] = [];
+  for (const line of lines) {
+    if (line.length <= 115) wrapped.push(line);
+    else for (let i = 0; i < line.length; i += 115) wrapped.push(line.slice(i, i + 115));
+  }
+  const pages: string[][] = [];
+  for (let i = 0; i < wrapped.length; i += 44) pages.push(wrapped.slice(i, i + 44));
+
+  const objects: string[] = [];
+  const add = (body: string) => {
+    objects.push(body);
+    return objects.length;
+  };
+  const catalogId = add('<< /Type /Catalog /Pages 2 0 R >>');
+  const pagesId = add('');
+  const fontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>');
+  const pageIds: number[] = [];
+  for (const pageLines of pages) {
+    const stream = `BT /F1 8 Tf 36 806 Td 11 TL ${pageLines.map(l => `(${escapePdfText(l)}) Tj`).join(' T* ')} ET`;
+    const contentId = add(`<< /Length ${Buffer.byteLength(stream, 'utf8')} >>\nstream\n${stream}\nendstream`);
+    const pageId = add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    pageIds.push(pageId);
+  }
+  objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((body, index) => {
+    offsets.push(Buffer.byteLength(pdf, 'utf8'));
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf, 'utf8');
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i < offsets.length; i++) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(pdf, 'utf8');
+}
+
+function normalizeDocumentStatus(status: any) {
+  const value = String(status || 'PENDIENTE').toUpperCase();
+  if (['SUBIDO', 'VALIDADO'].includes(value)) return `✓ ${value}`;
+  if (value === 'RECHAZADO') return '✖ RECHAZADO';
+  if (value === 'VENCIDO') return '✖ VENCIDO';
+  return `⚠ ${value || 'PENDIENTE'}`;
+}
+
+const EXPORT_HEADERS: Record<string, string[]> = {
+  capturas: ['Folio', 'Cliente', 'Vendedor', 'Telefono', 'Colonia', 'Ciudad', 'Paquete', 'INE', 'Contrato', 'Comprobante', 'StatusCaptura', 'StatusValidacion', 'StatusInstalacion', 'StatusDocumentos', 'FechaCaptura', 'FechaInstalacion', 'Direccion', 'Latitud', 'Longitud'],
+  clientes: ['Folio', 'Cliente', 'Telefono', 'WhatsApp', 'Correo', 'Direccion', 'FechaAlta', 'Pipeline', 'UltimoContacto', 'ProximoSeguimiento', 'Satisfaccion', 'RiesgoCancelacion', 'Vendedor'],
+  morosidad: ['Folio', 'Cliente', 'MontoAdeudo', 'DiasAtraso', 'NivelMorosidad', 'FechaVencimiento', 'UltimoPago', 'StatusCobranza', 'Gestor', 'Convenio', 'Observaciones'],
+  folios: ['Folio', 'Cliente', 'Telefono', 'StatusActual', 'Subestatus', 'AreaActual', 'Tecnico', 'Avance', 'DocumentosFaltantes', 'FechaInstalacion', 'Observaciones', 'FechaMovimiento'],
+  usuarios: ['Id', 'Nombre', 'Correo', 'Usuario', 'Rol', 'Zona', 'Puesto', 'Status', 'Creado'],
+};
+
+function emptyRowForHeaders(dataset: string) {
+  const headers = EXPORT_HEADERS[dataset] || ['Sin datos'];
+  return Object.fromEntries(headers.map(header => [header, '']));
+}
 
 async function startServer() {
   const app = express();
@@ -102,6 +220,178 @@ async function startServer() {
   function canAccessVenta(auth: any, venta: any) {
     if (!auth || !venta) return false;
     return canManage(auth) || venta.asesor_id === auth.sub;
+  }
+
+  function logSystem(req: any, accion: string, entidad?: string, entidadId?: string | null, detalle?: string, metadata?: any) {
+    try {
+      LogsSistema.insert({
+        id: randomUUID(),
+        accion,
+        entidad: entidad || null,
+        entidad_id: entidadId || null,
+        user_id: req.auth?.sub || null,
+        detalle: detalle || null,
+        ip: req.ip || req.headers['x-forwarded-for'] || null,
+        dispositivo: req.headers['user-agent'] || null,
+        metadata: metadata ? JSON.stringify(metadata) : null,
+      });
+    } catch (err) {
+      console.warn('[logs_sistema] No se pudo registrar evento:', err);
+    }
+  }
+
+  function parseMetadata(value: any) {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try { return JSON.parse(value); } catch { return {}; }
+  }
+
+  function parseCoords(coords: any) {
+    const match = String(coords || '').match(/(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)/);
+    return match ? { lat: Number(match[1]), lng: Number(match[2]) } : { lat: null, lng: null };
+  }
+
+  function buildOperationalAddress(meta: any, venta: any) {
+    const parts = [
+      [meta.prefijoCalle || meta.tipoVialidad, meta.calle || venta.calle].filter(Boolean).join(' '),
+      meta.numeroExterior ? `Ext. ${meta.numeroExterior}` : '',
+      meta.numeroInterior ? `Int. ${meta.numeroInterior}` : '',
+      meta.edificio ? `Edif. ${meta.edificio}` : '',
+      meta.departamento ? `Dept. ${meta.departamento}` : '',
+      meta.piso ? `Piso ${meta.piso}` : '',
+      meta.torre ? `Torre ${meta.torre}` : '',
+      meta.manzana ? `Mz. ${meta.manzana}` : '',
+      meta.lote ? `Lt. ${meta.lote}` : '',
+      meta.privada ? `Privada ${meta.privada}` : '',
+      meta.sector ? `Sector ${meta.sector}` : '',
+      meta.etapa ? `Etapa ${meta.etapa}` : '',
+      meta.unidadHabitacional || meta.unidad_habitacional,
+      meta.colonia || venta.colonia ? `Col. ${meta.colonia || venta.colonia}` : '',
+      meta.delegacion || venta.municipio,
+      meta.ciudad,
+      meta.codigoPostal || meta.codigo_postal ? `CP ${meta.codigoPostal || meta.codigo_postal}` : '',
+    ];
+    return parts.filter(Boolean).join(', ') || venta.direccion || null;
+  }
+
+  function syncOperationalTablesFromSale(req: any, sale: any) {
+    const meta = parseMetadata(req.body?.metadata || sale.metadata);
+    const folio = sale.folio || req.body?.folio || `CAP-${String(sale.id).slice(0, 8).toUpperCase()}`;
+    const capturaId = sale.id;
+    const fullName = [
+      req.body?.nombres || sale.nombres || meta.nombres,
+      req.body?.apellidos || [meta.apellidoPaterno, meta.apellidoMaterno].filter(Boolean).join(' '),
+    ].filter(Boolean).join(' ').trim() || null;
+    const coords = parseCoords(meta.coordenadas || sale.coordenadas);
+    const direccion = buildOperationalAddress(meta, sale);
+    const now = new Date();
+    const nextFollowUp = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const docMap: Array<{ type: typeof DOCUMENT_TYPES[number]; value: any; name: string }> = [
+      { type: 'INE_FRONTAL', value: meta.ineFrente, name: 'INE frontal' },
+      { type: 'INE_REVERSO', value: meta.ineReverso, name: 'INE reverso' },
+      { type: 'COMPROBANTE_DOMICILIO', value: meta.comprobanteDomicilio, name: 'Comprobante domicilio' },
+      { type: 'CURP', value: meta.curpDoc || meta.curp, name: 'CURP' },
+      { type: 'CONTRATO', value: meta.anexoPortabilidad || meta.contratoPdf, name: 'Contrato' },
+      { type: 'UBICACION_GPS', value: meta.coordenadas || sale.coordenadas, name: 'Ubicacion GPS' },
+    ];
+    const missingDocs = docMap.filter(doc => !doc.value).map(doc => doc.type);
+    const docsStatus = missingDocs.length ? 'PENDIENTE' : 'SUBIDO';
+
+    Capturas.create({
+      id: capturaId,
+      venta_id: sale.id,
+      folio,
+      fecha_captura: sale.fecha_solicitud || new Date().toISOString(),
+      vendedor_id: sale.asesor_id,
+      supervisor_id: req.body?.supervisor_id || null,
+      cliente_nombre: fullName,
+      telefono: sale.telefono || req.body?.telefono_titular || meta.telefonoTitular || null,
+      correo: sale.correo || meta.correo || null,
+      curp: sale.curp || meta.curp || null,
+      rfc: meta.rfc || null,
+      ine_numero: meta.folioIne || meta.ineNumero || null,
+      tipo_servicio: sale.tipo_servicio || meta.tipoServicio || null,
+      paquete: sale.plan || sale.paquete_nombre || meta.paqueteNombre || null,
+      status_captura: 'CAPTURADO',
+      status_validacion: 'PENDIENTE',
+      status_instalacion: 'PENDIENTE',
+      status_documentos: docsStatus,
+      fecha_instalacion: sale.fecha_instalacion || meta.fechaInstalacion || null,
+      tipo_vialidad: meta.prefijoCalle || meta.tipoVialidad || null,
+      calle: meta.calle || sale.calle || null,
+      numero_exterior: meta.numeroExterior || null,
+      numero_interior: meta.numeroInterior || null,
+      edificio: meta.edificio || null,
+      departamento: meta.departamento || null,
+      piso: meta.piso || null,
+      torre: meta.torre || null,
+      manzana: meta.manzana || null,
+      lote: meta.lote || null,
+      privada: meta.privada || null,
+      sector: meta.sector || null,
+      etapa: meta.etapa || null,
+      unidad_habitacional: meta.unidadHabitacional || null,
+      referencias: meta.referencias || [meta.entrecalle1, meta.entrecalle2].filter(Boolean).join(' / ') || null,
+      codigo_postal: meta.codigoPostal || req.body?.codigo_postal || null,
+      colonia: meta.colonia || sale.colonia || null,
+      ciudad: meta.ciudad || req.body?.ciudad || null,
+      delegacion: meta.delegacion || sale.municipio || null,
+      direccion_completa: direccion,
+      latitud: meta.gpsLatitud || coords.lat,
+      longitud: meta.gpsLongitud || coords.lng,
+      precision_gps: meta.gpsPrecision || null,
+      gps_timestamp: meta.gpsTimestamp || (coords.lat ? new Date().toISOString() : null),
+      observaciones: sale.notas || meta.observaciones || null,
+      metadata: JSON.stringify(meta),
+    });
+
+    for (const doc of docMap) {
+      DocumentosCliente.upsert({
+        id: randomUUID(),
+        captura_id: capturaId,
+        tipo_documento: doc.type,
+        archivo_url: doc.value ? String(doc.value).slice(0, 4096) : null,
+        archivo_nombre: doc.value ? doc.name : null,
+        status_documento: doc.value ? 'SUBIDO' : 'PENDIENTE',
+        validado_por: null,
+        fecha_validacion: null,
+        observaciones: doc.value ? null : 'Documento pendiente de carga',
+      });
+    }
+
+    ClientesCrm.upsert({
+      id: randomUUID(),
+      captura_id: capturaId,
+      folio,
+      nombre: fullName,
+      telefono: sale.telefono || meta.telefonoTitular || null,
+      whatsapp: meta.whatsapp || sale.telefono || meta.telefonoTitular || null,
+      correo: sale.correo || meta.correo || null,
+      direccion,
+      fecha_alta: null,
+      status_cliente: 'NUEVO',
+      ultimo_contacto: null,
+      proximo_seguimiento: nextFollowUp,
+      nivel_satisfaccion: null,
+      riesgo_cancelacion: 'BAJO',
+      vendedor_asignado: sale.asesor_id,
+      metadata: JSON.stringify({ origen: 'captura', venta_id: sale.id }),
+    });
+
+    EstatusFolios.upsert({
+      id: randomUUID(),
+      captura_id: capturaId,
+      folio,
+      status_actual: 'CAPTURADO',
+      subestatus: docsStatus === 'SUBIDO' ? 'DOCUMENTOS_SUBIDOS' : 'PENDIENTE_DOCUMENTOS',
+      area_actual: 'CAPTURA',
+      tecnico_asignado: null,
+      fecha_movimiento: new Date().toISOString(),
+      observaciones: sale.notas || null,
+      documentos_faltantes: missingDocs.join(','),
+      avance: docsStatus === 'SUBIDO' ? 35 : 20,
+      metadata: JSON.stringify({ venta_id: sale.id }),
+    });
   }
 
   function normalizeSiacRow(row: any) {
@@ -364,12 +654,37 @@ async function startServer() {
   app.post("/api/ventas", authOnly, wrap((req: any, res: any) => {
     const auth = req.auth;
     const data = {
-      id: randomUUID(), status: 'pendiente',
-      folio: null, ...req.body,
-      metadata: req.body.metadata ? JSON.stringify(req.body.metadata) : null,
+      id: randomUUID(),
+      folio: null,
+      asesor_id: auth.sub,
+      asesor_nombre: null,
+      status: 'pendiente',
+      nombres: null,
+      apellidos: null,
+      telefono: null,
+      direccion: null,
+      colonia: null,
+      municipio: null,
+      tipo_cliente: null,
+      tipo_servicio: null,
+      plan: null,
+      renta_mensual: null,
+      zona: null,
+      notas: null,
+      fecha_solicitud: new Date().toISOString(),
+      ...req.body,
+      metadata: req.body.metadata
+        ? typeof req.body.metadata === 'string' ? req.body.metadata : JSON.stringify(req.body.metadata)
+        : null,
     };
     if (!canManage(auth)) data.asesor_id = auth.sub;
     Ventas.create(data);
+    try {
+      syncOperationalTablesFromSale(req, data);
+      logSystem(req, 'CREATE_CAPTURA', 'capturas', data.id, data.folio || null, { venta_id: data.id });
+    } catch (syncErr) {
+      console.warn('[capturas] No se pudo sincronizar tablas operativas:', syncErr);
+    }
     AuditLog.insert({ accion: 'CREATE_VENTA', entidad: 'ventas', entidad_id: data.id, user_id: data.asesor_id, user_nombre: data.asesor_nombre, detalle: data.folio });
     res.json(Ventas.getById(data.id));
   }));
@@ -385,6 +700,34 @@ async function startServer() {
     }
     if (update.metadata && typeof update.metadata === 'object') update.metadata = JSON.stringify(update.metadata);
     Ventas.update(req.params.id, update);
+    try {
+      const updatedVenta = Ventas.getById(req.params.id) as any;
+      const status = String(update.status || updatedVenta?.status || '').toUpperCase();
+      if (updatedVenta && Capturas.getById(req.params.id)) {
+        const capturaUpdate: Record<string, any> = {};
+        if (status.includes('RECHAZ')) capturaUpdate.status_validacion = 'RECHAZADO';
+        if (status.includes('APROB') || status.includes('PROCED')) capturaUpdate.status_validacion = 'VALIDADO';
+        if (status.includes('INSTAL')) capturaUpdate.status_instalacion = 'INSTALADO';
+        if (update.notas) capturaUpdate.observaciones = update.notas;
+        if (Object.keys(capturaUpdate).length) Capturas.update(req.params.id, capturaUpdate);
+        EstatusFolios.upsert({
+          id: randomUUID(),
+          captura_id: req.params.id,
+          folio: updatedVenta.folio || `CAP-${String(req.params.id).slice(0, 8).toUpperCase()}`,
+          status_actual: status.includes('RECHAZ') ? 'RECHAZADO' : status.includes('INSTAL') ? 'INSTALADO' : 'EN_REVISION',
+          subestatus: update.status || null,
+          area_actual: status.includes('INSTAL') ? 'INSTALACION' : 'VALIDACION',
+          tecnico_asignado: update.tecnico_asignado || null,
+          fecha_movimiento: new Date().toISOString(),
+          observaciones: update.notas || null,
+          documentos_faltantes: null,
+          avance: status.includes('INSTAL') ? 100 : status.includes('RECHAZ') ? 0 : 60,
+          metadata: JSON.stringify({ venta_id: req.params.id, status: update.status || null }),
+        });
+      }
+    } catch (syncErr) {
+      console.warn('[folios] No se pudo sincronizar estatus operativo:', syncErr);
+    }
     AuditLog.insert({ accion: 'UPDATE_VENTA', entidad: 'ventas', entidad_id: req.params.id, user_id: update.by || null, user_nombre: update.byName || null, detalle: update.status || null });
     res.json(Ventas.getById(req.params.id));
   });
@@ -394,6 +737,68 @@ async function startServer() {
   app.delete("/api/ventas/:id", opsOnly, wrap((req: any, res: any) => {
     Ventas.delete(req.params.id);
     res.json({ ok: true });
+  }));
+
+  // ── TABLAS OPERATIVAS: CAPTURAS / CRM / FOLIOS / DOCUMENTOS ─────────────
+  app.get("/api/capturas", authOnly, wrap((req: any, res: any) => {
+    if (canManage(req.auth)) return res.json(Capturas.getAll());
+    res.json((db as any).prepare('SELECT * FROM capturas WHERE vendedor_id=? ORDER BY fecha_captura DESC').all(req.auth.sub));
+  }));
+
+  app.get("/api/capturas/:id/documentos", authOnly, wrap((req: any, res: any) => {
+    const captura = Capturas.getById(req.params.id) as any;
+    if (!captura) return res.status(404).json({ error: 'Captura no encontrada' });
+    if (!canManage(req.auth) && captura.vendedor_id !== req.auth.sub) return res.status(403).json({ error: 'Permisos insuficientes' });
+    res.json(DocumentosCliente.getByCaptura(req.params.id));
+  }));
+
+  app.patch("/api/documentos-cliente/:id", opsOnly, wrap((req: any, res: any) => {
+    const allowed = ['status_documento', 'validado_por', 'fecha_validacion', 'observaciones'];
+    const update: Record<string, any> = {};
+    for (const key of allowed) if (Object.prototype.hasOwnProperty.call(req.body, key)) update[key] = req.body[key];
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'Sin cambios validos' });
+    const fields = Object.keys(update).map(k => `${k}=@${k}`).join(',');
+    (db as any).prepare(`UPDATE documentos_cliente SET ${fields}, updated_at=datetime('now') WHERE id=@id`).run({ ...update, id: req.params.id });
+    logSystem(req, 'VALIDATE_DOCUMENT', 'documentos_cliente', req.params.id, update.status_documento || null);
+    res.json((db as any).prepare('SELECT * FROM documentos_cliente WHERE id=?').get(req.params.id));
+  }));
+
+  app.get("/api/clientes-crm", authOnly, wrap((req: any, res: any) => {
+    if (canManage(req.auth)) return res.json(ClientesCrm.getAll());
+    res.json((db as any).prepare('SELECT * FROM clientes_crm WHERE vendedor_asignado=? ORDER BY created_at DESC').all(req.auth.sub));
+  }));
+
+  app.get("/api/morosidad", opsOnly, wrap((_req: any, res: any) => {
+    res.json((db as any).prepare('SELECT * FROM morosidad ORDER BY dias_atraso DESC, created_at DESC').all());
+  }));
+
+  app.get("/api/estatus-folios", authOnly, wrap((req: any, res: any) => {
+    if (canManage(req.auth)) {
+      return res.json((db as any).prepare('SELECT * FROM estatus_folios ORDER BY fecha_movimiento DESC').all());
+    }
+    res.json((db as any).prepare(`
+      SELECT e.* FROM estatus_folios e
+      JOIN capturas c ON c.id=e.captura_id
+      WHERE c.vendedor_id=?
+      ORDER BY e.fecha_movimiento DESC
+    `).all(req.auth.sub));
+  }));
+
+  app.get("/api/folios/status", authOnly, wrap((req: any, res: any) => {
+    const q = `%${String(req.query.q || '').trim()}%`;
+    if (q.length < 4) return res.json([]);
+    const vendedorClause = canManage(req.auth) ? '' : 'AND c.vendedor_id=@userId';
+    const rows = (db as any).prepare(`
+      SELECT e.folio, c.cliente_nombre, c.telefono, e.status_actual, e.subestatus,
+             e.area_actual, e.tecnico_asignado, e.avance, e.documentos_faltantes,
+             c.fecha_instalacion, e.observaciones, e.fecha_movimiento
+      FROM estatus_folios e
+      LEFT JOIN capturas c ON c.id=e.captura_id
+      WHERE (e.folio LIKE @q OR c.telefono LIKE @q OR c.cliente_nombre LIKE @q) ${vendedorClause}
+      ORDER BY e.fecha_movimiento DESC
+      LIMIT 50
+    `).all({ q, userId: req.auth.sub });
+    res.json(rows);
   }));
 
   // ── SIAC ───────────────────────────────────────────────────
@@ -1024,6 +1429,170 @@ async function startServer() {
     res.json({ ok: true, state: agentState[agent] });
   }));
 
+  function queryValue(query: any, key: string) {
+    const value = query[key];
+    return Array.isArray(value) ? value[0] : value;
+  }
+
+  function addCommonFilters(alias: string, query: any, where: string[], params: Record<string, any>) {
+    const fechaDesde = queryValue(query, 'fecha_desde') || queryValue(query, 'from');
+    const fechaHasta = queryValue(query, 'fecha_hasta') || queryValue(query, 'to');
+    const vendedor = queryValue(query, 'vendedor') || queryValue(query, 'vendedor_id');
+    const supervisor = queryValue(query, 'supervisor') || queryValue(query, 'supervisor_id');
+    const colonia = queryValue(query, 'colonia');
+    const ciudad = queryValue(query, 'ciudad');
+    const paquete = queryValue(query, 'paquete');
+    if (fechaDesde) { where.push(`date(${alias}.fecha_captura) >= date(@fechaDesde)`); params.fechaDesde = fechaDesde; }
+    if (fechaHasta) { where.push(`date(${alias}.fecha_captura) <= date(@fechaHasta)`); params.fechaHasta = fechaHasta; }
+    if (vendedor) { where.push(`${alias}.vendedor_id = @vendedor`); params.vendedor = vendedor; }
+    if (supervisor) { where.push(`${alias}.supervisor_id = @supervisor`); params.supervisor = supervisor; }
+    if (colonia) { where.push(`${alias}.colonia LIKE @colonia`); params.colonia = `%${colonia}%`; }
+    if (ciudad) { where.push(`${alias}.ciudad LIKE @ciudad`); params.ciudad = `%${ciudad}%`; }
+    if (paquete) { where.push(`${alias}.paquete LIKE @paquete`); params.paquete = `%${paquete}%`; }
+  }
+
+  function exportRows(dataset: string, query: any) {
+    if (dataset === 'capturas') {
+      const where: string[] = [];
+      const params: Record<string, any> = {};
+      addCommonFilters('c', query, where, params);
+      const estatus = queryValue(query, 'estatus');
+      const instalacion = queryValue(query, 'instalacion');
+      if (estatus) {
+        where.push('(c.status_captura=@estatus OR c.status_validacion=@estatus OR c.status_instalacion=@estatus OR c.status_documentos=@estatus)');
+        params.estatus = estatus;
+      }
+      if (instalacion) { where.push('(c.status_instalacion=@instalacion OR date(c.fecha_instalacion)=date(@instalacion))'); params.instalacion = instalacion; }
+      const rows: any[] = (db as any).prepare(`
+        SELECT
+          c.folio AS Folio,
+          c.cliente_nombre AS Cliente,
+          COALESCE(u.nombre, c.vendedor_id, '') AS Vendedor,
+          c.telefono AS Telefono,
+          c.colonia AS Colonia,
+          c.ciudad AS Ciudad,
+          c.paquete AS Paquete,
+          COALESCE((SELECT status_documento FROM documentos_cliente d WHERE d.captura_id=c.id AND d.tipo_documento='INE_FRONTAL' LIMIT 1), 'PENDIENTE') AS INE,
+          COALESCE((SELECT status_documento FROM documentos_cliente d WHERE d.captura_id=c.id AND d.tipo_documento='CONTRATO' LIMIT 1), 'PENDIENTE') AS Contrato,
+          COALESCE((SELECT status_documento FROM documentos_cliente d WHERE d.captura_id=c.id AND d.tipo_documento='COMPROBANTE_DOMICILIO' LIMIT 1), 'PENDIENTE') AS Comprobante,
+          c.status_captura AS StatusCaptura,
+          c.status_validacion AS StatusValidacion,
+          c.status_instalacion AS StatusInstalacion,
+          c.status_documentos AS StatusDocumentos,
+          c.fecha_captura AS FechaCaptura,
+          c.fecha_instalacion AS FechaInstalacion,
+          c.direccion_completa AS Direccion,
+          c.latitud AS Latitud,
+          c.longitud AS Longitud
+        FROM capturas c
+        LEFT JOIN users u ON u.uid = c.vendedor_id
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY c.fecha_captura DESC
+      `).all(params);
+      return rows.map(row => ({
+        ...row,
+        INE: normalizeDocumentStatus(row.INE),
+        Contrato: normalizeDocumentStatus(row.Contrato),
+        Comprobante: normalizeDocumentStatus(row.Comprobante),
+      }));
+    }
+
+    if (dataset === 'clientes') {
+      return (db as any).prepare(`
+        SELECT
+          c.folio AS Folio,
+          c.nombre AS Cliente,
+          c.telefono AS Telefono,
+          c.whatsapp AS WhatsApp,
+          c.correo AS Correo,
+          c.direccion AS Direccion,
+          c.fecha_alta AS FechaAlta,
+          c.status_cliente AS Pipeline,
+          c.ultimo_contacto AS UltimoContacto,
+          c.proximo_seguimiento AS ProximoSeguimiento,
+          c.nivel_satisfaccion AS Satisfaccion,
+          c.riesgo_cancelacion AS RiesgoCancelacion,
+          COALESCE(u.nombre, c.vendedor_asignado, '') AS Vendedor
+        FROM clientes_crm c
+        LEFT JOIN users u ON u.uid = c.vendedor_asignado
+        ORDER BY c.created_at DESC
+      `).all();
+    }
+
+    if (dataset === 'morosidad') {
+      const status = queryValue(query, 'estatus') || queryValue(query, 'morosidad');
+      const where = status ? 'WHERE m.status_cobranza=@status' : '';
+      return (db as any).prepare(`
+        SELECT
+          m.folio AS Folio,
+          COALESCE(c.nombre, '') AS Cliente,
+          m.monto_adeudo AS MontoAdeudo,
+          m.dias_atraso AS DiasAtraso,
+          CASE
+            WHEN m.dias_atraso <= 7 THEN 'Preventiva'
+            WHEN m.dias_atraso <= 30 THEN 'Baja'
+            WHEN m.dias_atraso <= 60 THEN 'Media'
+            WHEN m.dias_atraso <= 90 THEN 'Alta'
+            ELSE 'Critica'
+          END AS NivelMorosidad,
+          m.fecha_vencimiento AS FechaVencimiento,
+          m.ultimo_pago AS UltimoPago,
+          m.status_cobranza AS StatusCobranza,
+          COALESCE(u.nombre, m.gestor_asignado, '') AS Gestor,
+          CASE WHEN m.convenio=1 THEN 'SI' ELSE 'NO' END AS Convenio,
+          m.observaciones AS Observaciones
+        FROM morosidad m
+        LEFT JOIN clientes_crm c ON c.id=m.cliente_id
+        LEFT JOIN users u ON u.uid=m.gestor_asignado
+        ${where}
+        ORDER BY m.dias_atraso DESC, m.created_at DESC
+      `).all(status ? { status } : {});
+    }
+
+    if (dataset === 'folios') {
+      const q = queryValue(query, 'q');
+      const where = q ? 'WHERE (e.folio LIKE @q OR c.cliente_nombre LIKE @q OR c.telefono LIKE @q)' : '';
+      return (db as any).prepare(`
+        SELECT
+          e.folio AS Folio,
+          c.cliente_nombre AS Cliente,
+          c.telefono AS Telefono,
+          e.status_actual AS StatusActual,
+          e.subestatus AS Subestatus,
+          e.area_actual AS AreaActual,
+          e.tecnico_asignado AS Tecnico,
+          e.avance AS Avance,
+          e.documentos_faltantes AS DocumentosFaltantes,
+          c.fecha_instalacion AS FechaInstalacion,
+          e.observaciones AS Observaciones,
+          e.fecha_movimiento AS FechaMovimiento
+        FROM estatus_folios e
+        LEFT JOIN capturas c ON c.id=e.captura_id
+        ${where}
+        ORDER BY e.fecha_movimiento DESC
+      `).all(q ? { q: `%${q}%` } : {});
+    }
+
+    if (dataset === 'usuarios') {
+      return (db as any).prepare(`
+        SELECT
+          uid AS Id,
+          nombre AS Nombre,
+          email AS Correo,
+          username AS Usuario,
+          role AS Rol,
+          zona AS Zona,
+          puesto AS Puesto,
+          CASE WHEN activo=1 THEN 'ACTIVO' ELSE 'INACTIVO' END AS Status,
+          created_at AS Creado
+        FROM users
+        ORDER BY nombre
+      `).all();
+    }
+
+    return null;
+  }
+
   // ── DB STATS / EXPORT / IMPORT ────────────────────────────
   app.get("/api/db/stats", managerOnly, wrap((_req: any, res: any) => {
     const stats: Record<string, number> = {};
@@ -1036,18 +1605,38 @@ async function startServer() {
 
   app.get("/api/export/:table", managerOnly, wrap((req: any, res: any) => {
     const { table } = req.params;
-    if (!ALLOWED_TABLES.includes(table)) return res.status(400).json({ error: 'Tabla no permitida' });
-    const rows: any[] = (db as any).prepare(`SELECT * FROM ${table}`).all();
+    const format = String(req.query.format || 'csv').toLowerCase();
+    const smartRows = exportRows(table, req.query);
+    if (!smartRows && !ALLOWED_TABLES.includes(table)) return res.status(400).json({ error: 'Tabla no permitida' });
+
+    const rows: any[] = smartRows || (db as any).prepare(`SELECT * FROM ${table}`).all();
+    const date = new Date().toISOString().slice(0, 10);
+    logSystem(req, 'EXPORT_DATASET', 'export', table, `format:${format};rows:${rows.length}`, { filtros: req.query });
+    AuditLog.insert({ accion: 'EXPORT_TABLE', entidad: table, entidad_id: null, user_id: req.auth?.sub || null, user_nombre: null, detalle: `format:${format};rows:${rows.length}` });
+
+    if (format === 'excel' || format === 'xls' || format === 'xlsx') {
+      const excel = toExcelXml(rows.length ? rows : [emptyRowForHeaders(table)], table);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${table}_${date}.xls"`);
+      return res.send(excel);
+    }
+
+    if (format === 'pdf') {
+      const pdf = toSimplePdf(rows, `Heavenly Dreams CRM - ${table}`);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${table}_${date}.pdf"`);
+      return res.send(pdf);
+    }
+
     let csv: string;
     if (rows.length === 0) {
-      const cols: any[] = (db as any).prepare(`PRAGMA table_info(${table})`).all();
-      csv = cols.map((c: any) => c.name).join(',');
+      const cols = EXPORT_HEADERS[table] || ((db as any).prepare(`PRAGMA table_info(${table})`).all() as any[]).map((c: any) => c.name);
+      csv = cols.join(',');
     } else {
       csv = toCsv(rows);
     }
-    const filename = `${table}_${new Date().toISOString().slice(0, 10)}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${table}_${date}.csv"`);
     res.send('﻿' + csv);
   }));
 

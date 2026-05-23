@@ -33,6 +33,12 @@ async function readFileAsText(file: File): Promise<string> {
 // ── table definitions ──────────────────────────────────────────
 
 const TABLES = [
+  { id: 'capturas',           label: 'Capturas',           color: 'cyan',    desc: 'Solicitudes completas con estados, GPS y dirección' },
+  { id: 'documentos_cliente', label: 'Documentos Cliente', color: 'emerald', desc: 'INE, comprobante, contrato y validación documental' },
+  { id: 'clientes_crm',       label: 'CRM Clientes',       color: 'sky',     desc: 'Pipeline de bienvenida, seguimiento y retención' },
+  { id: 'estatus_folios',     label: 'Estatus Folios',     color: 'teal',    desc: 'Consulta operativa de avance por folio' },
+  { id: 'morosidad',          label: 'Morosidad',          color: 'amber',   desc: 'Cobranza, niveles de atraso y convenios' },
+  { id: 'logs_sistema',       label: 'Logs Sistema',       color: 'indigo',  desc: 'Trazabilidad de exportaciones, cambios y accesos' },
   { id: 'siac_records',       label: 'Registros SIAC',     color: 'blue',    desc: 'Folios importados del reporte SIAC' },
   { id: 'ventas',             label: 'Ventas / CRM',        color: 'cyan',    desc: 'Capturas y seguimiento de ventas' },
   { id: 'users',              label: 'Usuarios',            color: 'purple',  desc: 'Cuentas y roles del sistema' },
@@ -97,16 +103,20 @@ export default function DataManagerView() {
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
-  // ── Export CSV ──────────────────────────────────────────────
-  const handleExport = async (tableId: string, label: string) => {
-    setExporting(tableId);
+  // ── Export CSV / Excel / PDF ───────────────────────────────
+  const handleExport = async (tableId: string, label: string, format: 'csv' | 'excel' | 'pdf' = 'csv') => {
+    const exportKey = `${tableId}:${format}`;
+    setExporting(exportKey);
     try {
-      const res = await fetch(`/api/export/${tableId}`);
+      const res = await fetch(`/api/export/${tableId}?format=${format}`);
       if (!res.ok) throw new Error(await res.text());
-      const text = await res.text();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
       const date = new Date().toISOString().slice(0, 10);
-      downloadBlob(text, `${tableId}_${date}.csv`);
-      toast.success(`${label} exportado correctamente`);
+      const ext = format === 'excel' ? 'xls' : format;
+      triggerDownload(url, `${tableId}_${date}.${ext}`);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      toast.success(`${label} exportado como ${format.toUpperCase()}`);
     } catch (e) {
       toast.error('Error al exportar: ' + String(e));
     } finally { setExporting(null); }
@@ -210,7 +220,7 @@ export default function DataManagerView() {
       {/* Guide */}
       <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
         {[
-          { icon: <Download className="w-5 h-5 mx-auto mb-1 text-blue-400" />, title: 'Exportar', desc: 'Descarga los datos actuales de cualquier tabla como CSV para Excel.' },
+          { icon: <Download className="w-5 h-5 mx-auto mb-1 text-blue-400" />, title: 'Exportar', desc: 'Descarga datos como CSV, Excel o PDF con columnas inteligentes.' },
           { icon: <FileDown className="w-5 h-5 mx-auto mb-1 text-emerald-400" />, title: 'Plantilla', desc: 'Si la tabla está vacía, descarga la plantilla con las columnas correctas.' },
           { icon: <Upload className="w-5 h-5 mx-auto mb-1 text-yellow-400" />, title: 'Importar', desc: 'Sube un CSV para agregar o reemplazar datos en la tabla.' },
         ].map(g => (
@@ -228,7 +238,9 @@ export default function DataManagerView() {
           const c = COLOR_MAP[table.color];
           const count = stats[table.id] ?? 0;
           const isEmpty = count === 0;
-          const isExporting = exporting === table.id;
+          const isExportingCsv = exporting === `${table.id}:csv`;
+          const isExportingExcel = exporting === `${table.id}:excel`;
+          const isExportingPdf = exporting === `${table.id}:pdf`;
           const isClearing = clearing === table.id;
           const isConfirmClear = confirmClear === table.id;
 
@@ -256,8 +268,8 @@ export default function DataManagerView() {
               <div className="flex flex-wrap gap-2">
                 {/* Export */}
                 <button
-                  onClick={() => handleExport(table.id, table.label)}
-                  disabled={isExporting || isEmpty}
+                  onClick={() => handleExport(table.id, table.label, 'csv')}
+                  disabled={isExportingCsv || isEmpty}
                   title={isEmpty ? 'No hay datos para exportar' : 'Exportar como CSV'}
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors border',
@@ -265,8 +277,28 @@ export default function DataManagerView() {
                     'hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed'
                   )}
                 >
-                  {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  Exportar
+                  {isExportingCsv ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  CSV
+                </button>
+
+                <button
+                  onClick={() => handleExport(table.id, table.label, 'excel')}
+                  disabled={isExportingExcel || isEmpty}
+                  title={isEmpty ? 'No hay datos para exportar' : 'Exportar para Excel'}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors border bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isExportingExcel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                  Excel
+                </button>
+
+                <button
+                  onClick={() => handleExport(table.id, table.label, 'pdf')}
+                  disabled={isExportingPdf || isEmpty}
+                  title={isEmpty ? 'No hay datos para exportar' : 'Exportar como PDF'}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors border bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isExportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                  PDF
                 </button>
 
                 {/* Template */}

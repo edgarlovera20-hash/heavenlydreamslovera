@@ -323,6 +323,154 @@ db.exec(`
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Capturas completas: solicitud, validacion, instalacion y trazabilidad comercial
+  CREATE TABLE IF NOT EXISTS capturas (
+    id                    TEXT PRIMARY KEY,
+    venta_id              TEXT,
+    folio                 TEXT UNIQUE,
+    fecha_captura         TEXT NOT NULL DEFAULT (datetime('now')),
+    vendedor_id           TEXT,
+    supervisor_id         TEXT,
+    cliente_nombre        TEXT,
+    telefono              TEXT,
+    correo                TEXT,
+    curp                  TEXT,
+    rfc                   TEXT,
+    ine_numero            TEXT,
+    tipo_servicio         TEXT,
+    paquete               TEXT,
+    status_captura        TEXT NOT NULL DEFAULT 'PENDIENTE',
+    status_validacion     TEXT NOT NULL DEFAULT 'PENDIENTE',
+    status_instalacion    TEXT NOT NULL DEFAULT 'PENDIENTE',
+    status_documentos     TEXT NOT NULL DEFAULT 'PENDIENTE',
+    fecha_instalacion     TEXT,
+    tipo_vialidad         TEXT,
+    calle                 TEXT,
+    numero_exterior       TEXT,
+    numero_interior       TEXT,
+    edificio              TEXT,
+    departamento          TEXT,
+    piso                  TEXT,
+    torre                 TEXT,
+    manzana               TEXT,
+    lote                  TEXT,
+    privada               TEXT,
+    sector                TEXT,
+    etapa                 TEXT,
+    unidad_habitacional   TEXT,
+    referencias           TEXT,
+    codigo_postal         TEXT,
+    colonia               TEXT,
+    ciudad                TEXT,
+    delegacion            TEXT,
+    direccion_completa    TEXT,
+    latitud               REAL,
+    longitud              REAL,
+    precision_gps         REAL,
+    gps_timestamp         TEXT,
+    observaciones         TEXT,
+    metadata              TEXT,
+    created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE SET NULL,
+    FOREIGN KEY (vendedor_id) REFERENCES users(uid) ON DELETE SET NULL
+  );
+
+  -- Documentos por captura: existencia, validacion y rechazo
+  CREATE TABLE IF NOT EXISTS documentos_cliente (
+    id                 TEXT PRIMARY KEY,
+    captura_id         TEXT NOT NULL,
+    tipo_documento     TEXT NOT NULL,
+    archivo_url        TEXT,
+    archivo_nombre     TEXT,
+    status_documento   TEXT NOT NULL DEFAULT 'PENDIENTE',
+    validado_por       TEXT,
+    fecha_validacion   TEXT,
+    observaciones      TEXT,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(captura_id, tipo_documento),
+    FOREIGN KEY (captura_id) REFERENCES capturas(id) ON DELETE CASCADE,
+    FOREIGN KEY (validado_por) REFERENCES users(uid) ON DELETE SET NULL
+  );
+
+  -- CRM de clientes para seguimiento, bienvenida, retencion y cobranza preventiva
+  CREATE TABLE IF NOT EXISTS clientes_crm (
+    id                    TEXT PRIMARY KEY,
+    captura_id            TEXT,
+    folio                 TEXT UNIQUE,
+    nombre                TEXT,
+    telefono              TEXT,
+    whatsapp              TEXT,
+    correo                TEXT,
+    direccion             TEXT,
+    fecha_alta            TEXT,
+    status_cliente        TEXT NOT NULL DEFAULT 'NUEVO',
+    ultimo_contacto       TEXT,
+    proximo_seguimiento   TEXT,
+    nivel_satisfaccion    INTEGER,
+    riesgo_cancelacion    TEXT DEFAULT 'BAJO',
+    vendedor_asignado     TEXT,
+    metadata              TEXT,
+    created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (captura_id) REFERENCES capturas(id) ON DELETE SET NULL,
+    FOREIGN KEY (vendedor_asignado) REFERENCES users(uid) ON DELETE SET NULL
+  );
+
+  -- Morosidad y cobranza
+  CREATE TABLE IF NOT EXISTS morosidad (
+    id                 TEXT PRIMARY KEY,
+    folio              TEXT,
+    cliente_id         TEXT,
+    monto_adeudo       REAL NOT NULL DEFAULT 0,
+    dias_atraso        INTEGER NOT NULL DEFAULT 0,
+    fecha_vencimiento  TEXT,
+    ultimo_pago        TEXT,
+    status_cobranza    TEXT NOT NULL DEFAULT 'PREVENTIVA',
+    gestor_asignado    TEXT,
+    convenio           INTEGER NOT NULL DEFAULT 0,
+    observaciones      TEXT,
+    metadata           TEXT,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (cliente_id) REFERENCES clientes_crm(id) ON DELETE CASCADE,
+    FOREIGN KEY (gestor_asignado) REFERENCES users(uid) ON DELETE SET NULL
+  );
+
+  -- Estatus consultable de folios
+  CREATE TABLE IF NOT EXISTS estatus_folios (
+    id                 TEXT PRIMARY KEY,
+    captura_id         TEXT,
+    folio              TEXT UNIQUE,
+    status_actual      TEXT NOT NULL DEFAULT 'CAPTURADO',
+    subestatus         TEXT,
+    area_actual        TEXT,
+    tecnico_asignado   TEXT,
+    fecha_movimiento   TEXT NOT NULL DEFAULT (datetime('now')),
+    observaciones      TEXT,
+    documentos_faltantes TEXT,
+    avance             INTEGER NOT NULL DEFAULT 20,
+    metadata           TEXT,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (captura_id) REFERENCES capturas(id) ON DELETE CASCADE
+  );
+
+  -- Bitacora empresarial ampliada para cambios, exportaciones, accesos, IP y dispositivo
+  CREATE TABLE IF NOT EXISTS logs_sistema (
+    id          TEXT PRIMARY KEY,
+    accion      TEXT NOT NULL,
+    entidad     TEXT,
+    entidad_id  TEXT,
+    user_id     TEXT,
+    detalle     TEXT,
+    ip          TEXT,
+    dispositivo TEXT,
+    metadata    TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   -- Credenciales WebAuthn verificadas por servidor
   CREATE TABLE IF NOT EXISTS webauthn_credentials (
     id                  TEXT PRIMARY KEY,
@@ -384,6 +532,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_events_name      ON system_events (event, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_jobs_status   ON ai_jobs (status, priority, created_at);
   CREATE INDEX IF NOT EXISTS idx_metrics_name     ON metrics (name, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_capturas_folio   ON capturas (folio);
+  CREATE INDEX IF NOT EXISTS idx_capturas_vendedor ON capturas (vendedor_id, fecha_captura DESC);
+  CREATE INDEX IF NOT EXISTS idx_capturas_status  ON capturas (status_captura, status_validacion, status_instalacion);
+  CREATE INDEX IF NOT EXISTS idx_capturas_geo     ON capturas (colonia, ciudad, paquete);
+  CREATE INDEX IF NOT EXISTS idx_docs_captura     ON documentos_cliente (captura_id, tipo_documento);
+  CREATE INDEX IF NOT EXISTS idx_docs_status      ON documentos_cliente (status_documento);
+  CREATE INDEX IF NOT EXISTS idx_clientes_folio   ON clientes_crm (folio);
+  CREATE INDEX IF NOT EXISTS idx_clientes_status  ON clientes_crm (status_cliente, proximo_seguimiento);
+  CREATE INDEX IF NOT EXISTS idx_morosidad_status ON morosidad (status_cobranza, dias_atraso DESC);
+  CREATE INDEX IF NOT EXISTS idx_folios_status    ON estatus_folios (status_actual, fecha_movimiento DESC);
+  CREATE INDEX IF NOT EXISTS idx_logs_created     ON logs_sistema (created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_logs_entidad     ON logs_sistema (entidad, entidad_id);
   CREATE INDEX IF NOT EXISTS idx_webauthn_user    ON webauthn_credentials (user_id);
   CREATE INDEX IF NOT EXISTS idx_webauthn_ch_user ON webauthn_challenges (user_id, type);
 `);
@@ -661,6 +821,174 @@ export const Metrics = {
   getRecent: (limit = 200) => db.prepare('SELECT * FROM metrics ORDER BY created_at DESC LIMIT ?').all(limit),
   insert: (data: any) => db.prepare(`
     INSERT INTO metrics (id,name,value,tags) VALUES (@id,@name,@value,@tags)
+  `).run(data),
+};
+
+export const Capturas = {
+  getAll: () => db.prepare('SELECT * FROM capturas ORDER BY fecha_captura DESC').all(),
+  getById: (id: string) => db.prepare('SELECT * FROM capturas WHERE id=?').get(id),
+  getByFolio: (folio: string) => db.prepare('SELECT * FROM capturas WHERE folio=?').get(folio),
+  create: (data: any) => db.prepare(`
+    INSERT INTO capturas (
+      id, venta_id, folio, fecha_captura, vendedor_id, supervisor_id,
+      cliente_nombre, telefono, correo, curp, rfc, ine_numero,
+      tipo_servicio, paquete, status_captura, status_validacion, status_instalacion,
+      status_documentos, fecha_instalacion, tipo_vialidad, calle, numero_exterior,
+      numero_interior, edificio, departamento, piso, torre, manzana, lote, privada,
+      sector, etapa, unidad_habitacional, referencias, codigo_postal, colonia,
+      ciudad, delegacion, direccion_completa, latitud, longitud, precision_gps,
+      gps_timestamp, observaciones, metadata
+    ) VALUES (
+      @id, @venta_id, @folio, @fecha_captura, @vendedor_id, @supervisor_id,
+      @cliente_nombre, @telefono, @correo, @curp, @rfc, @ine_numero,
+      @tipo_servicio, @paquete, @status_captura, @status_validacion, @status_instalacion,
+      @status_documentos, @fecha_instalacion, @tipo_vialidad, @calle, @numero_exterior,
+      @numero_interior, @edificio, @departamento, @piso, @torre, @manzana, @lote, @privada,
+      @sector, @etapa, @unidad_habitacional, @referencias, @codigo_postal, @colonia,
+      @ciudad, @delegacion, @direccion_completa, @latitud, @longitud, @precision_gps,
+      @gps_timestamp, @observaciones, @metadata
+    )
+    ON CONFLICT(folio) DO UPDATE SET
+      venta_id=excluded.venta_id,
+      vendedor_id=excluded.vendedor_id,
+      cliente_nombre=excluded.cliente_nombre,
+      telefono=excluded.telefono,
+      correo=excluded.correo,
+      curp=excluded.curp,
+      tipo_servicio=excluded.tipo_servicio,
+      paquete=excluded.paquete,
+      status_captura=excluded.status_captura,
+      status_validacion=excluded.status_validacion,
+      status_instalacion=excluded.status_instalacion,
+      status_documentos=excluded.status_documentos,
+      fecha_instalacion=excluded.fecha_instalacion,
+      tipo_vialidad=excluded.tipo_vialidad,
+      calle=excluded.calle,
+      numero_exterior=excluded.numero_exterior,
+      numero_interior=excluded.numero_interior,
+      edificio=excluded.edificio,
+      departamento=excluded.departamento,
+      piso=excluded.piso,
+      torre=excluded.torre,
+      manzana=excluded.manzana,
+      lote=excluded.lote,
+      privada=excluded.privada,
+      sector=excluded.sector,
+      etapa=excluded.etapa,
+      unidad_habitacional=excluded.unidad_habitacional,
+      referencias=excluded.referencias,
+      codigo_postal=excluded.codigo_postal,
+      colonia=excluded.colonia,
+      ciudad=excluded.ciudad,
+      delegacion=excluded.delegacion,
+      direccion_completa=excluded.direccion_completa,
+      latitud=excluded.latitud,
+      longitud=excluded.longitud,
+      precision_gps=excluded.precision_gps,
+      gps_timestamp=excluded.gps_timestamp,
+      observaciones=excluded.observaciones,
+      metadata=excluded.metadata,
+      updated_at=datetime('now')
+  `).run(data),
+  update: (id: string, data: any) => updateById('capturas', 'id', id, data, [
+    'supervisor_id', 'cliente_nombre', 'telefono', 'correo', 'curp', 'rfc', 'ine_numero',
+    'tipo_servicio', 'paquete', 'status_captura', 'status_validacion', 'status_instalacion',
+    'status_documentos', 'fecha_instalacion', 'tipo_vialidad', 'calle', 'numero_exterior',
+    'numero_interior', 'edificio', 'departamento', 'piso', 'torre', 'manzana', 'lote',
+    'privada', 'sector', 'etapa', 'unidad_habitacional', 'referencias', 'codigo_postal',
+    'colonia', 'ciudad', 'delegacion', 'direccion_completa', 'latitud', 'longitud',
+    'precision_gps', 'gps_timestamp', 'observaciones', 'metadata',
+  ]),
+};
+
+export const DocumentosCliente = {
+  getByCaptura: (capturaId: string) => db.prepare('SELECT * FROM documentos_cliente WHERE captura_id=? ORDER BY tipo_documento').all(capturaId),
+  upsert: (data: any) => db.prepare(`
+    INSERT INTO documentos_cliente
+      (id,captura_id,tipo_documento,archivo_url,archivo_nombre,status_documento,validado_por,fecha_validacion,observaciones)
+    VALUES
+      (@id,@captura_id,@tipo_documento,@archivo_url,@archivo_nombre,@status_documento,@validado_por,@fecha_validacion,@observaciones)
+    ON CONFLICT(captura_id,tipo_documento) DO UPDATE SET
+      archivo_url=excluded.archivo_url,
+      archivo_nombre=excluded.archivo_nombre,
+      status_documento=excluded.status_documento,
+      validado_por=excluded.validado_por,
+      fecha_validacion=excluded.fecha_validacion,
+      observaciones=excluded.observaciones,
+      updated_at=datetime('now')
+  `).run(data),
+};
+
+export const ClientesCrm = {
+  getAll: () => db.prepare('SELECT * FROM clientes_crm ORDER BY created_at DESC').all(),
+  upsert: (data: any) => db.prepare(`
+    INSERT INTO clientes_crm
+      (id,captura_id,folio,nombre,telefono,whatsapp,correo,direccion,fecha_alta,status_cliente,ultimo_contacto,proximo_seguimiento,nivel_satisfaccion,riesgo_cancelacion,vendedor_asignado,metadata)
+    VALUES
+      (@id,@captura_id,@folio,@nombre,@telefono,@whatsapp,@correo,@direccion,@fecha_alta,@status_cliente,@ultimo_contacto,@proximo_seguimiento,@nivel_satisfaccion,@riesgo_cancelacion,@vendedor_asignado,@metadata)
+    ON CONFLICT(folio) DO UPDATE SET
+      captura_id=excluded.captura_id,
+      nombre=excluded.nombre,
+      telefono=excluded.telefono,
+      whatsapp=excluded.whatsapp,
+      correo=excluded.correo,
+      direccion=excluded.direccion,
+      status_cliente=excluded.status_cliente,
+      proximo_seguimiento=excluded.proximo_seguimiento,
+      riesgo_cancelacion=excluded.riesgo_cancelacion,
+      vendedor_asignado=excluded.vendedor_asignado,
+      metadata=excluded.metadata,
+      updated_at=datetime('now')
+  `).run(data),
+};
+
+export const Morosidad = {
+  getAll: () => db.prepare('SELECT * FROM morosidad ORDER BY dias_atraso DESC, created_at DESC').all(),
+  upsert: (data: any) => db.prepare(`
+    INSERT INTO morosidad
+      (id,folio,cliente_id,monto_adeudo,dias_atraso,fecha_vencimiento,ultimo_pago,status_cobranza,gestor_asignado,convenio,observaciones,metadata)
+    VALUES
+      (@id,@folio,@cliente_id,@monto_adeudo,@dias_atraso,@fecha_vencimiento,@ultimo_pago,@status_cobranza,@gestor_asignado,@convenio,@observaciones,@metadata)
+    ON CONFLICT(id) DO UPDATE SET
+      monto_adeudo=excluded.monto_adeudo,
+      dias_atraso=excluded.dias_atraso,
+      fecha_vencimiento=excluded.fecha_vencimiento,
+      ultimo_pago=excluded.ultimo_pago,
+      status_cobranza=excluded.status_cobranza,
+      gestor_asignado=excluded.gestor_asignado,
+      convenio=excluded.convenio,
+      observaciones=excluded.observaciones,
+      metadata=excluded.metadata,
+      updated_at=datetime('now')
+  `).run(data),
+};
+
+export const EstatusFolios = {
+  getAll: () => db.prepare('SELECT * FROM estatus_folios ORDER BY fecha_movimiento DESC').all(),
+  upsert: (data: any) => db.prepare(`
+    INSERT INTO estatus_folios
+      (id,captura_id,folio,status_actual,subestatus,area_actual,tecnico_asignado,fecha_movimiento,observaciones,documentos_faltantes,avance,metadata)
+    VALUES
+      (@id,@captura_id,@folio,@status_actual,@subestatus,@area_actual,@tecnico_asignado,@fecha_movimiento,@observaciones,@documentos_faltantes,@avance,@metadata)
+    ON CONFLICT(folio) DO UPDATE SET
+      captura_id=excluded.captura_id,
+      status_actual=excluded.status_actual,
+      subestatus=excluded.subestatus,
+      area_actual=excluded.area_actual,
+      tecnico_asignado=excluded.tecnico_asignado,
+      fecha_movimiento=excluded.fecha_movimiento,
+      observaciones=excluded.observaciones,
+      documentos_faltantes=excluded.documentos_faltantes,
+      avance=excluded.avance,
+      metadata=excluded.metadata,
+      updated_at=datetime('now')
+  `).run(data),
+};
+
+export const LogsSistema = {
+  insert: (data: any) => db.prepare(`
+    INSERT INTO logs_sistema (id,accion,entidad,entidad_id,user_id,detalle,ip,dispositivo,metadata)
+    VALUES (@id,@accion,@entidad,@entidad_id,@user_id,@detalle,@ip,@dispositivo,@metadata)
   `).run(data),
 };
 

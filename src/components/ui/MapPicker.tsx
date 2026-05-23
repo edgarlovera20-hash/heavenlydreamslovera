@@ -6,6 +6,7 @@ import { Map, MapMarker, MarkerContent, MapControls, useMap } from './map';
 interface MapPickerProps {
   coords: string;
   onCoordsChange: (coords: string) => void;
+  onLocationChange?: (location: { lat: number; lng: number; accuracy?: number; timestamp: string }) => void;
   searchAddress?: string; // auto-search this address when provided
 }
 
@@ -40,7 +41,7 @@ function ClickHandler({ onClick }: { onClick: (lng: number, lat: number) => void
   return null;
 }
 
-export function MapPicker({ coords, onCoordsChange, searchAddress }: MapPickerProps) {
+export function MapPicker({ coords, onCoordsChange, onLocationChange, searchAddress }: MapPickerProps) {
   const initial = parseCoords(coords) ?? { lat: 19.4326, lng: -99.1332 };
   const [position, setPosition] = useState(initial);
   const [searching, setSearching] = useState(false);
@@ -56,9 +57,10 @@ export function MapPicker({ coords, onCoordsChange, searchAddress }: MapPickerPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coords]);
 
-  const updateCoords = (lat: number, lng: number) => {
+  const updateCoords = (lat: number, lng: number, accuracy?: number) => {
     setPosition({ lat, lng });
     onCoordsChange(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    onLocationChange?.({ lat, lng, accuracy, timestamp: new Date().toISOString() });
   };
 
   const geocode = async (query: string) => {
@@ -97,7 +99,7 @@ export function MapPicker({ coords, onCoordsChange, searchAddress }: MapPickerPr
     if (!navigator.geolocation) { setError('Geolocalización no soportada'); return; }
     setError('');
     navigator.geolocation.getCurrentPosition(
-      (pos) => updateCoords(pos.coords.latitude, pos.coords.longitude),
+      (pos) => updateCoords(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
       () => setError('No se pudo obtener la ubicación'),
       { enableHighAccuracy: true, timeout: 10000 }
     );
