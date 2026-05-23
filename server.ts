@@ -2135,33 +2135,85 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
-  // ── OCR MULTI-PROVEEDOR (GPT-4o-mini → Claude Haiku 4.5 → Tesseract) ──────
-  // Acepta { image: "..." } o { images: ["frente","reverso"] } — múltiples mejoran precisión.
-  app.post("/api/vision/ocr", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
+  function countOcrFields(fields: Record<string, any> = {}) {
+    return Object.values(fields).filter(value => String(value || '').trim()).length;
+  }
+
+  function recordOcrTelemetry(req: any, event: 'completed' | 'failed', docType: string, payload: any) {
+    try {
+      recordMetric(`ocr.${event}`, 1, {
+        docType,
+        provider: payload.provider || 'none',
+        cached: String(Boolean(payload.cached)),
+      });
+      recordEvent(`ocr.${event}`, { docType, ...payload }, req.auth);
+      logSystem(
+        req,
+        `ocr.${event}`,
+        'ocr',
+        docType,
+        event === 'completed'
+          ? `OCR ${docType} completado con ${payload.provider}; ${payload.fieldsCount || 0} campos`
+          : `OCR ${docType} falló: ${payload.error || 'error desconocido'}`,
+        payload
+      );
+    } catch (telemetryError) {
+      console.warn('[OCR] No se pudo registrar telemetría:', telemetryError);
+    }
+  }
+
+  async function runOcrEndpoint(req: any, res: any, docType: 'ine' | 'siac' | 'comprobante', runner: (imgs: string[]) => Promise<any>) {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
-    const result = await runIneOcr(imgs);
-    console.log('[OCR-ine]', result.provider, `${result.durationMs}ms`, `${imgs.length}img`, JSON.stringify(result.fields));
-    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason, cached: result.cached || false });
+    try {
+      const result = await runner(imgs);
+      const fieldsCount = result.fieldsCount ?? countOcrFields(result.fields);
+      const payload = {
+        provider: result.provider,
+        model: result.model,
+        durationMs: result.durationMs,
+        fallbackReason: result.fallbackReason,
+        cached: Boolean(result.cached),
+        strategy: result.strategy,
+        providerOrder: result.providerOrder,
+        attempts: result.attempts || [],
+        fieldsCount,
+        images: imgs.length,
+      };
+      console.log(`[OCR-${docType}]`, result.provider, result.model, `${result.durationMs}ms`, `${imgs.length}img`, JSON.stringify(result.fields));
+      recordOcrTelemetry(req, 'completed', docType, payload);
+      res.json({
+        text: result.text,
+        fields: result.fields,
+        provider: result.provider,
+        model: result.model,
+        durationMs: result.durationMs,
+        fallbackReason: result.fallbackReason,
+        cached: Boolean(result.cached),
+        strategy: result.strategy,
+        providerOrder: result.providerOrder,
+        attempts: result.attempts || [],
+        fieldsCount,
+      });
+    } catch (err: any) {
+      recordOcrTelemetry(req, 'failed', docType, { error: err?.message || String(err), images: imgs.length });
+      throw err;
+    }
+  }
+
+  // ── OCR MULTI-MODELO Y AUTOMATIZABLE ──────────────────────────────────────
+  // Acepta { image: "..." } o { images: ["frente","reverso"] } — múltiples mejoran precisión.
+  app.post("/api/vision/ocr", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
+    return runOcrEndpoint(req, res, 'ine', runIneOcr);
   }));
 
   app.post("/api/vision/siac", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
-    const { image, images } = req.body;
-    const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
-    if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
-    const result = await runSiacOcr(imgs);
-    console.log('[OCR-siac]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
-    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason, cached: result.cached || false });
+    return runOcrEndpoint(req, res, 'siac', runSiacOcr);
   }));
 
   app.post("/api/vision/comprobante", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
-    const { image, images } = req.body;
-    const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
-    if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
-    const result = await runComprobanteOcr(imgs);
-    console.log('[OCR-comprobante]', result.provider, `${result.durationMs}ms`, JSON.stringify(result.fields));
-    res.json({ text: result.text, fields: result.fields, provider: result.provider, durationMs: result.durationMs, fallbackReason: result.fallbackReason, cached: result.cached || false });
+    return runOcrEndpoint(req, res, 'comprobante', runComprobanteOcr);
   }));
 
   app.get("/api/vision/status", authOnly, wrap(async (_req: any, res: any) => {

@@ -7,6 +7,15 @@ import { toast } from 'sonner';
 
 type Tab = 'usuarios' | 'bot' | 'canales' | 'import_export' | 'integraciones' | 'notificaciones';
 
+type OcrStatus = {
+  primary?: string;
+  strategy?: string;
+  order?: string[];
+  orders?: Record<string, string[]>;
+  cache?: { entries?: number; ttlMs?: number; maxEntries?: number };
+  providers?: Record<string, { configured?: boolean; model?: string; url?: string }>;
+};
+
 function currentSessionRole() {
   try {
     return (JSON.parse(localStorage.getItem('hd_session') || '{}')?.role || '').toUpperCase();
@@ -167,15 +176,17 @@ function IntegracionesTab() {
   const [showVisionKey, setShowVisionKey] = useState(false);
   const [visionTesting, setVisionTesting] = useState(false);
   const [visionTestResult, setVisionTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [ocrStatus, setOcrStatus] = useState<OcrStatus | null>(null);
 
   useEffect(() => {
     if (!isUnlocked) return;
     const loadSettings = async () => {
       setIsLoading(true);
       try {
-        const [keysRes, visionRes] = await Promise.all([
+        const [keysRes, visionRes, ocrRes] = await Promise.all([
           fetch('/api/settings/integration_keys'),
           fetch('/api/settings/google_vision_key'),
+          fetch('/api/vision/status'),
         ]);
         if (keysRes.ok) {
           const data = await keysRes.json();
@@ -186,6 +197,9 @@ function IntegracionesTab() {
           const vk = typeof data.value === 'string' ? data.value : '';
           setVisionKeySaved(vk);
           setVisionKey(vk);
+        }
+        if (ocrRes.ok) {
+          setOcrStatus(await ocrRes.json());
         }
       } finally {
         setIsLoading(false);
@@ -294,6 +308,8 @@ function IntegracionesTab() {
     }
   };
 
+  const configuredOcrProviders = (Object.values(ocrStatus?.providers ?? {}) as Array<{ configured?: boolean }>).filter(provider => provider.configured).length;
+
   if (!isUnlocked) {
     return (
       <div className="flex flex-col items-center justify-center h-full py-12 space-y-4">
@@ -335,21 +351,21 @@ function IntegracionesTab() {
         </button>
       </div>
 
-      {/* ── Google Cloud Vision OCR ─────────────────────── */}
+      {/* ── OCR multi-modelo ─────────────────────── */}
       <div className="bg-gradient-to-br from-blue-950/40 to-slate-900/60 border border-blue-500/20 rounded-2xl p-6 space-y-4">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
-            <span className="text-xl">🔍</span>
+            <BrainCircuit className="w-6 h-6 text-blue-300" />
           </div>
           <div className="flex-1 min-w-0">
             <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              OCR con Google Cloud Vision
-              {visionKeySaved
-                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Activo</span>
-                : <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">Sin configurar</span>}
+              OCR multi-modelo
+              {configuredOcrProviders > 0
+                ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">{configuredOcrProviders} activos</span>
+                : <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">Solo local</span>}
             </h4>
             <p className="text-xs text-slate-400 mt-1">
-              Se usa al capturar documentos (INE frente/atrás) para extraer CURP, nombre y domicilio con precisión superior a Tesseract. Necesitas una API key de{' '}
+              Orquestador con Claude, Gemini, OpenAI, Ollama y Tesseract. Al capturar documentos extrae CURP, nombre, domicilio y SIAC con fallback automático. Puedes conservar una API key de{' '}
               <a href="https://console.cloud.google.com/apis/library/vision.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">
                 Google Cloud Console
               </a>.
@@ -394,6 +410,51 @@ function IntegracionesTab() {
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border ${visionTestResult.ok ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
             {visionTestResult.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
             {visionTestResult.msg}
+          </div>
+        )}
+
+        {ocrStatus && (
+          <div className="rounded-xl border border-white/10 bg-slate-950/50 p-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Estrategia</p>
+                <p className="text-sm text-cyan-200 font-semibold">{ocrStatus.strategy || 'adaptive'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Primario INE</p>
+                <p className="text-sm text-slate-100 font-semibold">{ocrStatus.primary || 'claude'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Cache</p>
+                <p className="text-sm text-slate-100 font-semibold">{ocrStatus.cache?.entries ?? 0} / {ocrStatus.cache?.maxEntries ?? 100}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {(Object.entries(ocrStatus.orders ?? {}) as [string, string[]][]).map(([doc, order]) => (
+                <div key={doc} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <span className="w-28 text-[10px] uppercase tracking-wider text-slate-500 font-bold">{doc}</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(order || []).map((provider, index) => {
+                      const configured = ocrStatus.providers?.[provider]?.configured;
+                      return (
+                        <span
+                          key={`${doc}-${provider}`}
+                          className={cn(
+                            'px-2 py-1 rounded-lg text-[10px] font-bold uppercase border',
+                            configured
+                              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                              : 'bg-slate-800/70 text-slate-400 border-white/10'
+                          )}
+                        >
+                          {index + 1}. {provider}{configured ? '' : ' sin config'}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

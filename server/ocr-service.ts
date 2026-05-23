@@ -15,6 +15,8 @@
  *   OLLAMA_API_KEY     — opcional, clave de autenticación para Ollama
  *   ANTHROPIC_API_KEY  — clave para Claude
  *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'claude' | 'gemini' | 'openai' | 'ollama' | 'tesseract'
+ *   OCR_STRATEGY       — 'adaptive' | 'quality' | 'fast' | 'local'
+ *   OCR_ORDER_INE      — opcional, orden por documento: "claude,gemini,openai,ollama,tesseract"
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -27,19 +29,23 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OLLAMA_URL        = process.env.OLLAMA_URL || '';
 const OLLAMA_API_KEY    = process.env.OLLAMA_API_KEY || '';
 const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'claude').toLowerCase();
+const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'adaptive').toLowerCase();
 
-const GEMINI_MODEL    = 'gemini-2.5-flash';
-const OPENAI_MODEL    = 'gpt-4o-mini';
+const GEMINI_MODEL    = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const OPENAI_MODEL    = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const CLAUDE_MODEL    = process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-latest';
-const OLLAMA_MODEL    = 'glm-ocr';
+const OLLAMA_MODEL    = process.env.OLLAMA_MODEL || 'glm-ocr';
 
 const TIMEOUT_MS_LLM       = 45_000;  // 45s para GPT/Claude
 const TIMEOUT_MS_TESSERACT = 60_000;  // 60s para tesseract local
 const CACHE_TTL_MS         = 10 * 60 * 1000;
 const CACHE_MAX_ENTRIES    = 100;
 
-export type OcrProvider = 'claude' | 'gemini' | 'openai' | 'ollama' | 'tesseract';
+const VALID_PROVIDER_NAMES = ['claude', 'gemini', 'openai', 'ollama', 'tesseract'] as const;
+
+export type OcrProvider = typeof VALID_PROVIDER_NAMES[number];
 export type OcrDocType  = 'ine' | 'comprobante' | 'siac';
+export type OcrStrategy = 'adaptive' | 'quality' | 'fast' | 'local';
 
 export interface OcrResult {
   text: string;
@@ -48,6 +54,10 @@ export interface OcrResult {
   model: string;
   durationMs: number;
   fallbackReason?: string; // por qué se cayó al siguiente proveedor
+  strategy?: string;
+  providerOrder?: OcrProvider[];
+  attempts?: string[];
+  fieldsCount?: number;
 }
 
 type CachedOcrResult = OcrResult & { cached?: boolean };
@@ -238,7 +248,7 @@ function validateFields(docType: OcrDocType, fields: Record<string, string>): { 
   return { ok: true };
 }
 
-// ─── PROVIDER 1: GPT-4o-mini ─────────────────────────────────────────────────
+// ─── PROVIDER 1: Claude ──────────────────────────────────────────────────────
 
 async function callClaude(prompt: string, base64Images: string[]): Promise<string> {
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY no configurada');
@@ -357,7 +367,7 @@ async function callOpenAi(prompt: string, base64Images: string[]): Promise<strin
   return data?.choices?.[0]?.message?.content || '';
 }
 
-// ─── PROVIDER 2: Gemini 1.5 Pro ──────────────────────────────────────────────
+// ─── PROVIDER 2: Gemini ──────────────────────────────────────────────────────
 
 async function callGemini(prompt: string, base64Images: string[]): Promise<string> {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY no configurada');
@@ -399,7 +409,7 @@ async function callGemini(prompt: string, base64Images: string[]): Promise<strin
   return text;
 }
 
-// ─── PROVIDER 3: Ollama (local/remoto) ──────────────────────────────────────
+// ─── PROVIDER 4: Ollama (local/remoto) ──────────────────────────────────────
 
 async function callOllama(prompt: string, base64Images: string[]): Promise<string> {
   if (!OLLAMA_URL) throw new Error('OLLAMA_URL no configurada');
@@ -464,15 +474,56 @@ async function callTesseract(docType: OcrDocType, base64Images: string[]): Promi
 
 // ─── ORQUESTADOR CON FALLBACK ────────────────────────────────────────────────
 
-const PROVIDER_ORDER: OcrProvider[] = (() => {
-  // Permite forzar el orden vía OCR_PRIMARY
-  const all: OcrProvider[] = ['claude', 'gemini', 'openai', 'ollama', 'tesseract'];
-  if (OCR_PRIMARY === 'gemini') return ['gemini', 'claude', 'openai', 'ollama', 'tesseract'];
-  if (OCR_PRIMARY === 'openai') return ['openai', 'claude', 'gemini', 'ollama', 'tesseract'];
-  if (OCR_PRIMARY === 'ollama') return ['ollama', 'claude', 'gemini', 'openai', 'tesseract'];
-  if (OCR_PRIMARY === 'tesseract') return ['tesseract', 'claude', 'gemini', 'openai', 'ollama'];
-  return all; // default: Claude → Gemini → OpenAI → Ollama → Tesseract
-})();
+const VALID_PROVIDERS: OcrProvider[] = [...VALID_PROVIDER_NAMES];
+
+const DOC_ORDERS: Record<OcrDocType, Record<OcrStrategy, OcrProvider[]>> = {
+  ine: {
+    adaptive: ['claude', 'gemini', 'openai', 'ollama', 'tesseract'],
+    quality: ['claude', 'openai', 'gemini', 'ollama', 'tesseract'],
+    fast: ['gemini', 'openai', 'claude', 'ollama', 'tesseract'],
+    local: ['ollama', 'tesseract', 'claude', 'gemini', 'openai'],
+  },
+  comprobante: {
+    adaptive: ['gemini', 'claude', 'openai', 'ollama', 'tesseract'],
+    quality: ['claude', 'gemini', 'openai', 'ollama', 'tesseract'],
+    fast: ['gemini', 'openai', 'claude', 'ollama', 'tesseract'],
+    local: ['ollama', 'tesseract', 'gemini', 'claude', 'openai'],
+  },
+  siac: {
+    adaptive: ['gemini', 'openai', 'claude', 'ollama', 'tesseract'],
+    quality: ['claude', 'openai', 'gemini', 'ollama', 'tesseract'],
+    fast: ['gemini', 'openai', 'claude', 'ollama', 'tesseract'],
+    local: ['ollama', 'tesseract', 'gemini', 'openai', 'claude'],
+  },
+};
+
+function currentStrategy(): OcrStrategy {
+  return (['adaptive', 'quality', 'fast', 'local'].includes(OCR_STRATEGY) ? OCR_STRATEGY : 'adaptive') as OcrStrategy;
+}
+
+function parseProviderList(value?: string | null): OcrProvider[] {
+  if (!value) return [];
+  const providers: OcrProvider[] = [];
+  for (const item of value.split(',')) {
+    const provider = item.trim().toLowerCase() as OcrProvider;
+    if (VALID_PROVIDERS.includes(provider) && !providers.includes(provider)) {
+      providers.push(provider);
+    }
+  }
+  return providers;
+}
+
+function completeOrder(preferred: OcrProvider[]): OcrProvider[] {
+  return [...preferred, ...VALID_PROVIDERS.filter(provider => !preferred.includes(provider))];
+}
+
+function providerOrderFor(docType: OcrDocType): OcrProvider[] {
+  const envOrder = parseProviderList(process.env[`OCR_ORDER_${docType.toUpperCase()}`]);
+  const forcedPrimary = parseProviderList(OCR_PRIMARY);
+  const strategy = currentStrategy();
+  const baseOrder = envOrder.length ? envOrder : DOC_ORDERS[docType][strategy];
+  return completeOrder([...forcedPrimary, ...baseOrder]);
+}
 
 async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: string[]): Promise<OcrResult> {
   const t0 = Date.now();
@@ -532,7 +583,10 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
 
   const errors: string[] = [];
 
-  for (const provider of PROVIDER_ORDER) {
+  const providerOrder = providerOrderFor(docType);
+  const strategy = currentStrategy();
+
+  for (const provider of providerOrder) {
     if (provider === 'claude' && !ANTHROPIC_API_KEY) { errors.push('claude: sin API key'); continue; }
     if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin API key'); continue; }
     if (provider === 'openai' && !OPENAI_API_KEY) { errors.push('openai: sin API key'); continue; }
@@ -549,8 +603,13 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
         continue;
       }
 
+      const fieldsCount = Object.values(result.fields).filter(value => String(value || '').trim()).length;
       if (errors.length) result.fallbackReason = errors.join(' | ');
-      console.log(`[OCR-${docType}] ${provider} OK in ${result.durationMs}ms (${Object.keys(result.fields).length} fields)`);
+      result.strategy = strategy;
+      result.providerOrder = providerOrder;
+      result.attempts = [...errors, `${provider}: ok`];
+      result.fieldsCount = fieldsCount;
+      console.log(`[OCR-${docType}] ${provider} OK in ${result.durationMs}ms (${fieldsCount} fields)`);
       setCached(key, result);
       return result;
     } catch (err: any) {
@@ -578,9 +637,21 @@ export async function runSiacOcr(images: string | string[]): Promise<CachedOcrRe
 }
 
 export async function checkOcrStatus() {
+  const orders = {
+    ine: providerOrderFor('ine'),
+    comprobante: providerOrderFor('comprobante'),
+    siac: providerOrderFor('siac'),
+  };
   return {
-    primary: PROVIDER_ORDER[0],
-    order: PROVIDER_ORDER,
+    primary: orders.ine[0],
+    strategy: currentStrategy(),
+    order: orders.ine,
+    orders,
+    cache: {
+      entries: ocrCache.size,
+      ttlMs: CACHE_TTL_MS,
+      maxEntries: CACHE_MAX_ENTRIES,
+    },
     providers: {
       claude:    { configured: !!ANTHROPIC_API_KEY, model: CLAUDE_MODEL },
       gemini:    { configured: !!GEMINI_API_KEY,   model: GEMINI_MODEL },
