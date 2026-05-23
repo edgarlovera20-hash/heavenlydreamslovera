@@ -264,6 +264,22 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE
   );
 
+  -- Cuentas externas OAuth/OIDC enlazadas a usuarios internos
+  CREATE TABLE IF NOT EXISTS oauth_accounts (
+    id               TEXT PRIMARY KEY,
+    user_id          TEXT NOT NULL,
+    provider         TEXT NOT NULL,
+    provider_user_id TEXT NOT NULL,
+    email            TEXT NOT NULL,
+    email_verified   INTEGER NOT NULL DEFAULT 0,
+    display_name     TEXT,
+    avatar_url       TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(provider, provider_user_id),
+    FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE
+  );
+
   -- Inventario empresarial: modems, SIMs, uniformes y activos
   CREATE TABLE IF NOT EXISTS inventory_items (
     id            TEXT PRIMARY KEY,
@@ -551,6 +567,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_valreq_sale      ON validation_requests (sale_id);
   CREATE INDEX IF NOT EXISTS idx_valreq_status    ON validation_requests (status);
   CREATE INDEX IF NOT EXISTS idx_sessions_token   ON sessions (refresh_token);
+  CREATE INDEX IF NOT EXISTS idx_oauth_email      ON oauth_accounts (provider, email);
+  CREATE INDEX IF NOT EXISTS idx_oauth_user       ON oauth_accounts (user_id);
   CREATE INDEX IF NOT EXISTS idx_inventory_estado ON inventory_items (estado);
   CREATE INDEX IF NOT EXISTS idx_events_name      ON system_events (event, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_jobs_status   ON ai_jobs (status, priority, created_at);
@@ -608,6 +626,7 @@ export const Users = {
   getAll: () => db.prepare('SELECT * FROM users ORDER BY nombre').all(),
   getById: (uid: string) => db.prepare('SELECT * FROM users WHERE uid=?').get(uid),
   getByUsername: (username: string) => db.prepare('SELECT * FROM users WHERE username=?').get(username),
+  getByEmail: (email: string) => db.prepare('SELECT * FROM users WHERE lower(email)=lower(?)').get(email),
   create: (data: any) => {
     const stmt = db.prepare(`
       INSERT INTO users (uid,nombre,email,username,role,password,zona,puesto,activo)
@@ -802,6 +821,25 @@ export const Sessions = {
   `).run(data),
   getByRefreshToken: (token: string) => db.prepare('SELECT * FROM sessions WHERE refresh_token=?').get(token),
   revoke: (token: string) => db.prepare("UPDATE sessions SET revoked_at=datetime('now') WHERE refresh_token=?").run(token),
+};
+
+export const OAuthAccounts = {
+  getByProviderUser: (provider: string, providerUserId: string) => db.prepare(
+    'SELECT * FROM oauth_accounts WHERE provider=? AND provider_user_id=?'
+  ).get(provider, providerUserId),
+  upsert: (data: any) => db.prepare(`
+    INSERT INTO oauth_accounts
+      (id,user_id,provider,provider_user_id,email,email_verified,display_name,avatar_url)
+    VALUES
+      (@id,@user_id,@provider,@provider_user_id,@email,@email_verified,@display_name,@avatar_url)
+    ON CONFLICT(provider, provider_user_id) DO UPDATE SET
+      user_id=excluded.user_id,
+      email=excluded.email,
+      email_verified=excluded.email_verified,
+      display_name=excluded.display_name,
+      avatar_url=excluded.avatar_url,
+      updated_at=datetime('now')
+  `).run(data),
 };
 
 export const InventoryItems = {

@@ -187,6 +187,19 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
     }
   };
 
+  const startOAuthRegistration = (provider: 'google' | 'microsoft') => {
+    if (!acceptedTerms) {
+      setErrorMsg('Debes aceptar los Términos y Condiciones para registrarte con Google o Microsoft.');
+      return;
+    }
+    const params = new URLSearchParams({
+      mode: 'register',
+      role: pendingRole || 'ASESOR',
+      termsAccepted: 'true',
+    });
+    window.location.href = `/api/auth/oauth/${provider}/start?${params.toString()}`;
+  };
+
   if (step === 2) {
     return (
       <div className="w-full max-w-md glass-panel-neon rounded-3xl p-8 animate-in zoom-in-95 duration-300 relative text-center my-auto shrink-0">
@@ -243,6 +256,40 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
             {errorMsg}
           </div>
         )}
+
+        <div className="relative z-10 mb-6 rounded-2xl border border-cyber-electric/20 bg-cyber-dark/30 p-4">
+          <p className="text-[10px] font-bold text-cyber-electric/70 uppercase tracking-[0.16em] text-center mb-3">
+            Registro rápido con cuenta corporativa
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => startOAuthRegistration('google')}
+              className="py-3 rounded-xl border border-cyber-electric/30 bg-white/5 hover:bg-white/10 text-white font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all"
+              title={!acceptedTerms ? 'Acepta términos para continuar' : 'Registrarse con Google'}
+            >
+              <span className="w-5 h-5 rounded-full bg-white text-slate-900 flex items-center justify-center font-black">G</span>
+              Google
+            </button>
+            <button
+              type="button"
+              onClick={() => startOAuthRegistration('microsoft')}
+              className="py-3 rounded-xl border border-cyber-electric/30 bg-white/5 hover:bg-white/10 text-white font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all"
+              title={!acceptedTerms ? 'Acepta términos para continuar' : 'Registrarse con Microsoft'}
+            >
+              <span className="grid grid-cols-2 gap-0.5 w-5 h-5">
+                <span className="bg-red-500" />
+                <span className="bg-green-500" />
+                <span className="bg-blue-500" />
+                <span className="bg-yellow-400" />
+              </span>
+              Microsoft
+            </button>
+          </div>
+          <p className="mt-3 text-center text-[11px] text-cyber-electric/60">
+            El alta externa queda pendiente de aprobación por gerencia igual que el registro manual.
+          </p>
+        </div>
 
         <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-2 gap-5 relative z-10">
 

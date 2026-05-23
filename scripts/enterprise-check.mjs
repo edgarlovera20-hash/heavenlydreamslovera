@@ -38,6 +38,11 @@ for (const required of [
   'DOCUMENT_STORAGE_DIR',
   'TWILIO_ACCOUNT_SID',
   'WEBAUTHN_RP_ID',
+  'OAUTH_CALLBACK_BASE_URL',
+  'GOOGLE_OAUTH_CLIENT_ID',
+  'GOOGLE_OAUTH_CLIENT_SECRET',
+  'MICROSOFT_OAUTH_CLIENT_ID',
+  'MICROSOFT_OAUTH_CLIENT_SECRET',
 ]) {
   if (!envExample.includes(required)) fail(`.env.example no documenta ${required}.`);
 }

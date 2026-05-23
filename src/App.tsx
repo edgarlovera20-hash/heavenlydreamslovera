@@ -234,6 +234,14 @@ export default function App() {
     else { setUsername(''); setPassword(''); setRememberMe(false); }
   };
 
+  const startOAuthLogin = (provider: 'google' | 'microsoft') => {
+    const params = new URLSearchParams({
+      mode: 'login',
+      role: pendingRole || 'ASESOR',
+    });
+    window.location.href = `/api/auth/oauth/${provider}/start?${params.toString()}`;
+  };
+
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     setAvatarUploading(true);
@@ -392,6 +400,34 @@ export default function App() {
                   ? <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />
                   : <><Lock className="w-4 h-4" /> Entrar</>}
               </button>
+              <div className="flex items-center gap-3 my-3">
+                <div className="flex-1 h-px bg-cyber-electric/20" />
+                <span className="text-[9px] uppercase tracking-widest text-cyber-electric/60 font-bold">o entra con</span>
+                <div className="flex-1 h-px bg-cyber-electric/20" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => startOAuthLogin('google')}
+                  className="py-3 rounded-xl border border-cyber-electric/30 bg-white/5 hover:bg-white/10 text-white font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all"
+                >
+                  <span className="w-5 h-5 rounded-full bg-white text-slate-900 flex items-center justify-center font-black">G</span>
+                  Google
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startOAuthLogin('microsoft')}
+                  className="py-3 rounded-xl border border-cyber-electric/30 bg-white/5 hover:bg-white/10 text-white font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all"
+                >
+                  <span className="grid grid-cols-2 gap-0.5 w-5 h-5">
+                    <span className="bg-red-500" />
+                    <span className="bg-green-500" />
+                    <span className="bg-blue-500" />
+                    <span className="bg-yellow-400" />
+                  </span>
+                  Microsoft
+                </button>
+              </div>
               {biometricAvailable && (
                 <>
                   <div className="flex items-center gap-3 my-3">

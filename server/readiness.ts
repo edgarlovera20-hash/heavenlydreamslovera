@@ -35,6 +35,9 @@ export function getReadinessGates(): ReadinessGate[] {
   const visionConfigured = hasEnv('GOOGLE_APPLICATION_CREDENTIALS_JSON') || hasEnv('GOOGLE_APPLICATION_CREDENTIALS');
   const webauthnConfigured = hasEnv('WEBAUTHN_RP_ID') && hasEnv('WEBAUTHN_ORIGIN');
   const twilioConfigured = hasEnv('TWILIO_ACCOUNT_SID') && hasEnv('TWILIO_AUTH_TOKEN') && hasEnv('TWILIO_FROM_NUMBER');
+  const googleOAuthConfigured = hasEnv('GOOGLE_OAUTH_CLIENT_ID') && hasEnv('GOOGLE_OAUTH_CLIENT_SECRET');
+  const microsoftOAuthConfigured = hasEnv('MICROSOFT_OAUTH_CLIENT_ID') && hasEnv('MICROSOFT_OAUTH_CLIENT_SECRET');
+  const oauthConfigured = googleOAuthConfigured || microsoftOAuthConfigured;
 
   return [
     gate(
@@ -106,6 +109,13 @@ export function getReadinessGates(): ReadinessGate[] {
       twilioConfigured ? 'ok' : 'warning',
       twilioConfigured ? 'Twilio listo para llamadas salientes.' : 'Faltan credenciales Twilio.',
       'Define TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN y TWILIO_FROM_NUMBER.',
+    ),
+    gate(
+      'oauth',
+      'OAuth Google/Microsoft',
+      oauthConfigured ? 'ok' : 'warning',
+      oauthConfigured ? 'Al menos un proveedor OAuth está configurado.' : 'Login/registro externo queda deshabilitado hasta configurar credenciales.',
+      'Define GOOGLE_OAUTH_CLIENT_ID/SECRET o MICROSOFT_OAUTH_CLIENT_ID/SECRET y callback HTTPS.',
     ),
     gate(
       'rbac_tests',

@@ -34,6 +34,7 @@ import {
 import { getEnterpriseReadiness } from "./server/readiness";
 import { readStoredDocument, storeDocument } from "./server/document-storage";
 import { buildValidationTwiML, createTwilioCall, twilioConfigured } from "./server/twilio";
+import { oauthCallback, oauthStart, oauthStatus } from "./server/oauth";
 
 function wrap(fn: Function) {
   return async (req: any, res: any) => {
@@ -87,7 +88,7 @@ const ALLOWED_TABLES = [
   'commission_rules', 'quotas', 'validation_requests', 'inventory_items',
   'automation_rules', 'ai_jobs', 'metrics', 'system_events', 'sessions',
   'capturas', 'documentos_cliente', 'clientes_crm', 'morosidad',
-  'estatus_folios', 'logs_sistema', 'document_files',
+  'estatus_folios', 'logs_sistema', 'document_files', 'oauth_accounts',
 ];
 
 const DOCUMENT_TYPES = [
@@ -752,6 +753,18 @@ async function startServer() {
     const { refreshToken } = req.body;
     if (refreshToken) Sessions.revoke(refreshToken);
     res.json({ ok: true });
+  }));
+
+  app.get("/api/auth/oauth/status", wrap((_req: any, res: any) => {
+    res.json(oauthStatus());
+  }));
+
+  app.get("/api/auth/oauth/:provider/start", loginLimiter, wrap((req: any, res: any) => {
+    oauthStart(req, res);
+  }));
+
+  app.get("/api/auth/oauth/:provider/callback", loginLimiter, wrap(async (req: any, res: any) => {
+    await oauthCallback(req, res);
   }));
 
   app.post("/api/curp/lookup", authOnly, wrap(async (req: any, res: any) => {
