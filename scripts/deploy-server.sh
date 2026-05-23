@@ -42,6 +42,16 @@ if [ -f data/heavenlydreams.db ]; then
   rm -f data/heavenlydreams.db-wal data/heavenlydreams.db-shm
 fi
 
+if git ls-files --error-unmatch data/heavenlydreams.db >/dev/null 2>&1; then
+  git update-index --skip-worktree data/heavenlydreams.db || true
+fi
+
+for source_file in package.json package-lock.json; do
+  if [ -n "$(git status --porcelain -- "${source_file}")" ]; then
+    git restore --source=HEAD -- "${source_file}" || true
+  fi
+done
+
 git fetch origin "${BRANCH}"
 git checkout "${BRANCH}"
 git pull --ff-only origin "${BRANCH}"
