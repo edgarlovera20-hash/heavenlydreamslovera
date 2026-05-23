@@ -416,7 +416,7 @@ function lookupFixedLada(number: string) {
 const EXPORT_HEADERS: Record<string, string[]> = {
   capturas: ['Folio', 'Cliente', 'Vendedor', 'Telefono', 'Colonia', 'Ciudad', 'Paquete', 'INE', 'Contrato', 'Comprobante', 'StatusCaptura', 'StatusValidacion', 'StatusInstalacion', 'StatusDocumentos', 'FechaCaptura', 'FechaInstalacion', 'Direccion', 'Latitud', 'Longitud'],
   clientes: ['Folio', 'Cliente', 'Telefono', 'WhatsApp', 'Correo', 'Direccion', 'FechaAlta', 'Pipeline', 'UltimoContacto', 'ProximoSeguimiento', 'Satisfaccion', 'RiesgoCancelacion', 'Vendedor'],
-  morosidad: ['Folio', 'Cliente', 'MontoAdeudo', 'DiasAtraso', 'NivelMorosidad', 'FechaVencimiento', 'UltimoPago', 'StatusCobranza', 'Gestor', 'Convenio', 'Observaciones'],
+  morosidad: ['Folio', 'Cliente', 'Telefono', 'WhatsApp', 'Correo', 'Direccion', 'Paquete', 'Promotor', 'Mercado', 'Area', 'MontoAdeudo', 'DiasAtraso', 'NivelMorosidad', 'FechaVencimiento', 'UltimoPago', 'StatusCobranza', 'Gestor', 'Convenio', 'Observaciones'],
   folios: ['Folio', 'Cliente', 'Telefono', 'StatusActual', 'Subestatus', 'AreaActual', 'Tecnico', 'Avance', 'DocumentosFaltantes', 'FechaInstalacion', 'Observaciones', 'FechaMovimiento'],
   usuarios: ['Id', 'Nombre', 'Correo', 'Usuario', 'Rol', 'Zona', 'Puesto', 'Status', 'Creado'],
 };
@@ -1275,7 +1275,21 @@ async function startServer() {
   }));
 
   app.get("/api/morosidad", opsOnly, wrap((_req: any, res: any) => {
-    res.json((db as any).prepare('SELECT * FROM morosidad ORDER BY dias_atraso DESC, created_at DESC').all());
+    res.json((db as any).prepare(`
+      SELECT
+        m.*,
+        c.nombre AS cliente,
+        c.telefono AS telefono,
+        c.whatsapp AS whatsapp,
+        c.correo AS correo,
+        c.direccion AS direccion,
+        c.status_cliente AS status_cliente,
+        c.riesgo_cancelacion AS riesgo_cancelacion,
+        c.metadata AS cliente_metadata
+      FROM morosidad m
+      LEFT JOIN clientes_crm c ON c.id=m.cliente_id
+      ORDER BY m.dias_atraso DESC, m.monto_adeudo DESC, m.created_at DESC
+    `).all());
   }));
 
   app.get("/api/estatus-folios", authOnly, wrap((req: any, res: any) => {
@@ -2171,6 +2185,14 @@ async function startServer() {
         SELECT
           m.folio AS Folio,
           COALESCE(c.nombre, '') AS Cliente,
+          COALESCE(c.telefono, '') AS Telefono,
+          COALESCE(c.whatsapp, '') AS WhatsApp,
+          COALESCE(c.correo, '') AS Correo,
+          COALESCE(c.direccion, '') AS Direccion,
+          COALESCE(CASE WHEN json_valid(c.metadata) THEN json_extract(c.metadata, '$.paquete') END, CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.paquete') END, '') AS Paquete,
+          COALESCE(CASE WHEN json_valid(c.metadata) THEN json_extract(c.metadata, '$.promotor') END, CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.promotor') END, '') AS Promotor,
+          COALESCE(CASE WHEN json_valid(c.metadata) THEN json_extract(c.metadata, '$.mercado') END, CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.mercado') END, '') AS Mercado,
+          COALESCE(CASE WHEN json_valid(c.metadata) THEN json_extract(c.metadata, '$.area') END, CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.area') END, '') AS Area,
           m.monto_adeudo AS MontoAdeudo,
           m.dias_atraso AS DiasAtraso,
           CASE

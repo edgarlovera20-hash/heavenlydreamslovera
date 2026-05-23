@@ -15,6 +15,20 @@ interface Moroso {
   paquete: string;
 }
 
+interface MorosidadApiRow {
+  id?: string;
+  folio?: string;
+  cliente?: string;
+  nombre?: string;
+  telefono?: string;
+  whatsapp?: string;
+  monto_adeudo?: number | string;
+  dias_atraso?: number | string;
+  status_cobranza?: string;
+  metadata?: string;
+  cliente_metadata?: string;
+}
+
 interface Sale {
   id?: string;
   folio?: string;
@@ -65,11 +79,39 @@ function buildMorososFromSales(sales: Sale[]): Moroso[] {
     .filter((m): m is Moroso => m !== null);
 }
 
+function parseMetadata(raw?: string) {
+  try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
+}
+
+function buildMorososFromApi(rows: MorosidadApiRow[]): Moroso[] {
+  return rows.map(row => {
+    const metadata = { ...parseMetadata(row.cliente_metadata), ...parseMetadata(row.metadata) };
+    return {
+      id: row.folio || row.id || 'SIN-FOLIO',
+      cliente: row.cliente || row.nombre || 'Cliente sin nombre',
+      telefono: row.whatsapp || row.telefono || '—',
+      deuda: Number(row.monto_adeudo) || 0,
+      diasAtraso: Number(row.dias_atraso) || 0,
+      estado: row.status_cobranza || 'Sin contactar',
+      paquete: metadata.paquete || 'Sin paquete',
+    };
+  });
+}
+
 export default function Morosidad() {
   const [allMorosos, setAllMorosos] = useState<Moroso[]>([]);
 
   useEffect(() => {
-    const load = () => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/morosidad');
+        if (res.ok) {
+          const rows = await res.json();
+          setAllMorosos(buildMorososFromApi(Array.isArray(rows) ? rows : []));
+          return;
+        }
+      } catch {}
+
       try {
         const sales: Sale[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
         setAllMorosos(buildMorososFromSales(sales));

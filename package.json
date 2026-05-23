@@ -13,6 +13,7 @@
     "lint": "tsc --noEmit",
     "enterprise:check": "node scripts/enterprise-check.mjs",
     "backup:sqlite": "node scripts/backup-db.mjs",
+    "import:morosos": "node scripts/import-morosos-xlsx.mjs",
     "test": "npm run lint && npm run enterprise:check",
     "turbo:build": "turbo run build",
     "turbo:lint": "turbo run lint",
