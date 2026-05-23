@@ -1024,6 +1024,206 @@ async function startServer() {
     });
   }));
 
+  // ── MOBILE PWA: endpoints compactos para asesores en campo ───────────────
+  function mobileUser(auth: any) {
+    const user = Users.getById(auth.sub) as any;
+    if (!user) return { uid: auth.sub, nombre: auth.name, role: auth.role };
+    const { password: _password, ...safe } = user;
+    return { ...safe, displayName: safe.nombre || auth.name };
+  }
+
+  function mobileSales(req: any, limit = 80) {
+    if (canManage(req.auth)) {
+      const asesorId = String(req.query?.asesor_id || '').trim();
+      if (asesorId) {
+        return (db as any).prepare('SELECT * FROM ventas WHERE asesor_id=? ORDER BY created_at DESC LIMIT ?').all(asesorId, limit);
+      }
+      return (db as any).prepare('SELECT * FROM ventas ORDER BY created_at DESC LIMIT ?').all(limit);
+    }
+    return (db as any).prepare('SELECT * FROM ventas WHERE asesor_id=? ORDER BY created_at DESC LIMIT ?').all(req.auth.sub, limit);
+  }
+
+  function mobileCaptures(req: any, limit = 80) {
+    if (canManage(req.auth)) {
+      return (db as any).prepare('SELECT * FROM capturas ORDER BY fecha_captura DESC LIMIT ?').all(limit);
+    }
+    return (db as any).prepare('SELECT * FROM capturas WHERE vendedor_id=? ORDER BY fecha_captura DESC LIMIT ?').all(req.auth.sub, limit);
+  }
+
+  function mobileClients(req: any, limit = 80) {
+    if (canManage(req.auth)) {
+      return (db as any).prepare('SELECT * FROM clientes_crm ORDER BY created_at DESC LIMIT ?').all(limit);
+    }
+    return (db as any).prepare('SELECT * FROM clientes_crm WHERE vendedor_asignado=? ORDER BY created_at DESC LIMIT ?').all(req.auth.sub, limit);
+  }
+
+  function mobileFollowUps(req: any, limit = 80) {
+    if (canManage(req.auth)) {
+      return (db as any).prepare(`
+        SELECT e.*, c.cliente_nombre, c.telefono
+        FROM estatus_folios e
+        LEFT JOIN capturas c ON c.id=e.captura_id
+        ORDER BY e.fecha_movimiento DESC
+        LIMIT ?
+      `).all(limit);
+    }
+    return (db as any).prepare(`
+      SELECT e.*, c.cliente_nombre, c.telefono
+      FROM estatus_folios e
+      JOIN capturas c ON c.id=e.captura_id
+      WHERE c.vendedor_id=?
+      ORDER BY e.fecha_movimiento DESC
+      LIMIT ?
+    `).all(req.auth.sub, limit);
+  }
+
+  function mobilePayroll(req: any, limit = 40) {
+    if (canManage(req.auth)) {
+      const asesorId = String(req.query?.asesor_id || '').trim();
+      const rows = asesorId ? Nominas.getByAsesor(asesorId) : Nominas.getAll();
+      return rows.slice(0, limit);
+    }
+    return Nominas.getByAsesor(req.auth.sub).slice(0, limit);
+  }
+
+  app.get("/api/mobile/bootstrap", authOnly, wrap((req: any, res: any) => {
+    const sales = mobileSales(req, 200);
+    const captures = mobileCaptures(req, 120);
+    const clients = mobileClients(req, 120);
+    const followUps = mobileFollowUps(req, 80);
+    const payroll = mobilePayroll(req, 12);
+    const today = new Date().toISOString().slice(0, 10);
+    const pendingSales = sales.filter((sale: any) => String(sale.status || 'pendiente').toLowerCase() === 'pendiente').length;
+    const todaySales = sales.filter((sale: any) => String(sale.fecha_solicitud || sale.created_at || '').startsWith(today)).length;
+    const pendingDocs = captures.filter((capture: any) => String(capture.status_documentos || '').toUpperCase() !== 'SUBIDO').length;
+    res.json({
+      user: mobileUser(req.auth),
+      permissions: { role: req.auth.role, canManage: canManage(req.auth), mobile: true },
+      counts: {
+        ventas: sales.length,
+        pendientes: pendingSales,
+        hoy: todaySales,
+        clientes: clients.length,
+        documentosPendientes: pendingDocs,
+        folios: followUps.length,
+      },
+      channels: {
+        whatsapp: getWhatsAppStatus(),
+        telegram: getTelegramStatus(),
+      },
+      recentSales: sales.slice(0, 8),
+      pendingFollowUps: followUps.slice(0, 8),
+      recentPayroll: payroll.slice(0, 5),
+    });
+  }));
+
+  app.post("/api/mobile/capturas", authOnly, wrap((req: any, res: any) => {
+    const body = req.body || {};
+    const nombres = String(body.nombres || '').trim();
+    const apellidoPaterno = String(body.apellidoPaterno || body.apellido_paterno || '').trim();
+    const apellidoMaterno = String(body.apellidoMaterno || body.apellido_materno || '').trim();
+    const telefono = normalizePhone10(body.telefono || body.telefono_titular || body.whatsapp);
+    if (!nombres) return res.status(400).json({ error: 'nombres requerido' });
+    if (telefono.length !== 10) return res.status(400).json({ error: 'telefono debe tener 10 digitos' });
+
+    const user = Users.getById(req.auth.sub) as any;
+    const incomingMeta = parseMetadata(body.metadata);
+    const meta = {
+      ...incomingMeta,
+      source: 'mobile-pwa',
+      mobileVersion: 1,
+      apellidoPaterno,
+      apellidoMaterno,
+      curp: normalizeCurp(body.curp || incomingMeta.curp),
+      telefonoTitular: telefono,
+      correo: String(body.correo || incomingMeta.correo || '').trim(),
+      tipoVialidad: body.tipoVialidad || incomingMeta.tipoVialidad || incomingMeta.prefijoCalle || null,
+      calle: body.calle || incomingMeta.calle || null,
+      numeroExterior: body.numeroExterior || incomingMeta.numeroExterior || null,
+      numeroInterior: body.numeroInterior || incomingMeta.numeroInterior || null,
+      colonia: body.colonia || incomingMeta.colonia || null,
+      delegacion: body.delegacion || body.municipio || incomingMeta.delegacion || null,
+      ciudad: body.ciudad || incomingMeta.ciudad || null,
+      codigoPostal: body.codigoPostal || body.codigo_postal || incomingMeta.codigoPostal || null,
+      referencias: body.referencias || incomingMeta.referencias || null,
+      coordenadas: body.coordenadas || incomingMeta.coordenadas || null,
+      gpsLatitud: body.gpsLatitud || incomingMeta.gpsLatitud || null,
+      gpsLongitud: body.gpsLongitud || incomingMeta.gpsLongitud || null,
+      tipoCliente: body.tipoCliente || body.tipo_cliente || incomingMeta.tipoCliente || null,
+      tipoServicio: body.tipoServicio || body.tipo_servicio || incomingMeta.tipoServicio || null,
+      paqueteNombre: body.paqueteNombre || body.plan || incomingMeta.paqueteNombre || null,
+      folioSiac: body.folioSiac || body.folio_siac || incomingMeta.folioSiac || null,
+      servicioSiac: body.servicioSiac || body.servicio_siac || incomingMeta.servicioSiac || null,
+    };
+    const data = {
+      id: randomUUID(),
+      folio: String(body.folio || '').trim() || null,
+      asesor_id: canManage(req.auth) && body.asesor_id ? String(body.asesor_id) : req.auth.sub,
+      asesor_nombre: body.asesor_nombre || user?.nombre || req.auth.name || null,
+      status: 'pendiente',
+      nombres,
+      apellidos: String(body.apellidos || [apellidoPaterno, apellidoMaterno].filter(Boolean).join(' ')).trim() || null,
+      telefono,
+      direccion: body.direccion || buildOperationalAddress(meta, body),
+      colonia: body.colonia || meta.colonia || null,
+      municipio: body.municipio || body.delegacion || meta.delegacion || null,
+      tipo_cliente: body.tipo_cliente || body.tipoCliente || meta.tipoCliente || null,
+      tipo_servicio: body.tipo_servicio || body.tipoServicio || meta.tipoServicio || null,
+      plan: body.plan || body.paqueteNombre || meta.paqueteNombre || null,
+      renta_mensual: Number(body.renta_mensual || body.rentaMensual || 0) || null,
+      zona: body.zona || body.ciudad || body.delegacion || meta.ciudad || null,
+      notas: body.notas || body.observaciones || null,
+      fecha_solicitud: new Date().toISOString(),
+      metadata: JSON.stringify(meta),
+    };
+    Ventas.create(data);
+    try {
+      syncOperationalTablesFromSale({ ...req, body: { ...body, nombres, apellidos: data.apellidos, telefono_titular: telefono, metadata: meta } }, data);
+      logSystem(req, 'CREATE_MOBILE_CAPTURA', 'capturas', data.id, data.folio || null, { venta_id: data.id });
+    } catch (syncErr) {
+      console.warn('[mobile/capturas] No se pudo sincronizar tablas operativas:', syncErr);
+    }
+    AuditLog.insert({ accion: 'CREATE_MOBILE_VENTA', entidad: 'ventas', entidad_id: data.id, user_id: data.asesor_id, user_nombre: data.asesor_nombre, detalle: data.folio });
+    res.json(Ventas.getById(data.id));
+  }));
+
+  app.get("/api/mobile/clientes", authOnly, wrap((req: any, res: any) => {
+    res.json(mobileClients(req, 100));
+  }));
+
+  app.get("/api/mobile/documentos", authOnly, wrap((req: any, res: any) => {
+    const captures = mobileCaptures(req, 60).map((capture: any) => ({
+      ...capture,
+      documentos: DocumentosCliente.getByCaptura(capture.id),
+      files: DocumentFiles.getByCapture(capture.id).map((file: any) => ({ ...file, storage_path: undefined })),
+    }));
+    res.json({ captures });
+  }));
+
+  app.get("/api/mobile/seguimiento", authOnly, wrap((req: any, res: any) => {
+    res.json(mobileFollowUps(req, 100));
+  }));
+
+  app.get("/api/mobile/nominas", authOnly, wrap((req: any, res: any) => {
+    res.json(mobilePayroll(req, 80));
+  }));
+
+  app.get("/api/mobile/chats", authOnly, wrap((_req: any, res: any) => {
+    const wa = getRecentMessages(80).map((msg: any) => ({ ...msg, channel: 'whatsapp' }));
+    const tg = getTelegramMessages(80).map((msg: any) => ({ ...msg, channel: 'telegram' }));
+    const all = [...wa, ...tg].sort((a: any, b: any) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+    res.json(all.slice(-80));
+  }));
+
+  app.post("/api/mobile/whatsapp/send", authOnly, wrap(async (req: any, res: any) => {
+    const phone = normalizePhone10(req.body?.phone || req.body?.telefono);
+    const message = String(req.body?.message || req.body?.mensaje || '').trim();
+    if (phone.length !== 10 || !message) return res.status(400).json({ error: 'phone de 10 digitos y message son requeridos' });
+    const result = await sendWhatsAppMessage(phone, message);
+    logSystem(req, 'MOBILE_WHATSAPP_SEND', 'whatsapp', phone, message.slice(0, 80), { ok: result?.ok !== false });
+    res.json(result);
+  }));
+
   // ── VENTAS ─────────────────────────────────────────────────
   app.get("/api/ventas", authOnly, wrap((req: any, res: any) => {
     const { asesor_id } = req.query;
@@ -2503,6 +2703,18 @@ async function startServer() {
   // ── VITE / STATIC ─────────────────────────────────────────
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+    const serveMobileDev = async (req: any, res: any, next: any) => {
+      try {
+        const { readFile } = await import('fs/promises');
+        const html = await readFile(path.join(process.cwd(), 'mobile.html'), 'utf-8');
+        const transformed = await vite.transformIndexHtml(req.originalUrl, html);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(transformed);
+      } catch (error) {
+        next(error);
+      }
+    };
+    app.get(/^\/m$/, (_req, res) => res.redirect('/m/'));
+    app.get(/^\/m\/.*$/, serveMobileDev);
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
@@ -2510,6 +2722,11 @@ async function startServer() {
     app.use('/assets', express.static(path.join(distPath, 'assets'), { maxAge: '1y', immutable: true }));
     app.use('/assets', (_req, res) => {
       res.status(404).type('text/plain').send('Asset not found');
+    });
+    app.get(/^\/m$/, (_req, res) => res.redirect('/m/'));
+    app.get(/^\/m\/.*$/, (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.sendFile(path.join(distPath, 'mobile.html'));
     });
     app.use(express.static(distPath, { maxAge: 0 }));
     app.get('*', (_req, res) => {

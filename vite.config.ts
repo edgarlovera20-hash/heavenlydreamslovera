@@ -22,8 +22,13 @@ export default defineConfig(({mode}) => {
     build: {
       target: 'esnext',
       sourcemap: false,
+      modulePreload: false,
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
+        input: {
+          app: path.resolve(__dirname, 'index.html'),
+          mobile: path.resolve(__dirname, 'mobile.html'),
+        },
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined;
