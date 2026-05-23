@@ -1060,9 +1060,7 @@ function ImportExportTab() {
 }
 
 // ──────────────────────────────────────────────────────────
-// WhatsApp QR Modal — simula el flujo de WhatsApp Web
-// Muestra un QR con un session ID único; el usuario "escanea"
-// con su teléfono y la conexión se completa.
+// WhatsApp QR Modal — usa Baileys en el servidor para vincular por QR.
 // ──────────────────────────────────────────────────────────
 function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConnected: (phone: string) => void; }) {
   const [qr, setQr] = useState<string | null>(null);
@@ -1098,8 +1096,8 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
         if (data.status?.status) setStatus(data.status.status);
         if (data.status?.error) setError(data.status.error);
         if (data.status?.status === 'connected') {
-          toast.success('WhatsApp conectado correctamente.');
-          setTimeout(() => onConnected('WhatsApp Web'), 600);
+          toast.success('WhatsApp conectado correctamente con Baileys.');
+          setTimeout(() => onConnected('WhatsApp Baileys'), 600);
           clearInterval(poll);
         }
       } catch {
@@ -1141,7 +1139,7 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
       </div>
 
       <div className="mt-3 text-xs text-slate-500 text-center">
-        Estado: <span className="text-slate-300 font-mono">{status}</span>
+        Estado: <span className="text-slate-300 font-mono">{status}</span> · Motor: <span className="text-emerald-300 font-mono">Baileys</span>
       </div>
     </ModalShell>
   );

@@ -58,6 +58,8 @@ export interface OcrResult {
   providerOrder?: OcrProvider[];
   attempts?: string[];
   fieldsCount?: number;
+  manualRequired?: boolean;
+  warning?: string;
 }
 
 type CachedOcrResult = OcrResult & { cached?: boolean };
@@ -582,6 +584,7 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
   }
 
   const errors: string[] = [];
+  let bestPartial: OcrResult | null = null;
 
   const providerOrder = providerOrderFor(docType);
   const strategy = currentStrategy();
@@ -600,6 +603,21 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
       if (!valid.ok) {
         console.warn(`[OCR-${docType}] ${provider} output rechazado: ${valid.reason}`);
         errors.push(`${provider} output inválido (${valid.reason})`);
+        const partialFieldsCount = Object.values(result.fields).filter(value => String(value || '').trim()).length;
+        result.strategy = strategy;
+        result.providerOrder = providerOrder;
+        result.attempts = [...errors];
+        result.fieldsCount = partialFieldsCount;
+        result.manualRequired = true;
+        result.warning = valid.reason || 'OCR sin campos confiables';
+        if (!bestPartial || partialFieldsCount > (bestPartial.fieldsCount || 0) || result.text.length > bestPartial.text.length) {
+          bestPartial = {
+            ...result,
+            fields: { ...result.fields },
+            providerOrder: [...providerOrder],
+            attempts: [...result.attempts],
+          };
+        }
         continue;
       }
 
@@ -617,6 +635,14 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
       console.warn(`[OCR-${docType}] ${provider} falló: ${msg}`);
       errors.push(`${provider}: ${msg}`);
     }
+  }
+
+  if (bestPartial) {
+    bestPartial.fallbackReason = errors.join(' | ');
+    bestPartial.attempts = errors;
+    console.warn(`[OCR-${docType}] sin campos confiables; se devuelve respuesta parcial para captura manual`);
+    setCached(key, bestPartial);
+    return bestPartial;
   }
 
   throw new Error(`Todos los proveedores OCR fallaron — ${errors.join(' | ')}`);

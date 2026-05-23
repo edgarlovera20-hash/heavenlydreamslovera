@@ -9,6 +9,13 @@ const PUBLIC_API_PATHS = [
   '/api/enterprise/health',
 ];
 
+declare global {
+  interface Window {
+    __hdApiFetchInstalled?: boolean;
+    __hdOriginalFetch?: typeof fetch;
+  }
+}
+
 function readSession(): any {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') || {}; } catch { return {}; }
 }
@@ -84,7 +91,10 @@ async function refreshSession(originalFetch: typeof fetch) {
 }
 
 export function installApiFetch() {
-  const originalFetch = window.fetch.bind(window);
+  if (window.__hdApiFetchInstalled) return;
+  const originalFetch = window.__hdOriginalFetch || window.fetch.bind(window);
+  window.__hdOriginalFetch = originalFetch;
+  window.__hdApiFetchInstalled = true;
   window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
     if (!isApiRequest(input)) return originalFetch(input, init);
 

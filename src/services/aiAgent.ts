@@ -63,6 +63,19 @@ const MOCK_RESPONSES: Record<EventType, (c: CustomerData) => string> = {
 export interface VisionOCRResponse {
   text: string;
   fields?: Record<string, string>;
+  manualRequired?: boolean;
+  warning?: string;
+}
+
+function friendlyOcrError(status: number, msg: string) {
+  const lower = msg.toLowerCase();
+  if (lower.includes('sin api key') || lower.includes('sin url configurada') || lower.includes('proveedores ocr fallaron')) {
+    return 'OCR sin proveedores IA configurados o sin lectura local confiable. Configura Claude/Gemini/OpenAI/Ollama en Ajustes > Integraciones o completa los campos manualmente.';
+  }
+  if (lower.includes('payload') || lower.includes('too large') || status === 413) {
+    return 'La imagen es demasiado pesada para OCR. Toma otra foto más cercana o sube una imagen más ligera.';
+  }
+  return `OCR error (${status}): ${msg}`;
 }
 
 export async function runGoogleVision(
@@ -94,12 +107,12 @@ export async function callVisionOCR(
   if (!response.ok) {
     const err = await response.json().catch(() => ({})) as any;
     const msg = err?.error || response.statusText;
-    throw new Error(`OCR error (${response.status}): ${msg}`);
+    throw new Error(friendlyOcrError(response.status, msg));
   }
 
   const data = await response.json() as VisionOCRResponse;
   if (onProgress) onProgress(100);
-  return { text: data.text || '', fields: data.fields };
+  return { text: data.text || '', fields: data.fields, manualRequired: data.manualRequired, warning: data.warning };
 }
 
 // ─────────────────────────────────────────────

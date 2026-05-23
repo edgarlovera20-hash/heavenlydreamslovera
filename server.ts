@@ -2,7 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { randomUUID } from "crypto";
-import { initWhatsApp, getWhatsAppStatus, getWhatsAppQR, sendWhatsAppMessage, logoutWhatsApp, getRecentMessages } from "./server/whatsapp";
+import { initWhatsApp, getWhatsAppStatus, getWhatsAppQR, sendWhatsAppMessage, logoutWhatsApp, getRecentMessages, setWhatsAppMessageHandler, type WaMessage } from "./server/whatsapp";
 import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
 import { runIneOcr, runComprobanteOcr, runSiacOcr, checkOcrStatus } from "./server/ocr-service";
 import db, {
@@ -1620,11 +1620,64 @@ async function startServer() {
   async function replyToMsg(msg: AnyChannelMsg, text: string) {
     try {
       if (msg.channel === 'whatsapp') {
-        await sendWhatsAppMessage(msg.from.replace('@c.us', ''), text);
+        await sendWhatsAppMessage(msg.from, text);
       } else if (msg.channel === 'telegram' && (msg as TgMessage).chatId) {
         await sendTelegramMessage((msg as TgMessage).chatId, text);
       }
     } catch { /* canal no disponible */ }
+  }
+
+  async function handleAssistantChannelMessage(msg: AnyChannelMsg) {
+    if (agentState.capturista.active) {
+      const body = msg.body.toLowerCase();
+      if (body.includes('nombre:') && (body.includes('telefono:') || body.includes('tel:'))) {
+        const nombres = extractField(msg.body, 'nombre');
+        const telefono = extractField(msg.body, 'tel(?:efono)?');
+        const plan = extractField(msg.body, 'plan');
+        const direccion = extractField(msg.body, 'direcci[oó]n|domicilio');
+        if (nombres && telefono) {
+          try {
+            Ventas.create({
+              id: randomUUID(), folio: null,
+              asesor_id: `agente_${msg.channel}`,
+              asesor_nombre: msg.fromName, status: 'pendiente',
+              nombres, apellidos: null, telefono, direccion, colonia: null, municipio: null,
+              tipo_cliente: null, tipo_servicio: null, plan, renta_mensual: null, zona: null,
+              notas: `Capturado por Agente vía ${msg.channel}: ${msg.from}`,
+              fecha_solicitud: new Date().toISOString().split('T')[0],
+              fecha_instalacion: null, contrato_pdf: null, ine_pdf: null, comprobante_pdf: null,
+              metadata: JSON.stringify({ source: msg.channel, raw: msg.body }),
+            });
+            await replyToMsg(msg, `Venta registrada para ${nombres}. El equipo la procesará pronto.`);
+            agentState.capturista.processed++;
+            agentState.capturista.lastRun = new Date().toISOString();
+          } catch { agentState.capturista.errors++; }
+        }
+        return;
+      }
+    }
+
+    if (agentState.consultor.active) {
+      const body = msg.body.toLowerCase().trim();
+      const isQuery = body.startsWith('folio ') || body.startsWith('consulta ')
+        || body.startsWith('estatus ') || body.includes('mi folio');
+      if (!isQuery) return;
+
+      const folioMatch = msg.body.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i);
+      if (folioMatch) {
+        const record = SiacRecords.getByFolio(folioMatch[1]) as any;
+        const reply = record
+          ? `Folio ${record.folio_siac}\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha: ${record.fecha_captura || 'N/D'}`
+          : `Folio ${folioMatch[1]} no encontrado. ¿Deseas que un asesor te contacte?`;
+        try {
+          await replyToMsg(msg, reply);
+          agentState.consultor.processed++;
+          agentState.consultor.lastRun = new Date().toISOString();
+        } catch { agentState.consultor.errors++; }
+      } else {
+        await replyToMsg(msg, 'Envía el número de folio para consultar. Ej: folio 123456');
+      }
+    }
   }
 
   // Agente Capturista: detecta ventas en WA + Telegram
@@ -1704,6 +1757,11 @@ async function startServer() {
     }
     agentState.consultor.lastRun = new Date().toISOString();
   }
+
+  // Registrar handlers en tiempo real para WhatsApp/Baileys y Telegram.
+  setWhatsAppMessageHandler(async (msg: WaMessage) => {
+    await handleAssistantChannelMessage(msg as AnyChannelMsg);
+  });
 
   // Registrar handler en tiempo real para Telegram (respuesta inmediata sin esperar el poll de 30s)
   setTelegramMessageHandler(async (msg: TgMessage) => {
@@ -2180,6 +2238,8 @@ async function startServer() {
         attempts: result.attempts || [],
         fieldsCount,
         images: imgs.length,
+        manualRequired: Boolean(result.manualRequired),
+        warning: result.warning,
       };
       console.log(`[OCR-${docType}]`, result.provider, result.model, `${result.durationMs}ms`, `${imgs.length}img`, JSON.stringify(result.fields));
       recordOcrTelemetry(req, 'completed', docType, payload);
@@ -2195,6 +2255,8 @@ async function startServer() {
         providerOrder: result.providerOrder,
         attempts: result.attempts || [],
         fieldsCount,
+        manualRequired: Boolean(result.manualRequired),
+        warning: result.warning,
       });
     } catch (err: any) {
       recordOcrTelemetry(req, 'failed', docType, { error: err?.message || String(err), images: imgs.length });

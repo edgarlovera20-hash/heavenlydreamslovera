@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, ProductCategory } from '../../configs/package-catalog';
-import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle, Search, Copy, Save, Bot, ExternalLink } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle, Search, Copy, Save, Bot, ExternalLink, RotateCw } from 'lucide-react';
 import { set as idbSet, get as idbGet, del as idbDel } from 'idb-keyval';
 import { chatUrl } from '../../lib/channels';
 import { cn, formatCurrency } from '../../lib/utils';
@@ -94,8 +94,10 @@ interface CustomerCaptureData {
   portabilidadEstado?: string;
   portabilidadTipo?: string;
   anexoPortabilidad?: string;
+  anexoPortabilidad2?: string;
   anexoPendiente?: boolean;
   contratoFirmado?: string;
+  solicitudFirmada?: string;
   videofirma?: string;
   audioLlamada?: string;
 
@@ -315,6 +317,27 @@ async function optimizeImageForOcr(file: File): Promise<string> {
   return canvas.toDataURL('image/jpeg', 0.82);
 }
 
+async function rotateImageDataUrl(dataUrl: string): Promise<string> {
+  if (looksLikePdfDataUrl(dataUrl)) return dataUrl;
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('No se pudo rotar la imagen.'));
+    img.src = dataUrl;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = image.height;
+  canvas.height = image.width;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return dataUrl;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.drawImage(image, -image.width / 2, -image.height / 2);
+  return canvas.toDataURL('image/jpeg', 0.88);
+}
+
 function ocrJobKey(images: string[]) {
   return images.map(img => `${img.length}:${img.slice(0, 48)}:${img.slice(-48)}`).join('|');
 }
@@ -397,7 +420,9 @@ const LARGE_CAPTURE_FIELDS: Array<keyof CustomerCaptureData> = [
   'comprobanteDomicilio',
   'capturaSiac',
   'anexoPortabilidad',
+  'anexoPortabilidad2',
   'contratoFirmado',
+  'solicitudFirmada',
   'videofirma',
   'audioLlamada',
 ];
@@ -476,11 +501,13 @@ function persistLocalSaleRecord(saved: any, saleData: Record<string, any>, form:
       comprobanteDomicilio: docFlag(form.comprobanteDomicilio),
       gpsEvidence: docFlag(form.coordenadas),
       coordenadas: form.coordenadas,
-      contratoFirmado: 'registrado',
+      contratoFirmado: docFlag(form.contratoFirmado || form.solicitudFirmada),
+      solicitudFirmada: docFlag(form.solicitudFirmada),
       videofirma: docFlag(form.videofirma),
       audioLlamada: docFlag(form.audioLlamada),
       capturaSiac: docFlag(form.capturaSiac || form.folioSiac),
       anexoPortabilidad: docFlag(form.anexoPortabilidad),
+      anexoPortabilidad2: docFlag(form.anexoPortabilidad2),
     };
     const current = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
     const next = [record, ...current.filter((sale: any) => sale.id !== id && sale.folio !== record.folio)];
@@ -500,7 +527,7 @@ function isDraftWorthSaving(form: Partial<CustomerCaptureData>) {
     'telefonoTitular', 'telefonoReferencia', 'correo', 'ineFrente',
     'ineReverso', 'curpDoc', 'comprobanteDomicilio', 'calle',
     'codigoPostal', 'colonia', 'ciudad', 'delegacion', 'coordenadas',
-    'packageId', 'paqueteNombre', 'numeroAPortar', 'anexoPortabilidad',
+    'packageId', 'paqueteNombre', 'numeroAPortar', 'anexoPortabilidad', 'anexoPortabilidad2',
   ];
   return meaningfulKeys.some(key => {
     const value = form[key];
@@ -1082,6 +1109,24 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     else updateForm({ curpDoc: undefined });
   };
 
+  const rotateDocumentImage = async (slot: 'frente' | 'reverso' | 'curp') => {
+    const current = slot === 'frente' ? form.ineFrente : slot === 'reverso' ? form.ineReverso : form.curpDoc;
+    if (!current) return;
+    if (looksLikePdfDataUrl(current)) {
+      toast.info('Los PDF no se pueden rotar aquí. Sube una imagen si necesitas corregir orientación.');
+      return;
+    }
+    try {
+      const rotated = await rotateImageDataUrl(current);
+      if (slot === 'frente') updateForm({ ineFrente: rotated });
+      else if (slot === 'reverso') updateForm({ ineReverso: rotated });
+      else updateForm({ curpDoc: rotated });
+      toast.success('Imagen rotada. Vuelve a iniciar el auto escáner.');
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo rotar la imagen.');
+    }
+  };
+
   const clearCurrentDraft = async () => {
     try {
       await idbDel(draftKeyRef.current);
@@ -1582,6 +1627,7 @@ const exportToPDF = async () => {
                   onPick={() => frenteInputRef.current?.click()}
                   onCamera={() => document.getElementById('frente-cam')?.click()}
                   onRemove={() => removeImage(docType === 'ine' ? 'frente' : 'curp')}
+                  onRotate={() => rotateDocumentImage(docType === 'ine' ? 'frente' : 'curp')}
                   disabled={false}
                 />
                 {docType === 'ine' && (
@@ -1591,6 +1637,7 @@ const exportToPDF = async () => {
                     onPick={() => reversoInputRef.current?.click()}
                     onCamera={() => document.getElementById('reverso-cam')?.click()}
                     onRemove={() => removeImage('reverso')}
+                    onRotate={() => rotateDocumentImage('reverso')}
                     disabled={false}
                   />
                 )}
@@ -2894,6 +2941,7 @@ function UploadSlot({
   onPick,
   onCamera,
   onRemove,
+  onRotate,
   disabled,
 }: {
   title: string;
@@ -2901,6 +2949,7 @@ function UploadSlot({
   onPick: () => void;
   onCamera?: () => void;
   onRemove: () => void;
+  onRotate?: () => void;
   disabled?: boolean;
 }) {
   if (image) {
@@ -2925,11 +2974,17 @@ function UploadSlot({
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="absolute inset-x-0 bottom-0 flex gap-2 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute inset-x-0 bottom-0 flex gap-2 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
           <button type="button" onClick={onPick} disabled={disabled}
             className="flex-1 text-[11px] font-medium text-slate-200 bg-slate-700/80 hover:bg-slate-600 rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors">
             <Upload className="w-3 h-3" /> Cambiar archivo
           </button>
+          {onRotate && !isPdf && (
+            <button type="button" onClick={onRotate} disabled={disabled} title="Rotar imagen"
+              className="px-3 text-[11px] font-medium text-cyan-100 bg-cyan-700/80 hover:bg-cyan-600 rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors">
+              <RotateCw className="w-3 h-3" /> Rotar
+            </button>
+          )}
           {onCamera && (
             <button type="button" onClick={onCamera} disabled={disabled}
               className="flex-1 text-[11px] font-medium text-blue-200 bg-blue-700/80 hover:bg-blue-600 rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors">

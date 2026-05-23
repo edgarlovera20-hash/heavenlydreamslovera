@@ -36,7 +36,7 @@ const AGENT_META = [
   {
     id: 'capturista',
     name: 'Agente Capturista',
-    desc: 'Detecta ventas en mensajes de WhatsApp y Telegram. Formato: Nombre: … Tel: … Plan: …',
+    desc: 'Detecta ventas en mensajes de WhatsApp Baileys y Telegram. Formato: Nombre: … Tel: … Plan: …',
     icon: Zap,
     color: 'emerald',
     channels: ['WhatsApp', 'Telegram', 'App'],
@@ -54,7 +54,7 @@ const AGENT_META = [
   {
     id: 'consultor',
     name: 'Agente Consultor',
-    desc: 'Responde consultas de folio SIAC en WhatsApp y Telegram automáticamente.',
+    desc: 'Responde consultas de folio SIAC en WhatsApp Baileys y Telegram automáticamente.',
     icon: Search,
     color: 'purple',
     channels: ['WhatsApp', 'Telegram'],
@@ -194,7 +194,7 @@ export default function AgentHubView() {
             Hub de Agentes Autónomos
           </h1>
           <p className="text-slate-500 text-xs mt-1 uppercase tracking-widest">
-            3 canales · WhatsApp · Telegram · App
+            3 canales · WhatsApp Baileys · Telegram · App
           </p>
         </div>
         <button onClick={loadAll} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-all text-xs font-bold uppercase tracking-widest">

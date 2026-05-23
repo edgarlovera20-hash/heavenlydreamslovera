@@ -21,13 +21,15 @@ import { toast } from 'sonner';
 // ──────────────────────────────────────────────
 // TYPES
 // ──────────────────────────────────────────────
-type DocType = 'image' | 'pdf' | 'video' | 'audio';
+type DocType = 'image' | 'pdf' | 'video' | 'audio' | 'imageOrPdf';
 
 interface DocumentDef {
   id: keyof Sale;
   name: string;
   type: DocType;
   optional?: boolean;
+  identityOption?: boolean;
+  requiredIf?: (s: Sale) => boolean;
   showIf?: (s: Sale) => boolean;
 }
 
@@ -51,10 +53,13 @@ interface Sale {
   gpsEvidence?: string;
   coordenadas?: string;
   anexoPortabilidad?: string;
+  anexoPortabilidad2?: string;
   contratoFirmado?: string;
+  solicitudFirmada?: string;
   videofirma?: string;
   audioLlamada?: string;
   capturaSiac?: string;
+  numeroAPortar?: string;
   docValidations?: Record<string, DocValidation>;
 }
 
@@ -63,6 +68,11 @@ interface DocValidation {
   confidence: number;
   reason?: string;
   checkedAt: string;
+  checkedBy?: string;
+  sha256?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
 }
 
 interface Step {
@@ -77,19 +87,23 @@ interface Step {
 // DOC CATALOG
 // ──────────────────────────────────────────────
 const DOC_DEFS: DocumentDef[] = [
-  { id: 'curpDoc', name: 'INE o CURP', type: 'image' },
-  { id: 'comprobanteDomicilio', name: 'Comprobante de domicilio (si aplica)', type: 'image', optional: true },
-  { id: 'gpsEvidence', name: 'GPS / ubicación', type: 'image' },
-  { id: 'contratoFirmado', name: 'Contrato firmado (PDF)', type: 'pdf' },
-  { id: 'videofirma', name: 'Video firma', type: 'video' },
-  { id: 'audioLlamada', name: 'Audio de la llamada de validación', type: 'audio' },
-  { id: 'capturaSiac', name: 'Captura del folio SIAC', type: 'image', optional: true },
+  { id: 'ineFrente', name: 'INE frente', type: 'image', identityOption: true },
+  { id: 'ineReverso', name: 'INE trasera', type: 'image', identityOption: true },
+  { id: 'curpDoc', name: 'CURP', type: 'imageOrPdf', identityOption: true },
+  { id: 'comprobanteDomicilio', name: 'Comprobante de domicilio', type: 'imageOrPdf' },
+  { id: 'gpsEvidence', name: 'GPS / ubicación', type: 'imageOrPdf' },
+  { id: 'anexoPortabilidad', name: 'Anexo de portabilidad 1', type: 'imageOrPdf', optional: true, requiredIf: s => isPortabilitySale(s) },
+  { id: 'anexoPortabilidad2', name: 'Anexo de portabilidad 2', type: 'imageOrPdf', optional: true, requiredIf: s => isPortabilitySale(s) },
+  { id: 'capturaSiac', name: 'Captura del folio SIAC', type: 'imageOrPdf' },
+  { id: 'contratoFirmado', name: 'Solicitud firmada', type: 'imageOrPdf' },
+  { id: 'videofirma', name: 'Video de video firma', type: 'video' },
+  { id: 'audioLlamada', name: 'Audio de llamada de validación', type: 'audio' },
   {
-    id: 'anexoPortabilidad',
-    name: 'Anexo de portabilidad',
-    type: 'pdf',
+    id: 'solicitudFirmada',
+    name: 'Solicitud firmada adicional',
+    type: 'imageOrPdf',
     optional: true,
-    showIf: (s) => s.tipoCliente === 'portabilidad' || s.tipoCliente === 'portado',
+    showIf: s => Boolean(s.solicitudFirmada),
   },
 ];
 
@@ -121,18 +135,46 @@ function hasIdentityDoc(s: Sale): boolean {
   return Boolean((s.ineFrente && s.ineReverso) || s.curpDoc || s.curp);
 }
 
+function isPortabilitySale(s: Sale): boolean {
+  const type = String(s.tipoCliente || '').toLowerCase();
+  return ['portabilidad', 'portado'].includes(type) || Boolean(s.numeroAPortar || s.anexoPortabilidad || s.anexoPortabilidad2);
+}
+
+function isRequiredDoc(s: Sale, doc: DocumentDef): boolean {
+  if (doc.identityOption) return false;
+  if (doc.requiredIf) return doc.requiredIf(s);
+  return !doc.optional;
+}
+
 function isDocUploaded(s: Sale, doc: DocumentDef): boolean {
-  if (doc.id === 'curpDoc') return hasIdentityDoc(s);
+  if (doc.id === 'curpDoc') return Boolean(s.curpDoc || s.curp);
   if (doc.id === 'gpsEvidence') return Boolean(s.gpsEvidence || s.coordenadas);
   return Boolean(s[doc.id]);
 }
 
 function getMissingDocs(s: Sale): DocumentDef[] {
-  return getDocsForSale(s).filter(d => !d.optional && !isDocUploaded(s, d));
+  const docs = getDocsForSale(s);
+  const missing = docs.filter(d => isRequiredDoc(s, d) && !isDocUploaded(s, d));
+  if (!hasIdentityDoc(s)) {
+    missing.unshift({ id: 'curpDoc', name: 'Identidad: INE frente + INE trasera o CURP', type: 'imageOrPdf' });
+  }
+  return missing;
+}
+
+function getSuspiciousDocs(s: Sale) {
+  return Object.entries(s.docValidations || {}).filter(([, validation]) => validation?.isManipulated);
 }
 
 function isComplete(s: Sale): boolean {
-  return getMissingDocs(s).length === 0;
+  return getMissingDocs(s).length === 0 && getSuspiciousDocs(s).length === 0;
+}
+
+function getChecklistStats(s: Sale) {
+  const docs = getDocsForSale(s);
+  const requiredDocs = docs.filter(d => isRequiredDoc(s, d));
+  const total = 1 + requiredDocs.length;
+  const uploaded = (hasIdentityDoc(s) ? 1 : 0) + requiredDocs.filter(d => isDocUploaded(s, d)).length;
+  return { uploaded, total, progress: total ? Math.round((uploaded / total) * 100) : 0 };
 }
 
 function fullName(s: Sale): string {
@@ -176,31 +218,31 @@ async function analyzeManipulation(
     checkedAt: new Date().toISOString(),
   };
 
-  if (file.size < 5_000) {
+  if (file.size < 800) {
     return { ...baseValidation, isManipulated: true, confidence: 0.92, reason: 'El archivo es demasiado pequeño para ser un documento original.' };
   }
   if (file.size > 50_000_000) {
     return { ...baseValidation, isManipulated: true, confidence: 0.7, reason: 'El archivo supera el tamaño esperado, podría estar manipulado.' };
   }
 
-  if (type === 'image') {
+  if (type === 'image' || (type === 'imageOrPdf' && file.type.startsWith('image/'))) {
     try {
       const ocr = await aiAgent.analyzeDocument(base64, file.type);
       if (!ocr || Object.keys(ocr).length === 0) {
         return {
           ...baseValidation,
-          isManipulated: true,
-          confidence: 0.6,
-          reason: 'La IA no detectó texto legible. Podría ser una imagen alterada o de baja calidad.',
+          isManipulated: false,
+          confidence: 0.35,
+          reason: 'El agente archivero no detectó texto suficiente; requiere revisión humana.',
         };
       }
       const fieldCount = Object.values(ocr).filter(v => (v || '').toString().trim().length > 1).length;
       if (fieldCount < 1) {
         return {
           ...baseValidation,
-          isManipulated: true,
-          confidence: 0.55,
-          reason: 'Texto detectado insuficiente para validar el documento.',
+          isManipulated: false,
+          confidence: 0.35,
+          reason: 'Texto detectado insuficiente; el archivo queda guardado con revisión manual.',
         };
       }
       return { ...baseValidation, isManipulated: false, confidence: Math.min(0.5 + fieldCount * 0.1, 0.95) };
@@ -211,6 +253,33 @@ async function analyzeManipulation(
   }
 
   return { ...baseValidation, isManipulated: false, confidence: 0.5 };
+}
+
+async function hashFile(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function dataUrlExtension(dataUrl: string, fallback: string) {
+  const mime = dataUrl.match(/^data:([^;]+);base64,/)?.[1] || '';
+  const extByMime: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'application/pdf': 'pdf',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/webm': 'webm',
+    'audio/wav': 'wav',
+  };
+  return extByMime[mime] || fallback;
+}
+
+function safeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|#{}%~&]/g, ' ').replace(/\s+/g, ' ').trim() || 'documento';
 }
 
 // ──────────────────────────────────────────────
@@ -287,6 +356,7 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     uploadTargetRef.current = { saleId, docId, type };
     if (fileInputRef.current) {
       const accept = type === 'image' ? 'image/*'
+        : type === 'imageOrPdf' ? 'image/*,application/pdf'
         : type === 'pdf' ? 'application/pdf'
         : type === 'video' ? 'video/*'
         : type === 'audio' ? 'audio/*'
@@ -306,6 +376,7 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     // Validar tipo
     const okType =
       (target.type === 'image' && file.type.startsWith('image/')) ||
+      (target.type === 'imageOrPdf' && (file.type.startsWith('image/') || file.type === 'application/pdf')) ||
       (target.type === 'pdf' && file.type === 'application/pdf') ||
       (target.type === 'video' && file.type.startsWith('video/')) ||
       (target.type === 'audio' && file.type.startsWith('audio/'));
@@ -325,11 +396,18 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
         r.readAsDataURL(file);
       });
 
-      const validation = await analyzeManipulation(file, base64, target.type);
+      const validation = {
+        ...(await analyzeManipulation(file, base64, target.type)),
+        checkedBy: 'Agente Archivero',
+        sha256: await hashFile(file),
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || 'application/octet-stream',
+      };
 
       if (validation.isManipulated) {
         toast.error(`Documento rechazado: ${validation.reason || 'Posible manipulación detectada.'}`);
-        setUploadError(`⚠️ IA detectó posible alteración: ${validation.reason || 'documento sospechoso.'}`);
+        setUploadError(`IA detectó posible alteración: ${validation.reason || 'documento sospechoso.'}`);
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
@@ -351,7 +429,7 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
         return { ...s, [target.docId]: true, docValidations: validations };
       }));
 
-      toast.success('Documento cargado y validado por la IA.');
+      toast.success('Documento cargado. El Agente Archivero registró huella y revisión.');
     } catch (err: any) {
       toast.error(err?.message || 'No se pudo procesar el archivo.');
       setUploadError(err?.message || 'No se pudo procesar el archivo.');
@@ -733,6 +811,50 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const handleDownloadExpediente = async (sale: Sale) => {
+    if (!sale.id) return;
+    try {
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+      const docs = getDocsForSale(sale);
+      zip.file('manifest.json', JSON.stringify({
+        expediente: folderName(sale),
+        folio: sale.folio || sale.id,
+        folioSiac: sale.folioSiac || '',
+        cliente: fullName(sale),
+        completo: isComplete(sale),
+        faltantes: getMissingDocs(sale).map(d => d.name),
+        sospechosos: getSuspiciousDocs(sale).map(([docId, validation]) => ({ docId, ...validation })),
+        documentos: docs.map(doc => ({
+          id: doc.id,
+          nombre: doc.name,
+          cargado: isDocUploaded(sale, doc),
+          validacion: sale.docValidations?.[doc.id],
+        })),
+        generado: new Date().toISOString(),
+      }, null, 2));
+
+      for (const doc of docs) {
+        const base64 = await get(`file_${sale.id}_${doc.id}`);
+        if (!base64 || typeof base64 !== 'string') continue;
+        const blob = await fetch(base64).then(r => r.blob());
+        const ext = dataUrlExtension(base64, doc.type === 'video' ? 'mp4' : doc.type === 'audio' ? 'mp3' : doc.type === 'pdf' ? 'pdf' : 'jpg');
+        zip.file(`${safeFileName(doc.name)}.${ext}`, blob);
+      }
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeFileName(folderName(sale))}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Expediente descargado en ZIP.');
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo descargar el expediente.');
+    }
+  };
+
   if (path.level === 'folio' && path.folioId) {
     const sale = sales.find(s => s.id === path.folioId);
     if (!sale) {
@@ -745,18 +867,23 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     }
     const docs = getDocsForSale(sale);
     const missing = getMissingDocs(sale);
+    const suspicious = getSuspiciousDocs(sale);
     const complete = isComplete(sale);
+    const stats = getChecklistStats(sale);
     const promoter = users[sale.asesorId || ''] || {};
     const promoterName = promoter.displayName || promoter.nombre || 'Sin asignar';
     const promoterPhone = promoter.telefono || '—';
     const fecha = parseSaleDate(sale);
     const documentSummary = [
       { label: 'INE o CURP', ok: hasIdentityDoc(sale), optional: false },
-      { label: 'Comprobante', ok: Boolean(sale.comprobanteDomicilio), optional: true },
+      { label: 'Comprobante', ok: Boolean(sale.comprobanteDomicilio), optional: false },
       { label: 'GPS', ok: Boolean(sale.gpsEvidence || sale.coordenadas), optional: false },
-      { label: 'Contrato firmado', ok: Boolean(sale.contratoFirmado), optional: false },
+      { label: 'SIAC', ok: Boolean(sale.capturaSiac), optional: false },
+      { label: 'Solicitud firmada', ok: Boolean(sale.contratoFirmado || sale.solicitudFirmada), optional: false },
       { label: 'Video firma', ok: Boolean(sale.videofirma), optional: false },
       { label: 'Audio llamada', ok: Boolean(sale.audioLlamada), optional: false },
+      { label: 'Portabilidad 1', ok: Boolean(sale.anexoPortabilidad), optional: !isPortabilitySale(sale) },
+      { label: 'Portabilidad 2', ok: Boolean(sale.anexoPortabilidad2), optional: !isPortabilitySale(sale) },
     ];
 
     return (
@@ -796,10 +923,38 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
                 Promotor: <span className="text-slate-200">{promoterName}</span> · Tel: <span className="text-slate-200">{promoterPhone}</span>
               </p>
             </div>
-            <button className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors">
+            <button
+              onClick={() => handleDownloadExpediente(sale)}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors"
+            >
               <Download className="w-4 h-4" />
               Descargar expediente
             </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+            <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-4">
+              <p className="text-[11px] uppercase tracking-widest text-blue-200 font-black">Agente Archivero</p>
+              <p className="text-white font-bold mt-1">{complete ? 'Expediente completo' : suspicious.length ? 'Revisión requerida' : 'Pendiente de archivos'}</p>
+              <p className="text-xs text-slate-300 mt-1">Valida integridad, huella SHA-256 y señales de edición.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-widest text-slate-400 font-black">Checklist</p>
+              <p className="text-white font-bold mt-1">{stats.uploaded}/{stats.total} requeridos</p>
+              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden mt-3">
+                <div className="h-2 rounded-full bg-cyan-400" style={{ width: `${stats.progress}%` }} />
+              </div>
+            </div>
+            <div className={cn(
+              'rounded-2xl border p-4',
+              suspicious.length
+                ? 'border-red-500/30 bg-red-500/10'
+                : 'border-emerald-500/30 bg-emerald-500/10'
+            )}>
+              <p className="text-[11px] uppercase tracking-widest font-black text-slate-200">Integridad</p>
+              <p className="text-white font-bold mt-1">{suspicious.length ? `${suspicious.length} sospechoso(s)` : 'Sin alertas'}</p>
+              <p className="text-xs text-slate-300 mt-1">Cada carga queda asociada a nombre, tamaño, tipo y huella.</p>
+            </div>
           </div>
 
           {!complete && (
@@ -811,8 +966,10 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
                 <div>
                   <p className="font-bold text-white">Notificación automática (IA Agent)</p>
                   <p className="text-sm mt-1 text-slate-300">
-                    Faltan documentos en este expediente. Notifica al promotor para que cargue:
-                    <span className="text-amber-300 font-medium"> {missing.map(d => d.name).join(', ')}</span>
+                    {suspicious.length
+                      ? 'El Agente Archivero encontró archivos sospechosos. Reemplaza o revisa:'
+                      : 'Faltan documentos en este expediente. Notifica al promotor para que cargue:'}
+                    <span className="text-amber-300 font-medium"> {suspicious.length ? suspicious.map(([docId]) => docId).join(', ') : missing.map(d => d.name).join(', ')}</span>
                   </p>
                 </div>
               </div>
@@ -873,6 +1030,8 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
                 key={doc.id}
                 doc={doc}
                 uploaded={isDocUploaded(sale, doc)}
+                satisfiedByAlternative={Boolean(doc.identityOption && hasIdentityDoc(sale) && !isDocUploaded(sale, doc))}
+                required={isRequiredDoc(sale, doc) || (doc.identityOption && !hasIdentityDoc(sale))}
                 analyzing={analyzingDocId === doc.id}
                 validation={sale.docValidations?.[doc.id]}
                 onUpload={() => triggerUpload(sale.id!, doc.id as string, doc.type)}
@@ -914,11 +1073,9 @@ function FolderCard({
 function SaleCard({
   sale, promoterName, onClick,
 }: { key?: React.Key | null; sale: Sale; promoterName: string; onClick: () => void }) {
-  const docs = getDocsForSale(sale);
-  const uploaded = docs.filter(d => isDocUploaded(sale, d)).length;
-  const total = docs.length;
-  const progress = total ? Math.round((uploaded / total) * 100) : 0;
+  const stats = getChecklistStats(sale);
   const complete = isComplete(sale);
+  const suspicious = getSuspiciousDocs(sale);
 
   return (
     <button
@@ -935,9 +1092,13 @@ function SaleCard({
               <span className="text-xs font-medium text-emerald-400 flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Completado
               </span>
+            ) : suspicious.length ? (
+              <span className="text-xs font-medium text-red-300 flex items-center gap-1">
+                <ShieldAlert className="w-3.5 h-3.5" /> Archivero: revisar
+              </span>
             ) : (
               <span className="text-xs font-medium text-amber-400 flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" /> Incompleto · {total - uploaded} faltante{total - uploaded === 1 ? '' : 's'}
+                <AlertCircle className="w-3.5 h-3.5" /> Incompleto · {stats.total - stats.uploaded} faltante{stats.total - stats.uploaded === 1 ? '' : 's'}
               </span>
             )}
           </div>
@@ -959,12 +1120,12 @@ function SaleCard({
         <div className="flex-1 max-w-xs w-full">
           <div className="flex justify-between text-xs text-slate-400 mb-1.5">
             <span>Progreso del expediente</span>
-            <span>{progress}%</span>
+            <span>{stats.progress}%</span>
           </div>
           <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
             <div
-              className={`h-2 rounded-full transition-all ${complete ? 'bg-emerald-500' : 'bg-amber-500'}`}
-              style={{ width: `${progress}%` }}
+              className={`h-2 rounded-full transition-all ${complete ? 'bg-emerald-500' : suspicious.length ? 'bg-red-500' : 'bg-amber-500'}`}
+              style={{ width: `${stats.progress}%` }}
             />
           </div>
         </div>
@@ -977,18 +1138,20 @@ function SaleCard({
 }
 
 function DocCard({
-  doc, uploaded, analyzing, validation, onUpload, onDownload,
+  doc, uploaded, satisfiedByAlternative, required, analyzing, validation, onUpload, onDownload,
 }: {
   key?: React.Key | null;
   doc: DocumentDef;
   uploaded: boolean;
+  satisfiedByAlternative?: boolean;
+  required?: boolean;
   analyzing: boolean;
   validation?: DocValidation;
   onUpload: () => void;
   onDownload: () => void;
 }) {
   const getIcon = () => {
-    if (doc.type === 'pdf') return <FileText className="w-5 h-5" />;
+    if (doc.type === 'pdf' || doc.type === 'imageOrPdf') return <FileText className="w-5 h-5" />;
     if (doc.type === 'image') return <FileImage className="w-5 h-5" />;
     if (doc.type === 'video') return <FileVideo className="w-5 h-5" />;
     if (doc.type === 'audio') return <FileAudio className="w-5 h-5" />;
@@ -997,23 +1160,27 @@ function DocCard({
 
   return (
     <div className={`p-4 rounded-2xl border flex items-center justify-between gap-4 transition-colors ${
-      uploaded
+      uploaded || satisfiedByAlternative
         ? 'bg-slate-800/40 border-slate-700/50'
         : 'bg-amber-500/5 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.08)]'
     }`}>
       <div className="flex items-center gap-4 min-w-0">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-          uploaded ? 'bg-slate-700/50 text-slate-400' : 'bg-amber-500/20 text-amber-400'
+          uploaded || satisfiedByAlternative ? 'bg-slate-700/50 text-slate-400' : 'bg-amber-500/20 text-amber-400'
         }`}>{getIcon()}</div>
         <div className="min-w-0">
           <h4 className="font-medium text-slate-200 text-sm flex items-center gap-2 truncate">
             {doc.name}
-            {doc.optional && <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">Opcional</span>}
+            {!required && <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">Opcional</span>}
           </h4>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {uploaded ? (
               <span className="text-xs font-medium text-emerald-400 flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Registrado
+              </span>
+            ) : satisfiedByAlternative ? (
+              <span className="text-xs font-medium text-blue-300 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5" /> Alternativa cubierta
               </span>
             ) : (
               <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
@@ -1030,6 +1197,9 @@ function DocCard({
                   <ShieldCheck className="w-3 h-3" /> IA: {Math.round(validation.confidence * 100)}% legítimo
                 </span>
               )
+            )}
+            {validation?.sha256 && (
+              <span className="text-[10px] text-slate-500 font-mono">SHA {validation.sha256.slice(0, 10)}</span>
             )}
           </div>
         </div>

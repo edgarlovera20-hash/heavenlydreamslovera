@@ -1,6 +1,9 @@
-// @ts-ignore - whatsapp-web.js no incluye tipos oficiales completos
-import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
+import makeWASocket, {
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  useMultiFileAuthState,
+} from '@whiskeysockets/baileys';
+import Pino from 'pino';
 import qrcode from 'qrcode';
 import path from 'node:path';
 
@@ -16,200 +19,209 @@ export interface WaMessage {
   channel: 'whatsapp';
 }
 
-let client: any = null;
+type WaMessageHandler = (msg: WaMessage) => Promise<void> | void;
+
+let socket: any = null;
 let initPromise: Promise<void> | null = null;
 let currentQR: string | null = null;
 let status: Status = 'disconnected';
 let lastError: string | null = null;
+let messageHandler: WaMessageHandler | null = null;
+
 const messageBuffer: WaMessage[] = [];
 const MAX_MESSAGES = 200;
-const AUTH_DATA_PATH = path.resolve(process.cwd(), '.wwebjs_auth');
-const PRIMARY_CLIENT_ID = process.env.WHATSAPP_CLIENT_ID || 'heavenly-dreams-main';
+const AUTH_DATA_PATH = path.resolve(process.cwd(), '.baileys_auth', process.env.WHATSAPP_CLIENT_ID || 'heavenly-dreams-main');
 
 export function getRecentMessages(limit = 50): WaMessage[] {
   return messageBuffer.slice(-limit);
 }
 
 export function getWhatsAppStatus() {
-  return { status, error: lastError };
+  return {
+    status,
+    error: lastError,
+    engine: 'baileys',
+    sessionPath: AUTH_DATA_PATH,
+  };
 }
 
 export function getWhatsAppQR() {
   return currentQR;
 }
 
-function isBrowserProfileLockError(err: any) {
-  const message = String(err?.message || err || '');
-  return /browser is already running|userDataDir|profile.*in use|process singleton/i.test(message);
+export function setWhatsAppMessageHandler(handler: WaMessageHandler | null) {
+  messageHandler = handler;
 }
 
-function friendlyError(err: any) {
-  const message = String(err?.message || err || 'No se pudo iniciar WhatsApp.');
-  if (isBrowserProfileLockError(message)) {
-    return 'La sesión de navegador de WhatsApp quedó bloqueada por un proceso anterior. Se intentó abrir una sesión limpia; vuelve a presionar Vincular WhatsApp.';
-  }
-  return message;
+function normalizePhoneOrJid(value: string) {
+  const raw = String(value || '').trim();
+  if (!raw) throw new Error('Número de WhatsApp vacío.');
+  if (raw.includes('@')) return raw;
+  const cleaned = raw.replace(/\D/g, '');
+  if (cleaned.length < 10) throw new Error('Captura un número de WhatsApp con lada.');
+  return `${cleaned}@s.whatsapp.net`;
 }
 
-async function destroyCurrentClient() {
-  if (!client) return;
-  const previous = client;
-  client = null;
+function extractBody(message: any): string {
+  const payload = message?.message || {};
+  return (
+    payload.conversation ||
+    payload.extendedTextMessage?.text ||
+    payload.imageMessage?.caption ||
+    payload.videoMessage?.caption ||
+    payload.documentMessage?.caption ||
+    payload.buttonsResponseMessage?.selectedDisplayText ||
+    payload.listResponseMessage?.title ||
+    ''
+  ).trim();
+}
+
+function normalizeTimestamp(value: any) {
+  if (!value) return Date.now();
+  if (typeof value === 'number') return value * 1000;
+  if (typeof value?.toNumber === 'function') return value.toNumber() * 1000;
+  return Date.now();
+}
+
+function pushMessage(entry: WaMessage) {
+  if (!entry.body) return;
+  if (messageBuffer.some(m => m.id === entry.id)) return;
+  messageBuffer.push(entry);
+  if (messageBuffer.length > MAX_MESSAGES) messageBuffer.shift();
+}
+
+async function closeCurrentSocket() {
+  if (!socket) return;
+  const previous = socket;
+  socket = null;
   try {
-    await previous.destroy();
+    previous.ev?.removeAllListeners?.();
+    previous.end?.(undefined);
   } catch {
-    // El proceso puede haber muerto antes; no bloquea el reinicio.
+    // Socket may already be closed; this should not block a clean restart.
   }
 }
 
-function attachClientEvents(nextClient: any) {
-  nextClient.on('qr', async (qr: string) => {
-    try {
-      currentQR = await qrcode.toDataURL(qr);
+async function startBaileysSocket() {
+  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DATA_PATH);
+  const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined as any }));
+  const nextSocket = makeWASocket({
+    auth: state,
+    browser: ['Heavenly Dreams CRM', 'Chrome', '1.0.0'],
+    logger: Pino({ level: 'silent' }),
+    printQRInTerminal: false,
+    version,
+  });
+
+  socket = nextSocket;
+  status = 'authenticating';
+  lastError = null;
+  currentQR = null;
+
+  nextSocket.ev.on('creds.update', saveCreds);
+
+  nextSocket.ev.on('connection.update', async (update: any) => {
+    if (update.qr) {
+      currentQR = await qrcode.toDataURL(update.qr);
       status = 'qr';
       lastError = null;
-      console.log('[WA] QR generado, escanea con tu teléfono');
-    } catch (err) {
-      console.error('[WA] Error generando QR:', err);
+      console.log('[WA:Baileys] QR generado, escanea con tu teléfono');
+    }
+
+    if (update.connection === 'connecting') {
+      status = currentQR ? 'qr' : 'authenticating';
+    }
+
+    if (update.connection === 'open') {
+      status = 'connected';
+      currentQR = null;
+      lastError = null;
+      console.log('[WA:Baileys] Conectado y listo para asistentes');
+    }
+
+    if (update.connection === 'close') {
+      const code = update.lastDisconnect?.error?.output?.statusCode;
+      const loggedOut = code === DisconnectReason.loggedOut;
+      status = 'disconnected';
+      currentQR = null;
+      lastError = loggedOut
+        ? 'Sesión cerrada. Vuelve a vincular WhatsApp con QR.'
+        : 'WhatsApp se desconectó. Presiona vincular para reintentar.';
+      socket = null;
+      console.log('[WA:Baileys] Desconectado:', code || update.lastDisconnect?.error?.message || 'sin código');
     }
   });
 
-  nextClient.on('authenticated', () => {
-    status = 'authenticating';
-    currentQR = null;
-    lastError = null;
-    console.log('[WA] Autenticado, esperando conexión final…');
-  });
-
-  nextClient.on('ready', () => {
-    status = 'connected';
-    currentQR = null;
-    lastError = null;
-    console.log('[WA] ✅ Conectado y listo para enviar mensajes');
-  });
-
-  nextClient.on('message', async (msg: any) => {
-    try {
-      const contact = await msg.getContact();
+  nextSocket.ev.on('messages.upsert', async ({ messages, type }: any) => {
+    if (type !== 'notify') return;
+    for (const msg of messages || []) {
+      if (!msg?.message || msg.key?.fromMe) continue;
+      const body = extractBody(msg);
+      if (!body) continue;
+      const remoteJid = msg.key.remoteJid || '';
       const entry: WaMessage = {
-        id: msg.id?._serialized || String(Date.now()),
-        from: msg.from,
-        fromName: contact.pushname || contact.name || msg.from.replace('@c.us', ''),
-        body: msg.body,
-        timestamp: msg.timestamp * 1000,
-        isGroup: msg.from?.includes('@g.us') || false,
+        id: msg.key.id || `${remoteJid}-${Date.now()}`,
+        from: remoteJid,
+        fromName: msg.pushName || remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', ''),
+        body,
+        timestamp: normalizeTimestamp(msg.messageTimestamp),
+        isGroup: remoteJid.endsWith('@g.us'),
         channel: 'whatsapp',
       };
-      messageBuffer.push(entry);
-      if (messageBuffer.length > MAX_MESSAGES) messageBuffer.shift();
-    } catch { /* ignorar errores de contacto */ }
+      pushMessage(entry);
+      if (messageHandler) {
+        try {
+          await messageHandler(entry);
+        } catch (err) {
+          console.warn('[WA:Baileys] Error en asistente WhatsApp:', err);
+        }
+      }
+    }
   });
-
-  nextClient.on('disconnected', (reason: string) => {
-    status = 'disconnected';
-    currentQR = null;
-    lastError = `Desconectado: ${reason}`;
-    console.log('[WA] Desconectado:', reason);
-  });
-
-  nextClient.on('auth_failure', (msg: string) => {
-    status = 'disconnected';
-    currentQR = null;
-    lastError = `Fallo de autenticación: ${msg}`;
-    console.error('[WA] Fallo de auth:', msg);
-  });
-}
-
-async function startClient(clientId: string) {
-  const nextClient = new Client({
-    authStrategy: new LocalAuth({
-      clientId,
-      dataPath: AUTH_DATA_PATH,
-    }),
-    webVersion: '2.3000.1015901307',
-    webVersionCache: {
-      type: 'remote',
-      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1015901307.html',
-    },
-    puppeteer: {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-      ],
-    },
-  });
-
-  client = nextClient;
-  attachClientEvents(nextClient);
-  await nextClient.initialize();
-}
-
-async function initializeWhatsAppClient() {
-  if (client && (status === 'connected' || status === 'qr' || status === 'authenticating')) {
-    return;
-  }
-  await destroyCurrentClient();
-  lastError = null;
-  status = 'disconnected';
-  currentQR = null;
-
-  try {
-    await startClient(PRIMARY_CLIENT_ID);
-  } catch (err) {
-    await destroyCurrentClient();
-    if (!isBrowserProfileLockError(err)) throw err;
-    const recoveryClientId = `${PRIMARY_CLIENT_ID}-recovery-${Date.now()}`;
-    console.warn('[WA] Perfil de navegador bloqueado, reintentando con sesión limpia:', recoveryClientId);
-    await startClient(recoveryClientId);
-  }
 }
 
 export async function initWhatsApp(): Promise<void> {
-  if (client && (status === 'connected' || status === 'qr' || status === 'authenticating')) {
+  if (socket && (status === 'connected' || status === 'qr' || status === 'authenticating')) {
     return initPromise || Promise.resolve();
   }
   if (initPromise) return initPromise;
 
-  initPromise = initializeWhatsAppClient().catch((err: Error) => {
-    lastError = friendlyError(err);
+  initPromise = (async () => {
+    await closeCurrentSocket();
+    status = 'authenticating';
+    currentQR = null;
+    lastError = null;
+    await startBaileysSocket();
+  })().catch((err: Error) => {
     status = 'disconnected';
     currentQR = null;
-    console.error('[WA] Error inicializando:', err);
+    lastError = err?.message || 'No se pudo iniciar WhatsApp con Baileys.';
+    console.error('[WA:Baileys] Error inicializando:', err);
   }).finally(() => {
     initPromise = null;
   });
+
   return initPromise;
 }
 
 export async function sendWhatsAppMessage(phone: string, message: string) {
-  if (!client || status !== 'connected') {
+  if (!socket || status !== 'connected') {
     throw new Error('WhatsApp no está conectado. Conecta primero escaneando el QR.');
   }
-  const cleaned = phone.replace(/\D/g, '');
-  const chatId = cleaned.includes('@') ? cleaned : `${cleaned}@c.us`;
-  const result = await client.sendMessage(chatId, message);
-  return { ok: true, id: result.id?._serialized };
+  const jid = normalizePhoneOrJid(phone);
+  const result = await socket.sendMessage(jid, { text: String(message || '') });
+  return { ok: true, id: result?.key?.id };
 }
 
 export async function logoutWhatsApp() {
-  if (!client) {
-    currentQR = null;
-    status = 'disconnected';
-    lastError = null;
-    return;
+  if (socket) {
+    try {
+      await socket.logout();
+    } catch {
+      // The session may already be invalid. We still reset local runtime state.
+    }
   }
-  try {
-    await client.logout();
-  } catch {
-    // ignorar
-  }
-  await destroyCurrentClient();
+  await closeCurrentSocket();
   currentQR = null;
   status = 'disconnected';
   lastError = null;

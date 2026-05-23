@@ -41,8 +41,11 @@ const DOC_LABELS: Record<string, string> = {
   ineReverso: 'INE Reverso',
   curpDoc: 'CURP',
   comprobanteDomicilio: 'Comprobante Domicilio',
-  anexoPortabilidad: 'Anexo Portabilidad',
-  contratoFirmado: 'Contrato Firmado',
+  gpsEvidence: 'GPS Ubicacion',
+  anexoPortabilidad: 'Anexo Portabilidad 1',
+  anexoPortabilidad2: 'Anexo Portabilidad 2',
+  contratoFirmado: 'Solicitud Firmada',
+  solicitudFirmada: 'Solicitud Firmada Adicional',
   videofirma: 'Videofirma',
   audioLlamada: 'Audio Llamada',
   capturaSiac: 'Captura SIAC',
@@ -330,4 +333,3 @@ export async function importExpedientesFromDrive(folderInput: string): Promise<D
     sourceFolderId: folderId,
   };
 }
-
