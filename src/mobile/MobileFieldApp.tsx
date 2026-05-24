@@ -2173,27 +2173,205 @@ export default function MobileFieldApp() {
 
   function renderProfile() {
     return (
-      <Panel>
-        <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-cyan-300/20 bg-cyan-300/10 text-2xl font-black text-cyan-100">
-            {displayName(session).slice(0, 1).toUpperCase()}
+      <div className="space-y-4 pb-4">
+        <Panel className="border-sky-400/25 bg-gradient-to-r from-sky-500/10 to-cyan-400/10">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-400/15 text-sky-100">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-sky-100">IA Motivacional</p>
+              <p className="mt-1 text-xs leading-5 text-sky-100/75">
+                {profileModel.foliosTotales === 0
+                  ? 'Aun no tienes capturas registradas. Inicia tu primera venta y desbloquea XP.'
+                  : `Llevas ${profileModel.foliosTotales} folios. Te faltan ${profileModel.missingXP} XP para Nivel ${profileModel.level + 1}.`}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-xl font-black">{displayName(session)}</p>
-            <p className="mt-1 text-sm text-slate-400">{session.puesto || session.role || 'Asesor en campo'}</p>
+        </Panel>
+
+        <Panel className={cx('relative overflow-hidden', profileModel.isTop3 && 'border-yellow-300/45 shadow-[0_0_30px_rgba(250,204,21,0.12)]')}>
+          {profileModel.isTop3 && <div className="pointer-events-none absolute inset-x-8 -top-20 h-40 rounded-full bg-yellow-300/10 blur-3xl" />}
+          <div className="relative flex flex-col items-center text-center">
+            <div className="group relative mb-4">
+              <button
+                type="button"
+                onClick={() => profileFileInputRef.current?.click()}
+                className={cx(
+                  'relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 bg-slate-900 text-4xl font-black text-slate-500 transition',
+                  profileModel.isTop3 ? 'border-yellow-300/80' : 'border-slate-700',
+                  profileModel.hasFireStreak && 'shadow-[0_0_24px_rgba(249,115,22,0.45)]'
+                )}
+                aria-label="Cambiar avatar"
+              >
+                {profileAvatarUrl ? (
+                  <img src={profileAvatarUrl} alt={`Avatar de ${profileName}`} className="h-full w-full object-cover" />
+                ) : (
+                  profileName.slice(0, 1).toUpperCase()
+                )}
+                <span className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition group-hover:opacity-100">
+                  <Camera className="h-6 w-6 text-white" />
+                </span>
+              </button>
+              <input ref={profileFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfileImageUpload} />
+              {profileRole === 'GERENTE' && (
+                <span className="absolute -right-1 -top-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#061322] bg-gradient-to-tr from-yellow-500 to-yellow-200 text-yellow-950">
+                  <Crown className="h-4 w-4" />
+                </span>
+              )}
+              {profileModel.hasFireStreak && (
+                <span className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#061322] bg-gradient-to-tr from-orange-500 to-red-500 text-white">
+                  <Flame className="h-4 w-4" />
+                </span>
+              )}
+            </div>
+
+            <h3 className="text-2xl font-black tracking-tight text-white">{profileName}</h3>
+            <p className="mt-1 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">{profileRoleLabel}</p>
+
+            <div className="mt-5 w-full rounded-2xl border border-white/10 bg-black/25 p-4 text-left">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Nivel actual</p>
+                  <p className="mt-1 bg-gradient-to-r from-sky-300 to-cyan-200 bg-clip-text text-2xl font-black text-transparent">LVL {profileModel.level}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Siguiente: LVL {profileModel.level + 1}</p>
+                  <p className="mt-1 text-sm font-black text-slate-200">{profileModel.points} / {profileModel.xpNextLevel} XP</p>
+                </div>
+              </div>
+              <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-800">
+                <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-cyan-300" style={{ width: `${profileModel.progressPercent}%` }} />
+              </div>
+            </div>
           </div>
+        </Panel>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Metric label="Success rate" value={`${profileModel.successRate}%`} />
+          <Metric label="Puntos" value={profileModel.points} />
+          <Metric label="Folios" value={profileModel.foliosTotales} />
+          <Metric label="Ranking" value={`#${profileModel.myRank}`} />
         </div>
-        <div className="mt-5 space-y-3">
-          <SummaryRow label="Clave" value={session.uid || 'N/D'} />
-          <SummaryRow label="Correo" value={session.email || 'N/D'} />
-          <SummaryRow label="Zona" value={session.zona || 'N/D'} />
-          <SummaryRow label="Rol" value={session.role || 'ASESOR'} />
-        </div>
-        <button onClick={logout} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-rose-400/25 bg-rose-500/10 font-black uppercase tracking-[0.14em] text-rose-100">
-          <MobileIcon name="logout" className="h-4 w-4" />
-          Cerrar sesion
-        </button>
-      </Panel>
+
+        <Panel>
+          <h3 className="flex items-center gap-2 text-sm font-black text-white">
+            <Target className="h-4 w-4 text-sky-300" />
+            Proximo objetivo
+          </h3>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-bold text-slate-200">Subir a LVL {profileModel.level + 1}</span>
+              <span className="text-xs font-black text-cyan-200">Faltan {profileModel.missingXP} XP</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+              <div className="h-full rounded-full bg-sky-400" style={{ width: `${profileModel.progressPercent}%` }} />
+            </div>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="flex items-center gap-2 text-sm font-black text-white">
+              <Medal className="h-4 w-4 text-yellow-300" />
+              Vitrina de medallas
+            </h3>
+            <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-black text-slate-400">
+              {profileModel.unlockedCount} / {profileModel.medals.length}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {profileModel.medals.map((medal) => {
+              const Icon = medal.icon;
+              return (
+                <div key={medal.id} className={cx('rounded-2xl border p-3 text-center', medal.unlocked ? 'border-white/10 bg-white/[0.04]' : 'border-transparent bg-white/[0.02] opacity-45 grayscale')}>
+                  <div className={cx('mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full', medal.bg)}>
+                    <Icon className={cx('h-5 w-5', medal.color)} />
+                  </div>
+                  <p className="text-xs font-bold leading-4 text-slate-300">{medal.name}</p>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+
+        <Panel>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="flex items-center gap-2 text-sm font-black text-white">
+              <Trophy className="h-4 w-4 text-yellow-300" />
+              Leaderboard
+            </h3>
+          </div>
+          <div className="mb-3 grid grid-cols-3 gap-1 rounded-2xl bg-black/25 p-1">
+            {(['weekly', 'monthly', 'all-time'] as const).map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setProfileLeaderboardFilter(filter)}
+                className={cx('rounded-xl px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em]', profileLeaderboardFilter === filter ? 'bg-slate-700 text-white' : 'text-slate-500')}
+              >
+                {filter === 'weekly' ? 'Semana' : filter === 'monthly' ? 'Mes' : 'Global'}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-2">
+            {profileModel.leaderboard.length === 0 ? (
+              <EmptyState icon="users" text="Aun no hay capturas para ranking." />
+            ) : profileModel.leaderboard.slice(0, 5).map((entry) => (
+              <div key={entry.id} className={cx('flex items-center gap-3 rounded-2xl border p-3', entry.id === profileUid ? 'border-sky-300/25 bg-sky-400/10' : 'border-white/10 bg-white/[0.03]')}>
+                <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black', entry.rank === 1 ? 'bg-yellow-300/15 text-yellow-200' : entry.rank === 2 ? 'bg-slate-300/15 text-slate-200' : entry.rank === 3 ? 'bg-orange-300/15 text-orange-200' : 'bg-slate-800 text-slate-500')}>
+                  {entry.rank}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={cx('truncate text-sm font-black', entry.id === profileUid ? 'text-sky-100' : 'text-slate-100')}>{entry.name}</p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">LVL {entry.level} - {entry.folios} folios</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-black text-white">{entry.points}</p>
+                  <p className="text-[10px] font-bold text-slate-500">PTS</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-black text-white">
+            <Clock className="h-4 w-4 text-sky-300" />
+            Historial de logros
+          </h3>
+          {profileModel.timeline.length === 0 ? (
+            <EmptyState icon="clipboard" text="Tu historial aparecera cuando registres tu primera venta." />
+          ) : (
+            <div className="space-y-3">
+              {profileModel.timeline.map((item) => (
+                <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-800 text-slate-400">
+                    {item.approved ? <DollarSign className="h-4 w-4 text-emerald-300" /> : <Zap className="h-4 w-4 text-sky-300" />}
+                  </span>
+                  <div>
+                    <p className="text-sm font-bold leading-5 text-slate-200">{item.title}</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">{item.time}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        <Panel>
+          <div className="space-y-3">
+            <SummaryRow label="Clave" value={profileUid || 'N/D'} />
+            <SummaryRow label="Correo" value={profileUser?.email || 'N/D'} />
+            <SummaryRow label="Zona" value={profileUser?.zona || 'N/D'} />
+            <SummaryRow label="Rol" value={profileRole || 'ASESOR'} />
+          </div>
+          <button onClick={logout} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-rose-400/25 bg-rose-500/10 font-black uppercase tracking-[0.14em] text-rose-100">
+            <MobileIcon name="logout" className="h-4 w-4" />
+            Cerrar sesion
+          </button>
+        </Panel>
+      </div>
     );
   }
 
