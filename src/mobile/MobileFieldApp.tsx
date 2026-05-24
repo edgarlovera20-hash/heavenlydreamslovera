@@ -1003,6 +1003,18 @@ export default function MobileFieldApp() {
   }, []);
 
   useEffect(() => {
+    if (!profileUid) {
+      setProfileAvatar(null);
+      return;
+    }
+    try {
+      setProfileAvatar(localStorage.getItem(`adhdreams_avatar_${profileUid}`));
+    } catch {
+      setProfileAvatar(null);
+    }
+  }, [profileUid]);
+
+  useEffect(() => {
     if (session?.uid) refreshBootstrap();
   }, [session?.uid, refreshBootstrap]);
 
