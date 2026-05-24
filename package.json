@@ -14,7 +14,8 @@
     "enterprise:check": "node scripts/enterprise-check.mjs",
     "backup:sqlite": "node scripts/backup-db.mjs",
     "import:morosos": "node scripts/import-morosos-xlsx.mjs",
-    "test": "npm run lint && npm run enterprise:check",
+    "test:api": "node scripts/api-smoke.mjs",
+    "test": "npm run lint && npm run enterprise:check && npm run test:api",
     "turbo:build": "turbo run build",
     "turbo:lint": "turbo run lint",
     "turbo:dev": "turbo run dev --parallel"

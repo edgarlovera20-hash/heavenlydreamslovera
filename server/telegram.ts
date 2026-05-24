@@ -1,3 +1,5 @@
+import { ingestChannelMessage, recordOutgoingChannelMessage, upsertChannelAccount } from './messaging';
+
 export interface TgMessage {
   id: string;
   from: string;
@@ -31,6 +33,16 @@ export function setTelegramMessageHandler(fn: (msg: TgMessage) => void) {
 
 export function getTelegramStatus() {
   return { status, error: lastError, botToken: botToken ? '***' : null };
+}
+
+function persistStatus(botName?: string | null) {
+  upsertChannelAccount({
+    channel: 'telegram',
+    label: botName ? `@${botName}` : 'Telegram Bot',
+    externalId: botName || 'default',
+    status,
+    metadata: { error: lastError },
+  });
 }
 
 export function getTelegramMessages(limit = 100): TgMessage[] {
@@ -89,6 +101,18 @@ async function pollLoop(token: string, abort: AbortController) {
         messageBuffer.push(entry);
         if (messageBuffer.length > MAX_MESSAGES) messageBuffer.shift();
 
+        await ingestChannelMessage({
+          id: `telegram:${entry.id}`,
+          channel: 'telegram',
+          externalChatId: String(entry.chatId),
+          direction: 'incoming',
+          body: entry.body,
+          fromName: entry.fromName,
+          timestamp: entry.timestamp,
+          isGroup: entry.isGroup,
+          metadata: { from: entry.from },
+        });
+
         if (onMessageCallback) onMessageCallback(entry);
       }
     } catch (err: any) {
@@ -117,6 +141,7 @@ export async function initTelegram(token: string): Promise<{ ok: boolean; botNam
   status = 'polling';
   lastError = null;
   lastUpdateId = 0;
+  persistStatus(me.result.username);
 
   pollingAbort = new AbortController();
   pollLoop(token, pollingAbort).catch(err => {
@@ -134,6 +159,7 @@ export function stopTelegram() {
   botToken = null;
   status = 'disconnected';
   lastError = null;
+  persistStatus();
 }
 
 export async function sendTelegramMessage(chatId: number | string, text: string) {
@@ -152,6 +178,18 @@ export async function sendTelegramMessage(chatId: number | string, text: string)
     isGroup: false,
     channel: 'telegram',
     direction: 'outgoing',
+  });
+  await recordOutgoingChannelMessage({
+    id: `telegram:${r.result?.message_id || `sent-${chatId}-${Date.now()}`}`,
+    channel: 'telegram',
+    externalChatId: String(chatId),
+    direction: 'outgoing',
+    body,
+    fromName: 'Heavenly Dreams CRM',
+    toId: String(chatId),
+    timestamp: Date.now(),
+    isGroup: false,
+    metadata: { messageId: r.result?.message_id || null },
   });
   if (messageBuffer.length > MAX_MESSAGES) messageBuffer.shift();
   return { ok: true, messageId: r.result?.message_id };

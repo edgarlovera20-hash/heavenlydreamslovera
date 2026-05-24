@@ -365,7 +365,7 @@ function IntegracionesTab() {
                 : <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">Solo local</span>}
             </h4>
             <p className="text-xs text-slate-400 mt-1">
-              Orquestador con Claude, Gemini, OpenAI, Ollama y Tesseract. Al capturar documentos extrae CURP, nombre, domicilio y SIAC con fallback automático. Puedes conservar una API key de{' '}
+              Orquestador con Ollama como primario, Gemini como respaldo y Tesseract local. Al capturar documentos extrae CURP, nombre, domicilio y SIAC con fallback automático. Puedes conservar una API key de{' '}
               <a href="https://console.cloud.google.com/apis/library/vision.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">
                 Google Cloud Console
               </a>.
@@ -422,7 +422,7 @@ function IntegracionesTab() {
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Primario INE</p>
-                <p className="text-sm text-slate-100 font-semibold">{ocrStatus.primary || 'claude'}</p>
+                <p className="text-sm text-slate-100 font-semibold">{ocrStatus.primary || 'ollama'}</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Cache</p>
@@ -782,6 +782,8 @@ function CanalesTab() {
 
   const disconnect = (which: 'whatsapp' | 'telegram') => {
     if (!confirm(`¿Desconectar la cuenta de ${which === 'whatsapp' ? 'WhatsApp' : 'Telegram'}? El agente IA dejará de atender los mensajes entrantes.`)) return;
+    const endpoint = which === 'telegram' ? '/api/telegram/stop' : '/api/whatsapp/logout';
+    fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).catch(() => {});
     persist({ ...channels, [which]: { connected: false } });
     toast.success(`${which === 'whatsapp' ? 'WhatsApp' : 'Telegram'} desconectado.`);
   };
@@ -1172,8 +1174,7 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
 }
 
 // ──────────────────────────────────────────────────────────
-// Telegram Bot Modal — pide el token y verifica con getMe.
-// Guarda el token en localStorage para uso futuro.
+// Telegram Bot Modal — envia el token al servidor; no se persiste en el navegador.
 // ──────────────────────────────────────────────────────────
 function TelegramConnectModal({ onClose, onConnected }: { onClose: () => void; onConnected: (botUsername: string) => void; }) {
   const [token, setToken] = useState('');
@@ -1190,16 +1191,16 @@ function TelegramConnectModal({ onClose, onConnected }: { onClose: () => void; o
     setError('');
     setVerifying(true);
     try {
-      const res = await fetch(`https://api.telegram.org/bot${trimmed}/getMe`);
-      const data = await res.json();
-      if (!data?.ok || !data?.result?.username) {
-        throw new Error(data?.description || 'Token inválido');
+      const res = await fetch('/api/telegram/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok || !data?.botName) {
+        throw new Error(data?.error || 'Token inválido');
       }
-      const username = data.result.username as string;
-      // Persistir tokens
-      const tokens: Record<string, string> = JSON.parse(localStorage.getItem('adhdreams_telegram_bots') || '{}');
-      tokens[username] = trimmed;
-      localStorage.setItem('adhdreams_telegram_bots', JSON.stringify(tokens));
+      const username = data.botName as string;
       toast.success(`Bot @${username} conectado.`);
       onConnected(username);
     } catch (e: any) {

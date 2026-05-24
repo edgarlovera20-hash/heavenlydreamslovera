@@ -7,6 +7,7 @@ import Pino from 'pino';
 import qrcode from 'qrcode';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { ingestChannelMessage, recordOutgoingChannelMessage, upsertChannelAccount } from './messaging';
 
 type Status = 'disconnected' | 'qr' | 'authenticating' | 'connected';
 
@@ -51,6 +52,16 @@ export function getWhatsAppStatus() {
     sessionPath: AUTH_DATA_PATH,
     reconnecting: Boolean(restartTimer),
   };
+}
+
+function persistStatus(nextStatus = status) {
+  upsertChannelAccount({
+    channel: 'whatsapp',
+    label: 'WhatsApp Baileys',
+    externalId: process.env.WHATSAPP_CLIENT_ID || 'heavenly-dreams-main',
+    status: nextStatus,
+    metadata: { engine: 'baileys', sessionPath: AUTH_DATA_PATH, error: lastError },
+  });
 }
 
 export function getWhatsAppQR() {
@@ -168,6 +179,7 @@ async function startBaileysSocket() {
   status = 'authenticating';
   lastError = null;
   currentQR = null;
+  persistStatus();
 
   nextSocket.ev.on('creds.update', saveCreds);
 
@@ -176,11 +188,13 @@ async function startBaileysSocket() {
       currentQR = await qrcode.toDataURL(update.qr);
       status = 'qr';
       lastError = null;
+      persistStatus();
       console.log('[WA:Baileys] QR generado, escanea con tu teléfono');
     }
 
     if (update.connection === 'connecting') {
       status = currentQR ? 'qr' : 'authenticating';
+      persistStatus();
     }
 
     if (update.connection === 'open') {
@@ -188,6 +202,7 @@ async function startBaileysSocket() {
       currentQR = null;
       lastError = null;
       reconnectAttempts = 0;
+      persistStatus();
       console.log('[WA:Baileys] Conectado y listo para asistentes');
     }
 
@@ -203,6 +218,7 @@ async function startBaileysSocket() {
         status = 'disconnected';
         lastError = null;
         reconnectAttempts = 0;
+        persistStatus();
         return;
       }
 
@@ -224,6 +240,7 @@ async function startBaileysSocket() {
       lastError = resetSession
         ? 'Sesión cerrada. Presiona Regenerar QR para vincular WhatsApp de nuevo.'
         : 'WhatsApp se desconectó. Presiona vincular para reintentar.';
+      persistStatus();
     }
   });
 
@@ -245,6 +262,17 @@ async function startBaileysSocket() {
         direction: 'incoming',
       };
       pushMessage(entry);
+      await ingestChannelMessage({
+        id: `whatsapp:${entry.id}`,
+        channel: 'whatsapp',
+        externalChatId: entry.from,
+        direction: 'incoming',
+        body: entry.body,
+        fromName: entry.fromName,
+        timestamp: entry.timestamp,
+        isGroup: entry.isGroup,
+        metadata: { rawId: entry.id },
+      });
       if (messageHandler) {
         try {
           await messageHandler(entry);
@@ -273,6 +301,7 @@ export async function initWhatsApp(): Promise<void> {
     status = 'disconnected';
     currentQR = null;
     lastError = err?.message || 'No se pudo iniciar WhatsApp con Baileys.';
+    persistStatus();
     console.error('[WA:Baileys] Error inicializando:', err);
   }).finally(() => {
     initPromise = null;
@@ -299,6 +328,18 @@ export async function sendWhatsAppMessage(phone: string, message: string) {
     channel: 'whatsapp',
     direction: 'outgoing',
   });
+  await recordOutgoingChannelMessage({
+    id: `whatsapp:${result?.key?.id || `sent-${jid}-${Date.now()}`}`,
+    channel: 'whatsapp',
+    externalChatId: jid,
+    direction: 'outgoing',
+    body,
+    fromName: 'Heavenly Dreams CRM',
+    toId: jid,
+    timestamp: Date.now(),
+    isGroup: jid.endsWith('@g.us'),
+    metadata: { engine: 'baileys' },
+  });
   return { ok: true, id: result?.key?.id };
 }
 
@@ -317,4 +358,5 @@ export async function logoutWhatsApp() {
   status = 'disconnected';
   lastError = null;
   reconnectAttempts = 0;
+  persistStatus();
 }

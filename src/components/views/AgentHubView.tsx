@@ -31,6 +31,20 @@ interface TgStatus {
   error: string | null;
   botToken: string | null;
 }
+interface AgentOutboxItem {
+  id: string;
+  conversationId: string;
+  type: 'reply' | 'action' | 'task';
+  status: string;
+  channel: 'whatsapp' | 'telegram';
+  target: string;
+  message?: string | null;
+  action?: string | null;
+  payload?: Record<string, any>;
+  display_name?: string;
+  intent?: string;
+  created_at: string;
+}
 
 const AGENT_META = [
   {
@@ -89,9 +103,10 @@ function timeAgo(iso: string | null) {
 export default function AgentHubView() {
   const [agents, setAgents] = useState<AgentState | null>(null);
   const [messages, setMessages] = useState<ChannelMsg[]>([]);
+  const [outbox, setOutbox] = useState<AgentOutboxItem[]>([]);
   const [tgStatus, setTgStatus] = useState<TgStatus>({ status: 'disconnected', error: null, botToken: null });
   const [loading, setLoading] = useState<Record<string, boolean>>({});
-  const [tab, setTab] = useState<'agents' | 'telegram' | 'messages' | 'manual'>('agents');
+  const [tab, setTab] = useState<'agents' | 'approvals' | 'telegram' | 'messages' | 'manual'>('agents');
   const [tgToken, setTgToken] = useState('');
   const [tgConnecting, setTgConnecting] = useState(false);
   const [manual, setManual] = useState({ nombres: '', telefono: '', plan: '', canal: 'app' });
@@ -106,9 +121,11 @@ export default function AgentHubView() {
         fetch('/api/channels/messages'),
         fetch('/api/telegram/status'),
       ]);
+      const outboxRes = await fetch('/api/agents/outbox').catch(() => null);
       if (ar.ok) setAgents(await ar.json());
       if (mr.ok) setMessages((await mr.json()).reverse());
       if (tgr.ok) setTgStatus(await tgr.json());
+      if (outboxRes?.ok) setOutbox(await outboxRes.json());
     } catch {}
   }, []);
 
@@ -155,6 +172,40 @@ export default function AgentHubView() {
     await loadAll();
   };
 
+  const approveOutbox = async (id: string) => {
+    setLoading(l => ({ ...l, [`approve_${id}`]: true }));
+    try {
+      const r = await fetch(`/api/agents/outbox/${id}/approve`, { method: 'POST' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'No se pudo aprobar.');
+      pop('✅ Propuesta aprobada');
+      await loadAll();
+    } catch (err: any) {
+      pop(`❌ ${err.message || 'No se pudo aprobar.'}`);
+    } finally {
+      setLoading(l => ({ ...l, [`approve_${id}`]: false }));
+    }
+  };
+
+  const rejectOutbox = async (id: string) => {
+    setLoading(l => ({ ...l, [`reject_${id}`]: true }));
+    try {
+      const r = await fetch(`/api/agents/outbox/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Rechazado desde Hub de Agentes' }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'No se pudo rechazar.');
+      pop('Propuesta rechazada');
+      await loadAll();
+    } catch (err: any) {
+      pop(`❌ ${err.message || 'No se pudo rechazar.'}`);
+    } finally {
+      setLoading(l => ({ ...l, [`reject_${id}`]: false }));
+    }
+  };
+
   const saveManual = async () => {
     if (!manual.nombres || !manual.telefono) { pop('Nombre y teléfono son requeridos'); return; }
     const r = await fetch('/api/ventas', {
@@ -178,6 +229,7 @@ export default function AgentHubView() {
 
   const TABS = [
     { id: 'agents', label: 'Agentes' },
+    { id: 'approvals', label: `Aprobaciones (${outbox.filter(item => item.status === 'pending_approval').length})` },
     { id: 'telegram', label: `Telegram${tgStatus.status === 'polling' ? ' 🟢' : ' ⚪'}` },
     { id: 'messages', label: `Mensajes (${messages.length})` },
     { id: 'manual', label: 'Captura Manual' },
@@ -295,6 +347,76 @@ export default function AgentHubView() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── APPROVALS ── */}
+      {tab === 'approvals' && (
+        <div className="space-y-3">
+          {outbox.length === 0 ? (
+            <div className="text-center py-16 text-slate-500">
+              <CheckCircle2 className="w-12 h-12 mx-auto mb-4 opacity-20" />
+              <p className="font-mono text-sm uppercase tracking-widest">Sin propuestas pendientes</p>
+              <p className="text-xs mt-2">Cuando el copiloto detecte respuestas o acciones, aparecerán aquí.</p>
+            </div>
+          ) : (
+            outbox.map(item => (
+              <div key={item.id} className={`bg-[#0a0d14] border rounded-2xl p-4 space-y-3 ${
+                item.status === 'pending_approval' ? 'border-yellow-400/30' : 'border-slate-800 opacity-75'
+              }`}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-purple-400/10 text-purple-300 border border-purple-400/20 uppercase font-bold tracking-widest">
+                        {item.action || item.type}
+                      </span>
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-400/10 text-cyan-300 border border-cyan-400/20 uppercase font-bold tracking-widest">
+                        {item.channel}
+                      </span>
+                      <span className={`text-[9px] px-2 py-0.5 rounded-full uppercase font-bold tracking-widest ${
+                        item.status === 'pending_approval' ? 'bg-yellow-400/10 text-yellow-300 border border-yellow-400/20' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}>
+                        {item.status}
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-white">{item.display_name || item.target}</p>
+                    <p className="text-[10px] text-slate-500">{new Date(item.created_at).toLocaleString('es-MX')}</p>
+                  </div>
+                  {item.status === 'pending_approval' && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => approveOutbox(item.id)}
+                        disabled={loading[`approve_${item.id}`]}
+                        className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500/20 disabled:opacity-60"
+                      >
+                        Aprobar
+                      </button>
+                      <button
+                        onClick={() => rejectOutbox(item.id)}
+                        disabled={loading[`reject_${item.id}`]}
+                        className="px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[10px] font-bold uppercase tracking-widest hover:bg-rose-500/20 disabled:opacity-60"
+                      >
+                        Rechazar
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {item.message && (
+                  <p className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-slate-200 whitespace-pre-wrap">{item.message}</p>
+                )}
+                {item.action === 'create_sale' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    {['nombre', 'telefono', 'direccion', 'colonia', 'paquete', 'zona'].map(key => item.payload?.[key] ? (
+                      <div key={key} className="rounded-lg border border-slate-800 bg-black/20 p-2">
+                        <span className="text-slate-500 uppercase text-[9px] font-bold">{key}</span>
+                        <p className="text-slate-200">{String(item.payload[key])}</p>
+                      </div>
+                    ) : null)}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       )}
 

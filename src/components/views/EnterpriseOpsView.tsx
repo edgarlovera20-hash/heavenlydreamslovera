@@ -1,17 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, Bot, CheckCircle2, GitBranch, Play, RefreshCw, ShieldCheck, Zap } from 'lucide-react';
 
-const SESSION_KEY = 'hd_session';
-
-function authHeaders(): HeadersInit {
-  try {
-    const session = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
-    return session.accessToken ? { Authorization: `Bearer ${session.accessToken}` } : {};
-  } catch {
-    return {};
-  }
-}
-
 function Panel({ title, icon: Icon, children }: { title: string; icon: any; children: React.ReactNode }) {
   return (
     <section className="border border-slate-800 bg-[#0a0d14]/80 rounded-lg p-4">
@@ -34,7 +23,7 @@ export default function EnterpriseOpsView() {
   const [aiText, setAiText] = useState('No puedo pagar hoy, pero el viernes liquido el atraso.');
   const [aiResult, setAiResult] = useState<any>(null);
 
-  const headers = useMemo(() => ({ 'Content-Type': 'application/json', ...authHeaders() }), []);
+  const headers = useMemo(() => ({ 'Content-Type': 'application/json' }), []);
 
   const load = async () => {
     setLoading(true);

@@ -7,6 +7,7 @@ const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_JWT_SECRET = 'dev-heavenly-dreams-change-me';
 const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
 const ISSUER = 'heavenly-dreams-crm';
+const REFRESH_COOKIE = 'hd_refresh';
 
 if (process.env.NODE_ENV === 'production' && JWT_SECRET === DEFAULT_JWT_SECRET) {
   throw new Error('JWT_SECRET es obligatorio en producción');
@@ -18,6 +19,44 @@ type SessionOptions = {
   webAuthnVerified?: boolean;
   webAuthnEnrollmentRequired?: boolean;
 };
+
+function isSecureRequest(req?: Request) {
+  const forwardedProto = String(req?.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  return forwardedProto === 'https' || req?.secure === true || process.env.NODE_ENV === 'production';
+}
+
+function parseCookies(req: Request) {
+  const header = req.headers.cookie || '';
+  const cookies: Record<string, string> = {};
+  for (const part of header.split(';')) {
+    const index = part.indexOf('=');
+    if (index < 0) continue;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (key) cookies[key] = decodeURIComponent(value);
+  }
+  return cookies;
+}
+
+function setCookie(res: Response, value: string, expiresAt: string | Date, req?: Request) {
+  const attrs = [
+    `${REFRESH_COOKIE}=${encodeURIComponent(value)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Expires=${new Date(expiresAt).toUTCString()}`,
+  ];
+  if (isSecureRequest(req)) attrs.push('Secure');
+  res.append('Set-Cookie', attrs.join('; '));
+}
+
+export function clearRefreshCookie(res: Response, req?: Request) {
+  setCookie(res, '', new Date(0), req);
+}
+
+export function getRefreshTokenFromRequest(req: Request) {
+  return String((req.body as any)?.refreshToken || parseCookies(req)[REFRESH_COOKIE] || '').trim();
+}
 
 function b64url(input: Buffer | string) {
   return Buffer.from(input).toString('base64url');
@@ -68,7 +107,7 @@ export function getBearerAuth(req: Request) {
   return verifyAccessToken(token);
 }
 
-export function issueSession(user: any, req?: Request, options: SessionOptions = {}) {
+function createSessionRecord(user: any, req?: Request, options: SessionOptions = {}) {
   const refreshToken = `${randomUUID()}.${randomBytes(32).toString('base64url')}`;
   const expiresAt = new Date(Date.now() + REFRESH_TTL_MS).toISOString();
   const webAuthnVerified = options.webAuthnVerified === true;
@@ -84,15 +123,28 @@ export function issueSession(user: any, req?: Request, options: SessionOptions =
     webauthn_enrollment_required: webAuthnEnrollmentRequired ? 1 : 0,
   });
   return {
-    accessToken: createAccessToken(user, { webAuthnVerified, webAuthnEnrollmentRequired }),
     refreshToken,
-    expiresIn: Math.floor(ACCESS_TTL_MS / 1000),
-    webAuthnVerified,
-    webAuthnEnrollmentRequired,
+    expiresAt,
+    publicSession: {
+      accessToken: createAccessToken(user, { webAuthnVerified, webAuthnEnrollmentRequired }),
+      expiresIn: Math.floor(ACCESS_TTL_MS / 1000),
+      webAuthnVerified,
+      webAuthnEnrollmentRequired,
+    },
   };
 }
 
-export function rotateRefreshToken(refreshToken: string, req?: Request) {
+export function issueSession(user: any, req?: Request, options: SessionOptions = {}) {
+  return createSessionRecord(user, req, options).publicSession;
+}
+
+export function issueSessionCookie(res: Response, user: any, req?: Request, options: SessionOptions = {}) {
+  const created = createSessionRecord(user, req, options);
+  setCookie(res, created.refreshToken, created.expiresAt, req);
+  return created.publicSession;
+}
+
+export function rotateRefreshToken(refreshToken: string, req?: Request, res?: Response) {
   const session = Sessions.getByRefreshToken(refreshToken) as any;
   if (!session || session.revoked_at) throw new Error('Sesión inválida');
   if (new Date(session.expires_at).getTime() < Date.now()) throw new Error('Sesión expirada');
@@ -107,12 +159,14 @@ export function rotateRefreshToken(refreshToken: string, req?: Request) {
     user_nombre: user.nombre,
     detalle: null,
   });
+  const nextSession = createSessionRecord(user, req, {
+    webAuthnVerified: session.webauthn_verified === 1,
+    webAuthnEnrollmentRequired: session.webauthn_enrollment_required === 1,
+  });
+  if (res) setCookie(res, nextSession.refreshToken, nextSession.expiresAt, req);
   return {
     user,
-    session: issueSession(user, req, {
-      webAuthnVerified: session.webauthn_verified === 1,
-      webAuthnEnrollmentRequired: session.webauthn_enrollment_required === 1,
-    }),
+    session: nextSession.publicSession,
   };
 }
 

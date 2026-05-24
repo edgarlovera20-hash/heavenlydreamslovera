@@ -36,7 +36,16 @@ export const SiacAPI = {
   create: (data: any) => api('POST', '/api/siac', data),
   bulkCreate: (records: any[]) => api('POST', '/api/siac/bulk', records),
   importCsv: (replace = false) => api('POST', `/api/siac/import${replace ? '?replace=1' : ''}`),
+  importSource: (replace = true) => api('POST', '/api/siac/import-source', { replace }),
+  importFile: (fileName: string, contentBase64: string, replace = true) => api('POST', '/api/siac/import-file', { fileName, contentBase64, replace }),
   deleteAll: () => api('DELETE', '/api/siac'),
+};
+
+export const MorosidadAPI = {
+  getAll: () => api('GET', '/api/morosidad'),
+  analytics: () => api('GET', '/api/morosidad/analytics'),
+  importSource: (replace = true) => api('POST', '/api/morosidad/import-source', { replace }),
+  importFile: (fileName: string, contentBase64: string, replace = true) => api('POST', '/api/morosidad/import-file', { fileName, contentBase64, replace }),
 };
 
 // ── Tickets ─────────────────────────────────────────────────

@@ -1,24 +1,20 @@
 /**
  * OCR multi-proveedor con fallback en cascada:
- *   1. Claude (Anthropic)      — primario empresarial, requiere ANTHROPIC_API_KEY
+ *   1. Ollama (local/remoto)   — primario, requiere OLLAMA_URL
  *   2. Gemini (Google)         — respaldo, requiere GEMINI_API_KEY
- *   3. GPT-4o-mini (OpenAI)    — respaldo, requiere OPENAI_API_KEY
- *   4. Ollama (local/remoto)   — flexible, requiere OLLAMA_URL
- *   5. Tesseract.js            — fallback offline, sin red ni API key
+ *   3. Tesseract.js            — fallback offline, sin red ni API key
  *
  * Si los cuatro fallan, lanza error.
  *
  * Variables de entorno:
- *   GEMINI_API_KEY     — clave para Gemini 1.5 Pro
- *   OPENAI_API_KEY     — clave para GPT-4o-mini
+ *   GEMINI_API_KEY     — clave para Gemini
  *   OLLAMA_URL         — URL del servidor Ollama (ej: http://localhost:11434)
  *   OLLAMA_API_KEY     — opcional, clave de autenticación para Ollama
  *   OLLAMA_MODEL       — modelo local/remoto para OCR visual (default: glm-ocr:latest)
  *   OLLAMA_TIMEOUT_MS  — timeout para OCR Ollama (default: 135000)
- *   ANTHROPIC_API_KEY  — clave para Claude
- *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'claude' | 'gemini' | 'openai' | 'ollama' | 'tesseract'
+ *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'ollama' | 'gemini' | 'tesseract'
  *   OCR_STRATEGY       — 'adaptive' | 'quality' | 'fast' | 'local'
- *   OCR_ORDER_INE      — opcional, orden por documento: "claude,gemini,openai,ollama,tesseract"
+ *   OCR_ORDER_INE      — opcional, orden por documento: "ollama,gemini,tesseract"
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -26,16 +22,12 @@ import { createHash } from 'node:crypto';
 import { runTesseractIne, runTesseractComprobante, runTesseractSiac } from './ocr-tesseract';
 
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
-const OPENAI_API_KEY    = process.env.OPENAI_API_KEY || '';
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OLLAMA_URL        = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
 const OLLAMA_API_KEY    = process.env.OLLAMA_API_KEY || '';
-const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'claude').toLowerCase();
+const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'ollama').toLowerCase();
 const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'adaptive').toLowerCase();
 
 const GEMINI_MODEL    = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const OPENAI_MODEL    = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const CLAUDE_MODEL    = process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-latest';
 const OLLAMA_MODEL    = process.env.OLLAMA_MODEL || 'glm-ocr:latest';
 
 function parsePositiveIntEnv(name: string, fallback: number): number {
@@ -43,13 +35,13 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
-const TIMEOUT_MS_LLM       = parsePositiveIntEnv('OCR_LLM_TIMEOUT_MS', 45_000);  // 45s para GPT/Claude
+const TIMEOUT_MS_LLM       = parsePositiveIntEnv('OCR_LLM_TIMEOUT_MS', 45_000);  // 45s para Gemini
 const TIMEOUT_MS_OLLAMA    = parsePositiveIntEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM * 3);
 const TIMEOUT_MS_TESSERACT = 60_000;  // 60s para tesseract local
 const CACHE_TTL_MS         = 10 * 60 * 1000;
 const CACHE_MAX_ENTRIES    = 100;
 
-const VALID_PROVIDER_NAMES = ['claude', 'gemini', 'openai', 'ollama', 'tesseract'] as const;
+const VALID_PROVIDER_NAMES = ['ollama', 'gemini', 'tesseract'] as const;
 
 export type OcrProvider = typeof VALID_PROVIDER_NAMES[number];
 export type OcrDocType  = 'ine' | 'comprobante' | 'siac';
@@ -74,7 +66,7 @@ type CachedOcrResult = OcrResult & { cached?: boolean };
 
 const ocrCache = new Map<string, { expiresAt: number; result: OcrResult }>();
 
-// ─── PROMPTS (compartidos entre GPT y Claude) ────────────────────────────────
+// ─── PROMPTS (compartidos entre Ollama y Gemini) ─────────────────────────────
 
 const INE_PROMPT = `You are a precise OCR system for Mexican INE/IFE identity cards. You may receive 1-2 images (front and/or back of the same card).
 
@@ -339,51 +331,6 @@ function validateFields(docType: OcrDocType, fields: Record<string, string>): { 
   return { ok: true };
 }
 
-// ─── PROVIDER 1: Claude ──────────────────────────────────────────────────────
-
-async function callClaude(prompt: string, base64Images: string[]): Promise<string> {
-  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY no configurada');
-
-  const imageBlocks = base64Images.map(b64 => ({
-    type: 'image' as const,
-    source: {
-      type: 'base64' as const,
-      media_type: detectMediaType(b64),
-      data: stripDataUrl(b64),
-    },
-  }));
-
-  const res = await withTimeout(
-    fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: 2000,
-        temperature: 0,
-        messages: [{
-          role: 'user',
-          content: [{ type: 'text', text: prompt }, ...imageBlocks],
-        }],
-      }),
-    }),
-    TIMEOUT_MS_LLM,
-    'Claude'
-  );
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Claude ${res.status}: ${body.slice(0, 200)}`);
-  }
-
-  const data = await res.json() as any;
-  return data?.content?.[0]?.text || '';
-}
-
 function cacheKey(docType: OcrDocType, images: string[]) {
   const hash = createHash('sha256');
   hash.update(docType);
@@ -413,49 +360,6 @@ function setCached(key: string, result: OcrResult) {
     if (oldest) ocrCache.delete(oldest);
   }
   ocrCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, result: { ...result } });
-}
-
-async function callOpenAi(prompt: string, base64Images: string[]): Promise<string> {
-  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY no configurada');
-
-  const imageBlocks = base64Images.map(b64 => {
-    const mediaType = detectMediaType(b64);
-    const data      = stripDataUrl(b64);
-    return {
-      type: 'image_url' as const,
-      image_url: { url: `data:${mediaType};base64,${data}`, detail: 'high' as const },
-    };
-  });
-
-  const res = await withTimeout(
-    fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        messages: [{
-          role: 'user',
-          content: [{ type: 'text', text: prompt }, ...imageBlocks],
-        }],
-        response_format: { type: 'json_object' },
-        temperature: 0.0,
-        max_tokens: 2000,
-      }),
-    }),
-    TIMEOUT_MS_LLM,
-    'OpenAI'
-  );
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`OpenAI ${res.status}: ${body.slice(0, 200)}`);
-  }
-
-  const data = await res.json() as any;
-  return data?.choices?.[0]?.message?.content || '';
 }
 
 // ─── PROVIDER 2: Gemini ──────────────────────────────────────────────────────
@@ -500,7 +404,7 @@ async function callGemini(prompt: string, base64Images: string[]): Promise<strin
   return text;
 }
 
-// ─── PROVIDER 4: Ollama (local/remoto) ──────────────────────────────────────
+// ─── PROVIDER 1: Ollama (local/remoto) ──────────────────────────────────────
 
 async function callOllama(prompt: string, base64Images: string[]): Promise<string> {
   if (!OLLAMA_URL) throw new Error('OLLAMA_URL no configurada');
@@ -642,22 +546,22 @@ const VALID_PROVIDERS: OcrProvider[] = [...VALID_PROVIDER_NAMES];
 
 const DOC_ORDERS: Record<OcrDocType, Record<OcrStrategy, OcrProvider[]>> = {
   ine: {
-    adaptive: ['claude', 'gemini', 'openai', 'ollama', 'tesseract'],
-    quality: ['claude', 'openai', 'gemini', 'ollama', 'tesseract'],
-    fast: ['gemini', 'openai', 'claude', 'ollama', 'tesseract'],
-    local: ['ollama', 'tesseract', 'claude', 'gemini', 'openai'],
+    adaptive: ['ollama', 'gemini', 'tesseract'],
+    quality: ['ollama', 'gemini', 'tesseract'],
+    fast: ['ollama', 'gemini', 'tesseract'],
+    local: ['ollama', 'tesseract', 'gemini'],
   },
   comprobante: {
-    adaptive: ['gemini', 'claude', 'openai', 'ollama', 'tesseract'],
-    quality: ['claude', 'gemini', 'openai', 'ollama', 'tesseract'],
-    fast: ['gemini', 'openai', 'claude', 'ollama', 'tesseract'],
-    local: ['ollama', 'tesseract', 'gemini', 'claude', 'openai'],
+    adaptive: ['ollama', 'gemini', 'tesseract'],
+    quality: ['ollama', 'gemini', 'tesseract'],
+    fast: ['ollama', 'gemini', 'tesseract'],
+    local: ['ollama', 'tesseract', 'gemini'],
   },
   siac: {
-    adaptive: ['gemini', 'openai', 'claude', 'ollama', 'tesseract'],
-    quality: ['claude', 'openai', 'gemini', 'ollama', 'tesseract'],
-    fast: ['gemini', 'openai', 'claude', 'ollama', 'tesseract'],
-    local: ['ollama', 'tesseract', 'gemini', 'openai', 'claude'],
+    adaptive: ['ollama', 'gemini', 'tesseract'],
+    quality: ['ollama', 'gemini', 'tesseract'],
+    fast: ['ollama', 'gemini', 'tesseract'],
+    local: ['ollama', 'tesseract', 'gemini'],
   },
 };
 
@@ -693,15 +597,6 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
   const t0 = Date.now();
   const prompt = PROMPTS[docType];
 
-  if (provider === 'claude') {
-    const raw = await callClaude(prompt, images);
-    if (!raw) throw new Error('Claude devolvió respuesta vacía');
-    const fields = sanitizeFields(docType, parseJsonResponse(raw));
-    const text = fields.rawText || raw;
-    delete fields.rawText;
-    return { text, fields, provider, model: CLAUDE_MODEL, durationMs: Date.now() - t0 };
-  }
-
   if (provider === 'gemini') {
     const raw = await callGemini(prompt, images);
     if (!raw) throw new Error('Gemini devolvió respuesta vacía');
@@ -709,15 +604,6 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
     const text = fields.rawText || raw;
     delete fields.rawText;
     return { text, fields, provider, model: GEMINI_MODEL, durationMs: Date.now() - t0 };
-  }
-
-  if (provider === 'openai') {
-    const raw = await callOpenAi(prompt, images);
-    if (!raw) throw new Error('OpenAI devolvió respuesta vacía');
-    const fields = sanitizeFields(docType, parseJsonResponse(raw));
-    const text = fields.rawText || raw;
-    delete fields.rawText;
-    return { text, fields, provider, model: OPENAI_MODEL, durationMs: Date.now() - t0 };
   }
 
   if (provider === 'ollama') {
@@ -752,9 +638,7 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
   const strategy = currentStrategy();
 
   for (const provider of providerOrder) {
-    if (provider === 'claude' && !ANTHROPIC_API_KEY) { errors.push('claude: sin API key'); continue; }
     if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin API key'); continue; }
-    if (provider === 'openai' && !OPENAI_API_KEY) { errors.push('openai: sin API key'); continue; }
     if (provider === 'ollama' && !OLLAMA_URL) { errors.push('ollama: sin URL configurada'); continue; }
 
     try {
@@ -842,9 +726,7 @@ export async function checkOcrStatus() {
       maxEntries: CACHE_MAX_ENTRIES,
     },
     providers: {
-      claude:    { configured: !!ANTHROPIC_API_KEY, model: CLAUDE_MODEL },
       gemini:    { configured: !!GEMINI_API_KEY,   model: GEMINI_MODEL },
-      openai:    { configured: !!OPENAI_API_KEY,    model: OPENAI_MODEL },
       ollama:    ollamaHealth,
       tesseract: { configured: true,                model: 'tesseract-spa (local)' },
     },

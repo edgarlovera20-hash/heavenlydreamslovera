@@ -1,7 +1,9 @@
 // @ts-ignore
 import Database from 'better-sqlite3';
+import { randomUUID } from 'crypto';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { hashPassword, isPasswordHash } from './passwords';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = join(__dirname, '..', 'data', 'heavenlydreams.db');
@@ -31,6 +33,8 @@ const newSiacCols = [
   { name: 'zona',               def: 'TEXT' },
   { name: 'distrito',           def: 'TEXT' },
   { name: 'colonia',            def: 'TEXT' },
+  { name: 'usuario',            def: 'TEXT' },
+  { name: 'morosidad',          def: 'TEXT' },
 ];
 try {
   const existingCols = ((db as any).prepare('PRAGMA table_info(siac_records)').all() as any[]).map((c: any) => c.name);
@@ -124,6 +128,8 @@ db.exec(`
     zona                TEXT,
     distrito            TEXT,
     colonia             TEXT,
+    usuario             TEXT,
+    morosidad           TEXT,
     created_at          TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -357,6 +363,118 @@ db.exec(`
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Cuentas, conversaciones y mensajes de canales atendidos por agentes
+  CREATE TABLE IF NOT EXISTS channel_accounts (
+    id          TEXT PRIMARY KEY,
+    channel     TEXT NOT NULL,
+    label       TEXT,
+    external_id TEXT,
+    status      TEXT NOT NULL DEFAULT 'disconnected',
+    metadata    TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(channel, external_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS channel_conversations (
+    id              TEXT PRIMARY KEY,
+    channel         TEXT NOT NULL,
+    external_chat_id TEXT NOT NULL,
+    display_name    TEXT,
+    status          TEXT NOT NULL DEFAULT 'nuevo',
+    assigned_to     TEXT,
+    intent          TEXT,
+    confidence      REAL NOT NULL DEFAULT 0,
+    memory          TEXT,
+    last_message_at INTEGER,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(channel, external_chat_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS channel_messages (
+    id               TEXT PRIMARY KEY,
+    conversation_id  TEXT NOT NULL,
+    channel          TEXT NOT NULL,
+    external_chat_id TEXT NOT NULL,
+    direction        TEXT NOT NULL,
+    body             TEXT NOT NULL,
+    from_name        TEXT,
+    to_id            TEXT,
+    timestamp        INTEGER NOT NULL,
+    is_group         INTEGER NOT NULL DEFAULT 0,
+    metadata         TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (conversation_id) REFERENCES channel_conversations(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_decisions (
+    id                TEXT PRIMARY KEY,
+    conversation_id   TEXT NOT NULL,
+    message_id        TEXT,
+    agent             TEXT NOT NULL,
+    intent            TEXT NOT NULL,
+    confidence        REAL NOT NULL DEFAULT 0,
+    extracted_fields  TEXT,
+    proposed_reply    TEXT,
+    proposed_actions  TEXT,
+    requires_approval INTEGER NOT NULL DEFAULT 1,
+    status            TEXT NOT NULL DEFAULT 'pending_approval',
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (conversation_id) REFERENCES channel_conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (message_id) REFERENCES channel_messages(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_tasks (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT,
+    type            TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'open',
+    due_at          TEXT,
+    assigned_to     TEXT,
+    metadata        TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (conversation_id) REFERENCES channel_conversations(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_profiles (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    role            TEXT,
+    personality     TEXT,
+    self_knowledge  TEXT,
+    knowledge_base  TEXT,
+    learned_notes   TEXT,
+    metadata        TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_outbox (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    decision_id     TEXT,
+    type            TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending_approval',
+    channel         TEXT NOT NULL,
+    target          TEXT NOT NULL,
+    message         TEXT,
+    action          TEXT,
+    payload         TEXT,
+    result          TEXT,
+    error           TEXT,
+    approved_by     TEXT,
+    approved_at     TEXT,
+    rejected_by     TEXT,
+    rejected_at     TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (conversation_id) REFERENCES channel_conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (decision_id) REFERENCES agent_decisions(id) ON DELETE SET NULL
+  );
+
   -- Métricas/KPIs capturados por módulos y workers
   CREATE TABLE IF NOT EXISTS metrics (
     id          TEXT PRIMARY KEY,
@@ -582,6 +700,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ventas_status    ON ventas (status);
   CREATE INDEX IF NOT EXISTS idx_ventas_created   ON ventas (created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ventas_zona      ON ventas (zona);
+  CREATE INDEX IF NOT EXISTS idx_siac_folio       ON siac_records (folio_siac);
+  CREATE INDEX IF NOT EXISTS idx_siac_created     ON siac_records (fecha_captura DESC);
   CREATE INDEX IF NOT EXISTS idx_siac_estatus     ON siac_records (estatus_siac);
   CREATE INDEX IF NOT EXISTS idx_siac_promotor    ON siac_records (promotor);
   CREATE INDEX IF NOT EXISTS idx_audit_created    ON audit_log (created_at DESC);
@@ -601,6 +721,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ai_jobs_status   ON ai_jobs (status, priority, created_at);
   CREATE INDEX IF NOT EXISTS idx_telmex_jobs_status ON telmex_automation_jobs (status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_telmex_jobs_sale ON telmex_automation_jobs (sale_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_channel_conversations_last ON channel_conversations (last_message_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_channel_messages_conversation ON channel_messages (conversation_id, timestamp ASC);
+  CREATE INDEX IF NOT EXISTS idx_channel_messages_recent ON channel_messages (timestamp DESC);
+  CREATE INDEX IF NOT EXISTS idx_agent_outbox_status ON agent_outbox (status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_metrics_name     ON metrics (name, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_capturas_folio   ON capturas (folio);
   CREATE INDEX IF NOT EXISTS idx_capturas_vendedor ON capturas (vendedor_id, fecha_captura DESC);
@@ -612,7 +736,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_doc_files_sha     ON document_files (sha256);
   CREATE INDEX IF NOT EXISTS idx_doc_files_review  ON document_files (review_status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_clientes_folio   ON clientes_crm (folio);
+  CREATE INDEX IF NOT EXISTS idx_clientes_vendedor ON clientes_crm (vendedor_asignado, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_clientes_status  ON clientes_crm (status_cliente, proximo_seguimiento);
+  CREATE INDEX IF NOT EXISTS idx_morosidad_dias   ON morosidad (dias_atraso DESC);
   CREATE INDEX IF NOT EXISTS idx_morosidad_status ON morosidad (status_cobranza, dias_atraso DESC);
   CREATE INDEX IF NOT EXISTS idx_folios_status    ON estatus_folios (status_actual, fecha_movimiento DESC);
   CREATE INDEX IF NOT EXISTS idx_logs_created     ON logs_sistema (created_at DESC);
@@ -621,14 +747,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_webauthn_ch_user ON webauthn_challenges (user_id, type);
 `);
 
+function passwordForStorage(value: any) {
+  const password = String(value || '');
+  if (!password) throw new Error('Password requerido');
+  return isPasswordHash(password) ? password : hashPassword(password);
+}
+
 // Seed admin user if no users exist
 const userCount = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c;
 if (userCount === 0 && process.env.NODE_ENV !== 'production') {
+  const devPassword = process.env.DEV_ADMIN_PASSWORD || `dev-${randomUUID().slice(0, 8)}`;
   db.prepare(`
     INSERT INTO users (uid, nombre, email, username, role, password, zona, activo)
     VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-  `).run('uid_edgar', 'Edgar Lovera', 'edgar@heavenlydreams.com', 'edgar', 'GERENTE', 'admin123', 'CDMX - Edgar Lovera');
-  console.log('[DB] Usuario admin inicial creado: edgar / admin123');
+  `).run('uid_edgar', 'Edgar Lovera', 'edgar@heavenlydreams.com', 'edgar', 'GERENTE', passwordForStorage(devPassword), 'CDMX - Edgar Lovera');
+  console.log(`[DB] Usuario admin inicial creado: edgar / contraseña temporal: ${devPassword}`);
 }
 
 export default db;
@@ -657,13 +790,20 @@ export const Users = {
   getByUsername: (username: string) => db.prepare('SELECT * FROM users WHERE username=?').get(username),
   getByEmail: (email: string) => db.prepare('SELECT * FROM users WHERE lower(email)=lower(?)').get(email),
   create: (data: any) => {
+    const clean = { ...data, password: passwordForStorage(data.password) };
     const stmt = db.prepare(`
       INSERT INTO users (uid,nombre,email,username,role,password,zona,puesto,activo)
       VALUES (@uid,@nombre,@email,@username,@role,@password,@zona,@puesto,@activo)
     `);
-    return stmt.run(data);
+    return stmt.run(clean);
   },
-  update: (uid: string, data: any) => updateById('users', 'uid', uid, data, ['nombre', 'email', 'username', 'role', 'password', 'zona', 'puesto', 'avatar', 'biometric_id', 'activo']),
+  update: (uid: string, data: any) => {
+    const clean = { ...data };
+    if (Object.prototype.hasOwnProperty.call(clean, 'password') && clean.password) {
+      clean.password = passwordForStorage(clean.password);
+    }
+    return updateById('users', 'uid', uid, clean, ['nombre', 'email', 'username', 'role', 'password', 'zona', 'puesto', 'avatar', 'biometric_id', 'activo']);
+  },
   delete: (uid: string) => db.prepare("DELETE FROM users WHERE uid=?").run(uid),
 };
 
@@ -685,6 +825,28 @@ export const Ventas = {
 
 export const SiacRecords = {
   getAll: () => db.prepare('SELECT * FROM siac_records ORDER BY fecha_captura DESC').all(),
+  getPage: ({ limit = 200, offset = 0, q = '', updatedSince = '' }: { limit?: number; offset?: number; q?: string; updatedSince?: string }) => {
+    const where: string[] = [];
+    const params: Record<string, any> = { limit, offset };
+    if (q) {
+      where.push(`(
+        folio_siac LIKE @q OR telefono_asignado LIKE @q OR telefono_portado LIKE @q
+        OR telefono_referencia LIKE @q OR os_alta LIKE @q OR tienda LIKE @q
+        OR zona LIKE @q OR distrito LIKE @q OR colonia LIKE @q
+      )`);
+      params.q = `%${q}%`;
+    }
+    if (updatedSince) {
+      where.push('datetime(created_at) >= datetime(@updatedSince)');
+      params.updatedSince = updatedSince;
+    }
+    return db.prepare(`
+      SELECT * FROM siac_records
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY fecha_captura DESC
+      LIMIT @limit OFFSET @offset
+    `).all(params);
+  },
   search: (folio: string) => db.prepare(
     `SELECT * FROM siac_records
       WHERE folio_siac LIKE @q
@@ -709,14 +871,16 @@ export const SiacRecords = {
       observaciones, respuesta_telmex, motivo_rechazo, telefono_asignado,
       telefono_portado, os_alta, fecha_os_alta, estatus_pisa,
       fecha_cambio_estatus, tipo_cliente, tipo_servicio, correo,
-      estatus_etapa, campana, telefono_referencia, zona, distrito, colonia
+      estatus_etapa, campana, telefono_referencia, zona, distrito, colonia,
+      usuario, morosidad
     ) VALUES (
       @id, @folio_siac, @fecha_captura, @estrategia, @promotor, @estatus_siac,
       @tipo_linea, @linea_contratada, @area, @division, @tienda, @paquete,
       @observaciones, @respuesta_telmex, @motivo_rechazo, @telefono_asignado,
       @telefono_portado, @os_alta, @fecha_os_alta, @estatus_pisa,
       @fecha_cambio_estatus, @tipo_cliente, @tipo_servicio, @correo,
-      @estatus_etapa, @campana, @telefono_referencia, @zona, @distrito, @colonia
+      @estatus_etapa, @campana, @telefono_referencia, @zona, @distrito, @colonia,
+      @usuario, @morosidad
     ) ON CONFLICT(folio_siac) DO UPDATE SET
       fecha_captura=excluded.fecha_captura,
       estrategia=excluded.estrategia,
@@ -745,8 +909,10 @@ export const SiacRecords = {
       telefono_referencia=excluded.telefono_referencia,
       zona=excluded.zona,
       distrito=excluded.distrito,
-      colonia=excluded.colonia
-  `).run(data),
+      colonia=excluded.colonia,
+      usuario=excluded.usuario,
+      morosidad=excluded.morosidad
+  `).run({ usuario: null, morosidad: null, ...data }),
   deleteAll: () => db.prepare('DELETE FROM siac_records').run(),
   count: () => (db.prepare('SELECT COUNT(*) as c FROM siac_records').get() as any).c,
 };
@@ -765,6 +931,17 @@ export const Tickets = {
 
 export const AuditLog = {
   getAll: (limit = 200) => db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?').all(limit),
+  getPage: ({ limit = 200, offset = 0, updatedSince = '' }: { limit?: number; offset?: number; updatedSince?: string }) => {
+    if (updatedSince) {
+      return db.prepare(`
+        SELECT * FROM audit_log
+        WHERE datetime(created_at) >= datetime(@updatedSince)
+        ORDER BY created_at DESC
+        LIMIT @limit OFFSET @offset
+      `).all({ limit, offset, updatedSince });
+    }
+    return db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT @limit OFFSET @offset').all({ limit, offset });
+  },
   insert: (data: any) => db.prepare(`
     INSERT INTO audit_log (accion,entidad,entidad_id,user_id,user_nombre,detalle)
     VALUES (@accion,@entidad,@entidad_id,@user_id,@user_nombre,@detalle)
@@ -957,6 +1134,309 @@ export const AutomationRules = {
   delete: (id: string) => db.prepare('DELETE FROM automation_rules WHERE id=?').run(id),
 };
 
+function parseJson(value: any, fallback: any = null) {
+  if (value == null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function normalizeConversation(row: any) {
+  return row ? { ...row, memory: parseJson(row.memory, {}) } : null;
+}
+
+function normalizeMessage(row: any) {
+  return row ? {
+    ...row,
+    conversationId: row.conversation_id,
+    externalChatId: row.external_chat_id,
+    fromName: row.from_name,
+    isGroup: Boolean(row.is_group),
+    metadata: parseJson(row.metadata, {}),
+  } : null;
+}
+
+function normalizeDecision(row: any) {
+  return row ? {
+    ...row,
+    conversationId: row.conversation_id,
+    messageId: row.message_id,
+    extractedFields: parseJson(row.extracted_fields, {}),
+    proposedActions: parseJson(row.proposed_actions, []),
+    requiresApproval: Boolean(row.requires_approval),
+  } : null;
+}
+
+function normalizeOutbox(row: any) {
+  return row ? {
+    ...row,
+    conversationId: row.conversation_id,
+    decisionId: row.decision_id,
+    payload: parseJson(row.payload, {}),
+    result: parseJson(row.result, null),
+  } : null;
+}
+
+function normalizeAgentProfile(row: any) {
+  return row ? {
+    ...row,
+    selfKnowledge: row.self_knowledge,
+    knowledgeBase: row.knowledge_base,
+    learnedNotes: parseJson(row.learned_notes, []),
+    metadata: parseJson(row.metadata, {}),
+  } : null;
+}
+
+const DEFAULT_RECEPTIONIST_PROFILE = {
+  id: 'promoter_receptionist',
+  name: 'Agente Heavenly',
+  role: 'Recepcion de promotores',
+  personality: 'Cordial, claro, rapido y profesional. Saluda con confianza, pide datos concretos y no suena como robot generico.',
+  self_knowledge: 'Soy el asistente que recibe a los promotores de Heavenly Dreams. Puedo guiarlos para registrar clientes, consultar folios SIAC y ordenar la informacion antes de pasarla al equipo.',
+  knowledge_base: 'Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC. Si falta informacion, hago preguntas cortas y concretas.',
+  learned_notes: JSON.stringify([]),
+  metadata: JSON.stringify({ audience: 'promotores', channel: 'chats' }),
+};
+
+export const ChannelAccounts = {
+  getAll: () => db.prepare('SELECT * FROM channel_accounts ORDER BY channel, created_at DESC').all(),
+  upsert: (data: any) => db.prepare(`
+    INSERT INTO channel_accounts (id,channel,label,external_id,status,metadata)
+    VALUES (@id,@channel,@label,@external_id,@status,@metadata)
+    ON CONFLICT(channel, external_id) DO UPDATE SET
+      label=excluded.label,
+      status=excluded.status,
+      metadata=excluded.metadata,
+      updated_at=datetime('now')
+  `).run({
+    ...data,
+    id: data.id || randomUUID(),
+    metadata: typeof data.metadata === 'string' ? data.metadata : JSON.stringify(data.metadata || {}),
+  }),
+};
+
+export const ChannelConversations = {
+  getAll: (limit = 200) => (db.prepare(`
+    SELECT c.*,
+      (SELECT body FROM channel_messages m WHERE m.conversation_id=c.id ORDER BY m.timestamp DESC LIMIT 1) AS last_body,
+      (SELECT COUNT(*) FROM agent_outbox o WHERE o.conversation_id=c.id AND o.status='pending_approval') AS pending_outbox
+    FROM channel_conversations c
+    ORDER BY COALESCE(c.last_message_at, 0) DESC, c.created_at DESC
+    LIMIT ?
+  `).all(limit) as any[]).map(normalizeConversation),
+  getById: (id: string) => normalizeConversation(db.prepare('SELECT * FROM channel_conversations WHERE id=?').get(id)),
+  getByChannelChat: (channel: string, externalChatId: string) => normalizeConversation(db.prepare(
+    'SELECT * FROM channel_conversations WHERE channel=? AND external_chat_id=?'
+  ).get(channel, externalChatId)),
+  upsert: (data: any) => {
+    const id = data.id || randomUUID();
+    db.prepare(`
+      INSERT INTO channel_conversations
+        (id,channel,external_chat_id,display_name,status,assigned_to,intent,confidence,memory,last_message_at)
+      VALUES
+        (@id,@channel,@external_chat_id,@display_name,@status,@assigned_to,@intent,@confidence,@memory,@last_message_at)
+      ON CONFLICT(channel, external_chat_id) DO UPDATE SET
+        display_name=COALESCE(excluded.display_name, channel_conversations.display_name),
+        status=COALESCE(excluded.status, channel_conversations.status),
+        intent=COALESCE(excluded.intent, channel_conversations.intent),
+        confidence=CASE WHEN excluded.confidence > 0 THEN excluded.confidence ELSE channel_conversations.confidence END,
+        memory=COALESCE(excluded.memory, channel_conversations.memory),
+        last_message_at=MAX(COALESCE(channel_conversations.last_message_at, 0), COALESCE(excluded.last_message_at, 0)),
+        updated_at=datetime('now')
+    `).run({
+      id,
+      channel: data.channel,
+      external_chat_id: data.external_chat_id,
+      display_name: data.display_name || null,
+      status: data.status || 'nuevo',
+      assigned_to: data.assigned_to || null,
+      intent: data.intent || null,
+      confidence: Number(data.confidence || 0),
+      memory: data.memory == null ? null : typeof data.memory === 'string' ? data.memory : JSON.stringify(data.memory),
+      last_message_at: Number(data.last_message_at || Date.now()),
+    });
+    return ChannelConversations.getByChannelChat(data.channel, data.external_chat_id) || ChannelConversations.getById(id);
+  },
+  update: (id: string, data: any) => {
+    const update = { ...data };
+    if (Object.prototype.hasOwnProperty.call(update, 'memory') && typeof update.memory !== 'string') update.memory = JSON.stringify(update.memory || {});
+    return updateById('channel_conversations', 'id', id, update, ['display_name', 'status', 'assigned_to', 'intent', 'confidence', 'memory', 'last_message_at']);
+  },
+};
+
+export const ChannelMessages = {
+  getRecent: (limit = 150, updatedSince = '') => {
+    const rows = updatedSince
+      ? db.prepare(`
+          SELECT m.* FROM channel_messages m
+          WHERE m.timestamp >= @sinceMs OR datetime(m.created_at) >= datetime(@updatedSince)
+          ORDER BY m.timestamp DESC LIMIT @limit
+        `).all({ limit, updatedSince, sinceMs: Date.parse(updatedSince) || 0 })
+      : db.prepare(`
+          SELECT m.* FROM channel_messages m ORDER BY m.timestamp DESC LIMIT ?
+        `).all(limit);
+    return (rows as any[]).map(normalizeMessage).reverse();
+  },
+  getByConversation: (conversationId: string, limit = 200, updatedSince = '') => {
+    const rows = updatedSince
+      ? db.prepare(`
+          SELECT * FROM channel_messages
+          WHERE conversation_id=@conversationId
+            AND (timestamp >= @sinceMs OR datetime(created_at) >= datetime(@updatedSince))
+          ORDER BY timestamp ASC LIMIT @limit
+        `).all({ conversationId, limit, updatedSince, sinceMs: Date.parse(updatedSince) || 0 })
+      : db.prepare(`
+          SELECT * FROM channel_messages WHERE conversation_id=? ORDER BY timestamp ASC LIMIT ?
+        `).all(conversationId, limit);
+    return (rows as any[]).map(normalizeMessage);
+  },
+  getById: (id: string) => normalizeMessage(db.prepare('SELECT * FROM channel_messages WHERE id=?').get(id)),
+  create: (data: any) => {
+    const result = db.prepare(`
+      INSERT OR IGNORE INTO channel_messages
+        (id,conversation_id,channel,external_chat_id,direction,body,from_name,to_id,timestamp,is_group,metadata)
+      VALUES
+        (@id,@conversation_id,@channel,@external_chat_id,@direction,@body,@from_name,@to_id,@timestamp,@is_group,@metadata)
+    `).run({
+      ...data,
+      timestamp: Number(data.timestamp || Date.now()),
+      is_group: data.is_group ? 1 : 0,
+      metadata: typeof data.metadata === 'string' ? data.metadata : JSON.stringify(data.metadata || {}),
+    });
+    return { created: result.changes > 0, message: ChannelMessages.getById(data.id) };
+  },
+};
+
+export const AgentDecisions = {
+  getRecent: (limit = 100) => (db.prepare('SELECT * FROM agent_decisions ORDER BY created_at DESC LIMIT ?').all(limit) as any[]).map(normalizeDecision),
+  getByMessage: (messageId: string) => normalizeDecision(db.prepare('SELECT * FROM agent_decisions WHERE message_id=? ORDER BY created_at DESC LIMIT 1').get(messageId)),
+  getByConversation: (conversationId: string, limit = 100) => (db.prepare(
+    'SELECT * FROM agent_decisions WHERE conversation_id=? ORDER BY created_at DESC LIMIT ?'
+  ).all(conversationId, limit) as any[]).map(normalizeDecision),
+  create: (data: any) => {
+    db.prepare(`
+      INSERT INTO agent_decisions
+        (id,conversation_id,message_id,agent,intent,confidence,extracted_fields,proposed_reply,proposed_actions,requires_approval,status)
+      VALUES
+        (@id,@conversation_id,@message_id,@agent,@intent,@confidence,@extracted_fields,@proposed_reply,@proposed_actions,@requires_approval,@status)
+    `).run({
+      ...data,
+      id: data.id || randomUUID(),
+      confidence: Number(data.confidence || 0),
+      extracted_fields: typeof data.extracted_fields === 'string' ? data.extracted_fields : JSON.stringify(data.extracted_fields || {}),
+      proposed_actions: typeof data.proposed_actions === 'string' ? data.proposed_actions : JSON.stringify(data.proposed_actions || []),
+      requires_approval: data.requires_approval === false ? 0 : 1,
+      status: data.status || 'pending_approval',
+    });
+  },
+};
+
+export const AgentTasks = {
+  getAll: (limit = 100) => db.prepare('SELECT * FROM agent_tasks ORDER BY created_at DESC LIMIT ?').all(limit),
+  create: (data: any) => db.prepare(`
+    INSERT INTO agent_tasks (id,conversation_id,type,title,status,due_at,assigned_to,metadata)
+    VALUES (@id,@conversation_id,@type,@title,@status,@due_at,@assigned_to,@metadata)
+  `).run({
+    ...data,
+    id: data.id || randomUUID(),
+    status: data.status || 'open',
+    metadata: typeof data.metadata === 'string' ? data.metadata : JSON.stringify(data.metadata || {}),
+  }),
+  update: (id: string, data: any) => updateById('agent_tasks', 'id', id, data, ['type', 'title', 'status', 'due_at', 'assigned_to', 'metadata']),
+};
+
+export const AgentProfiles = {
+  getById: (id: string) => {
+    const row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id);
+    if (row) return normalizeAgentProfile(row);
+    if (id === DEFAULT_RECEPTIONIST_PROFILE.id) {
+      AgentProfiles.upsert(DEFAULT_RECEPTIONIST_PROFILE);
+      return normalizeAgentProfile(db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id));
+    }
+    return null;
+  },
+  upsert: (data: any) => {
+    const clean = {
+      id: data.id,
+      name: data.name || DEFAULT_RECEPTIONIST_PROFILE.name,
+      role: data.role || DEFAULT_RECEPTIONIST_PROFILE.role,
+      personality: data.personality || '',
+      self_knowledge: data.self_knowledge ?? data.selfKnowledge ?? '',
+      knowledge_base: data.knowledge_base ?? data.knowledgeBase ?? '',
+      learned_notes: typeof data.learned_notes === 'string'
+        ? data.learned_notes
+        : JSON.stringify(data.learnedNotes || data.learned_notes || []),
+      metadata: typeof data.metadata === 'string' ? data.metadata : JSON.stringify(data.metadata || {}),
+    };
+    return db.prepare(`
+      INSERT INTO agent_profiles
+        (id,name,role,personality,self_knowledge,knowledge_base,learned_notes,metadata)
+      VALUES
+        (@id,@name,@role,@personality,@self_knowledge,@knowledge_base,@learned_notes,@metadata)
+      ON CONFLICT(id) DO UPDATE SET
+        name=excluded.name,
+        role=excluded.role,
+        personality=excluded.personality,
+        self_knowledge=excluded.self_knowledge,
+        knowledge_base=excluded.knowledge_base,
+        learned_notes=excluded.learned_notes,
+        metadata=excluded.metadata,
+        updated_at=datetime('now')
+    `).run(clean);
+  },
+  update: (id: string, data: any) => {
+    const existing = AgentProfiles.getById(id) as any;
+    if (!existing) return null;
+    AgentProfiles.upsert({
+      id,
+      name: data.name ?? existing.name,
+      role: data.role ?? existing.role,
+      personality: data.personality ?? existing.personality,
+      selfKnowledge: data.selfKnowledge ?? data.self_knowledge ?? existing.selfKnowledge,
+      knowledgeBase: data.knowledgeBase ?? data.knowledge_base ?? existing.knowledgeBase,
+      learnedNotes: data.learnedNotes ?? data.learned_notes ?? existing.learnedNotes ?? [],
+      metadata: data.metadata ?? existing.metadata ?? {},
+    });
+    return AgentProfiles.getById(id);
+  },
+};
+
+export const AgentOutbox = {
+  getAll: (limit = 200) => (db.prepare(`
+    SELECT o.*, c.display_name, c.intent
+    FROM agent_outbox o
+    LEFT JOIN channel_conversations c ON c.id=o.conversation_id
+    ORDER BY CASE o.status WHEN 'pending_approval' THEN 0 ELSE 1 END, o.created_at DESC
+    LIMIT ?
+  `).all(limit) as any[]).map(normalizeOutbox),
+  getByConversation: (conversationId: string, limit = 100) => (db.prepare(
+    'SELECT * FROM agent_outbox WHERE conversation_id=? ORDER BY created_at DESC LIMIT ?'
+  ).all(conversationId, limit) as any[]).map(normalizeOutbox),
+  getById: (id: string) => normalizeOutbox(db.prepare('SELECT * FROM agent_outbox WHERE id=?').get(id)),
+  create: (data: any) => {
+    const id = data.id || randomUUID();
+    db.prepare(`
+      INSERT INTO agent_outbox
+        (id,conversation_id,decision_id,type,status,channel,target,message,action,payload,result,error)
+      VALUES
+        (@id,@conversation_id,@decision_id,@type,@status,@channel,@target,@message,@action,@payload,@result,@error)
+    `).run({
+      ...data,
+      id,
+      status: data.status || 'pending_approval',
+      payload: typeof data.payload === 'string' ? data.payload : JSON.stringify(data.payload || {}),
+      result: data.result == null ? null : typeof data.result === 'string' ? data.result : JSON.stringify(data.result),
+      error: data.error || null,
+    });
+    return AgentOutbox.getById(id);
+  },
+  update: (id: string, data: any) => {
+    const update = { ...data };
+    if (Object.prototype.hasOwnProperty.call(update, 'payload') && typeof update.payload !== 'string') update.payload = JSON.stringify(update.payload || {});
+    if (Object.prototype.hasOwnProperty.call(update, 'result') && typeof update.result !== 'string') update.result = JSON.stringify(update.result || null);
+    return updateById('agent_outbox', 'id', id, update, ['status', 'message', 'action', 'payload', 'result', 'error', 'approved_by', 'approved_at', 'rejected_by', 'rejected_at']);
+  },
+};
+
 export const Metrics = {
   getRecent: (limit = 200) => db.prepare('SELECT * FROM metrics ORDER BY created_at DESC LIMIT ?').all(limit),
   insert: (data: any) => db.prepare(`
@@ -1061,6 +1541,17 @@ export const DocumentosCliente = {
 
 export const DocumentFiles = {
   getAll: (limit = 300) => db.prepare('SELECT * FROM document_files ORDER BY created_at DESC LIMIT ?').all(limit),
+  getPage: ({ limit = 300, offset = 0, updatedSince = '' }: { limit?: number; offset?: number; updatedSince?: string }) => {
+    if (updatedSince) {
+      return db.prepare(`
+        SELECT * FROM document_files
+        WHERE datetime(created_at) >= datetime(@updatedSince)
+        ORDER BY created_at DESC
+        LIMIT @limit OFFSET @offset
+      `).all({ limit, offset, updatedSince });
+    }
+    return db.prepare('SELECT * FROM document_files ORDER BY created_at DESC LIMIT @limit OFFSET @offset').all({ limit, offset });
+  },
   getById: (id: string) => db.prepare('SELECT * FROM document_files WHERE id=?').get(id),
   getByCapture: (captureId: string) => db.prepare('SELECT * FROM document_files WHERE captura_id=? ORDER BY created_at DESC').all(captureId),
   create: (data: any) => db.prepare(`

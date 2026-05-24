@@ -3,6 +3,8 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { randomUUID } from "crypto";
+import { createApp } from "./server/app";
+import { hasPagingQuery, parseLimit, parseOffset, queryString, wrap } from "./server/http";
 import { initWhatsApp, getWhatsAppStatus, getWhatsAppQR, sendWhatsAppMessage, logoutWhatsApp, getRecentMessages, setWhatsAppMessageHandler, type WaMessage } from "./server/whatsapp";
 import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
 import { runIneOcr, runComprobanteOcr, runSiacOcr, checkOcrStatus } from "./server/ocr-service";
@@ -12,9 +14,18 @@ import db, {
   Nominas, Territories, ValidationRequests, Announcements,
   InventoryItems, AutomationRules, AiJobs, Metrics, Sessions,
   Capturas, DocumentosCliente, DocumentFiles, ClientesCrm, EstatusFolios, LogsSistema,
+  AgentOutbox, AgentProfiles,
 } from "./server/db";
 import { getSiacCSVFingerprint, importSiacCSV } from "./server/siac-importer";
-import { getBearerAuth, issueSession, rateLimit, requireAuth, requireRole, rotateRefreshToken } from "./server/security";
+import {
+  DEFAULT_MOROSOS_SOURCE,
+  DEFAULT_SIAC_SOURCE,
+  getSourceFingerprint,
+  importMorososSource,
+  importSiacSource,
+} from "./server/source-data-importer";
+import { clearRefreshCookie, getBearerAuth, getRefreshTokenFromRequest, issueSessionCookie, rateLimit, requireAuth, requireRole, rotateRefreshToken } from "./server/security";
+import { hashPassword, needsPasswordRehash, verifyPassword } from "./server/passwords";
 import {
   classifyMorosityReply,
   enqueueAiJob,
@@ -37,13 +48,21 @@ import { readStoredDocument, storeDocument } from "./server/document-storage";
 import { buildValidationTwiML, createTwilioCall, twilioConfigured } from "./server/twilio";
 import { oauthCallback, oauthStart, oauthStatus } from "./server/oauth";
 import { createTelmexAutomationJob, getTelmexJob, listTelmexJobs, updateTelmexAutomationJob } from "./server/telmex-automation";
-
-function wrap(fn: Function) {
-  return async (req: any, res: any) => {
-    try { await fn(req, res); }
-    catch (err: any) { res.status(500).json({ error: err.message }); }
-  };
-}
+import {
+  assignConversation,
+  getChannelAccounts,
+  getChannelConversations,
+  getChannelMessages,
+  getConversationAutomation,
+  getRecentChannelMessages,
+  setIncomingMessageHandler,
+} from "./server/messaging";
+import {
+  approveAgentOutbox,
+  rejectAgentOutbox,
+  runAgentForConversation,
+  runAgentForMessage,
+} from "./server/agent-orchestrator";
 
 // ── CSV helpers ────────────────────────────────────────────────
 function toCsv(rows: any[]): string {
@@ -428,11 +447,9 @@ function emptyRowForHeaders(dataset: string) {
 }
 
 async function startServer() {
-  const app = express();
+  const app = createApp();
   const PORT = Number(process.env.PORT || 3000);
   const HOST = process.env.HOST?.trim();
-  app.set('trust proxy', 1);
-  app.use(express.json({ limit: '20mb' }));
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
   const registrationLimiter = rateLimit('registration', 8, 60 * 60 * 1000);
   const ocrLimiter = rateLimit('ocr', 40, 15 * 60 * 1000);
@@ -658,6 +675,8 @@ async function startServer() {
       zona: row.zona || null,
       distrito: row.distrito || null,
       colonia: row.colonia || null,
+      usuario: row.usuario || row.usuarioPromotor || null,
+      morosidad: row.morosidad || null,
     };
   }
 
@@ -705,29 +724,20 @@ async function startServer() {
     };
     Users.create(data);
     AuditLog.insert({ accion: 'CREATE_USER', entidad: 'users', entidad_id: data.uid, user_id: req.body.createdBy || null, user_nombre: data.nombre, detalle: null });
-    res.json(Users.getById(data.uid));
+    res.json(safeUser(Users.getById(data.uid)));
   }));
-
-  // ── Verificación de password SHA-256 (compatible con plain text legacy) ──
-  async function checkPassword(plain: string, stored: string): Promise<boolean> {
-    if (!stored) return false;
-    // SHA-256 hash (64 hex chars)
-    if (/^[a-f0-9]{64}$/i.test(stored)) {
-      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain));
-      const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-      return hash === stored;
-    }
-    return plain === stored;
-  }
 
   // Login
   app.post("/api/auth/login", loginLimiter, wrap(async (req: any, res: any) => {
     const { username, password } = req.body;
     // Buscar por username o email
-    const user = (Users.getByUsername(username) || Users.getByUsername(username + '@adhdreams.local')) as any;
+    const user = (Users.getByUsername(username) || Users.getByEmail(username) || Users.getByUsername(username + '@adhdreams.local')) as any;
     if (!user) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
-    if (!(await checkPassword(password, user.password)))
+    if (!verifyPassword(password, user.password))
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+    if (needsPasswordRehash(user.password)) {
+      Users.update(user.uid, { password: hashPassword(password) });
+    }
     if (user.activo === 2)
       return res.status(403).json({ error: 'Tu cuenta está pendiente de aprobación por el administrador.', code: 'PENDING' });
     if (user.activo === 0)
@@ -738,23 +748,24 @@ async function startServer() {
     if (managerRequiresWebAuthn && userHasPasskey(user.uid)) {
       return res.json({ requiresWebAuthn: true, webAuthnUserId: user.uid, nombre: user.nombre, role: user.role });
     }
-    const session = issueSession(user, req, user.role === 'GERENTE'
+    const session = issueSessionCookie(res, user, req, user.role === 'GERENTE'
       ? { webAuthnVerified: !managerRequiresWebAuthn, webAuthnEnrollmentRequired: managerRequiresWebAuthn }
       : {});
     res.json({ ...safe, ...session, webAuthnEnrollmentRequired: managerRequiresWebAuthn });
   }));
 
   app.post("/api/auth/refresh", loginLimiter, wrap((req: any, res: any) => {
-    const { refreshToken } = req.body;
+    const refreshToken = getRefreshTokenFromRequest(req);
     if (!refreshToken) return res.status(400).json({ error: 'refreshToken requerido' });
-    const { user, session } = rotateRefreshToken(refreshToken, req);
+    const { user, session } = rotateRefreshToken(refreshToken, req, res);
     const { password: _, ...safe } = user;
     res.json({ ...safe, ...session });
   }));
 
   app.post("/api/auth/logout", wrap((req: any, res: any) => {
-    const { refreshToken } = req.body;
+    const refreshToken = getRefreshTokenFromRequest(req);
     if (refreshToken) Sessions.revoke(refreshToken);
+    clearRefreshCookie(res, req);
     res.json({ ok: true });
   }));
 
@@ -910,7 +921,8 @@ async function startServer() {
     const user = Users.getById(req.auth.sub) as any;
     if (!user || user.activo !== 1) return res.status(401).json({ error: 'Usuario inválido' });
     if (user.role !== 'GERENTE') return res.status(403).json({ error: 'Solo gerencia puede continuar este flujo' });
-    if (req.body?.refreshToken) Sessions.revoke(req.body.refreshToken);
+    const previousRefreshToken = getRefreshTokenFromRequest(req);
+    if (previousRefreshToken) Sessions.revoke(previousRefreshToken);
     AuditLog.insert({
       accion: 'WEBAUTHN_LOCAL_CONTINUE',
       entidad: 'users',
@@ -920,7 +932,7 @@ async function startServer() {
       detalle: 'WebAuthn no requerido por configuracion del entorno',
     });
     const { password: _, ...safe } = user;
-    res.json({ ...safe, ...issueSession(user, req, { webAuthnVerified: true, webAuthnEnrollmentRequired: false }) });
+    res.json({ ...safe, ...issueSessionCookie(res, user, req, { webAuthnVerified: true, webAuthnEnrollmentRequired: false }) });
   }));
 
   app.post("/api/webauthn/register/options", authOnly, wrap(async (req: any, res: any) => {
@@ -928,12 +940,12 @@ async function startServer() {
   }));
 
   app.post("/api/webauthn/register/verify", authOnly, wrap(async (req: any, res: any) => {
-    res.json(await verifyRegistration(req.auth.sub, req.body.response, req));
+    res.json(await verifyRegistration(req.auth.sub, req.body.response, req, res));
   }));
 
   app.post("/api/webauthn/login/options", loginLimiter, wrap(async (req: any, res: any) => {
     const { userId, username } = req.body;
-    const user = userId ? Users.getById(userId) as any : username ? Users.getByUsername(username) as any : null;
+    const user = userId ? Users.getById(userId) as any : username ? (Users.getByUsername(username) || Users.getByEmail(username)) as any : null;
     if (!user) return res.status(400).json({ error: 'usuario requerido' });
     res.json({ ...(await makeAuthenticationOptions(user.uid, req)), userId: user.uid });
   }));
@@ -941,7 +953,7 @@ async function startServer() {
   app.post("/api/webauthn/login/verify", loginLimiter, wrap(async (req: any, res: any) => {
     const { userId, response } = req.body;
     if (!userId || !response) return res.status(400).json({ error: 'userId y response son requeridos' });
-    res.json(await verifyAuthentication(userId, response, req));
+    res.json(await verifyAuthentication(userId, response, req, res));
   }));
 
   // Usuarios pendientes de aprobación
@@ -1087,19 +1099,49 @@ async function startServer() {
     return Nominas.getByAsesor(req.auth.sub).slice(0, limit);
   }
 
+  function filterUpdatedSince(rows: any[], updatedSince: any) {
+    const since = Number(updatedSince || 0);
+    if (!since) return rows;
+    return rows.filter((row: any) => {
+      const value = row.updated_at || row.created_at || row.timestamp || row.last_message_at || row.fecha_movimiento || row.fecha_captura || row.fecha_solicitud || row.fecha || 0;
+      const time = typeof value === 'number' ? value : new Date(value).getTime();
+      return Number.isFinite(time) && time >= since;
+    });
+  }
+
   app.get("/api/mobile/bootstrap", authOnly, wrap((req: any, res: any) => {
-    const sales = mobileSales(req, 200);
-    const captures = mobileCaptures(req, 120);
-    const clients = mobileClients(req, 120);
-    const followUps = mobileFollowUps(req, 80);
+    const sales = mobileSales(req, 60);
+    const captures = mobileCaptures(req, 40);
+    const clients = mobileClients(req, 40);
+    const followUps = mobileFollowUps(req, 40);
     const payroll = mobilePayroll(req, 12);
+    const conversations = getChannelConversations(80);
+    const pendingOutbox = AgentOutbox.getAll(100).filter((item: any) => item.status === 'pending_approval');
     const today = new Date().toISOString().slice(0, 10);
     const pendingSales = sales.filter((sale: any) => String(sale.status || 'pendiente').toLowerCase() === 'pendiente').length;
     const todaySales = sales.filter((sale: any) => String(sale.fecha_solicitud || sale.created_at || '').startsWith(today)).length;
     const pendingDocs = captures.filter((capture: any) => String(capture.status_documentos || '').toUpperCase() !== 'SUBIDO').length;
+    const openConversations = conversations.filter((conversation: any) => !['cerrado', 'closed'].includes(String(conversation.status || '').toLowerCase())).length;
     res.json({
       user: mobileUser(req.auth),
       permissions: { role: req.auth.role, canManage: canManage(req.auth), mobile: true },
+      featureFlags: {
+        mobilePwaPrimary: true,
+        offlineQueue: true,
+        moduleCache: true,
+        agentApprovals: true,
+      },
+      nav: ['inicio', 'venta', 'folios', 'clientes', 'documentos', 'seguimiento', 'nominas', 'chats', 'perfil', 'ajustes'],
+      sync: {
+        serverTime: Date.now(),
+        staleAfterMs: 45000,
+        supportsUpdatedSince: true,
+      },
+      agentInboxSummary: {
+        pendingApproval: pendingOutbox.length,
+        conversationsOpen: openConversations,
+        latestDecisionAt: pendingOutbox[0]?.created_at || null,
+      },
       counts: {
         ventas: sales.length,
         pendientes: pendingSales,
@@ -1107,6 +1149,8 @@ async function startServer() {
         clientes: clients.length,
         documentosPendientes: pendingDocs,
         folios: followUps.length,
+        chatsAbiertos: openConversations,
+        aprobaciones: pendingOutbox.length,
       },
       channels: {
         whatsapp: getWhatsAppStatus(),
@@ -1189,11 +1233,11 @@ async function startServer() {
   }));
 
   app.get("/api/mobile/clientes", authOnly, wrap((req: any, res: any) => {
-    res.json(mobileClients(req, 100));
+    res.json(filterUpdatedSince(mobileClients(req, 100), req.query?.updatedSince));
   }));
 
   app.get("/api/mobile/documentos", authOnly, wrap((req: any, res: any) => {
-    const captures = mobileCaptures(req, 60).map((capture: any) => ({
+    const captures = filterUpdatedSince(mobileCaptures(req, 60), req.query?.updatedSince).map((capture: any) => ({
       ...capture,
       documentos: DocumentosCliente.getByCaptura(capture.id),
       files: DocumentFiles.getByCapture(capture.id).map((file: any) => ({ ...file, storage_path: undefined })),
@@ -1202,21 +1246,23 @@ async function startServer() {
   }));
 
   app.get("/api/mobile/seguimiento", authOnly, wrap((req: any, res: any) => {
-    res.json(mobileFollowUps(req, 100));
+    res.json(filterUpdatedSince(mobileFollowUps(req, 100), req.query?.updatedSince));
   }));
 
   app.get("/api/mobile/nominas", authOnly, wrap((req: any, res: any) => {
-    res.json(mobilePayroll(req, 80));
+    res.json(filterUpdatedSince(mobilePayroll(req, 80), req.query?.updatedSince));
   }));
 
-  app.get("/api/mobile/chats", authOnly, wrap((_req: any, res: any) => {
-    const wa = getRecentMessages(80).map((msg: any) => ({ ...msg, channel: 'whatsapp' }));
-    const tg = getTelegramMessages(80).map((msg: any) => ({ ...msg, channel: 'telegram' }));
-    const all = [...wa, ...tg].sort((a: any, b: any) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
-    res.json(all.slice(-80));
+  app.get("/api/mobile/chats", managerOnly, wrap((req: any, res: any) => {
+    const messages = filterUpdatedSince(getRecentChannelMessages(120), req.query?.updatedSince);
+    const conversations = getChannelConversations(120).map((conversation: any) => ({
+      ...conversation,
+      pending_outbox: Number(conversation.pending_outbox || 0),
+    }));
+    res.json({ conversations, messages });
   }));
 
-  app.post("/api/mobile/whatsapp/send", authOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/mobile/whatsapp/send", managerOnly, wrap(async (req: any, res: any) => {
     const phone = normalizePhone10(req.body?.phone || req.body?.telefono);
     const message = String(req.body?.message || req.body?.mensaje || '').trim();
     if (phone.length !== 10 || !message) return res.status(400).json({ error: 'phone de 10 digitos y message son requeridos' });
@@ -1336,6 +1382,9 @@ async function startServer() {
 
   app.get("/api/document-files", authOnly, wrap((req: any, res: any) => {
     const capturaId = String(req.query.captura_id || req.query.captureId || '');
+    const limit = parseLimit(req.query.limit, 300, 1000);
+    const offset = parseOffset(req.query.offset);
+    const updatedSince = queryString(req.query.updatedSince);
     if (capturaId) {
       const captura = Capturas.getById(capturaId) as any;
       if (captura && !canManage(req.auth) && captura.vendedor_id !== req.auth.sub) {
@@ -1344,6 +1393,9 @@ async function startServer() {
       return res.json(DocumentFiles.getByCapture(capturaId));
     }
     if (!canManage(req.auth)) return res.status(403).json({ error: 'Permisos insuficientes' });
+    if (hasPagingQuery(req.query as any)) {
+      return res.json(DocumentFiles.getPage({ limit, offset, updatedSince }));
+    }
     res.json(DocumentFiles.getAll(300));
   }));
 
@@ -1493,6 +1545,71 @@ async function startServer() {
     `).all());
   }));
 
+  app.get("/api/morosidad/analytics", opsOnly, wrap((_req: any, res: any) => {
+    const rows: any[] = (db as any).prepare(`
+      SELECT
+        m.*,
+        c.nombre AS cliente,
+        c.telefono,
+        c.correo,
+        c.metadata AS cliente_metadata,
+        COALESCE(CASE WHEN json_valid(c.metadata) THEN json_extract(c.metadata, '$.promotor') END, CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.promotor') END, 'SIN PROMOTOR') AS promotor,
+        COALESCE(CASE WHEN json_valid(c.metadata) THEN json_extract(c.metadata, '$.usuario') END, CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.usuario') END, 'SIN USUARIO') AS usuario,
+        COALESCE(CASE WHEN json_valid(c.metadata) THEN json_extract(c.metadata, '$.area') END, CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.area') END, 'SIN AREA') AS area,
+        COALESCE(CASE WHEN json_valid(c.metadata) THEN json_extract(c.metadata, '$.mercado') END, CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.mercado') END, 'SIN MERCADO') AS mercado,
+        COALESCE(CASE WHEN json_valid(c.metadata) THEN json_extract(c.metadata, '$.paquete') END, CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.paquete') END, 'SIN PAQUETE') AS paquete
+      FROM morosidad m
+      LEFT JOIN clientes_crm c ON c.id=m.cliente_id
+    `).all();
+    const siacRows: any[] = (db as any).prepare(`
+      SELECT folio_siac, zona, tienda, estrategia, usuario, promotor, morosidad
+      FROM siac_records
+    `).all();
+    const siacByFolio = new Map(siacRows.map(row => [String(row.folio_siac), row]));
+    const enriched = rows.map(row => ({ ...row, ...(siacByFolio.get(String(row.folio)) || {}) }));
+    const group = (field: string) => Object.values(enriched.reduce((acc: any, row: any) => {
+      const key = String(row[field] || `SIN ${field.toUpperCase()}`).trim() || `SIN ${field.toUpperCase()}`;
+      if (!acc[key]) acc[key] = { name: key, total: 0, monto: 0 };
+      acc[key].total += 1;
+      acc[key].monto += Number(row.monto_adeudo) || 0;
+      return acc;
+    }, {})).sort((a: any, b: any) => b.monto - a.monto || b.total - a.total).slice(0, 12);
+    res.json({
+      total: enriched.length,
+      montoTotal: enriched.reduce((sum, row) => sum + (Number(row.monto_adeudo) || 0), 0),
+      byUsuario: group('usuario'),
+      byPromotor: group('promotor'),
+      byZona: group('zona'),
+      byTienda: group('tienda'),
+      byEstrategia: group('estrategia'),
+      byArea: group('area'),
+      byMercado: group('mercado'),
+      byStatus: group('status_cobranza'),
+    });
+  }));
+
+  app.post("/api/morosidad/import-source", managerOnly, wrap(async (req: any, res: any) => {
+    const result = await importMorososSource({
+      sourcePath: req.body?.sourcePath || DEFAULT_MOROSOS_SOURCE,
+      replace: req.query.replace === '1' || req.body?.replace !== false,
+    });
+    Settings.set('morosos_source_fingerprint', result.fingerprint);
+    AuditLog.insert({ accion: 'IMPORT_MOROSOS_SOURCE', entidad: 'morosidad', entidad_id: null, user_id: req.auth?.sub || null, user_nombre: null, detalle: `imported:${result.imported};skipped:${result.skipped};source:${result.source}` });
+    res.json({ ok: true, ...result });
+  }));
+
+  app.post("/api/morosidad/import-file", managerOnly, wrap(async (req: any, res: any) => {
+    const content = String(req.body?.contentBase64 || '');
+    if (!content) return res.status(400).json({ error: 'contentBase64 requerido' });
+    const result = await importMorososSource({
+      buffer: Buffer.from(content, 'base64'),
+      fileName: req.body?.fileName || 'morosos.csv',
+      replace: req.body?.replace === true,
+    });
+    AuditLog.insert({ accion: 'IMPORT_MOROSOS_FILE', entidad: 'morosidad', entidad_id: null, user_id: req.auth?.sub || null, user_nombre: null, detalle: `imported:${result.imported};skipped:${result.skipped};source:${result.source}` });
+    res.json({ ok: true, ...result });
+  }));
+
   app.get("/api/estatus-folios", authOnly, wrap((req: any, res: any) => {
     if (canManage(req.auth)) {
       return res.json((db as any).prepare('SELECT * FROM estatus_folios ORDER BY fecha_movimiento DESC').all());
@@ -1522,6 +1639,84 @@ async function startServer() {
     res.json(rows);
   }));
 
+  app.post("/api/duplicates/check", authOnly, wrap((req: any, res: any) => {
+    const telefono = normalizePhone10(req.body?.telefono || req.body?.telefonoTitular);
+    const celular = normalizePhone10(req.body?.celular);
+    const numeroPortar = normalizePhone10(req.body?.numeroAPortar || req.body?.numero_a_portar);
+    const correo = String(req.body?.correo || req.body?.email || '').trim().toLowerCase();
+    const values = [
+      telefono && { field: 'telefono', label: 'Teléfono celular', value: telefono },
+      celular && { field: 'celular', label: 'Celular', value: celular },
+      numeroPortar && { field: 'numero_portar', label: 'Teléfono a portar', value: numeroPortar },
+      correo && { field: 'correo', label: 'Correo electrónico', value: correo },
+    ].filter(Boolean) as Array<{ field: string; label: string; value: string }>;
+
+    const matches: any[] = [];
+    for (const item of values) {
+      if (item.field === 'correo') {
+        matches.push(...(db as any).prepare(`
+          SELECT 'SIAC' AS source, folio_siac AS folio, correo AS value, COALESCE(promotor, usuario, '') AS owner,
+                 tienda, zona, 'Correo electrónico ya registrado en SIAC' AS reason
+          FROM siac_records WHERE lower(correo)=@value LIMIT 10
+        `).all({ value: item.value }));
+        matches.push(...(db as any).prepare(`
+          SELECT 'CRM' AS source, folio, correo AS value, nombre AS owner, NULL AS tienda, NULL AS zona,
+                 'Correo electrónico ya registrado en clientes' AS reason
+          FROM clientes_crm WHERE lower(correo)=@value LIMIT 10
+        `).all({ value: item.value }));
+        matches.push(...(db as any).prepare(`
+          SELECT 'CAPTURA' AS source, folio, json_extract(metadata, '$.correo') AS value, cliente_nombre AS owner, NULL AS tienda, ciudad AS zona,
+                 'Correo electrónico ya usado en captura' AS reason
+          FROM capturas WHERE json_valid(metadata) AND lower(json_extract(metadata, '$.correo'))=@value LIMIT 10
+        `).all({ value: item.value }));
+      } else {
+        matches.push(...(db as any).prepare(`
+          SELECT 'SIAC' AS source, folio_siac AS folio, @value AS value, COALESCE(promotor, usuario, '') AS owner,
+                 tienda, zona, @reason AS reason
+          FROM siac_records
+          WHERE telefono_asignado=@value OR telefono_portado=@value OR telefono_referencia=@value
+          LIMIT 10
+        `).all({ value: item.value, reason: `${item.label} ya registrado en SIAC` }));
+        matches.push(...(db as any).prepare(`
+          SELECT 'CRM' AS source, folio, @value AS value, nombre AS owner, NULL AS tienda, NULL AS zona,
+                 @reason AS reason
+          FROM clientes_crm
+          WHERE telefono=@value OR whatsapp=@value
+          LIMIT 10
+        `).all({ value: item.value, reason: `${item.label} ya registrado en clientes` }));
+        matches.push(...(db as any).prepare(`
+          SELECT 'CAPTURA' AS source, folio, @value AS value, cliente_nombre AS owner, NULL AS tienda, ciudad AS zona,
+                 @reason AS reason
+          FROM capturas
+          WHERE telefono=@value
+             OR (json_valid(metadata) AND (
+                json_extract(metadata, '$.telefonoTitular')=@value
+                OR json_extract(metadata, '$.numeroAPortar')=@value
+                OR json_extract(metadata, '$.numero_a_portar')=@value
+             ))
+          LIMIT 10
+        `).all({ value: item.value, reason: `${item.label} ya usado en captura` }));
+      }
+    }
+
+    const uniqueMatches = Array.from(new Map(matches.map(match => [`${match.source}:${match.folio}:${match.reason}`, match])).values());
+    if (uniqueMatches.length) {
+      logSystem(req, 'DUPLICATE_CAPTURE_ALERT', 'capturas', req.body?.folio || null, `matches:${uniqueMatches.length}`, {
+        values,
+        matches: uniqueMatches.slice(0, 20),
+      });
+      AuditLog.insert({
+        accion: 'DUPLICATE_CAPTURE_ALERT',
+        entidad: 'capturas',
+        entidad_id: req.body?.folio || null,
+        user_id: req.auth?.sub || null,
+        user_nombre: req.auth?.name || null,
+        detalle: `Coincidencias: ${uniqueMatches.length}`,
+      });
+    }
+    res.json({ duplicate: uniqueMatches.length > 0, matches: uniqueMatches.slice(0, 30) });
+  }));
+
   // ── SIAC ───────────────────────────────────────────────────
   // Buscar por Folio SIAC (columna fija clave)
   app.get("/api/siac/search", authOnly, wrap((req: any, res: any) => {
@@ -1536,7 +1731,53 @@ async function startServer() {
     res.json(record);
   }));
 
-  app.get("/api/siac", authOnly, wrap((_req: any, res: any) => res.json(SiacRecords.getAll())));
+  app.get("/api/siac", authOnly, wrap((req: any, res: any) => {
+    if (hasPagingQuery(req.query as any)) {
+      return res.json(SiacRecords.getPage({
+        limit: parseLimit(req.query.limit, 200, 1000),
+        offset: parseOffset(req.query.offset),
+        q: queryString(req.query.q),
+        updatedSince: queryString(req.query.updatedSince),
+      }));
+    }
+    res.json(SiacRecords.getAll());
+  }));
+
+  app.post("/api/siac/import-source", managerOnly, wrap(async (req: any, res: any) => {
+    const result = await importSiacSource({
+      sourcePath: req.body?.sourcePath || DEFAULT_SIAC_SOURCE,
+      replace: req.query.replace === '1' || req.body?.replace !== false,
+    });
+    Settings.set('siac_primary_source_fingerprint', result.fingerprint);
+    AuditLog.insert({
+      accion: 'IMPORT_SIAC_PRIMARY_SOURCE',
+      entidad: 'siac_records',
+      entidad_id: null,
+      user_id: req.auth?.sub || null,
+      user_nombre: null,
+      detalle: `imported:${result.imported};skipped:${result.skipped};source:${result.source}`,
+    });
+    res.json({ ok: true, ...result });
+  }));
+
+  app.post("/api/siac/import-file", managerOnly, wrap(async (req: any, res: any) => {
+    const content = String(req.body?.contentBase64 || '');
+    if (!content) return res.status(400).json({ error: 'contentBase64 requerido' });
+    const result = await importSiacSource({
+      buffer: Buffer.from(content, 'base64'),
+      fileName: req.body?.fileName || 'siac.xlsx',
+      replace: req.body?.replace === true,
+    });
+    AuditLog.insert({
+      accion: 'IMPORT_SIAC_FILE',
+      entidad: 'siac_records',
+      entidad_id: null,
+      user_id: req.auth?.sub || null,
+      user_nombre: null,
+      detalle: `imported:${result.imported};skipped:${result.skipped};source:${result.source}`,
+    });
+    res.json({ ok: true, ...result });
+  }));
 
   // Reimportar CSV
   app.post("/api/siac/import", managerOnly, wrap((req: any, res: any) => {
@@ -1724,7 +1965,12 @@ async function startServer() {
 
   // ── AUDIT LOG ──────────────────────────────────────────────
   app.get("/api/audit", managerOnly, wrap((req: any, res: any) => {
-    const limit = parseInt(req.query.limit as string) || 200;
+    const limit = parseLimit(req.query.limit, 200, 1000);
+    const offset = parseOffset(req.query.offset);
+    const updatedSince = queryString(req.query.updatedSince);
+    if (hasPagingQuery(req.query as any)) {
+      return res.json(AuditLog.getPage({ limit, offset, updatedSince }));
+    }
     res.json(AuditLog.getAll(limit));
   }));
 
@@ -1972,8 +2218,9 @@ async function startServer() {
   }));
 
   // Mensajes recibidos (para panel admin/gerente)
-  app.get("/api/whatsapp/messages", opsOnly, wrap((_req: any, res: any) => {
-    res.json(getRecentMessages(100));
+  app.get("/api/whatsapp/messages", opsOnly, wrap((req: any, res: any) => {
+    const limit = parseLimit(req.query.limit, 100, 500);
+    res.json(getRecentChannelMessages(limit, queryString(req.query.updatedSince)).filter((msg: any) => msg.channel === 'whatsapp'));
   }));
 
   // ── TELEGRAM ──────────────────────────────────────────────
@@ -1981,16 +2228,19 @@ async function startServer() {
     res.json(getTelegramStatus());
   }));
 
-  app.get("/api/telegram/messages", opsOnly, wrap((_req: any, res: any) => {
-    res.json(getTelegramMessages(100));
+  app.get("/api/telegram/messages", opsOnly, wrap((req: any, res: any) => {
+    const limit = parseLimit(req.query.limit, 100, 500);
+    res.json(getRecentChannelMessages(limit, queryString(req.query.updatedSince)).filter((msg: any) => msg.channel === 'telegram'));
   }));
 
   app.post("/api/telegram/init", opsOnly, wrap(async (req: any, res: any) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'token requerido' });
-    // Persistir token en Settings para sobrevivir reinicios
-    Settings.set('telegram_bot_token', token);
     const result = await initTelegram(token);
+    if (result.ok) {
+      // Persistir token solo en servidor para sobrevivir reinicios.
+      Settings.set('telegram_bot_token', token);
+    }
     res.json(result);
   }));
 
@@ -2006,12 +2256,61 @@ async function startServer() {
     res.json(await sendTelegramMessage(chatId, message));
   }));
 
+  async function sendChannelMessage(channel: string, target: string, message: string) {
+    if (channel === 'whatsapp') return sendWhatsAppMessage(target, message);
+    if (channel === 'telegram') return sendTelegramMessage(target, message);
+    throw new Error('Canal no soportado');
+  }
+
+  app.get("/api/channels/accounts", opsOnly, wrap((_req: any, res: any) => {
+    res.json(getChannelAccounts());
+  }));
+
+  app.get("/api/channels/conversations", opsOnly, wrap((req: any, res: any) => {
+    res.json(getChannelConversations(parseLimit(req.query.limit, 200, 500)));
+  }));
+
+  app.get("/api/channels/conversations/:id/messages", opsOnly, wrap((req: any, res: any) => {
+    res.json(getChannelMessages(req.params.id, parseLimit(req.query.limit, 200, 500), queryString(req.query.updatedSince)));
+  }));
+
+  app.get("/api/channels/conversations/:id/automation", opsOnly, wrap((req: any, res: any) => {
+    const data = getConversationAutomation(req.params.id);
+    if (!data.conversation) return res.status(404).json({ error: 'Conversacion no encontrada' });
+    res.json(data);
+  }));
+
+  app.patch("/api/agents/conversations/:id/assign", opsOnly, wrap((req: any, res: any) => {
+    const updated = assignConversation(req.params.id, req.body.assignedTo || req.body.assigned_to || null);
+    if (!updated) return res.status(404).json({ error: 'Conversacion no encontrada' });
+    res.json(updated);
+  }));
+
+  app.post("/api/agents/conversations/:id/run", opsOnly, wrap(async (req: any, res: any) => {
+    res.json(await runAgentForConversation(req.params.id) || { ok: true, idle: true });
+  }));
+
+  app.get("/api/agents/outbox", opsOnly, wrap((req: any, res: any) => {
+    res.json(AgentOutbox.getAll(parseLimit(req.query.limit, 200, 500)));
+  }));
+
+  app.post("/api/agents/outbox/:id/approve", opsOnly, wrap(async (req: any, res: any) => {
+    res.json(await approveAgentOutbox(req.params.id, req.auth, sendChannelMessage));
+  }));
+
+  app.post("/api/agents/outbox/:id/reject", opsOnly, wrap((req: any, res: any) => {
+    res.json(rejectAgentOutbox(req.params.id, req.auth, req.body?.reason));
+  }));
+
+  app.post("/api/channels/send", opsOnly, wrap(async (req: any, res: any) => {
+    const { channel, target, message } = req.body;
+    if (!channel || !target || !message) return res.status(400).json({ error: 'channel, target y message son requeridos' });
+    res.json(await sendChannelMessage(channel, target, message));
+  }));
+
   // Mensajes combinados WA + Telegram (para panel unificado)
-  app.get("/api/channels/messages", opsOnly, wrap((_req: any, res: any) => {
-    const wa = getRecentMessages(100);
-    const tg = getTelegramMessages(100);
-    const all = [...wa, ...tg].sort((a, b) => a.timestamp - b.timestamp);
-    res.json(all.slice(-150));
+  app.get("/api/channels/messages", opsOnly, wrap((req: any, res: any) => {
+    res.json(getRecentChannelMessages(parseLimit(req.query.limit, 150, 500), queryString(req.query.updatedSince)));
   }));
 
   // ── TWILIO VOICE AGENT ───────────────────────────────────
@@ -2120,138 +2419,45 @@ async function startServer() {
 
   // Agente Capturista: detecta ventas en WA + Telegram
   async function runCapturistaAgent() {
-    const waMsgs = getRecentMessages(50) as AnyChannelMsg[];
-    const tgMsgs = getTelegramMessages(50) as AnyChannelMsg[];
-    const allMsgs = [...waMsgs, ...tgMsgs];
-    const lastTsKey = 'agent_capturista_last_ts';
-    const lastTs = parseInt(Settings.get(lastTsKey) || '0');
-    const newMsgs = allMsgs.filter(m => m.timestamp > lastTs);
-
-    for (const msg of newMsgs) {
-      const body = msg.body.toLowerCase();
-      if (body.includes('nombre:') && (body.includes('telefono:') || body.includes('tel:'))) {
-        try {
-          const nombres = extractField(msg.body, 'nombre');
-          const telefono = extractField(msg.body, 'tel(?:efono)?');
-          const plan = extractField(msg.body, 'plan');
-          const direccion = extractField(msg.body, 'direcci[oó]n|domicilio');
-          if (nombres && telefono) {
-            Ventas.create({
-              id: randomUUID(), folio: null,
-              asesor_id: `agente_${msg.channel}`,
-              asesor_nombre: msg.fromName, status: 'pendiente',
-              nombres, apellidos: null, telefono, direccion, colonia: null, municipio: null,
-              tipo_cliente: null, tipo_servicio: null, plan, renta_mensual: null, zona: null,
-              notas: `Capturado por Agente vía ${msg.channel}: ${msg.from}`,
-              fecha_solicitud: new Date().toISOString().split('T')[0],
-              fecha_instalacion: null, contrato_pdf: null, ine_pdf: null, comprobante_pdf: null,
-              metadata: JSON.stringify({ source: msg.channel, raw: msg.body }),
-            });
-            await replyToMsg(msg, `✅ Venta registrada para <b>${nombres}</b>. El equipo la procesará pronto.`);
-            agentState.capturista.processed++;
-          }
-        } catch { agentState.capturista.errors++; }
-      }
-    }
-    if (newMsgs.length > 0) {
-      Settings.set(lastTsKey, String(Math.max(...newMsgs.map(m => m.timestamp))));
+    const conversations = getChannelConversations(80).filter((conversation: any) => conversation.intent === 'venta' || conversation.status === 'nuevo');
+    for (const conversation of conversations) {
+      try {
+        const result: any = await runAgentForConversation(conversation.id);
+        if (result && !result.duplicate && !result.idle) agentState.capturista.processed++;
+      } catch { agentState.capturista.errors++; }
     }
     agentState.capturista.lastRun = new Date().toISOString();
   }
 
   // Agente Consultor: responde consultas de folio SIAC en WA + Telegram
   async function runConsultorAgent() {
-    const waMsgs = getRecentMessages(50) as AnyChannelMsg[];
-    const tgMsgs = getTelegramMessages(50) as AnyChannelMsg[];
-    const allMsgs = [...waMsgs, ...tgMsgs];
-    const lastTsKey = 'agent_consultor_last_ts';
-    const lastTs = parseInt(Settings.get(lastTsKey) || '0');
-    const newMsgs = allMsgs.filter(m => m.timestamp > lastTs);
-
-    for (const msg of newMsgs) {
-      const body = msg.body.toLowerCase().trim();
-      const isQuery = body.startsWith('folio ') || body.startsWith('consulta ')
-        || body.startsWith('estatus ') || body.includes('mi folio');
-      if (!isQuery) continue;
-
-      const folioMatch = msg.body.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i);
-      if (folioMatch) {
-        const record = SiacRecords.getByFolio(folioMatch[1]) as any;
-        const reply = record
-          ? `📋 <b>Folio ${record.folio_siac}</b>\n` +
-            `Estatus: ${record.estatus_siac || 'N/D'}\n` +
-            `Promotora: ${record.promotor || 'N/D'}\n` +
-            `Fecha captura: ${record.fecha_captura || 'N/D'}\n` +
-            `Paquete: ${record.paquete || 'N/D'}`
-          : `❌ Folio <b>${folioMatch[1]}</b> no encontrado.\n¿Deseas que un asesor te contacte?`;
-        await replyToMsg(msg, reply);
-      } else {
-        await replyToMsg(msg, '🔍 Envía el número de folio para consultar. Ej: <b>folio 123456</b>');
-      }
-      agentState.consultor.processed++;
-    }
-    if (newMsgs.length > 0) {
-      Settings.set(lastTsKey, String(Math.max(...newMsgs.map(m => m.timestamp))));
+    const conversations = getChannelConversations(80).filter((conversation: any) => conversation.intent === 'consulta_folio' || conversation.status === 'nuevo');
+    for (const conversation of conversations) {
+      try {
+        const result: any = await runAgentForConversation(conversation.id);
+        if (result && !result.duplicate && !result.idle) agentState.consultor.processed++;
+      } catch { agentState.consultor.errors++; }
     }
     agentState.consultor.lastRun = new Date().toISOString();
   }
 
-  // Registrar handlers en tiempo real para WhatsApp/Baileys y Telegram.
-  setWhatsAppMessageHandler(async (msg: WaMessage) => {
-    await handleAssistantChannelMessage(msg as AnyChannelMsg);
+  // Registrar handler durable en tiempo real para WhatsApp/Baileys y Telegram.
+  setIncomingMessageHandler(async ({ conversation, message }) => {
+    if (!agentState.capturista.active && !agentState.consultor.active) return;
+    const result: any = await runAgentForMessage(conversation, message);
+    if (!result || result.duplicate) return;
+    const intent = result.decision?.intent;
+    if (intent === 'venta') {
+      agentState.capturista.processed++;
+      agentState.capturista.lastRun = new Date().toISOString();
+    } else if (intent === 'consulta_folio') {
+      agentState.consultor.processed++;
+      agentState.consultor.lastRun = new Date().toISOString();
+    }
   });
 
-  // Registrar handler en tiempo real para Telegram (respuesta inmediata sin esperar el poll de 30s)
-  setTelegramMessageHandler(async (msg: TgMessage) => {
-    if (agentState.capturista.active) {
-      const body = msg.body.toLowerCase();
-      if (body.includes('nombre:') && (body.includes('telefono:') || body.includes('tel:'))) {
-        const nombres = extractField(msg.body, 'nombre');
-        const telefono = extractField(msg.body, 'tel(?:efono)?');
-        const plan = extractField(msg.body, 'plan');
-        const direccion = extractField(msg.body, 'direcci[oó]n|domicilio');
-        if (nombres && telefono) {
-          try {
-            Ventas.create({
-              id: randomUUID(), folio: null, asesor_id: 'agente_telegram',
-              asesor_nombre: msg.fromName, status: 'pendiente',
-              nombres, apellidos: null, telefono, direccion, colonia: null, municipio: null,
-              tipo_cliente: null, tipo_servicio: null, plan, renta_mensual: null, zona: null,
-              notas: `Capturado por Agente vía Telegram: ${msg.chatId}`,
-              fecha_solicitud: new Date().toISOString().split('T')[0],
-              fecha_instalacion: null, contrato_pdf: null, ine_pdf: null, comprobante_pdf: null,
-              metadata: JSON.stringify({ source: 'telegram', raw: msg.body }),
-            });
-            await sendTelegramMessage(msg.chatId, `✅ Venta registrada para <b>${nombres}</b>. El equipo la procesará pronto.`);
-            agentState.capturista.processed++;
-            agentState.capturista.lastRun = new Date().toISOString();
-          } catch { agentState.capturista.errors++; }
-        }
-        return;
-      }
-    }
-    if (agentState.consultor.active) {
-      const body = msg.body.toLowerCase().trim();
-      const isQuery = body.startsWith('folio ') || body.startsWith('consulta ')
-        || body.startsWith('estatus ') || body.includes('mi folio');
-      if (isQuery) {
-        const folioMatch = msg.body.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i);
-        if (folioMatch) {
-          const record = SiacRecords.getByFolio(folioMatch[1]) as any;
-          const reply = record
-            ? `📋 <b>Folio ${record.folio_siac}</b>\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha: ${record.fecha_captura || 'N/D'}`
-            : `❌ Folio <b>${folioMatch[1]}</b> no encontrado.`;
-          try {
-            await sendTelegramMessage(msg.chatId, reply);
-            agentState.consultor.processed++;
-            agentState.consultor.lastRun = new Date().toISOString();
-          } catch { agentState.consultor.errors++; }
-        } else {
-          await sendTelegramMessage(msg.chatId, '🔍 Envía el número de folio. Ej: <b>folio 123456</b>');
-        }
-      }
-    }
-  });
+  setWhatsAppMessageHandler(null);
+  setTelegramMessageHandler(() => {});
 
   const AGENT_RUNNERS: Record<string, () => Promise<void>> = {
     capturista: runCapturistaAgent,
@@ -2262,6 +2468,26 @@ async function startServer() {
 
   app.get("/api/agents/status", opsOnly, wrap((_req: any, res: any) => {
     res.json(agentState);
+  }));
+
+  app.get("/api/agents/profiles/:id", opsOnly, wrap((req: any, res: any) => {
+    const profile = AgentProfiles.getById(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Perfil de agente no encontrado' });
+    res.json(profile);
+  }));
+
+  app.patch("/api/agents/profiles/:id", opsOnly, wrap((req: any, res: any) => {
+    const profile = AgentProfiles.update(req.params.id, req.body || {});
+    if (!profile) return res.status(404).json({ error: 'Perfil de agente no encontrado' });
+    AuditLog.insert({
+      accion: 'UPDATE_AGENT_PROFILE',
+      entidad: 'agent_profiles',
+      entidad_id: req.params.id,
+      user_id: req.auth?.sub || null,
+      user_nombre: null,
+      detalle: profile.name,
+    });
+    res.json(profile);
   }));
 
   app.post("/api/agents/:agent/toggle", opsOnly, wrap(async (req: any, res: any) => {
@@ -2785,13 +3011,37 @@ async function startServer() {
     });
   }
 
-  // Auto-import SIAC CSV on startup when the source file changed.
-  const siacCsvFingerprint = getSiacCSVFingerprint();
-  const storedSiacFingerprint = Settings.get('siac_csv_fingerprint');
-  if (SiacRecords.count() === 0 || (siacCsvFingerprint && storedSiacFingerprint !== siacCsvFingerprint)) {
-    const result = importSiacCSV({ replace: true });
-    if (siacCsvFingerprint) Settings.set('siac_csv_fingerprint', siacCsvFingerprint);
-    console.log(`[SIAC] CSV sincronizado: ${result.imported} registros válidos`);
+  // Auto-import principal SIAC/Morosos when the source files change.
+  try {
+    const siacPrimaryFingerprint = getSourceFingerprint(DEFAULT_SIAC_SOURCE);
+    const storedSiacPrimaryFingerprint = Settings.get('siac_primary_source_fingerprint');
+    if (siacPrimaryFingerprint && (SiacRecords.count() === 0 || storedSiacPrimaryFingerprint !== siacPrimaryFingerprint)) {
+      const result = await importSiacSource({ sourcePath: DEFAULT_SIAC_SOURCE, replace: true });
+      Settings.set('siac_primary_source_fingerprint', result.fingerprint);
+      console.log(`[SIAC] Fuente principal sincronizada: ${result.imported} registros válidos`);
+    } else {
+      const siacCsvFingerprint = getSiacCSVFingerprint();
+      const storedSiacFingerprint = Settings.get('siac_csv_fingerprint');
+      if (SiacRecords.count() === 0 || (siacCsvFingerprint && storedSiacFingerprint !== siacCsvFingerprint)) {
+        const result = importSiacCSV({ replace: true });
+        if (siacCsvFingerprint) Settings.set('siac_csv_fingerprint', siacCsvFingerprint);
+        console.log(`[SIAC] CSV sincronizado: ${result.imported} registros válidos`);
+      }
+    }
+  } catch (err: any) {
+    console.warn('[SIAC] No se pudo sincronizar fuente principal:', err?.message || err);
+  }
+  try {
+    const morososFingerprint = getSourceFingerprint(DEFAULT_MOROSOS_SOURCE);
+    const storedMorososFingerprint = Settings.get('morosos_source_fingerprint');
+    const morososCount = ((db as any).prepare('SELECT COUNT(*) AS c FROM morosidad').get() as any).c;
+    if (morososFingerprint && (morososCount === 0 || storedMorososFingerprint !== morososFingerprint)) {
+      const result = await importMorososSource({ sourcePath: DEFAULT_MOROSOS_SOURCE, replace: true });
+      Settings.set('morosos_source_fingerprint', result.fingerprint);
+      console.log(`[MOROSOS] Fuente principal sincronizada: ${result.imported} registros válidos`);
+    }
+  } catch (err: any) {
+    console.warn('[MOROSOS] No se pudo sincronizar fuente principal:', err?.message || err);
   }
 
   // Auto-reconectar Telegram si había token guardado

@@ -32,7 +32,8 @@ function serverToSIACRecord(row: any): SIACRecord {
     area: row.area || row.zona || '',
     estrategia: row.estrategia || '',
     nombrePromotor: row.promotor || '',
-    usuarioPromotor: row.promotor || '',
+    usuarioPromotor: row.usuario || row.promotor || '',
+    morosidad: row.morosidad || '',
     ordenServicio: row.os_alta || '',
     numPortar: row.telefono_portado || row.telefono_referencia || '',
     telefonoAsignado: row.telefono_asignado || '',
@@ -55,6 +56,8 @@ function siacRecordToServerRow(record: SIACRecord) {
     fecha_captura: record.fechaCaptura,
     estrategia: record.estrategia,
     promotor: record.nombrePromotor || record.usuarioPromotor,
+    usuario: record.usuarioPromotor,
+    morosidad: record.morosidad,
     estatus_siac: record.estatus,
     tipo_linea: record.tipoCliente,
     linea_contratada: record.tipoCliente,
@@ -148,22 +151,48 @@ export default function SIACView() {
     return { abiertas, posteadas, revenue, topZona };
   }, [records]);
 
-  // Import CSV
+  const fileToBase64 = async (file: File) => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return btoa(binary);
+  };
+
+  const handleImportPrincipal = async () => {
+    setLoading(true);
+    try {
+      const result = await SiacAPI.importSource(true);
+      await loadServerRecords();
+      toast.success(`Fuente principal SIAC cargada: ${result.imported} registros.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo cargar la fuente principal SIAC.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Import CSV/XLSX
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setLoading(true);
     try {
-      const text = await file.text();
-      const parsed = parseSIACCsv(text);
-      if (parsed.length === 0) { toast.error('No se encontraron registros válidos en el CSV.'); return; }
-      await uploadSIACRecords(parsed);
-      saveSIAC(parsed);
-      setRecords(parsed);
+      if (/\.xlsx?$/i.test(file.name)) {
+        const result = await SiacAPI.importFile(file.name, await fileToBase64(file), true);
+        await loadServerRecords();
+        toast.success(`${result.imported} registros SIAC importados desde Excel.`);
+      } else {
+        const text = await file.text();
+        const parsed = parseSIACCsv(text);
+        if (parsed.length === 0) { toast.error('No se encontraron registros válidos en el CSV.'); return; }
+        await uploadSIACRecords(parsed);
+        saveSIAC(parsed);
+        setRecords(parsed);
+        toast.success(`${parsed.length} registros SIAC importados y guardados en la base de datos.`);
+      }
       setPage(0);
       logAudit('EXPORTACION', auth.currentUser?.uid || '', auth.currentUser?.displayName || '',
-        { details: `SIAC importado: ${parsed.length} registros` });
-      toast.success(`${parsed.length} registros SIAC importados y guardados en la base de datos.`);
+        { details: `SIAC importado: ${file.name}` });
     } catch (err) {
       toast.error('Error al leer el archivo: ' + String(err));
     } finally {
@@ -214,7 +243,12 @@ export default function SIACView() {
           <p className="text-slate-400 text-sm">{records.length} registros cargados · filtra, busca y exporta.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <input ref={fileRef} type="file" accept=".csv" onChange={handleFileSelect} className="hidden" />
+          <input ref={fileRef} type="file" accept=".csv,.xlsx" onChange={handleFileSelect} className="hidden" />
+          <button onClick={handleImportPrincipal} disabled={loading}
+            className="flex items-center gap-2 px-3 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-300 rounded-xl text-xs font-bold hover:bg-purple-500/20 transition-colors disabled:opacity-50">
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Cargar principal
+          </button>
           <button onClick={() => loadServerRecords(true)} disabled={loading}
             className="flex items-center gap-2 px-3 py-2 bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold hover:bg-cyan-500/20 transition-colors disabled:opacity-50">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
@@ -223,7 +257,7 @@ export default function SIACView() {
           <button onClick={() => fileRef.current?.click()} disabled={loading}
             className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-500/20 transition-colors disabled:opacity-50">
             {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            Importar CSV
+            Importar CSV/XLSX
           </button>
           <button onClick={handleExport} disabled={filtered.length === 0}
             className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl text-xs font-bold hover:bg-emerald-500/20 transition-colors disabled:opacity-50">

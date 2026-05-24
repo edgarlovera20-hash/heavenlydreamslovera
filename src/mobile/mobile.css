@@ -5,6 +5,16 @@
 }
 
 @layer base {
+  :root {
+    --theme-electric: #0ea5e9;
+    --theme-deep: #111827;
+    --theme-dark: #131d2f;
+    --theme-black: #0b1120;
+    --theme-neon: #22d3ee;
+    --theme-matrix: #10b981;
+    --theme-text-main: #f8fafc;
+  }
+
   html,
   body,
   #mobile-root {
@@ -13,8 +23,37 @@
 
   body {
     margin: 0;
-    background: #061322;
-    color: #f8fafc;
+    background: var(--theme-black);
+    color: var(--theme-text-main);
     font-family: var(--font-sans);
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    touch-action: manipulation;
+  }
+}
+
+@layer utilities {
+  .hd-reduce-motion *,
+  .hd-reduce-motion *::before,
+  .hd-reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .hd-mobile-compact #mobile-root main {
+    padding-top: 0.75rem;
   }
 }

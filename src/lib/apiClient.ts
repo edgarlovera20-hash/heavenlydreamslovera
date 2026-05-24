@@ -1,5 +1,7 @@
 const SESSION_KEY = 'hd_session';
 const REMEMBER_USER_KEY = 'hd_remember_user';
+let accessToken: string | null = null;
+let legacyRefreshToken: string | null = null;
 
 const PUBLIC_API_PATHS = [
   '/api/auth/login',
@@ -17,14 +19,41 @@ declare global {
 }
 
 function readSession(): any {
-  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') || {}; } catch { return {}; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') || {};
+    if (raw.accessToken) accessToken = raw.accessToken;
+    if (raw.refreshToken) legacyRefreshToken = raw.refreshToken;
+    const safe = sanitizeSession(raw);
+    if (raw.accessToken || raw.refreshToken) writeSession(safe);
+    return safe;
+  } catch {
+    return {};
+  }
 }
 
 function writeSession(session: any) {
   try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
 }
 
+export function sanitizeSession(session: any) {
+  const { accessToken: _accessToken, refreshToken: _refreshToken, ...safe } = session || {};
+  return safe;
+}
+
+export function persistSession(session: any) {
+  if (session?.accessToken) accessToken = session.accessToken;
+  const safe = sanitizeSession(session);
+  writeSession(safe);
+  return safe;
+}
+
+export function setAccessToken(token?: string | null) {
+  accessToken = token || null;
+}
+
 export function clearSession() {
+  accessToken = null;
+  legacyRefreshToken = null;
   try { localStorage.removeItem(SESSION_KEY); } catch {}
 }
 
@@ -73,20 +102,22 @@ function isPublicApi(input: RequestInfo | URL, init?: RequestInit) {
   return PUBLIC_API_PATHS.includes(path);
 }
 
-async function refreshSession(originalFetch: typeof fetch) {
-  const session = readSession();
-  if (!session.refreshToken) return null;
+export async function refreshSession(originalFetch: typeof fetch = window.__hdOriginalFetch || window.fetch.bind(window)) {
+  readSession();
+  const body = legacyRefreshToken ? JSON.stringify({ refreshToken: legacyRefreshToken }) : undefined;
   const res = await originalFetch('/api/auth/refresh', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken: session.refreshToken }),
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body,
+    credentials: 'same-origin',
   });
   if (!res.ok) {
     clearSession();
     return null;
   }
   const next = await res.json();
-  writeSession(next);
+  legacyRefreshToken = null;
+  persistSession(next);
   return next;
 }
 
@@ -100,12 +131,12 @@ export function installApiFetch() {
 
     const headers = new Headers(init.headers || {});
     if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
-    const session = readSession();
-    if (session.accessToken && !isPublicApi(input, init)) {
-      headers.set('Authorization', `Bearer ${session.accessToken}`);
+    readSession();
+    if (accessToken && !isPublicApi(input, init)) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
     }
 
-    const first = await originalFetch(input, { ...init, headers });
+    const first = await originalFetch(input, { credentials: 'same-origin', ...init, headers });
     if (first.status !== 401 || isPublicApi(input, init) || pathOf(input) === '/api/auth/refresh') return first;
 
     const refreshed = await refreshSession(originalFetch);
@@ -113,6 +144,6 @@ export function installApiFetch() {
     const retryHeaders = new Headers(init.headers || {});
     if (!retryHeaders.has('Content-Type') && init.body) retryHeaders.set('Content-Type', 'application/json');
     retryHeaders.set('Authorization', `Bearer ${refreshed.accessToken}`);
-    return originalFetch(input, { ...init, headers: retryHeaders });
+    return originalFetch(input, { credentials: 'same-origin', ...init, headers: retryHeaders });
   };
 }

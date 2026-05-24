@@ -1,6 +1,6 @@
 /**
  * Fallback OCR 100% local con Tesseract.js + parsers regex.
- * Se usa solo si GPT-4o-mini y Claude Haiku 4.5 fallan (sin red / sin API key / timeout).
+ * Se usa solo si Ollama y Gemini fallan (sin red / sin API key / timeout).
  *
  * Tesseract extrae texto crudo — los parsers heurísticos intentan mapear ese texto
  * a los mismos campos que devuelven los proveedores LLM (nombres, CURP, dirección…).

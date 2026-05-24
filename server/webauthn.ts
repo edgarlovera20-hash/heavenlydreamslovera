@@ -8,8 +8,8 @@ import {
 } from '@simplewebauthn/server';
 import type { AuthenticationResponseJSON, RegistrationResponseJSON, WebAuthnCredential } from '@simplewebauthn/server';
 import { AuditLog, Users, WebAuthnChallenges, WebAuthnCredentials } from './db';
-import { issueSession } from './security';
-import type { Request } from 'express';
+import { issueSessionCookie } from './security';
+import type { Request, Response } from 'express';
 
 const RP_NAME = 'Heavenly Dreams CRM';
 
@@ -131,7 +131,7 @@ export async function makeRegistrationOptions(userId: string, req?: Request) {
   return options;
 }
 
-export async function verifyRegistration(userId: string, response: RegistrationResponseJSON, req?: Request) {
+export async function verifyRegistration(userId: string, response: RegistrationResponseJSON, req?: Request, res?: Response) {
   const clientChallenge = JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64url').toString('utf8')).challenge;
   const challenge = WebAuthnChallenges.consume(userId, 'registration', clientChallenge);
   if (!challenge) throw new Error('Challenge de registro inválido o expirado');
@@ -161,7 +161,7 @@ export async function verifyRegistration(userId: string, response: RegistrationR
   const { password: _, ...safe } = user;
   return {
     ...safe,
-    ...issueSession(user, req, { webAuthnVerified: true }),
+    ...(res ? issueSessionCookie(res, user, req, { webAuthnVerified: true }) : {}),
     verified: true,
     webAuthnVerified: true,
     webAuthnEnrollmentRequired: false,
@@ -194,7 +194,7 @@ export async function makeAuthenticationOptions(userId: string, req?: Request) {
   return options;
 }
 
-export async function verifyAuthentication(userId: string, response: AuthenticationResponseJSON, req?: Request) {
+export async function verifyAuthentication(userId: string, response: AuthenticationResponseJSON, req?: Request, res?: Response) {
   const credentialRow = WebAuthnCredentials.getByCredentialId(response.id) as any;
   if (!credentialRow || credentialRow.user_id !== userId) throw new Error('Credencial no registrada para este usuario');
   const clientChallenge = JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64url').toString('utf8')).challenge;
@@ -215,5 +215,5 @@ export async function verifyAuthentication(userId: string, response: Authenticat
   const user = Users.getById(userId) as any;
   AuditLog.insert({ accion: 'WEBAUTHN_LOGIN', entidad: 'users', entidad_id: userId, user_id: userId, user_nombre: user?.nombre || null, detalle: response.id });
   const { password: _, ...safe } = user;
-  return { ...safe, ...issueSession(user, req, { webAuthnVerified: true }), webAuthnVerified: true };
+  return { ...safe, ...(res ? issueSessionCookie(res, user, req, { webAuthnVerified: true }) : {}), webAuthnVerified: true };
 }

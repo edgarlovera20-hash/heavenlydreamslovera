@@ -56,10 +56,21 @@ const sourceFiles = tracked.filter(file =>
   /\.(ts|tsx|js|json|env|md)$/.test(file) &&
   !file.startsWith('package-lock') &&
   !file.startsWith('node_modules/'));
+const forbiddenLiterals = [
+  'Elovera1964',
+  'admin123',
+  'adhdreams_telegram_bots',
+];
 for (const file of sourceFiles) {
   if (!existsSync(join(root, file))) continue;
   const text = readFileSync(join(root, file), 'utf8');
   if (/-----BEGIN PRIVATE KEY-----/.test(text)) fail(`Llave privada detectada en ${file}.`);
+  for (const literal of forbiddenLiterals) {
+    if (text.includes(literal)) fail(`Literal sensible detectado en ${file}: ${literal}`);
+  }
+  if (file.startsWith('scripts/') && /const\s+password\s*=\s*['"][^'"]+['"]/.test(text)) {
+    fail(`Password hardcodeado detectado en ${file}. Usa variables de entorno.`);
+  }
 }
 
 console.log('Enterprise check');

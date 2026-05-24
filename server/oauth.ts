@@ -1,10 +1,10 @@
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { AuditLog, OAuthAccounts, Users } from './db';
-import { issueSession } from './security';
+import { issueSessionCookie } from './security';
 import { isWebAuthnRequired } from './webauthn';
 
-type OAuthProvider = 'google' | 'microsoft';
+type OAuthProvider = 'google';
 type OAuthMode = 'login' | 'register';
 
 interface OAuthProfile {
@@ -32,15 +32,6 @@ const PROVIDERS: Record<OAuthProvider, {
     authUrl: () => 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: () => 'https://oauth2.googleapis.com/token',
     userInfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo',
-    scopes: ['openid', 'email', 'profile'],
-  },
-  microsoft: {
-    label: 'Microsoft',
-    clientIdEnv: 'MICROSOFT_OAUTH_CLIENT_ID',
-    clientSecretEnv: 'MICROSOFT_OAUTH_CLIENT_SECRET',
-    authUrl: tenant => `https://login.microsoftonline.com/${tenant || 'common'}/oauth2/v2.0/authorize`,
-    tokenUrl: tenant => `https://login.microsoftonline.com/${tenant || 'common'}/oauth2/v2.0/token`,
-    userInfoUrl: 'https://graph.microsoft.com/oidc/userinfo',
     scopes: ['openid', 'email', 'profile'],
   },
 };
@@ -86,23 +77,12 @@ function isValidGoogleClientId(value: any) {
   return isConfiguredValue(value) && String(value).trim().endsWith('.apps.googleusercontent.com');
 }
 
-function isValidMicrosoftClientId(value: any) {
-  return isConfiguredValue(value) && /^[0-9a-f-]{36}$/i.test(String(value).trim());
-}
-
-function microsoftTenant() {
-  const tenant = String(process.env.MICROSOFT_OAUTH_TENANT || 'common').trim();
-  if (!tenant || tenant === 'commo') return 'common';
-  return tenant;
-}
-
 function providerConfig(provider: string) {
-  if (provider !== 'google' && provider !== 'microsoft') throw new Error('Proveedor OAuth no soportado');
+  if (provider !== 'google') throw new Error('Proveedor OAuth no soportado');
   const config = PROVIDERS[provider];
   const clientId = process.env[config.clientIdEnv];
   const clientSecret = process.env[config.clientSecretEnv];
-  const validClientId = provider === 'google' ? isValidGoogleClientId(clientId) : isValidMicrosoftClientId(clientId);
-  if (!validClientId || !isConfiguredValue(clientSecret)) {
+  if (!isValidGoogleClientId(clientId) || !isConfiguredValue(clientSecret)) {
     throw new Error(`${config.label} OAuth no configurado. Define ${config.clientIdEnv} y ${config.clientSecretEnv}.`);
   }
   return { provider, config, clientId, clientSecret } as const;
@@ -150,7 +130,8 @@ function renderOAuthResult(res: Response, payload: { session?: any; title: strin
   <script>
     const session = ${sessionJson};
     if (session) {
-      localStorage.setItem('hd_session', JSON.stringify(session));
+      const { accessToken, refreshToken, ...profile } = session;
+      localStorage.setItem('hd_session', JSON.stringify(profile));
       localStorage.setItem('hd_remember_user', JSON.stringify({ username: session.username || session.email, email: session.email }));
       setTimeout(() => location.replace('/'), 700);
     }
@@ -161,8 +142,7 @@ function renderOAuthResult(res: Response, payload: { session?: any; title: strin
 
 async function exchangeCode(provider: OAuthProvider, code: string, redirectUri: string) {
   const { config, clientId, clientSecret } = providerConfig(provider);
-  const tenant = microsoftTenant();
-  const res = await fetch(config.tokenUrl(provider === 'microsoft' ? tenant : undefined), {
+  const res = await fetch(config.tokenUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -194,7 +174,7 @@ async function fetchProfile(provider: OAuthProvider, accessToken: string): Promi
     provider,
     providerUserId,
     email,
-    emailVerified: provider === 'microsoft' ? true : data.email_verified === true,
+    emailVerified: data.email_verified === true,
     displayName: String(data.name || data.given_name || email.split('@')[0]).trim(),
     avatarUrl: data.picture || null,
   };
@@ -251,15 +231,16 @@ function createPendingOAuthUser(profile: OAuthProfile, role: string) {
   return user;
 }
 
-function sessionForOAuthUser(user: any, req: Request) {
+function sessionForOAuthUser(user: any, req: Request, res: Response) {
   const managerRequiresWebAuthn = user.role === 'GERENTE' && isWebAuthnRequired(req);
   const { password: _password, ...safe } = user;
+  const { accessToken: _accessToken, ...session } = issueSessionCookie(res, user, req, user.role === 'GERENTE'
+    ? { webAuthnVerified: !managerRequiresWebAuthn, webAuthnEnrollmentRequired: managerRequiresWebAuthn }
+    : {});
   return {
     ...safe,
     displayName: user.nombre,
-    ...issueSession(user, req, user.role === 'GERENTE'
-      ? { webAuthnVerified: !managerRequiresWebAuthn, webAuthnEnrollmentRequired: managerRequiresWebAuthn }
-      : {}),
+    ...session,
     webAuthnEnrollmentRequired: managerRequiresWebAuthn,
   };
 }
@@ -272,11 +253,10 @@ export function oauthStart(req: Request, res: Response) {
     if (mode === 'register' && req.query.termsAccepted !== 'true') {
       return renderOAuthResult(res, {
         title: 'Términos requeridos',
-        message: 'Debes aceptar los Términos y Condiciones antes de registrarte con Google o Microsoft.',
+        message: 'Debes aceptar los Términos y Condiciones antes de registrarte con Google.',
         error: true,
       });
     }
-    const tenant = microsoftTenant();
     const state = encodeState({
       provider,
       mode,
@@ -285,7 +265,7 @@ export function oauthStart(req: Request, res: Response) {
       nonce: randomBytes(16).toString('base64url'),
       exp: Date.now() + 10 * 60 * 1000,
     });
-    const authUrl = new URL(config.authUrl(provider === 'microsoft' ? tenant : undefined));
+    const authUrl = new URL(config.authUrl());
     authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', callbackUrl(req, provider));
     authUrl.searchParams.set('response_type', 'code');
@@ -296,7 +276,7 @@ export function oauthStart(req: Request, res: Response) {
   } catch (err: any) {
     renderOAuthResult(res, {
       title: 'OAuth no configurado',
-      message: err?.message || 'No se pudo iniciar el acceso con Google o Microsoft.',
+      message: err?.message || 'No se pudo iniciar el acceso con Google.',
       error: true,
     });
   }
@@ -309,7 +289,7 @@ export async function oauthCallback(req: Request, res: Response) {
     const providerError = String(req.query.error || '');
     if (providerError) {
       const description = String(req.query.error_description || req.query.error_uri || '').trim();
-      throw new Error(description || `Microsoft devolvió error OAuth: ${providerError}`);
+      throw new Error(description || `El proveedor devolvió error OAuth: ${providerError}`);
     }
     const code = String(req.query.code || '');
     const state = decodeState(String(req.query.state || ''));
@@ -321,7 +301,7 @@ export async function oauthCallback(req: Request, res: Response) {
     if (!profile.emailVerified) {
       return renderOAuthResult(res, {
         title: 'Correo no verificado',
-        message: 'El proveedor no confirmó ese correo como verificado. Usa una cuenta Google/Microsoft verificada.',
+        message: 'El proveedor no confirmó ese correo como verificado. Usa una cuenta Google verificada.',
         error: true,
       });
     }
@@ -332,7 +312,7 @@ export async function oauthCallback(req: Request, res: Response) {
     if (!user && state.mode === 'login') {
       return renderOAuthResult(res, {
         title: 'Cuenta no encontrada',
-        message: 'No existe una cuenta aprobada con ese correo. Usa la opción de registro con Google o Microsoft.',
+        message: 'No existe una cuenta aprobada con ese correo. Usa la opción de registro con Google.',
         error: true,
       });
     }
@@ -348,7 +328,7 @@ export async function oauthCallback(req: Request, res: Response) {
       user = createPendingOAuthUser(profile, state.role);
       return renderOAuthResult(res, {
         title: 'Registro enviado',
-        message: 'Tu cuenta con Google/Microsoft quedó pendiente de aprobación por gerencia.',
+        message: 'Tu cuenta con Google quedó pendiente de aprobación por gerencia.',
       });
     }
 
@@ -377,7 +357,7 @@ export async function oauthCallback(req: Request, res: Response) {
       detalle: `${profile.provider}:${profile.email}`,
     });
     renderOAuthResult(res, {
-      session: sessionForOAuthUser(user, req),
+      session: sessionForOAuthUser(user, req, res),
       title: 'Acceso verificado',
       message: 'Cuenta verificada. Entrando al CRM.',
     });
@@ -393,21 +373,15 @@ export async function oauthCallback(req: Request, res: Response) {
 export function oauthStatus() {
   const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-  const microsoftClientId = process.env.MICROSOFT_OAUTH_CLIENT_ID;
-  const microsoftClientSecret = process.env.MICROSOFT_OAUTH_CLIENT_SECRET;
   return {
     google: isValidGoogleClientId(googleClientId) && isConfiguredValue(googleClientSecret),
-    microsoft: isValidMicrosoftClientId(microsoftClientId) && isConfiguredValue(microsoftClientSecret),
+    microsoft: false,
     callbacks: {
       google: '/api/auth/oauth/google/callback',
-      microsoft: '/api/auth/oauth/microsoft/callback',
     },
     missing: {
       googleClientId: !isValidGoogleClientId(googleClientId),
       googleClientSecret: !isConfiguredValue(googleClientSecret),
-      microsoftClientId: !isValidMicrosoftClientId(microsoftClientId),
-      microsoftClientSecret: !isConfiguredValue(microsoftClientSecret),
-      microsoftTenant: microsoftTenant(),
     },
   };
 }

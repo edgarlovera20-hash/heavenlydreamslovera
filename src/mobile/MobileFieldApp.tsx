@@ -1,17 +1,26 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startAuthentication } from '@simplewebauthn/browser';
 import { del as idbDel, get as idbGet, set as idbSet } from 'idb-keyval';
-import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, rememberUsername } from '../lib/apiClient';
+import { Camera, Clock, Crown, DollarSign, Flame, Medal, Shield, Sparkles, Star, Target, TrendingUp, Trophy, Zap } from 'lucide-react';
+import { PACKAGE_CATALOG, type ClientType, type PackageCatalogItem, type ProductCategory, type ServiceSegment } from '../configs/package-catalog';
+import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from '../lib/apiClient';
+import Logo from '../components/ui/Logo';
 import { getMobilePosition } from './mobileLocation';
 import { runMobileOcr } from './mobileOcr';
+
+const MapPicker = lazy(() => import('../components/ui/MapPicker').then(m => ({ default: m.MapPicker })));
 
 const SESSION_KEY = 'hd_session';
 const DRAFT_KEY = 'hd_mobile_capture_draft_v1';
 const LOCAL_SETTINGS_KEY = 'hd_mobile_settings_v1';
+const OFFLINE_QUEUE_KEY = 'hd_mobile_offline_queue_v1';
+const MODULE_CACHE_PREFIX = 'hd_mobile_module_cache_v1:';
 
 type IconName = 'badge' | 'camera' | 'check' | 'chevron-left' | 'chevron-right' | 'clipboard' | 'cloud-off' | 'folder' | 'home' | 'id' | 'loader' | 'logout' | 'map' | 'message' | 'refresh' | 'save' | 'search' | 'send' | 'settings' | 'shield' | 'smartphone' | 'user' | 'users' | 'wallet' | 'wifi' | 'wifi-off';
 type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'perfil' | 'ajustes';
 type DraftSaveState = 'idle' | 'saving' | 'saved';
 type Notice = { kind: 'success' | 'error'; message: string } | null;
+type QueueStatus = 'queued' | 'syncing' | 'failed';
 
 type SessionUser = {
   uid: string;
@@ -22,18 +31,31 @@ type SessionUser = {
   role?: string;
   zona?: string;
   puesto?: string;
-  accessToken?: string;
-  refreshToken?: string;
+  avatar?: string;
 };
 
 type MobileBootstrap = {
   user: SessionUser;
   permissions: { role?: string; canManage: boolean; mobile: boolean };
-  counts: { ventas: number; pendientes: number; hoy: number; clientes: number; documentosPendientes: number; folios: number };
+  featureFlags?: { mobilePwaPrimary?: boolean; offlineQueue?: boolean; moduleCache?: boolean; agentApprovals?: boolean };
+  nav?: MobileSection[];
+  sync?: { serverTime: number; staleAfterMs: number; supportsUpdatedSince: boolean };
+  agentInboxSummary?: { pendingApproval: number; conversationsOpen: number; latestDecisionAt?: string | null };
+  counts: { ventas: number; pendientes: number; hoy: number; clientes: number; documentosPendientes: number; folios: number; chatsAbiertos?: number; aprobaciones?: number };
   channels: { whatsapp: any; telegram: any };
   recentSales: any[];
   pendingFollowUps: any[];
   recentPayroll: any[];
+};
+
+type OfflineQueueItem = {
+  id: string;
+  kind: 'capture' | 'whatsapp';
+  status: QueueStatus;
+  createdAt: string;
+  error?: string;
+  payload: any;
+  files?: Array<{ docType: string; file: File }>;
 };
 
 type CaptureDocument = {
@@ -48,11 +70,15 @@ type CaptureDraft = {
   apellidoPaterno: string;
   apellidoMaterno: string;
   curp: string;
+  folioIne: string;
   fechaNacimiento: string;
   sexo: string;
   estadoNacimiento: string;
   telefono: string;
+  telefonoTitular: string;
+  telefonoReferencia: string;
   correo: string;
+  mismaDireccionIne: boolean;
   tipoVialidad: string;
   calle: string;
   numeroExterior: string;
@@ -65,12 +91,23 @@ type CaptureDraft = {
   coordenadas: string;
   gpsLatitud: string;
   gpsLongitud: string;
-  tipoCliente: string;
-  tipoServicio: string;
+  tipoCliente: ClientType;
+  tipoServicio: ServiceSegment;
+  categoriaProducto: ProductCategory;
   paqueteNombre: string;
+  packageId: string;
   rentaMensual: string;
+  megas: string;
+  lineasTelefonicas: string;
+  incluyeClaroVideo: boolean;
+  streamingElegido: 'netflix' | 'hbo_max' | 'hbo_max_gratis' | 'ninguno';
+  plataformasAdicionales: string[];
+  numeroAPortar: string;
+  companiaActual: string;
+  nip: string;
   folioSiac: string;
   servicioSiac: string;
+  videoFirmaLocal: boolean;
   notas: string;
   documents: CaptureDocument[];
 };
@@ -113,11 +150,15 @@ const EMPTY_DRAFT: CaptureDraft = {
   apellidoPaterno: '',
   apellidoMaterno: '',
   curp: '',
+  folioIne: '',
   fechaNacimiento: '',
   sexo: '',
   estadoNacimiento: '',
   telefono: '',
+  telefonoTitular: '',
+  telefonoReferencia: '',
   correo: '',
+  mismaDireccionIne: true,
   tipoVialidad: 'CALLE',
   calle: '',
   numeroExterior: '',
@@ -130,17 +171,38 @@ const EMPTY_DRAFT: CaptureDraft = {
   coordenadas: '',
   gpsLatitud: '',
   gpsLongitud: '',
-  tipoCliente: 'RESIDENCIAL',
-  tipoServicio: 'INTERNET',
-  paqueteNombre: 'Infinitum 100 MB',
-  rentaMensual: '389',
+  tipoCliente: 'linea_nueva',
+  tipoServicio: 'residencial',
+  categoriaProducto: 'infinitum_puro',
+  paqueteNombre: '',
+  packageId: '',
+  rentaMensual: '',
+  megas: '',
+  lineasTelefonicas: '',
+  incluyeClaroVideo: false,
+  streamingElegido: 'ninguno',
+  plataformasAdicionales: [],
+  numeroAPortar: '',
+  companiaActual: '',
+  nip: '',
   folioSiac: '',
   servicioSiac: '',
+  videoFirmaLocal: false,
   notas: '',
   documents: [],
 };
 
-const CAPTURE_STEPS = ['Cliente', 'Domicilio', 'Paquete', 'Expediente', 'Confirmar'];
+const CAPTURE_STEPS = ['INE/OCR', 'Cliente', 'Domicilio', 'Servicio', 'Paquetes', 'Streaming', 'Video firma', 'Confirmar'];
+
+const STREAMING_ADDONS = [
+  { id: 'netflix_basico', provider: 'Netflix', name: 'Basico con anuncios', price: 99 },
+  { id: 'netflix_estandar', provider: 'Netflix', name: 'Estandar HD', price: 219 },
+  { id: 'netflix_premium', provider: 'Netflix', name: 'Premium 4K', price: 299 },
+  { id: 'hbo_estandar', provider: 'HBO Max', name: 'Estandar', price: 149 },
+  { id: 'hbo_premium', provider: 'HBO Max', name: 'Premium', price: 199 },
+  { id: 'disney_premium', provider: 'Disney+', name: 'Premium', price: 299 },
+  { id: 'prime_video', provider: 'Prime Video', name: 'Prime', price: 99 },
+];
 
 const DOCUMENT_TYPES = [
   { type: 'INE_FRONTAL', label: 'INE frontal', mode: 'ine' as const },
@@ -160,7 +222,7 @@ const PRIMARY_NAV: Array<{ id: MobileSection; label: string; icon: IconName }> =
 ];
 
 const MODULES: Array<{ id: MobileSection; label: string; icon: IconName; caption: string }> = [
-  { id: 'venta', label: 'Iniciar nueva venta', icon: 'clipboard', caption: 'Captura ligera con CURP y expediente' },
+  { id: 'venta', label: 'Iniciar nueva venta', icon: 'clipboard', caption: 'Flujo completo con INE, CURP, mapa y firma' },
   { id: 'folios', label: 'Consultar folio', icon: 'search', caption: 'SIAC y estatus operativo' },
   { id: 'clientes', label: 'Mi CRM', icon: 'users', caption: 'Clientes propios y próximos contactos' },
   { id: 'documentos', label: 'Expediente', icon: 'folder', caption: 'Documentos por captura' },
@@ -177,14 +239,14 @@ function cx(...classes: Array<string | false | null | undefined>) {
 function loadSession(): SessionUser | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return raw ? persistSession(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
 }
 
 function saveSession(session: SessionUser) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  return persistSession(session);
 }
 
 function loadMobileSettings() {
@@ -215,13 +277,67 @@ function shortDate(value: any) {
   return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
 }
 
+function formatRelative(value?: any): string {
+  if (!value) return 'Sin fecha';
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return 'Sin fecha';
+  const diff = Date.now() - then;
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'Hace instantes';
+  if (minutes < 60) return `Hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Ayer';
+  return `Hace ${days} dias`;
+}
+
 function displayName(session?: SessionUser | null) {
   return session?.displayName || session?.nombre || session?.username || 'Asesor';
 }
 
+function roleLabel(role?: string) {
+  const normalized = String(role || 'ASESOR').toUpperCase();
+  if (normalized === 'GERENTE') return 'gerente';
+  if (normalized === 'SUPERVISOR') return 'supervisor';
+  if (normalized === 'ADMIN') return 'admin';
+  return 'asesor';
+}
+
+function saleOwnerId(sale: any) {
+  return String(sale?.asesor_id || sale?.asesorId || sale?.vendedor_id || sale?.vendedorId || sale?.userId || '').trim();
+}
+
+function saleOwnerName(sale: any) {
+  return String(sale?.asesor_nombre || sale?.asesorNombre || sale?.vendedor_nombre || sale?.vendedor || 'Asesor').trim();
+}
+
+function saleDateValue(sale: any) {
+  return sale?.fecha_solicitud || sale?.fechaSolicitud || sale?.created_at || sale?.createdAt || sale?.fecha_captura || '';
+}
+
+function saleClientName(sale: any) {
+  return [sale?.nombres, sale?.apellidos].filter(Boolean).join(' ').trim() || sale?.cliente_nombre || sale?.cliente || sale?.folio || 'Cliente';
+}
+
+function isApprovedSale(sale: any) {
+  return ['aprobada', 'procedio', 'procedió', 'pagada'].includes(String(sale?.status || '').toLowerCase());
+}
+
+function salesWithinFilter(sale: any, filter: 'weekly' | 'monthly' | 'all-time') {
+  if (filter === 'all-time') return true;
+  const time = new Date(saleDateValue(sale)).getTime();
+  if (Number.isNaN(time)) return false;
+  const now = new Date();
+  if (filter === 'monthly') {
+    return new Date(time).toISOString().slice(0, 7) === now.toISOString().slice(0, 7);
+  }
+  return Date.now() - time <= 7 * 24 * 60 * 60 * 1000;
+}
+
 function hasDraftData(draft: CaptureDraft) {
   return Object.entries(draft).some(([key, value]) => {
-    if (key === 'tipoVialidad' || key === 'tipoCliente' || key === 'tipoServicio' || key === 'paqueteNombre' || key === 'rentaMensual') return false;
+    if (['tipoVialidad', 'tipoCliente', 'tipoServicio', 'categoriaProducto', 'mismaDireccionIne', 'incluyeClaroVideo', 'streamingElegido', 'videoFirmaLocal'].includes(key)) return false;
     if (Array.isArray(value)) return value.length > 0;
     return String(value ?? '').trim().length > 0;
   });
@@ -243,12 +359,43 @@ function buildAddress(draft: CaptureDraft) {
   ].filter(Boolean).join(', ');
 }
 
+function availablePackagesForDraft(draft: CaptureDraft) {
+  return PACKAGE_CATALOG.filter((pkg) => (
+    pkg.segment === draft.tipoServicio &&
+    pkg.category === draft.categoriaProducto &&
+    pkg.allowedClientTypes.includes(draft.tipoCliente)
+  ));
+}
+
+function selectedPackageForDraft(draft: CaptureDraft) {
+  return PACKAGE_CATALOG.find((pkg) => pkg.id === draft.packageId) || null;
+}
+
+function streamingTotal(draft: CaptureDraft) {
+  return draft.plataformasAdicionales.reduce((sum, id) => sum + (STREAMING_ADDONS.find((item) => item.id === id)?.price || 0), 0);
+}
+
+function buildMapSearchAddress(draft: CaptureDraft) {
+  return [draft.calle, draft.numeroExterior, draft.colonia, draft.delegacion, draft.ciudad, draft.codigoPostal].filter(Boolean).join(', ');
+}
+
 function pick(source: any, ...keys: string[]) {
   for (const key of keys) {
     const value = source?.[key];
     if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
   }
   return '';
+}
+
+function mergeById(existing: any[], incoming: any[]) {
+  const map = new Map<string, any>();
+  for (const item of existing || []) map.set(String(item.id || item.folio || item.timestamp || Math.random()), item);
+  for (const item of incoming || []) map.set(String(item.id || item.folio || item.timestamp || Math.random()), item);
+  return Array.from(map.values());
+}
+
+function chatKey(value: any) {
+  return String(value?.conversation_id || value?.conversationId || value?.external_chat_id || value?.externalChatId || value?.chatId || value?.from || value?.to || value?.id || '');
 }
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -268,6 +415,48 @@ async function fileToBase64(file: File) {
   return dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
 }
 
+function newQueueId() {
+  return `mq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function readOfflineQueue(): Promise<OfflineQueueItem[]> {
+  const saved = await idbGet(OFFLINE_QUEUE_KEY).catch(() => null);
+  return Array.isArray(saved) ? saved : [];
+}
+
+async function writeOfflineQueue(items: OfflineQueueItem[]) {
+  await idbSet(OFFLINE_QUEUE_KEY, items);
+}
+
+async function readModuleCache<T>(section: MobileSection): Promise<{ data: T; savedAt: number } | null> {
+  const cached = await idbGet(`${MODULE_CACHE_PREFIX}${section}`).catch(() => null);
+  return cached?.data ? cached : null;
+}
+
+async function writeModuleCache(section: MobileSection, data: any) {
+  await idbSet(`${MODULE_CACHE_PREFIX}${section}`, { data, savedAt: Date.now() });
+}
+
+async function compressImageFile(file: File) {
+  if (!file.type.startsWith('image/') || file.size < 900_000) return file;
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('No se pudo optimizar la imagen.'));
+    img.src = URL.createObjectURL(file);
+  });
+  const maxSide = 1600;
+  const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.width * ratio));
+  canvas.height = Math.max(1, Math.round(image.height * ratio));
+  canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(image.src);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.78));
+  if (!blob) return file;
+  return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg', lastModified: Date.now() });
+}
+
 function Field(props: {
   label: string;
   value: string;
@@ -277,7 +466,7 @@ function Field(props: {
   multiline?: boolean;
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
 }) {
-  const base = 'w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 text-[16px] text-slate-50 outline-none transition focus:border-cyan-300/70 focus:bg-black/45 placeholder:text-slate-500';
+  const base = 'min-h-12 w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 text-[16px] text-slate-50 outline-none transition focus:border-cyan-300/70 focus:bg-black/45 placeholder:text-slate-500';
   return (
     <label className="block space-y-2">
       <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{props.label}</span>
@@ -309,7 +498,7 @@ function SelectField(props: { label: string; value: string; onChange: (value: st
       <select
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
-        className="w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 text-[16px] text-slate-50 outline-none transition focus:border-cyan-300/70"
+        className="min-h-12 w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 text-[16px] text-slate-50 outline-none transition focus:border-cyan-300/70"
       >
         {props.options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
@@ -338,9 +527,40 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
   const remembered = useMemo(() => loadRememberedUsername(), []);
   const [username, setUsername] = useState(remembered?.username || '');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(Boolean(remembered));
   const [loading, setLoading] = useState(false);
+  const [googleOAuthAvailable, setGoogleOAuthAvailable] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [passkeySupported, setPasskeySupported] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/oauth/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((status) => {
+        if (!cancelled) setGoogleOAuthAvailable(Boolean(status?.google));
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleOAuthAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const supported = typeof window !== 'undefined' && Boolean(window.PublicKeyCredential) && window.isSecureContext;
+    if (!supported) {
+      setPasskeySupported(false);
+      return;
+    }
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+      .then(setPasskeySupported)
+      .catch(() => setPasskeySupported(false));
+  }, []);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -363,8 +583,7 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
       }
       if (remember) rememberUsername(username);
       else forgetRememberedUsername();
-      const session = { ...data, displayName: data.displayName || data.nombre };
-      saveSession(session);
+      const session = saveSession({ ...data, displayName: data.displayName || data.nombre });
       onLogin(session);
       onNotice('success', 'Sesion iniciada.');
     } catch (err: any) {
@@ -374,19 +593,91 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
     }
   };
 
+  const startGoogleLogin = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      const status = await apiJson<{ google?: boolean }>('/api/auth/oauth/status');
+      if (!status.google) {
+        setError('Google no esta configurado en el servidor.');
+        return;
+      }
+      const params = new URLSearchParams({ mode: 'login', role: 'ASESOR', mobile: 'true' });
+      window.location.href = `/api/auth/oauth/google/start?${params.toString()}`;
+    } catch (err: any) {
+      setError(err?.message || 'No se pudo iniciar Google.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const startPasskeyLogin = async () => {
+    const account = username.trim();
+    if (!account) {
+      setError('Ingresa tu usuario o correo para usar huella digital.');
+      return;
+    }
+    if (!passkeySupported) {
+      setError('Huella digital/passkey no disponible en este navegador.');
+      return;
+    }
+    setError('');
+    setPasskeyLoading(true);
+    try {
+      const options = await apiJson<any>('/api/webauthn/login/options', {
+        method: 'POST',
+        body: JSON.stringify({ username: account }),
+      });
+      const assertion = await startAuthentication({ optionsJSON: options });
+      const user = await apiJson<any>('/api/webauthn/login/verify', {
+        method: 'POST',
+        body: JSON.stringify({ userId: options.userId, response: assertion }),
+      });
+      if (remember) rememberUsername(account);
+      else forgetRememberedUsername();
+      const session = saveSession({ ...user, displayName: user.displayName || user.nombre });
+      onLogin(session);
+      onNotice('success', 'Sesion iniciada con huella digital.');
+    } catch (err: any) {
+      setError(err?.message || 'No se pudo entrar con huella digital.');
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
   return (
-    <main className="min-h-dvh bg-[#061322] px-5 py-8 text-slate-100">
+    <main className="min-h-dvh bg-[#0B1120] px-5 py-8 text-slate-100">
       <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center">
-        <div className="mb-8">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">
-            <MobileIcon name="smartphone" className="h-7 w-7" />
+        <div className="mb-8 flex flex-col items-center text-center">
+          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-cyan-300/45 bg-[#131d2f]/85 shadow-[0_0_24px_rgba(34,211,238,0.22)]">
+            <Logo className="h-16 w-16" />
           </div>
-          <h1 className="text-3xl font-black tracking-tight">Heavenly Dreams Campo</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">Acceso ligero para asesores en campo.</p>
+          <h1 className="text-center text-3xl font-black uppercase tracking-[0.08em] text-slate-50 drop-shadow-[0_0_12px_rgba(34,211,238,0.18)]">Heavenly Dreams</h1>
+          <p className="mt-3 text-sm font-black uppercase tracking-[0.18em] text-[#22d3ee]">Tu Dream Team comienza aqui</p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">App version lite para movil</p>
         </div>
-        <form onSubmit={submit} className="space-y-4 rounded-[28px] border border-cyan-400/15 bg-[#07111f]/90 p-4 shadow-2xl">
+        <form onSubmit={submit} className="space-y-4 rounded-[28px] border border-[#22d3ee]/45 bg-[#131d2f]/85 p-4 shadow-[0_0_26px_rgba(34,211,238,0.14)] backdrop-blur-xl">
           <Field label="Usuario" value={username} onChange={setUsername} placeholder="edgar" />
-          <Field label="Contrasena" value={password} onChange={setPassword} placeholder="Tu contrasena" type="password" />
+          <div className="space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Contrasena</span>
+            <div className="relative">
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Tu contrasena"
+                type={showPassword ? 'text' : 'password'}
+                className="min-h-12 w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 pr-14 text-[16px] text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-cyan-300/70 focus:bg-black/45"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-cyan-100/70 transition hover:bg-cyan-300/10 hover:text-cyan-100"
+                aria-label={showPassword ? 'Ocultar contrasena' : 'Ver contrasena'}
+              >
+                <MobileIcon name={showPassword ? 'shield' : 'search'} className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
           <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-sm text-slate-300">
             <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="h-4 w-4 accent-cyan-300" />
             Recordar usuario
@@ -396,6 +687,36 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
             <MobileIcon name={loading ? 'loader' : 'shield'} className={cx('h-4 w-4', loading && 'animate-spin')} />
             Entrar
           </button>
+          <button
+            type="button"
+            disabled={!passkeySupported || passkeyLoading}
+            onClick={startPasskeyLogin}
+            className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl border border-cyan-300/35 bg-cyan-300/10 font-black uppercase tracking-[0.12em] text-cyan-100 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+            title={passkeySupported ? 'Entrar con huella digital o passkey' : 'Huella digital/passkey no disponible'}
+          >
+            <MobileIcon name={passkeyLoading ? 'loader' : 'id'} className={cx('h-4 w-4', passkeyLoading && 'animate-spin')} />
+            Huella digital
+          </button>
+          <div className="flex items-center gap-3 py-1">
+            <span className="h-px flex-1 bg-cyan-300/15" />
+            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100/60">o</span>
+            <span className="h-px flex-1 bg-cyan-300/15" />
+          </div>
+          <button
+            type="button"
+            disabled={!googleOAuthAvailable || googleLoading}
+            onClick={startGoogleLogin}
+            className="flex h-13 w-full items-center justify-center gap-3 rounded-2xl border border-cyan-300/20 bg-white/[0.04] font-black uppercase tracking-[0.12em] text-slate-50 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+            title={googleOAuthAvailable ? 'Entrar con cuenta Google' : 'Faltan credenciales OAuth de Google en el servidor'}
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-sm font-black text-slate-950">G</span>
+            {googleLoading ? 'Abriendo Google...' : 'Cuenta Google'}
+          </button>
+          {!googleOAuthAvailable && (
+            <p className="text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+              Google pendiente de configurar
+            </p>
+          )}
         </form>
       </div>
     </main>
@@ -417,6 +738,8 @@ export default function MobileFieldApp() {
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File | null>>({});
   const [submittingCapture, setSubmittingCapture] = useState(false);
   const [curpLoading, setCurpLoading] = useState(false);
+  const [videoFirmaActive, setVideoFirmaActive] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [folioQuery, setFolioQuery] = useState('');
   const [folioResults, setFolioResults] = useState<any[]>([]);
   const [folioLoading, setFolioLoading] = useState(false);
@@ -425,22 +748,234 @@ export default function MobileFieldApp() {
   const [followUps, setFollowUps] = useState<any[]>([]);
   const [payroll, setPayroll] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messagePhone, setMessagePhone] = useState('');
   const [messageText, setMessageText] = useState('');
   const [moduleLoading, setModuleLoading] = useState(false);
+  const [offlineQueue, setOfflineQueue] = useState<OfflineQueueItem[]>([]);
+  const [syncingQueue, setSyncingQueue] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+  const [profileLeaderboardFilter, setProfileLeaderboardFilter] = useState<'weekly' | 'monthly' | 'all-time'>('weekly');
+  const profileFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const profileUser = bootstrap?.user || session;
+  const profileUid = profileUser?.uid || session?.uid || '';
+  const profileName = displayName(profileUser || session);
+  const profileRole = String(profileUser?.role || session?.role || 'ASESOR').toUpperCase();
+  const profileRoleLabel = roleLabel(profileRole);
+
+  const profileModel = useMemo(() => {
+    const allSales = Array.isArray(bootstrap?.recentSales) ? bootstrap.recentSales : [];
+    const mySales = profileUid
+      ? allSales.filter((sale) => saleOwnerId(sale) === profileUid)
+      : [];
+    const approvedSales = mySales.filter(isApprovedSale).length;
+    const foliosTotales = mySales.length;
+    const successRate = foliosTotales > 0 ? ((approvedSales / foliosTotales) * 100).toFixed(1) : '0';
+    const points = (foliosTotales * 10) + (approvedSales * 25);
+    const level = Math.floor(points / 100);
+    const xpNextLevel = (level + 1) * 100;
+    const xpCurrentLevel = points % 100;
+    const missingXP = xpNextLevel - points;
+    const dates = new Set(
+      mySales
+        .map((sale) => String(saleDateValue(sale)).split('T')[0].split(' ')[0])
+        .filter(Boolean)
+    );
+    let streakDays = 0;
+    const day = new Date();
+    while (dates.size > 0) {
+      const key = day.toISOString().split('T')[0];
+      if (dates.has(key)) {
+        streakDays += 1;
+        day.setDate(day.getDate() - 1);
+      } else if (streakDays === 0) {
+        day.setDate(day.getDate() - 1);
+        if (!dates.has(day.toISOString().split('T')[0])) break;
+      } else {
+        break;
+      }
+      if (streakDays > 365) break;
+    }
+
+    const leaderboardMap = new Map<string, { id: string; name: string; folios: number; approved: number; points: number }>();
+    allSales
+      .filter((sale) => salesWithinFilter(sale, profileLeaderboardFilter))
+      .forEach((sale) => {
+        const id = saleOwnerId(sale) || saleOwnerName(sale);
+        const existing = leaderboardMap.get(id) || { id, name: saleOwnerName(sale), folios: 0, approved: 0, points: 0 };
+        existing.folios += 1;
+        if (isApprovedSale(sale)) existing.approved += 1;
+        existing.points = (existing.folios * 10) + (existing.approved * 25);
+        leaderboardMap.set(id, existing);
+      });
+    if (profileUid && !leaderboardMap.has(profileUid)) {
+      leaderboardMap.set(profileUid, { id: profileUid, name: profileName, folios: foliosTotales, approved: approvedSales, points });
+    }
+    const leaderboard = Array.from(leaderboardMap.values())
+      .sort((a, b) => b.points - a.points)
+      .map((entry, index) => ({ ...entry, level: Math.floor(entry.points / 100), rank: index + 1 }));
+    const myRank = leaderboard.find((entry) => entry.id === profileUid)?.rank || leaderboard.length + 1;
+    const isTop3 = myRank <= 3 && foliosTotales > 0;
+    const hasFireStreak = streakDays >= 7;
+    const medals = [
+      { id: 1, name: 'Primera Venta', icon: Star, color: 'text-yellow-300', bg: 'bg-yellow-300/10', unlocked: foliosTotales >= 1 },
+      { id: 2, name: 'Vendedor Activo', icon: TrendingUp, color: 'text-sky-300', bg: 'bg-sky-300/10', unlocked: foliosTotales >= 5 },
+      { id: 3, name: 'En Racha', icon: Flame, color: 'text-orange-300', bg: 'bg-orange-300/10', unlocked: streakDays >= 7 },
+      { id: 4, name: 'Nivel 5', icon: Shield, color: 'text-violet-300', bg: 'bg-violet-300/10', unlocked: level >= 5 },
+      { id: 5, name: 'Top 3 Semanal', icon: Crown, color: 'text-yellow-200', bg: 'bg-yellow-200/10', unlocked: isTop3 },
+    ];
+    const timeline = [...mySales]
+      .sort((a, b) => String(saleDateValue(b)).localeCompare(String(saleDateValue(a))))
+      .slice(0, 4)
+      .map((sale, index) => ({
+        id: sale?.id || sale?.folio || `sale-${index}`,
+        title: isApprovedSale(sale)
+          ? `Venta APROBADA - ${saleClientName(sale)} (+25 XP)`
+          : `Captura registrada - ${saleClientName(sale)} (+10 XP)`,
+        time: formatRelative(saleDateValue(sale)),
+        approved: isApprovedSale(sale),
+      }));
+
+    return {
+      approvedSales,
+      foliosTotales,
+      hasFireStreak,
+      isTop3,
+      leaderboard,
+      level,
+      medals,
+      missingXP,
+      myRank,
+      points,
+      progressPercent: xpCurrentLevel,
+      streakDays,
+      successRate,
+      timeline,
+      unlockedCount: medals.filter((medal) => medal.unlocked).length,
+      xpNextLevel,
+    };
+  }, [bootstrap?.recentSales, profileLeaderboardFilter, profileName, profileUid]);
 
   const notify = useCallback((kind: 'success' | 'error', message: string) => {
     setNotice({ kind, message });
     window.setTimeout(() => setNotice(null), 3500);
   }, []);
 
+  const handleProfileImageUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const imageUrl = String(reader.result || '');
+      setProfileAvatar(imageUrl);
+      if (profileUid) {
+        try {
+          localStorage.setItem(`adhdreams_avatar_${profileUid}`, imageUrl);
+        } catch {
+          notify('error', 'No se pudo guardar el avatar localmente.');
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+  }, [notify, profileUid]);
+
+  const profileAvatarUrl = profileAvatar || profileUser?.avatar || null;
+
   const updateDraft = useCallback((patch: Partial<CaptureDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
   }, []);
 
+  const capturePayload = useCallback(() => {
+    const phone = normalizePhone(draft.telefono || draft.telefonoTitular);
+    const titularPhone = normalizePhone(draft.telefonoTitular || draft.telefono);
+    const referenciaPhone = normalizePhone(draft.telefonoReferencia);
+    return {
+      nombres: draft.nombres.trim(),
+      apellidoPaterno: draft.apellidoPaterno.trim(),
+      apellidoMaterno: draft.apellidoMaterno.trim(),
+      apellidos: [draft.apellidoPaterno, draft.apellidoMaterno].filter(Boolean).join(' ').trim(),
+      curp: draft.curp.trim().toUpperCase(),
+      fechaNacimiento: draft.fechaNacimiento,
+      sexo: draft.sexo,
+      estadoNacimiento: draft.estadoNacimiento,
+      telefono: phone,
+      telefono_titular: titularPhone,
+      telefonoTitular: titularPhone,
+      telefono_referencia: referenciaPhone,
+      telefonoReferencia: referenciaPhone,
+      correo: draft.correo.trim(),
+      direccion: buildAddress(draft),
+      calle: draft.calle,
+      tipoVialidad: draft.tipoVialidad,
+      numeroExterior: draft.numeroExterior,
+      numeroInterior: draft.numeroInterior,
+      colonia: draft.colonia,
+      municipio: draft.delegacion,
+      delegacion: draft.delegacion,
+      ciudad: draft.ciudad,
+      codigo_postal: draft.codigoPostal,
+      codigoPostal: draft.codigoPostal,
+      referencias: draft.referencias,
+      coordenadas: draft.coordenadas,
+      gpsLatitud: draft.gpsLatitud,
+      gpsLongitud: draft.gpsLongitud,
+      folio_ine: draft.folioIne,
+      folioIne: draft.folioIne,
+      tipo_cliente: draft.tipoCliente,
+      tipoCliente: draft.tipoCliente,
+      tipo_servicio: draft.tipoServicio,
+      tipoServicio: draft.tipoServicio,
+      categoria_producto: draft.categoriaProducto,
+      categoriaProducto: draft.categoriaProducto,
+      plan: draft.paqueteNombre,
+      paqueteNombre: draft.paqueteNombre,
+      packageId: draft.packageId,
+      megas: draft.megas,
+      lineasTelefonicas: draft.lineasTelefonicas,
+      incluyeClaroVideo: draft.incluyeClaroVideo,
+      renta_mensual: Number(draft.rentaMensual || 0),
+      numeroAPortar: draft.numeroAPortar,
+      companiaActual: draft.companiaActual,
+      nip: draft.nip,
+      streamingElegido: draft.streamingElegido,
+      plataformasAdicionales: draft.plataformasAdicionales,
+      folio_siac: draft.folioSiac,
+      folioSiac: draft.folioSiac,
+      servicio_siac: draft.servicioSiac,
+      servicioSiac: draft.servicioSiac,
+      notas: draft.notas || buildAddress(draft),
+      metadata: {
+        source: 'mobile-pwa',
+        mobileVersion: 1,
+        ...draft,
+        telefonoTitular: titularPhone,
+        telefonoReferencia: referenciaPhone,
+        tipoContratacion: draft.tipoCliente,
+        segmento: draft.tipoServicio,
+        categoriaProducto: draft.categoriaProducto,
+        streamingTotal: streamingTotal(draft),
+        videoFirmaLocal: draft.videoFirmaLocal,
+        direccionCompleta: buildAddress(draft),
+      },
+    };
+  }, [draft]);
+
+  const persistQueue = useCallback(async (items: OfflineQueueItem[]) => {
+    setOfflineQueue(items);
+    await writeOfflineQueue(items);
+  }, []);
+
+  const enqueueOffline = useCallback(async (item: Omit<OfflineQueueItem, 'id' | 'status' | 'createdAt'>) => {
+    const next = [...offlineQueue, { ...item, id: newQueueId(), status: 'queued' as const, createdAt: new Date().toISOString() }];
+    await persistQueue(next);
+    notify('success', 'Accion guardada para sincronizar.');
+  }, [notify, offlineQueue, persistQueue]);
+
   const refreshBootstrap = useCallback(async () => {
-    if (!session?.accessToken) return;
+    if (!session?.uid) return;
     setBootLoading(true);
     try {
       const data = await apiJson<MobileBootstrap>('/api/mobile/bootstrap');
@@ -455,7 +990,7 @@ export default function MobileFieldApp() {
     } finally {
       setBootLoading(false);
     }
-  }, [notify, session?.accessToken]);
+  }, [notify, session?.uid]);
 
   useEffect(() => {
     const onOnline = () => setOnline(navigator.onLine);
@@ -468,8 +1003,25 @@ export default function MobileFieldApp() {
   }, []);
 
   useEffect(() => {
-    if (session?.accessToken) refreshBootstrap();
-  }, [session?.accessToken, refreshBootstrap]);
+    if (session?.uid) refreshBootstrap();
+  }, [session?.uid, refreshBootstrap]);
+
+  useEffect(() => {
+    return () => {
+      const stream = videoRef.current?.srcObject as MediaStream | null;
+      stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    let activeLoad = true;
+    readOfflineQueue().then((items) => {
+      if (activeLoad) setOfflineQueue(items);
+    });
+    return () => {
+      activeLoad = false;
+    };
+  }, []);
 
   useEffect(() => {
     let activeLoad = true;
@@ -515,41 +1067,126 @@ export default function MobileFieldApp() {
   }, [settings]);
 
   const loadModule = useCallback(async (section: MobileSection) => {
-    if (!session?.accessToken) return;
+    if (!session?.uid) return;
     if (!['clientes', 'documentos', 'seguimiento', 'nominas', 'chats'].includes(section)) return;
     setModuleLoading(true);
     try {
-      if (section === 'clientes') setClients(await apiJson<any[]>('/api/mobile/clientes'));
-      if (section === 'documentos') {
-        const data = await apiJson<{ captures: any[] }>('/api/mobile/documentos');
-        setDocuments(data.captures || []);
+      const cached = await readModuleCache<any>(section);
+      if (cached?.data) {
+        if (section === 'clientes') setClients(cached.data);
+        if (section === 'documentos') setDocuments(cached.data.captures || []);
+        if (section === 'seguimiento') setFollowUps(cached.data);
+        if (section === 'nominas') setPayroll(cached.data);
+        if (section === 'chats') {
+          setConversations(cached.data.conversations || []);
+          setMessages(cached.data.messages || cached.data || []);
+        }
       }
-      if (section === 'seguimiento') setFollowUps(await apiJson<any[]>('/api/mobile/seguimiento'));
-      if (section === 'nominas') setPayroll(await apiJson<any[]>('/api/mobile/nominas'));
-      if (section === 'chats') setMessages(await apiJson<any[]>('/api/mobile/chats'));
+      const since = cached?.savedAt && bootstrap?.sync?.supportsUpdatedSince ? `?updatedSince=${cached.savedAt}` : '';
+      if (section === 'clientes') {
+        const data = await apiJson<any[]>(`/api/mobile/clientes${since}`);
+        const next = since && cached?.data ? mergeById(cached.data, data) : data;
+        setClients(next);
+        await writeModuleCache(section, next);
+      }
+      if (section === 'documentos') {
+        const data = await apiJson<{ captures: any[] }>(`/api/mobile/documentos${since}`);
+        setDocuments(data.captures || []);
+        await writeModuleCache(section, data);
+      }
+      if (section === 'seguimiento') {
+        const data = await apiJson<any[]>(`/api/mobile/seguimiento${since}`);
+        const next = since && cached?.data ? mergeById(cached.data, data) : data;
+        setFollowUps(next);
+        await writeModuleCache(section, next);
+      }
+      if (section === 'nominas') {
+        const data = await apiJson<any[]>(`/api/mobile/nominas${since}`);
+        const next = since && cached?.data ? mergeById(cached.data, data) : data;
+        setPayroll(next);
+        await writeModuleCache(section, next);
+      }
+      if (section === 'chats') {
+        const data = await apiJson<{ conversations: any[]; messages: any[] }>(`/api/mobile/chats${since}`);
+        const next = {
+          conversations: since && cached?.data?.conversations ? mergeById(cached.data.conversations, data.conversations || []) : data.conversations || [],
+          messages: since && cached?.data?.messages ? mergeById(cached.data.messages, data.messages || []) : data.messages || [],
+        };
+        setConversations(next.conversations);
+        setMessages(next.messages);
+        await writeModuleCache(section, next);
+      }
     } catch (err: any) {
       notify('error', err?.message || 'No se pudo cargar el modulo.');
     } finally {
       setModuleLoading(false);
     }
-  }, [notify, session?.accessToken]);
+  }, [bootstrap?.sync?.supportsUpdatedSince, notify, session?.uid]);
+
+  const flushOfflineQueue = useCallback(async () => {
+    if (!online || syncingQueue || offlineQueue.length === 0) return;
+    setSyncingQueue(true);
+    const remaining: OfflineQueueItem[] = [];
+    for (const item of offlineQueue) {
+      try {
+        if (item.kind === 'whatsapp') {
+          await apiJson('/api/mobile/whatsapp/send', {
+            method: 'POST',
+            body: JSON.stringify(item.payload),
+          });
+        }
+        if (item.kind === 'capture') {
+          const saved = await apiJson<any>('/api/mobile/capturas', {
+            method: 'POST',
+            body: JSON.stringify(item.payload),
+          });
+          for (const fileItem of item.files || []) {
+            const contentBase64 = await fileToBase64(fileItem.file);
+            await apiJson('/api/document-files', {
+              method: 'POST',
+              body: JSON.stringify({
+                captureId: saved.id,
+                saleId: saved.id,
+                docType: fileItem.docType,
+                fileName: fileItem.file.name,
+                mimeType: fileItem.file.type || 'application/octet-stream',
+                contentBase64,
+              }),
+            });
+          }
+        }
+      } catch (err: any) {
+        remaining.push({ ...item, status: 'failed', error: err?.message || 'No se pudo sincronizar.' });
+      }
+    }
+    await persistQueue(remaining);
+    setSyncingQueue(false);
+    if (remaining.length === 0) {
+      notify('success', 'Cola movil sincronizada.');
+      refreshBootstrap();
+      if (active === 'chats') loadModule('chats');
+    } else {
+      notify('error', `${remaining.length} accion(es) siguen pendientes.`);
+    }
+  }, [active, loadModule, notify, offlineQueue, online, persistQueue, refreshBootstrap, syncingQueue]);
 
   useEffect(() => {
     loadModule(active);
   }, [active, loadModule]);
 
+  useEffect(() => {
+    if (online && session?.uid && offlineQueue.length > 0) flushOfflineQueue();
+  }, [flushOfflineQueue, offlineQueue.length, online, session?.uid]);
+
   const logout = async () => {
-    const refreshToken = session?.refreshToken;
     clearApiSession();
     setSession(null);
     setBootstrap(null);
-    if (refreshToken) {
-      fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      }).catch(() => {});
-    }
+    fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }).catch(() => {});
   };
 
   const clearDraft = async (showNotice = true) => {
@@ -560,6 +1197,27 @@ export default function MobileFieldApp() {
     setDraftSavedAt('');
     setDraftState('idle');
     if (showNotice) notify('success', 'Borrador movil limpiado.');
+  };
+
+  const startVideoFirma = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      setVideoFirmaActive(true);
+      updateDraft({ videoFirmaLocal: true });
+      window.setTimeout(() => {
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      }, 0);
+      notify('success', 'Video firma local iniciada.');
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo abrir la camara para video firma.');
+    }
+  };
+
+  const stopVideoFirma = () => {
+    const stream = videoRef.current?.srcObject as MediaStream | null;
+    stream?.getTracks().forEach((track) => track.stop());
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setVideoFirmaActive(false);
   };
 
   const validateCurp = async () => {
@@ -634,14 +1292,15 @@ export default function MobileFieldApp() {
     }
   };
 
-  const handleDocumentSelected = (type: string, file: File | null) => {
-    setSelectedFiles((current) => ({ ...current, [type]: file }));
+  const handleDocumentSelected = async (type: string, file: File | null) => {
+    const prepared = file ? await compressImageFile(file).catch(() => file) : null;
+    setSelectedFiles((current) => ({ ...current, [type]: prepared }));
     if (!file) return;
     setDraft((current) => ({
       ...current,
       documents: [
         ...current.documents.filter((doc) => doc.type !== type),
-        { type, fileName: file.name, size: file.size, selectedAt: new Date().toISOString() },
+        { type, fileName: prepared?.name || file.name, size: prepared?.size || file.size, selectedAt: new Date().toISOString() },
       ],
     }));
   };
@@ -660,6 +1319,10 @@ export default function MobileFieldApp() {
         apellidoPaterno: pick(fields, 'apellidoPaterno', 'apellido_paterno', 'primerApellido') || draft.apellidoPaterno,
         apellidoMaterno: pick(fields, 'apellidoMaterno', 'apellido_materno', 'segundoApellido') || draft.apellidoMaterno,
         curp: pick(fields, 'curp', 'CURP') || draft.curp,
+        folioIne: pick(fields, 'folioIne', 'folio_ine', 'claveElector', 'cic', 'ocr') || draft.folioIne,
+        fechaNacimiento: pick(fields, 'fechaNacimiento', 'fecha_nacimiento', 'birthDate') || draft.fechaNacimiento,
+        sexo: pick(fields, 'sexo', 'genero') || draft.sexo,
+        estadoNacimiento: pick(fields, 'estadoNacimiento', 'entidadNacimiento', 'estado') || draft.estadoNacimiento,
         calle: pick(fields, 'calle', 'domicilioCalle', 'street') || draft.calle,
         colonia: pick(fields, 'colonia', 'asentamiento') || draft.colonia,
         delegacion: pick(fields, 'delegacion', 'municipio', 'alcaldia') || draft.delegacion,
@@ -674,80 +1337,44 @@ export default function MobileFieldApp() {
   };
 
   const submitCapture = async () => {
-    if (!online) {
-      notify('error', 'Sin conexion. El borrador quedo guardado offline.');
+    const phone = normalizePhone(draft.telefono || draft.telefonoTitular);
+    const titularPhone = normalizePhone(draft.telefonoTitular || draft.telefono);
+    const referenciaPhone = normalizePhone(draft.telefonoReferencia);
+    if (!draft.nombres.trim() || phone.length !== 10 || titularPhone.length !== 10 || !draft.calle.trim() || !draft.paqueteNombre) {
+      notify('error', 'Nombre, telefono, telefono titular, domicilio y paquete son requeridos.');
       return;
     }
-    const phone = normalizePhone(draft.telefono);
-    if (!draft.nombres.trim() || phone.length !== 10 || !draft.calle.trim()) {
-      notify('error', 'Nombre, telefono de 10 digitos y calle son requeridos.');
+    if (referenciaPhone && referenciaPhone.length !== 10) {
+      notify('error', 'El telefono de referencia debe tener 10 digitos.');
+      return;
+    }
+    const payload = capturePayload();
+    const files = Object.entries(selectedFiles)
+      .filter(([, file]) => Boolean(file))
+      .map(([docType, file]) => ({ docType, file: file as File }));
+    if (!online) {
+      await enqueueOffline({ kind: 'capture', payload, files });
+      await clearDraft(false);
+      setActive('inicio');
       return;
     }
     setSubmittingCapture(true);
     try {
-      const payload = {
-        nombres: draft.nombres.trim(),
-        apellidoPaterno: draft.apellidoPaterno.trim(),
-        apellidoMaterno: draft.apellidoMaterno.trim(),
-        apellidos: [draft.apellidoPaterno, draft.apellidoMaterno].filter(Boolean).join(' ').trim(),
-        curp: draft.curp.trim().toUpperCase(),
-        fechaNacimiento: draft.fechaNacimiento,
-        sexo: draft.sexo,
-        estadoNacimiento: draft.estadoNacimiento,
-        telefono: phone,
-        telefono_titular: phone,
-        correo: draft.correo.trim(),
-        direccion: buildAddress(draft),
-        calle: draft.calle,
-        tipoVialidad: draft.tipoVialidad,
-        numeroExterior: draft.numeroExterior,
-        numeroInterior: draft.numeroInterior,
-        colonia: draft.colonia,
-        municipio: draft.delegacion,
-        delegacion: draft.delegacion,
-        ciudad: draft.ciudad,
-        codigo_postal: draft.codigoPostal,
-        codigoPostal: draft.codigoPostal,
-        referencias: draft.referencias,
-        coordenadas: draft.coordenadas,
-        gpsLatitud: draft.gpsLatitud,
-        gpsLongitud: draft.gpsLongitud,
-        tipo_cliente: draft.tipoCliente,
-        tipoCliente: draft.tipoCliente,
-        tipo_servicio: draft.tipoServicio,
-        tipoServicio: draft.tipoServicio,
-        plan: draft.paqueteNombre,
-        paqueteNombre: draft.paqueteNombre,
-        renta_mensual: Number(draft.rentaMensual || 0),
-        folio_siac: draft.folioSiac,
-        folioSiac: draft.folioSiac,
-        servicio_siac: draft.servicioSiac,
-        servicioSiac: draft.servicioSiac,
-        notas: draft.notas || buildAddress(draft),
-        metadata: {
-          source: 'mobile-pwa',
-          mobileVersion: 1,
-          ...draft,
-          telefonoTitular: phone,
-          direccionCompleta: buildAddress(draft),
-        },
-      };
       const saved = await apiJson<any>('/api/mobile/capturas', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
 
-      const entries = Object.entries(selectedFiles).filter(([, file]) => Boolean(file)) as Array<[string, File]>;
-      for (const [docType, file] of entries) {
-        const contentBase64 = await fileToBase64(file);
+      for (const fileItem of files) {
+        const contentBase64 = await fileToBase64(fileItem.file);
         await apiJson('/api/document-files', {
           method: 'POST',
           body: JSON.stringify({
             captureId: saved.id,
             saleId: saved.id,
-            docType,
-            fileName: file.name,
-            mimeType: file.type || 'application/octet-stream',
+            docType: fileItem.docType,
+            fileName: fileItem.file.name,
+            mimeType: fileItem.file.type || 'application/octet-stream',
             contentBase64,
           }),
         });
@@ -790,18 +1417,67 @@ export default function MobileFieldApp() {
       notify('error', 'Telefono de 10 digitos y mensaje son requeridos.');
       return;
     }
+    const payload = { phone, message: messageText.trim() };
+    const optimisticMessage = {
+      id: newQueueId(),
+      channel: 'whatsapp',
+      external_chat_id: `${phone}@s.whatsapp.net`,
+      direction: 'outgoing',
+      body: messageText.trim(),
+      timestamp: Date.now(),
+      pending: true,
+    };
+    setMessages((current) => [...current, optimisticMessage]);
+    setConversations((current) => mergeById(current, [{
+      id: optimisticMessage.external_chat_id,
+      external_chat_id: optimisticMessage.external_chat_id,
+      display_name: phone,
+      channel: 'whatsapp',
+      status: online ? 'enviando' : 'pendiente',
+      last_message_at: optimisticMessage.timestamp,
+    }]));
+    setMessageText('');
+    setMessagePhone('');
+    if (!online) {
+      await enqueueOffline({ kind: 'whatsapp', payload });
+      return;
+    }
     try {
       await apiJson('/api/mobile/whatsapp/send', {
         method: 'POST',
-        body: JSON.stringify({ phone, message: messageText.trim() }),
+        body: JSON.stringify(payload),
       });
-      setMessageText('');
-      setMessagePhone('');
       await loadModule('chats');
       notify('success', 'Mensaje enviado.');
     } catch (err: any) {
+      await enqueueOffline({ kind: 'whatsapp', payload });
       notify('error', err?.message || 'No se pudo enviar mensaje.');
     }
+  };
+
+  const runIneOcr = async () => {
+    const targets = ['INE_FRONTAL', 'INE_REVERSO'].filter((type) => selectedFiles[type]);
+    if (targets.length === 0) {
+      notify('error', 'Sube frente y reverso de INE antes de iniciar OCR.');
+      return;
+    }
+    for (const type of targets) {
+      await runDocumentOcr(type, 'ine');
+    }
+    notify('success', 'OCR de INE aplicado al borrador.');
+  };
+
+  const selectPackage = (pkg: PackageCatalogItem) => {
+    updateDraft({
+      packageId: pkg.id,
+      paqueteNombre: pkg.displayName,
+      rentaMensual: String(pkg.price),
+      megas: String(pkg.internetMbps),
+      lineasTelefonicas: String(pkg.phoneLines || ''),
+      incluyeClaroVideo: pkg.includesClaroVideo,
+      streamingElegido: pkg.category === 'infinitum_puro' ? 'hbo_max_gratis' : 'ninguno',
+      plataformasAdicionales: [],
+    });
   };
 
   const clearMobileCache = async () => {
@@ -814,7 +1490,7 @@ export default function MobileFieldApp() {
     notify('success', 'Cache movil actualizado.');
   };
 
-  if (!session?.accessToken) {
+  if (!session?.uid) {
     return (
       <>
         <LoginView onLogin={setSession} onNotice={notify} />
@@ -822,6 +1498,9 @@ export default function MobileFieldApp() {
       </>
     );
   }
+
+  const canUseWhatsApp = String(session.role || '').toUpperCase() === 'GERENTE';
+  const visibleModules = MODULES.filter((module) => canUseWhatsApp || module.id !== 'chats');
 
   const renderContent = () => {
     if (active === 'inicio') {
@@ -841,13 +1520,49 @@ export default function MobileFieldApp() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <Metric label="Ventas" value={bootstrap?.counts.ventas ?? 0} />
               <Metric label="Pendientes" value={bootstrap?.counts.pendientes ?? 0} />
-              <Metric label="Clientes" value={bootstrap?.counts.clientes ?? 0} />
-              <Metric label="Docs pendientes" value={bootstrap?.counts.documentosPendientes ?? 0} />
+              {canUseWhatsApp ? (
+                <>
+                  <Metric label="Chats abiertos" value={bootstrap?.counts.chatsAbiertos ?? bootstrap?.agentInboxSummary?.conversationsOpen ?? 0} />
+                  <Metric label="Aprobaciones" value={bootstrap?.counts.aprobaciones ?? bootstrap?.agentInboxSummary?.pendingApproval ?? 0} />
+                </>
+              ) : (
+                <>
+                  <Metric label="Clientes" value={bootstrap?.counts.clientes ?? 0} />
+                  <Metric label="Docs pendientes" value={bootstrap?.counts.documentosPendientes ?? 0} />
+                </>
+              )}
             </div>
           </Panel>
 
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setActive('venta')} className="min-h-20 rounded-[20px] bg-cyan-300 px-3 py-3 text-left text-slate-950">
+              <MobileIcon name="clipboard" className="mb-2 h-5 w-5" />
+              <span className="block text-xs font-black uppercase tracking-[0.08em]">Nueva venta</span>
+            </button>
+            <button onClick={() => setActive('folios')} className="min-h-20 rounded-[20px] border border-white/10 bg-white/[0.04] px-3 py-3 text-left text-slate-100">
+              <MobileIcon name="search" className="mb-2 h-5 w-5" />
+              <span className="block text-xs font-black uppercase tracking-[0.08em]">Folios</span>
+            </button>
+          </div>
+
+          {(offlineQueue.length > 0 || hasDraftData(draft)) && (
+            <Panel className="border-amber-300/20 bg-amber-300/8">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-amber-100">Sincronizacion movil</p>
+                  <p className="mt-1 text-xs text-amber-100/70">
+                    {offlineQueue.length} accion(es) en cola{hasDraftData(draft) ? ' y borrador local activo' : ''}
+                  </p>
+                </div>
+                <button onClick={flushOfflineQueue} disabled={!online || syncingQueue || offlineQueue.length === 0} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-200 text-slate-950 disabled:opacity-40">
+                  <MobileIcon name={syncingQueue ? 'loader' : 'refresh'} className={cx('h-5 w-5', syncingQueue && 'animate-spin')} />
+                </button>
+              </div>
+            </Panel>
+          )}
+
           <div className="grid grid-cols-1 gap-3">
-            {MODULES.map((module) => (
+            {visibleModules.map((module) => (
                 <button
                   key={module.id}
                   onClick={() => setActive(module.id)}
@@ -874,7 +1589,7 @@ export default function MobileFieldApp() {
     if (active === 'documentos') return renderDocuments();
     if (active === 'seguimiento') return renderFollowUps();
     if (active === 'nominas') return renderPayroll();
-    if (active === 'chats') return renderChats();
+    if (active === 'chats') return canUseWhatsApp ? renderChats() : renderSettings();
     if (active === 'perfil') return renderProfile();
     return renderSettings();
   };
@@ -922,6 +1637,34 @@ export default function MobileFieldApp() {
   );
 
   function renderCapture() {
+    const packages = availablePackagesForDraft(draft);
+    const selectedPackage = selectedPackageForDraft(draft);
+    const totalMensual = Number(draft.rentaMensual || 0) + streamingTotal(draft);
+    const docRow = (type: string, label: string, mode: 'ine' | 'comprobante' | 'siac', capture?: 'environment') => {
+      const selected = draft.documents.find((item) => item.type === type);
+      return (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-black text-slate-100">{label}</p>
+              <p className="mt-1 truncate text-xs text-slate-500">{selected?.fileName || 'Pendiente'}</p>
+            </div>
+            <MobileIcon name={selected ? 'check' : 'camera'} className={cx('h-5 w-5', selected ? 'text-emerald-300' : 'text-slate-500')} />
+          </div>
+          <input
+            type="file"
+            accept="image/*,.pdf"
+            capture={capture}
+            onChange={(event) => handleDocumentSelected(type, event.currentTarget.files?.[0] || null)}
+            className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-xl file:border-0 file:bg-cyan-300 file:px-3 file:py-2 file:text-sm file:font-black file:text-slate-950"
+          />
+          <button onClick={() => runDocumentOcr(type, mode)} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-xs font-black uppercase tracking-[0.1em] text-cyan-100">
+            OCR de este documento
+          </button>
+        </div>
+      );
+    };
+
     return (
       <Panel>
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -935,7 +1678,7 @@ export default function MobileFieldApp() {
           </div>
         </div>
 
-        <div className="mb-5 grid grid-cols-5 gap-1.5">
+        <div className="mb-5 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CAPTURE_STEPS.length}, minmax(0, 1fr))` }}>
           {CAPTURE_STEPS.map((step, index) => (
             <button
               key={step}
@@ -948,6 +1691,22 @@ export default function MobileFieldApp() {
 
         <div className="space-y-4">
           {draftStep === 0 && (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3">
+                <p className="text-sm font-black text-cyan-100">Primero sube INE frente y reverso.</p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">El OCR autocompleta nombre, CURP, folio INE y domicilio detectado. Si no hay CURP, puedes consultarla o generarla en el siguiente paso.</p>
+              </div>
+              {docRow('INE_FRONTAL', 'INE frontal', 'ine', 'environment')}
+              {docRow('INE_REVERSO', 'INE reverso', 'ine', 'environment')}
+              {docRow('CURP', 'CURP opcional', 'ine')}
+              <button onClick={runIneOcr} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.12em] text-slate-950">
+                <MobileIcon name="search" className="h-4 w-4" />
+                Iniciar OCR INE
+              </button>
+            </div>
+          )}
+
+          {draftStep === 1 && (
             <>
               <Field label="Nombre(s)" value={draft.nombres} onChange={(value) => updateDraft({ nombres: value })} placeholder="Nombre del cliente" />
               <div className="grid grid-cols-2 gap-3">
@@ -955,6 +1714,7 @@ export default function MobileFieldApp() {
                 <Field label="Apellido materno" value={draft.apellidoMaterno} onChange={(value) => updateDraft({ apellidoMaterno: value })} />
               </div>
               <Field label="CURP" value={draft.curp} onChange={(value) => updateDraft({ curp: value.toUpperCase().slice(0, 18) })} placeholder="CURP del cliente" />
+              <Field label="Folio INE" value={draft.folioIne} onChange={(value) => updateDraft({ folioIne: value.toUpperCase() })} placeholder="OCR / CIC / clave elector" />
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Nacimiento" type="date" value={draft.fechaNacimiento} onChange={(value) => updateDraft({ fechaNacimiento: value })} />
                 <SelectField label="Sexo" value={draft.sexo} onChange={(value) => updateDraft({ sexo: value })} options={['', 'H', 'M']} />
@@ -963,18 +1723,20 @@ export default function MobileFieldApp() {
               <div className="grid grid-cols-2 gap-3">
                 <button onClick={validateCurp} disabled={curpLoading} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-cyan-300/25 bg-cyan-300/10 text-sm font-black text-cyan-100 disabled:opacity-60">
                   <MobileIcon name={curpLoading ? 'loader' : 'id'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
-                  Validar CURP
+                  Consultar CURP
                 </button>
                 <button onClick={generateCurp} disabled={curpLoading} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-slate-100 disabled:opacity-60">
                   Generar
                 </button>
               </div>
-              <Field label="Telefono WhatsApp" value={draft.telefono} onChange={(value) => updateDraft({ telefono: normalizePhone(value) })} placeholder="5512345678" inputMode="tel" />
-              <Field label="Correo" value={draft.correo} onChange={(value) => updateDraft({ correo: value })} placeholder="cliente@correo.com" type="email" />
+              <Field label="Telefono" value={draft.telefono} onChange={(value) => updateDraft({ telefono: normalizePhone(value) })} placeholder="5512345678" inputMode="tel" />
+              <Field label="Telefono titular" value={draft.telefonoTitular} onChange={(value) => updateDraft({ telefonoTitular: normalizePhone(value) })} placeholder="5512345678" inputMode="tel" />
+              <Field label="Telefono referencia" value={draft.telefonoReferencia} onChange={(value) => updateDraft({ telefonoReferencia: normalizePhone(value) })} placeholder="Opcional" inputMode="tel" />
+              <Field label="Correo electronico" value={draft.correo} onChange={(value) => updateDraft({ correo: value })} placeholder="cliente@correo.com" type="email" />
             </>
           )}
 
-          {draftStep === 1 && (
+          {draftStep === 2 && (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <SelectField label="Vialidad" value={draft.tipoVialidad} onChange={(value) => updateDraft({ tipoVialidad: value })} options={['CALLE', 'AVENIDA', 'BOULEVARD', 'CERRADA', 'PRIVADA']} />
@@ -991,64 +1753,158 @@ export default function MobileFieldApp() {
                 <Field label="Ciudad" value={draft.ciudad} onChange={(value) => updateDraft({ ciudad: value })} />
               </div>
               <Field label="Referencias" value={draft.referencias} onChange={(value) => updateDraft({ referencias: value })} multiline />
+              <button onClick={() => updateDraft({ mismaDireccionIne: !draft.mismaDireccionIne })} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
+                <span className="text-sm font-black text-slate-100">La direccion coincide con la INE</span>
+                <span className={cx('rounded-full px-3 py-1 text-xs font-black', draft.mismaDireccionIne ? 'bg-emerald-300 text-slate-950' : 'bg-amber-300 text-slate-950')}>{draft.mismaDireccionIne ? 'SI' : 'NO'}</span>
+              </button>
+              {!draft.mismaDireccionIne && (
+                <div className="space-y-3">
+                  {docRow('COMPROBANTE_DOMICILIO', 'Comprobante domicilio', 'comprobante', 'environment')}
+                  <p className="text-xs leading-5 text-amber-100">Si la direccion de la INE no coincide, usa OCR del comprobante y ajusta el mapa.</p>
+                </div>
+              )}
+              <Suspense fallback={<div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">Cargando mapa...</div>}>
+                <MapPicker
+                  coords={draft.coordenadas}
+                  onCoordsChange={(coords) => updateDraft({ coordenadas: coords })}
+                  onLocationChange={(location) => updateDraft({ gpsLatitud: String(location.lat), gpsLongitud: String(location.lng) })}
+                  onAddressResolved={(address) => updateDraft({
+                    codigoPostal: draft.codigoPostal || address.codigoPostal || '',
+                    colonia: draft.colonia || address.colonia || '',
+                    delegacion: draft.delegacion || address.delegacion || '',
+                    ciudad: draft.ciudad || address.ciudad || '',
+                  })}
+                  searchAddress={buildMapSearchAddress(draft)}
+                />
+              </Suspense>
               <button onClick={captureGps} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-sm font-black text-emerald-100">
                 <MobileIcon name="map" className="h-4 w-4" />
-                Capturar GPS
+                Capturar GPS actual
               </button>
-              {draft.coordenadas && <p className="rounded-2xl bg-white/[0.03] px-3 py-2 text-sm text-slate-300">{draft.coordenadas}</p>}
-            </>
-          )}
-
-          {draftStep === 2 && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <SelectField label="Tipo cliente" value={draft.tipoCliente} onChange={(value) => updateDraft({ tipoCliente: value })} options={['RESIDENCIAL', 'NEGOCIO', 'EMPRESARIAL']} />
-                <SelectField label="Servicio" value={draft.tipoServicio} onChange={(value) => updateDraft({ tipoServicio: value })} options={['INTERNET', 'INTERNET + TELEFONIA', 'PORTABILIDAD', 'STREAMING']} />
-              </div>
-              <SelectField label="Paquete" value={draft.paqueteNombre} onChange={(value) => updateDraft({ paqueteNombre: value })} options={['Infinitum 100 MB', 'Infinitum 150 MB', 'Infinitum 250 MB', 'Infinitum 500 MB', 'Infinitum 1 GB']} />
-              <Field label="Renta mensual" value={draft.rentaMensual} onChange={(value) => updateDraft({ rentaMensual: value.replace(/[^\d.]/g, '') })} inputMode="decimal" />
-              <Field label="Folio SIAC" value={draft.folioSiac} onChange={(value) => updateDraft({ folioSiac: value.toUpperCase() })} placeholder="Folio si existe" />
-              <Field label="Servicio SIAC" value={draft.servicioSiac} onChange={(value) => updateDraft({ servicioSiac: value })} />
-              <Field label="Notas" value={draft.notas} onChange={(value) => updateDraft({ notas: value })} multiline />
             </>
           )}
 
           {draftStep === 3 && (
             <div className="space-y-3">
-              {DOCUMENT_TYPES.map((doc) => {
-                const selected = draft.documents.find((item) => item.type === doc.type);
-                return (
-                  <div key={doc.type} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-black text-slate-100">{doc.label}</p>
-                        <p className="mt-1 truncate text-xs text-slate-500">{selected?.fileName || 'Pendiente'}</p>
-                      </div>
-                      <MobileIcon name={selected ? 'check' : 'camera'} className={cx('h-5 w-5', selected ? 'text-emerald-300' : 'text-slate-500')} />
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      capture={doc.type.includes('INE') ? 'environment' : undefined}
-                      onChange={(event) => handleDocumentSelected(doc.type, event.currentTarget.files?.[0] || null)}
-                      className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-xl file:border-0 file:bg-cyan-300 file:px-3 file:py-2 file:text-sm file:font-black file:text-slate-950"
-                    />
-                    <button onClick={() => runDocumentOcr(doc.type, doc.mode)} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-xs font-black uppercase tracking-[0.1em] text-cyan-100">
-                      OCR bajo demanda
-                    </button>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => updateDraft({ tipoCliente: 'linea_nueva' })} className={cx('rounded-2xl border p-4 text-left', draft.tipoCliente === 'linea_nueva' ? 'border-cyan-300 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-white/[0.03] text-slate-300')}>
+                  <p className="font-black">Servicio nuevo</p>
+                  <p className="mt-1 text-xs text-slate-400">Linea nueva</p>
+                </button>
+                <button onClick={() => updateDraft({ tipoCliente: 'portado', categoriaProducto: 'doble_play' })} className={cx('rounded-2xl border p-4 text-left', draft.tipoCliente === 'portado' ? 'border-cyan-300 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-white/[0.03] text-slate-300')}>
+                  <p className="font-black">Portabilidad</p>
+                  <p className="mt-1 text-xs text-slate-400">Conserva numero</p>
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => updateDraft({ tipoServicio: 'residencial' })} className={cx('rounded-2xl border p-4 text-left', draft.tipoServicio === 'residencial' ? 'border-cyan-300 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-white/[0.03] text-slate-300')}>Residencial</button>
+                <button onClick={() => updateDraft({ tipoServicio: 'negocio' })} className={cx('rounded-2xl border p-4 text-left', draft.tipoServicio === 'negocio' ? 'border-cyan-300 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-white/[0.03] text-slate-300')}>Negocio</button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button disabled={draft.tipoCliente === 'portado'} onClick={() => updateDraft({ categoriaProducto: 'infinitum_puro' })} className={cx('rounded-2xl border p-4 text-left disabled:opacity-40', draft.categoriaProducto === 'infinitum_puro' ? 'border-cyan-300 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-white/[0.03] text-slate-300')}>
+                  <p className="font-black">Infinitum puro</p>
+                  <p className="mt-1 text-xs text-slate-400">Solo internet</p>
+                </button>
+                <button onClick={() => updateDraft({ categoriaProducto: 'doble_play' })} className={cx('rounded-2xl border p-4 text-left', draft.categoriaProducto === 'doble_play' ? 'border-cyan-300 bg-cyan-300/15 text-cyan-100' : 'border-white/10 bg-white/[0.03] text-slate-300')}>
+                  <p className="font-black">Doble play</p>
+                  <p className="mt-1 text-xs text-slate-400">Internet + telefono</p>
+                </button>
+              </div>
+              {draft.tipoCliente === 'portado' && (
+                <>
+                  <Field label="Numero a portar" value={draft.numeroAPortar} onChange={(value) => updateDraft({ numeroAPortar: normalizePhone(value) })} placeholder="10 digitos" inputMode="tel" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Compania actual" value={draft.companiaActual} onChange={(value) => updateDraft({ companiaActual: value })} />
+                    <Field label="NIP" value={draft.nip} onChange={(value) => updateDraft({ nip: value.replace(/\D/g, '').slice(0, 4) })} inputMode="numeric" />
                   </div>
-                );
-              })}
+                </>
+              )}
             </div>
           )}
 
           {draftStep === 4 && (
             <div className="space-y-3">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100">Paquetes disponibles</p>
+              {packages.length === 0 && <EmptyState icon="wallet" text="No hay paquetes para esta configuracion." />}
+              {packages.map((pkg) => (
+                <button key={pkg.id} onClick={() => selectPackage(pkg)} className={cx('w-full rounded-2xl border p-4 text-left', draft.packageId === pkg.id ? 'border-cyan-300 bg-cyan-300/15' : 'border-white/10 bg-white/[0.03]')}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-black text-slate-50">{pkg.displayName}</p>
+                      <p className="mt-1 text-xs text-slate-400">{pkg.internetMbps} megas{pkg.phoneLines ? ` - ${pkg.phoneLines} linea(s)` : ''}</p>
+                    </div>
+                    <span className="text-lg font-black text-cyan-100">{formatMoney(pkg.price)}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-black uppercase">
+                    {pkg.includesClaroVideo && <span className="rounded-full bg-emerald-300/15 px-2 py-1 text-emerald-100">Claro Video</span>}
+                    {pkg.allowsStreamingChoice && <span className="rounded-full bg-purple-300/15 px-2 py-1 text-purple-100">Streaming promo</span>}
+                    {pkg.claroDrive && <span className="rounded-full bg-white/10 px-2 py-1 text-slate-300">Drive {pkg.claroDrive}</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {draftStep === 5 && (
+            <div className="space-y-3">
+              <SummaryRow label="Paquete base" value={draft.paqueteNombre || 'Selecciona paquete'} />
+              <SummaryRow label="Renta base" value={formatMoney(draft.rentaMensual || 0)} />
+              {draft.categoriaProducto === 'infinitum_puro' && (
+                <div className="rounded-2xl border border-purple-300/25 bg-purple-300/10 p-4 text-sm text-purple-100">
+                  HBO Max gratis por 6 meses por contratar Infinitum Puro.
+                </div>
+              )}
+              {selectedPackage?.allowsStreamingChoice && (
+                <SelectField label={`Beneficio ${selectedPackage.streamingMonths || 6} meses`} value={draft.streamingElegido} onChange={(value) => updateDraft({ streamingElegido: value as any })} options={['ninguno', 'netflix', 'hbo_max']} />
+              )}
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Plataformas adicionales</p>
+              {STREAMING_ADDONS.map((addon) => {
+                const selected = draft.plataformasAdicionales.includes(addon.id);
+                return (
+                  <button key={addon.id} onClick={() => updateDraft({ plataformasAdicionales: selected ? draft.plataformasAdicionales.filter((id) => id !== addon.id) : [...draft.plataformasAdicionales, addon.id] })} className={cx('flex w-full items-center justify-between rounded-2xl border p-3 text-left', selected ? 'border-cyan-300 bg-cyan-300/15' : 'border-white/10 bg-white/[0.03]')}>
+                    <span>
+                      <span className="block text-sm font-black">{addon.provider}</span>
+                      <span className="mt-1 block text-xs text-slate-400">{addon.name}</span>
+                    </span>
+                    <span className="font-black text-cyan-100">{formatMoney(addon.price)}</span>
+                  </button>
+                );
+              })}
+              <SummaryRow label="Total mensual estimado" value={formatMoney(totalMensual)} />
+            </div>
+          )}
+
+          {draftStep === 6 && (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
+                <p className="text-sm font-black text-cyan-100">Video firma local</p>
+                <p className="mt-1 text-xs leading-5 text-slate-300">Pide al cliente decir su nombre completo y aceptar la contratacion mientras se ve en camara.</p>
+              </div>
+              <div className="aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black/50">
+                {videoFirmaActive ? <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-slate-500">Camara inactiva</div>}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={startVideoFirma} disabled={videoFirmaActive} className="h-12 rounded-2xl bg-cyan-300 font-black text-slate-950 disabled:opacity-40">Iniciar</button>
+                <button onClick={stopVideoFirma} disabled={!videoFirmaActive} className="h-12 rounded-2xl border border-rose-300/25 bg-rose-300/10 font-black text-rose-100 disabled:opacity-40">Detener</button>
+              </div>
+              <button onClick={() => updateDraft({ videoFirmaLocal: !draft.videoFirmaLocal })} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
+                <span className="text-sm font-black text-slate-100">Consentimiento de video firma capturado</span>
+                <span className={cx('rounded-full px-3 py-1 text-xs font-black', draft.videoFirmaLocal ? 'bg-emerald-300 text-slate-950' : 'bg-slate-700 text-slate-200')}>{draft.videoFirmaLocal ? 'SI' : 'NO'}</span>
+              </button>
+            </div>
+          )}
+
+          {draftStep === 7 && (
+            <div className="space-y-3">
               <SummaryRow label="Cliente" value={fullName(draft) || 'Sin nombre'} />
               <SummaryRow label="CURP" value={draft.curp || 'Pendiente'} />
               <SummaryRow label="Telefono" value={draft.telefono || 'Pendiente'} />
+              <SummaryRow label="Telefono titular" value={draft.telefonoTitular || 'Pendiente'} />
+              <SummaryRow label="Referencia" value={draft.telefonoReferencia || 'Opcional'} />
               <SummaryRow label="Direccion" value={buildAddress(draft) || 'Pendiente'} />
-              <SummaryRow label="Paquete" value={`${draft.paqueteNombre} - ${formatMoney(draft.rentaMensual)}`} />
+              <SummaryRow label="Paquete" value={`${draft.paqueteNombre || 'Pendiente'} - ${formatMoney(draft.rentaMensual || 0)}`} />
+              <SummaryRow label="Streaming" value={`${draft.streamingElegido} + ${draft.plataformasAdicionales.length} adicional(es)`} />
+              <SummaryRow label="Video firma" value={draft.videoFirmaLocal ? 'Capturada localmente' : 'Pendiente'} />
               <SummaryRow label="Documentos" value={`${draft.documents.length}/${DOCUMENT_TYPES.length} seleccionados`} />
               {draftSavedAt && <p className="text-xs text-slate-500">Borrador recuperable: {shortDate(draftSavedAt)}</p>}
               <button onClick={submitCapture} disabled={submittingCapture} className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.14em] text-slate-950 disabled:cursor-wait disabled:opacity-60">
@@ -1115,7 +1971,8 @@ export default function MobileFieldApp() {
       <Panel>
         <ModuleHeader title="Mi CRM de clientes" loading={moduleLoading} onRefresh={() => loadModule('clientes')} />
         <div className="space-y-3">
-          {clients.length === 0 && <EmptyState icon="users" text="Aun no hay clientes propios." />}
+          {moduleLoading && clients.length === 0 && <ModuleSkeleton />}
+          {!moduleLoading && clients.length === 0 && <EmptyState icon="users" text="Aun no hay clientes propios." />}
           {clients.map((client) => (
             <div key={client.id || client.folio} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
               <div className="flex items-start justify-between gap-3">
@@ -1139,7 +1996,8 @@ export default function MobileFieldApp() {
       <Panel>
         <ModuleHeader title="Documentos expediente" loading={moduleLoading} onRefresh={() => loadModule('documentos')} />
         <div className="space-y-3">
-          {documents.length === 0 && <EmptyState icon="folder" text="Sin expedientes asignados." />}
+          {moduleLoading && documents.length === 0 && <ModuleSkeleton />}
+          {!moduleLoading && documents.length === 0 && <EmptyState icon="folder" text="Sin expedientes asignados." />}
           {documents.map((capture) => (
             <div key={capture.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
               <div className="flex items-start justify-between gap-3">
@@ -1169,7 +2027,8 @@ export default function MobileFieldApp() {
       <Panel>
         <ModuleHeader title="Seguimiento" loading={moduleLoading} onRefresh={() => loadModule('seguimiento')} />
         <div className="space-y-3">
-          {followUps.length === 0 && <EmptyState icon="badge" text="Sin seguimientos pendientes." />}
+          {moduleLoading && followUps.length === 0 && <ModuleSkeleton />}
+          {!moduleLoading && followUps.length === 0 && <EmptyState icon="badge" text="Sin seguimientos pendientes." />}
           {followUps.map((row, index) => (
             <div key={row.id || `${row.folio}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
               <div className="flex items-start justify-between gap-3">
@@ -1195,7 +2054,8 @@ export default function MobileFieldApp() {
       <Panel>
         <ModuleHeader title="Nóminas" loading={moduleLoading} onRefresh={() => loadModule('nominas')} />
         <div className="space-y-3">
-          {payroll.length === 0 && <EmptyState icon="wallet" text="Sin registros de nomina." />}
+          {moduleLoading && payroll.length === 0 && <ModuleSkeleton />}
+          {!moduleLoading && payroll.length === 0 && <EmptyState icon="wallet" text="Sin registros de nomina." />}
           {payroll.map((row) => (
             <div key={row.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
               <div className="flex items-start justify-between gap-3">
@@ -1214,13 +2074,79 @@ export default function MobileFieldApp() {
   }
 
   function renderChats() {
+    const generatedConversations = conversations.length > 0 ? conversations : Array.from(new Map(messages.map((msg: any) => [chatKey(msg), {
+      id: chatKey(msg),
+      external_chat_id: chatKey(msg),
+      display_name: msg.fromName || msg.from || msg.to || msg.chatId || 'Canal',
+      channel: msg.channel || 'whatsapp',
+      last_message_at: msg.timestamp,
+    }])).values());
+    const selected = selectedConversationId;
+    const visibleMessages = selected
+      ? messages.filter((msg: any) => [chatKey(msg), msg.conversation_id, msg.external_chat_id, msg.chatId].map(String).includes(String(selected)))
+      : [];
+    const selectedConversation = generatedConversations.find((conversation: any) => String(conversation.id) === String(selected) || String(conversation.external_chat_id) === String(selected));
     return (
       <Panel>
-        <ModuleHeader title="Chats" loading={moduleLoading} onRefresh={() => loadModule('chats')} />
+        <ModuleHeader title={selected ? 'Conversacion' : 'Chats'} loading={moduleLoading} onRefresh={() => loadModule('chats')} />
         <div className="mb-4 grid grid-cols-2 gap-2">
           <Metric label="WhatsApp" value={bootstrap?.channels.whatsapp?.connected ? 'Conectado' : 'Desconectado'} />
-          <Metric label="Telegram" value={bootstrap?.channels.telegram?.connected ? 'Conectado' : 'Desconectado'} />
+          <Metric label="Pendientes IA" value={bootstrap?.agentInboxSummary?.pendingApproval ?? 0} />
         </div>
+        {selected && (
+          <button onClick={() => setSelectedConversationId(null)} className="mb-3 flex min-h-11 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 text-sm font-black text-slate-100">
+            <MobileIcon name="chevron-left" className="h-4 w-4" />
+            Ver conversaciones
+          </button>
+        )}
+        {!selected && (
+          <div className="mb-4 space-y-2">
+            {moduleLoading && generatedConversations.length === 0 && <ModuleSkeleton />}
+            {!moduleLoading && generatedConversations.length === 0 && <EmptyState icon="message" text="Sin conversaciones recientes." />}
+            {generatedConversations.map((conversation: any) => (
+              <button
+                key={conversation.id || conversation.external_chat_id}
+                onClick={() => {
+                  const id = String(conversation.id || conversation.external_chat_id);
+                  setSelectedConversationId(id);
+                  setMessagePhone(normalizePhone(conversation.external_chat_id || conversation.display_name || ''));
+                }}
+                className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-100">
+                  <MobileIcon name="message" className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-black">{conversation.display_name || conversation.external_chat_id || 'Conversacion'}</span>
+                  <span className="mt-1 block truncate text-xs text-slate-500">{conversation.status || conversation.intent || conversation.channel || 'whatsapp'}</span>
+                </span>
+                {Number(conversation.pending_outbox || 0) > 0 && <span className="rounded-full bg-amber-300 px-2 py-1 text-[10px] font-black text-slate-950">IA</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        {selected && (
+          <>
+            <div className="mb-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-sm font-black">{selectedConversation?.display_name || selectedConversation?.external_chat_id || 'Cliente'}</p>
+              <p className="mt-1 text-xs text-slate-500">{selectedConversation?.channel || 'whatsapp'} - {selectedConversation?.status || 'abierto'}</p>
+            </div>
+            <div className="max-h-[46dvh] space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-3">
+              {visibleMessages.length === 0 && <EmptyState icon="message" text="Sin mensajes en esta conversacion." />}
+              {visibleMessages.map((msg: any, index) => {
+                const outgoing = String(msg.direction || '').toLowerCase() === 'outgoing' || Boolean(msg.to);
+                return (
+                  <div key={`${msg.id || msg.timestamp || index}`} className={cx('max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-5', outgoing ? 'ml-auto bg-cyan-300 text-slate-950' : 'bg-white/[0.06] text-slate-200')}>
+                    <p>{msg.body || msg.text || msg.message || 'Mensaje'}</p>
+                    <p className={cx('mt-1 text-[10px] font-black uppercase tracking-[0.08em]', outgoing ? 'text-slate-700' : 'text-slate-500')}>
+                      {msg.pending ? 'pendiente' : outgoing ? 'enviado' : shortDate(msg.timestamp)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
         <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
           <Field label="WhatsApp" value={messagePhone} onChange={(value) => setMessagePhone(normalizePhone(value))} placeholder="5512345678" inputMode="tel" />
           <Field label="Mensaje" value={messageText} onChange={setMessageText} placeholder="Mensaje para cliente" multiline />
@@ -1228,18 +2154,6 @@ export default function MobileFieldApp() {
             <MobileIcon name="send" className="h-4 w-4" />
             Enviar
           </button>
-        </div>
-        <div className="mt-4 space-y-3">
-          {messages.length === 0 && <EmptyState icon="message" text="Sin mensajes recientes." />}
-          {messages.slice().reverse().map((msg: any, index) => (
-            <div key={`${msg.id || msg.timestamp || index}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-black">{msg.from || msg.to || msg.chatId || 'Canal'}</p>
-                <span className="text-[11px] text-slate-500">{msg.channel || msg.source || 'WA'}</span>
-              </div>
-              <p className="mt-2 text-sm leading-5 text-slate-300">{msg.body || msg.text || msg.message || 'Mensaje'}</p>
-            </div>
-          ))}
         </div>
       </Panel>
     );
@@ -1281,6 +2195,20 @@ export default function MobileFieldApp() {
             <MobileIcon name="refresh" className="h-4 w-4" />
             Sincronizar datos
           </button>
+          <button onClick={flushOfflineQueue} disabled={!online || syncingQueue || offlineQueue.length === 0} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 font-black text-emerald-100 disabled:opacity-45">
+            <MobileIcon name={syncingQueue ? 'loader' : 'wifi'} className={cx('h-4 w-4', syncingQueue && 'animate-spin')} />
+            Sincronizar cola ({offlineQueue.length})
+          </button>
+          {offlineQueue.length > 0 && (
+            <div className="space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              {offlineQueue.slice(0, 4).map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-bold text-slate-200">{item.kind === 'capture' ? 'Venta pendiente' : 'Mensaje pendiente'}</span>
+                  <span className={cx('rounded-full px-2 py-1 font-black uppercase', item.status === 'failed' ? 'bg-rose-400/15 text-rose-100' : 'bg-amber-300/15 text-amber-100')}>{item.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <button onClick={clearDraft} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-amber-300/20 bg-amber-300/10 font-black text-amber-100">
             <MobileIcon name="cloud-off" className="h-4 w-4" />
             Limpiar borrador offline
@@ -1329,6 +2257,20 @@ function EmptyState({ icon, text }: { icon: IconName; text: string }) {
     <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 text-center">
       <MobileIcon name={icon} className="h-9 w-9 text-slate-600" />
       <p className="mt-3 text-sm font-bold text-slate-400">{text}</p>
+    </div>
+  );
+}
+
+function ModuleSkeleton() {
+  return (
+    <div className="space-y-3" aria-label="Cargando modulo">
+      {[0, 1, 2].map((item) => (
+        <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+          <div className="h-4 w-2/3 animate-pulse rounded bg-white/10" />
+          <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-white/10" />
+          <div className="mt-4 h-8 animate-pulse rounded-xl bg-white/5" />
+        </div>
+      ))}
     </div>
   );
 }

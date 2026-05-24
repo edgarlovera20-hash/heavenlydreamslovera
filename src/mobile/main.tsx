@@ -2,9 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './mobile.css';
 import { installApiFetch } from '../lib/apiClient';
+import { routeToDeviceVersion } from '../lib/device';
 import MobileFieldApp from './MobileFieldApp';
 
 installApiFetch();
+const redirectedToDeviceVersion = routeToDeviceVersion();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -14,8 +16,10 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-createRoot(document.getElementById('mobile-root')!).render(
-  <StrictMode>
-    <MobileFieldApp />
-  </StrictMode>,
-);
+if (!redirectedToDeviceVersion) {
+  createRoot(document.getElementById('mobile-root')!).render(
+    <StrictMode>
+      <MobileFieldApp />
+    </StrictMode>,
+  );
+}

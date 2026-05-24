@@ -31,13 +31,12 @@ export function getReadinessGates(): ReadinessGate[] {
   const postgresConfigured = hasEnv('DATABASE_URL');
   const redisConfigured = hasEnv('REDIS_URL');
   const objectStorageConfigured = hasEnv('DOCUMENT_STORAGE_DIR') || (hasEnv('S3_BUCKET') && hasEnv('S3_ENDPOINT'));
-  const ocrConfigured = hasEnv('ANTHROPIC_API_KEY') || hasEnv('GEMINI_API_KEY') || hasEnv('OPENAI_API_KEY') || hasEnv('OLLAMA_URL');
+  const ocrConfigured = hasEnv('OLLAMA_URL') || hasEnv('GEMINI_API_KEY');
   const visionConfigured = hasEnv('GOOGLE_APPLICATION_CREDENTIALS_JSON') || hasEnv('GOOGLE_APPLICATION_CREDENTIALS');
   const webauthnConfigured = hasEnv('WEBAUTHN_RP_ID') && hasEnv('WEBAUTHN_ORIGIN');
   const twilioConfigured = hasEnv('TWILIO_ACCOUNT_SID') && hasEnv('TWILIO_AUTH_TOKEN') && hasEnv('TWILIO_FROM_NUMBER');
   const googleOAuthConfigured = hasEnv('GOOGLE_OAUTH_CLIENT_ID') && hasEnv('GOOGLE_OAUTH_CLIENT_SECRET');
-  const microsoftOAuthConfigured = hasEnv('MICROSOFT_OAUTH_CLIENT_ID') && hasEnv('MICROSOFT_OAUTH_CLIENT_SECRET');
-  const oauthConfigured = googleOAuthConfigured || microsoftOAuthConfigured;
+  const oauthConfigured = googleOAuthConfigured;
 
   return [
     gate(
@@ -87,7 +86,7 @@ export function getReadinessGates(): ReadinessGate[] {
       'OCR multi IA',
       ocrConfigured ? 'ok' : 'warning',
       ocrConfigured ? 'Hay al menos un proveedor IA OCR configurado.' : 'Solo queda Tesseract/local como fallback.',
-      'Configura Claude/Gemini/OpenAI/Ollama.',
+      'Configura Ollama o Gemini.',
     ),
     gate(
       'google_vision',
@@ -112,10 +111,10 @@ export function getReadinessGates(): ReadinessGate[] {
     ),
     gate(
       'oauth',
-      'OAuth Google/Microsoft',
+      'OAuth Google',
       oauthConfigured ? 'ok' : 'warning',
-      oauthConfigured ? 'Al menos un proveedor OAuth está configurado.' : 'Login/registro externo queda deshabilitado hasta configurar credenciales.',
-      'Define GOOGLE_OAUTH_CLIENT_ID/SECRET o MICROSOFT_OAUTH_CLIENT_ID/SECRET y callback HTTPS.',
+      oauthConfigured ? 'Google OAuth está configurado.' : 'Login/registro externo queda deshabilitado hasta configurar credenciales.',
+      'Define GOOGLE_OAUTH_CLIENT_ID/SECRET y callback HTTPS.',
     ),
     gate(
       'rbac_tests',

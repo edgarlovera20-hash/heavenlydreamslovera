@@ -10,15 +10,15 @@ import { LoadingOverlay } from './components/ui/LoadingOverlay';
 import { CyberIcon } from './components/ui/CyberIcon';
 import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, ScanFace, Sun, Moon, UserPlus, Fingerprint } from 'lucide-react';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
-import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, rememberUsername } from './lib/apiClient';
+import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
 export type Role = 'GERENTE' | 'SUPERVISOR' | 'ASESOR';
 
 // Session helpers — server is source of truth; localStorage is only a cache for reloads
 const SESSION_KEY = 'hd_session';
-function saveSession(user: any) { try { localStorage.setItem(SESSION_KEY, JSON.stringify(user)); } catch {} }
+function saveSession(user: any) { return persistSession(user); }
 function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch {} }
-function loadSession(): any | null { try { const s = localStorage.getItem(SESSION_KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
+function loadSession(): any | null { try { const s = localStorage.getItem(SESSION_KEY); return s ? persistSession(JSON.parse(s)) : null; } catch { return null; } }
 
 function passkeyUnavailableMessage() {
   return 'Este navegador no soporta passkeys. Abre la app en Chrome o Edge. En produccion usa HTTPS y un dominio, no IP directa.';
@@ -50,6 +50,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [googleOAuthAvailable, setGoogleOAuthAvailable] = useState(false);
   const [continuingWithoutPasskey, setContinuingWithoutPasskey] = useState(false);
   const [passkeyUserId, setPasskeyUserId] = useState<string | null>(null);
   const [passkeyEnrollmentRequired, setPasskeyEnrollmentRequired] = useState(false);
@@ -64,7 +65,7 @@ export default function App() {
     if (session?.uid && session?.role) {
       setCurrentUser(session);
       setRole(session.role as Role);
-      setPasskeyEnrollmentRequired(session.role === 'GERENTE' && session.webAuthnVerified !== true);
+      setPasskeyEnrollmentRequired(false);
       const av = localStorage.getItem(`hd_avatar_${session.uid}`);
       if (av) setAvatarUrl(av);
     } else {
@@ -95,14 +96,27 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/oauth/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(status => {
+        if (!cancelled) setGoogleOAuthAvailable(Boolean(status?.google));
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleOAuthAvailable(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
     document.documentElement.classList.toggle('light', isLightMode);
   }, [isLightMode]);
 
   const applyLogin = (user: any) => {
-    saveSession(user);
-    setCurrentUser(user);
-    setRole(user.role as Role);
-    const av = localStorage.getItem(`hd_avatar_${user.uid}`);
+    const session = saveSession(user);
+    setCurrentUser(session);
+    setRole(session.role as Role);
+    const av = localStorage.getItem(`hd_avatar_${session.uid}`);
     if (av) setAvatarUrl(av);
     setUsername(''); setPassword('');
     setPendingRole(null);
@@ -127,7 +141,7 @@ export default function App() {
       }
       if (rememberMe) rememberUsername(username); else forgetRememberedUsername();
       applyLogin(data);
-      setPasskeyEnrollmentRequired(Boolean(data.webAuthnEnrollmentRequired));
+      setPasskeyEnrollmentRequired(false);
     } catch {
       setError('No se pudo conectar al servidor.');
     } finally {
@@ -188,9 +202,9 @@ export default function App() {
         webAuthnVerified: true,
         webAuthnEnrollmentRequired: false,
       };
-      saveSession(verifiedSession);
-      setCurrentUser(verifiedSession);
-      setRole(verifiedSession.role as Role);
+      const session = saveSession(verifiedSession);
+      setCurrentUser(session);
+      setRole(session.role as Role);
       setPasskeyEnrollmentRequired(false);
     } catch (err: any) {
       setError(friendlyPasskeyError(err));
@@ -201,11 +215,10 @@ export default function App() {
     setError('');
     setContinuingWithoutPasskey(true);
     try {
-      const session = loadSession();
       const res = await fetch('/api/auth/passkey/continue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: session?.refreshToken }),
+        body: JSON.stringify({}),
       });
       const next = await res.json();
       if (!res.ok) { setError(next.error || 'No se pudo continuar sin passkey.'); return; }
@@ -220,10 +233,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    const session = loadSession();
-    if (session?.refreshToken) {
-      fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: session.refreshToken }) }).catch(() => {});
-    }
+    fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).catch(() => {});
     clearSession(); clearApiSession();
     setCurrentUser(null);
     setRole(null);
@@ -234,14 +244,14 @@ export default function App() {
     else { setUsername(''); setPassword(''); setRememberMe(false); }
   };
 
-  const startOAuthLogin = async (provider: 'google' | 'microsoft') => {
-    const providerLabel = provider === 'google' ? 'Google' : 'Microsoft';
+  const startOAuthLogin = async (provider: 'google') => {
+    const providerLabel = 'Google';
     setError('');
     try {
       const statusRes = await fetch('/api/auth/oauth/status');
       const status = await statusRes.json();
       if (!statusRes.ok || !status?.[provider]) {
-        setError(`${providerLabel} no está configurado en el servidor. Configura las credenciales OAuth en .env y reinicia la app.`);
+        setError('');
         return;
       }
     } catch {
@@ -418,28 +428,22 @@ export default function App() {
                 <span className="text-[9px] uppercase tracking-widest text-cyber-electric/60 font-bold">o entra con</span>
                 <div className="flex-1 h-px bg-cyber-electric/20" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <button
                   type="button"
+                  disabled={!googleOAuthAvailable}
                   onClick={() => startOAuthLogin('google')}
-                  className="py-3 rounded-xl border border-cyber-electric/30 bg-white/5 hover:bg-white/10 text-white font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all"
+                  className="py-3 rounded-xl border border-cyber-electric/30 bg-white/5 hover:bg-white/10 text-white font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/5"
+                  title={googleOAuthAvailable ? 'Entrar con cuenta Google' : 'Faltan credenciales OAuth de Google en el servidor'}
                 >
                   <span className="w-5 h-5 rounded-full bg-white text-slate-900 flex items-center justify-center font-black">G</span>
-                  Google
+                  Cuenta Google
                 </button>
-                <button
-                  type="button"
-                  onClick={() => startOAuthLogin('microsoft')}
-                  className="py-3 rounded-xl border border-cyber-electric/30 bg-white/5 hover:bg-white/10 text-white font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all"
-                >
-                  <span className="grid grid-cols-2 gap-0.5 w-5 h-5">
-                    <span className="bg-red-500" />
-                    <span className="bg-green-500" />
-                    <span className="bg-blue-500" />
-                    <span className="bg-yellow-400" />
-                  </span>
-                  Microsoft
-                </button>
+                {!googleOAuthAvailable && (
+                  <p className="text-center text-[10px] text-cyber-electric/50 font-bold uppercase tracking-widest">
+                    Google pendiente de configurar
+                  </p>
+                )}
               </div>
               {biometricAvailable && (
                 <>

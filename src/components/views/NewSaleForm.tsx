@@ -667,6 +667,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [docType, setDocType] = useState<'ine' | 'curp'>('ine');
   const [selectedPackage, setSelectedPackage] = useState<PackageCatalogItem | null>(null);
   const [error, setError] = useState<string>('');
+  const [duplicateMatches, setDuplicateMatches] = useState<any[]>([]);
   const [telmexAutomationLoading, setTelmexAutomationLoading] = useState(false);
   const [telmexAutomationJob, setTelmexAutomationJob] = useState<{ id: string; status: string; current_step?: string; progress?: number } | null>(null);
   const pendingOcrJobsRef = useRef<Set<string>>(new Set());
@@ -1480,6 +1481,25 @@ const exportToPDF = async () => {
     setIsLoading(true);
 
     try {
+      const duplicateRes = await fetch('/api/duplicates/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          folio: form.folio,
+          telefono: form.telefonoTitular,
+          correo: form.correo,
+          numeroAPortar: form.numeroAPortar,
+        }),
+      });
+      const duplicateData = await duplicateRes.json().catch(() => ({}));
+      if (duplicateData?.duplicate) {
+        const matches = Array.isArray(duplicateData.matches) ? duplicateData.matches : [];
+        setDuplicateMatches(matches);
+        toast.warning(`Dato ya registrado: ${matches[0]?.reason || 'revisa coincidencias antes de guardar.'}`);
+      } else {
+        setDuplicateMatches([]);
+      }
+
       // 1. Copy signature to PDF ref
       const sourceCanvas = sigCanvasRef.current;
       if (sourceCanvas && receiptRef.current) {
@@ -1694,6 +1714,21 @@ const exportToPDF = async () => {
           )}
         </div>
       </div>
+
+      {duplicateMatches.length > 0 && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-amber-100">Dato ya registrado. Administración fue alertada.</p>
+            <p className="text-xs text-amber-100/80 mt-1">
+              {duplicateMatches.slice(0, 3).map(match => `${match.reason} (${match.source}: ${match.folio || 'sin folio'})`).join(' · ')}
+            </p>
+          </div>
+          <button onClick={() => setDuplicateMatches([])} className="ml-auto text-amber-100/70 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Stepper */}
       <div className="mb-12 px-2 md:px-6">

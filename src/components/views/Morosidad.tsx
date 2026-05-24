@@ -1,9 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, AlertTriangle, Bot, Send, Loader2, X, DollarSign, Calendar, Phone, MessageCircle, CheckCircle2 } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, Filter, AlertTriangle, Bot, Send, Loader2, X, DollarSign, Calendar, Phone, MessageCircle, CheckCircle2, Download, Upload, RefreshCw } from 'lucide-react';
+import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { cn } from '../../lib/utils';
 import { aiAgent, CustomerData, EventType } from '../../services/aiAgent';
 import { LinkChannelModal } from '../ui/LinkChannelModal';
 import { getChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/channels';
+import { MorosidadAPI } from '../../services/db';
+import { toast } from 'sonner';
 
 interface Moroso {
   id: string;
@@ -13,6 +16,13 @@ interface Moroso {
   diasAtraso: number;
   estado: string;
   paquete: string;
+  promotor?: string;
+  usuario?: string;
+  area?: string;
+  mercado?: string;
+  zona?: string;
+  tienda?: string;
+  estrategia?: string;
 }
 
 interface MorosidadApiRow {
@@ -27,6 +37,21 @@ interface MorosidadApiRow {
   status_cobranza?: string;
   metadata?: string;
   cliente_metadata?: string;
+}
+
+interface AnalyticsBucket { name: string; total: number; monto: number; }
+
+interface MorosidadAnalytics {
+  total: number;
+  montoTotal: number;
+  byUsuario: AnalyticsBucket[];
+  byPromotor: AnalyticsBucket[];
+  byZona: AnalyticsBucket[];
+  byTienda: AnalyticsBucket[];
+  byEstrategia: AnalyticsBucket[];
+  byArea: AnalyticsBucket[];
+  byMercado: AnalyticsBucket[];
+  byStatus: AnalyticsBucket[];
 }
 
 interface Sale {
@@ -94,22 +119,30 @@ function buildMorososFromApi(rows: MorosidadApiRow[]): Moroso[] {
       diasAtraso: Number(row.dias_atraso) || 0,
       estado: row.status_cobranza || 'Sin contactar',
       paquete: metadata.paquete || 'Sin paquete',
+      promotor: metadata.promotor,
+      usuario: metadata.usuario,
+      area: metadata.area,
+      mercado: metadata.mercado,
     };
   });
 }
 
 export default function Morosidad() {
   const [allMorosos, setAllMorosos] = useState<Moroso[]>([]);
+  const [analytics, setAnalytics] = useState<MorosidadAnalytics | null>(null);
+  const [loadingData, setLoadingData] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const load = async () => {
+  const load = async () => {
+      setLoadingData(true);
       try {
-        const res = await fetch('/api/morosidad');
-        if (res.ok) {
-          const rows = await res.json();
-          setAllMorosos(buildMorososFromApi(Array.isArray(rows) ? rows : []));
-          return;
-        }
+        const [rows, stats] = await Promise.all([
+          MorosidadAPI.getAll(),
+          MorosidadAPI.analytics().catch(() => null),
+        ]);
+        setAllMorosos(buildMorososFromApi(Array.isArray(rows) ? rows : []));
+        if (stats) setAnalytics(stats);
+        return;
       } catch {}
 
       try {
@@ -117,8 +150,12 @@ export default function Morosidad() {
         setAllMorosos(buildMorososFromSales(sales));
       } catch {
         setAllMorosos([]);
+      } finally {
+        setLoadingData(false);
       }
-    };
+  };
+
+  useEffect(() => {
     load();
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
@@ -142,6 +179,42 @@ export default function Morosidad() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkChannels, setLinkChannels] = useState<ChannelKey[]>([]);
   const [channelState, setChannelState] = useState<ChannelsState>(getChannels());
+
+  const fileToBase64 = async (file: File) => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return btoa(binary);
+  };
+
+  const importPrincipal = async () => {
+    setLoadingData(true);
+    try {
+      const result = await MorosidadAPI.importSource(true);
+      await load();
+      toast.success(`Morosos cargados: ${result.imported} registros.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo importar MOROSOS APP.');
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const importFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setLoadingData(true);
+    try {
+      const result = await MorosidadAPI.importFile(file.name, await fileToBase64(file), true);
+      await load();
+      toast.success(`Morosidad importada: ${result.imported} registros.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo importar el archivo de morosidad.');
+    } finally {
+      setLoadingData(false);
+      event.target.value = '';
+    }
+  };
 
   const openLinkModal = (channels: ChannelKey[]) => { setLinkChannels(channels); setShowLinkModal(true); };
   const closeLinkModal = () => { setShowLinkModal(false); setChannelState(getChannels()); };
@@ -228,16 +301,90 @@ export default function Morosidad() {
   const tgLinked = channelState.telegramVendedores;
   const waUrl = chatUrl('whatsappClientes') || chatUrl('whatsappVendedores');
   const tgUrl = chatUrl('telegramVendedores');
+  const chartColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#8b5cf6'];
+  const money = (value: number) => `$${Number(value || 0).toLocaleString('es-MX')}`;
+  const MiniBar = ({ title, data }: { title: string; data?: AnalyticsBucket[] }) => (
+    <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 min-h-[260px]">
+      <h3 className="text-sm font-bold text-slate-100 mb-3">{title}</h3>
+      <ResponsiveContainer width="100%" height={205}>
+        <BarChart data={(data || []).slice(0, 8)} margin={{ left: 0, right: 6, top: 8, bottom: 32 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />
+          <XAxis dataKey="name" angle={-25} textAnchor="end" interval={0} tick={{ fill: '#94a3b8', fontSize: 10 }} height={54} />
+          <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
+          <Tooltip formatter={(value: any, name: string) => name === 'monto' ? money(Number(value)) : value} contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,.12)', borderRadius: 8 }} />
+          <Bar dataKey="monto" fill="#ef4444" radius={[6, 6, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-100 mb-1 tracking-tight flex items-center gap-2">
-          <AlertTriangle className="w-6 h-6 text-red-400" />
-          Gestión de Morosidad
-        </h1>
-        <p className="text-slate-400 text-sm">Seguimiento de cuentas por cobrar y automatización de cobranza con IA.</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100 mb-1 tracking-tight flex items-center gap-2">
+            <AlertTriangle className="w-6 h-6 text-red-400" />
+            Gestión de Morosidad
+          </h1>
+          <p className="text-slate-400 text-sm">Seguimiento de cuentas por cobrar, importación MOROSOS APP y análisis por usuario, zona, tienda y estrategia.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input ref={fileRef} type="file" accept=".csv" onChange={importFile} className="hidden" />
+          <button onClick={importPrincipal} disabled={loadingData}
+            className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/30 text-red-300 rounded-xl text-xs font-bold hover:bg-red-500/20 transition-colors disabled:opacity-50">
+            {loadingData ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            Cargar principal
+          </button>
+          <button onClick={() => fileRef.current?.click()} disabled={loadingData}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 text-blue-300 rounded-xl text-xs font-bold hover:bg-blue-500/20 transition-colors disabled:opacity-50">
+            <Upload className="w-3.5 h-3.5" /> Importar CSV
+          </button>
+          <button onClick={() => { window.location.href = '/api/export/morosidad?format=csv'; }}
+            className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-bold hover:bg-emerald-500/20 transition-colors">
+            <Download className="w-3.5 h-3.5" /> Exportar
+          </button>
+        </div>
       </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
+          <p className="text-2xl font-black text-red-300">{analytics?.total ?? allMorosos.length}</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Cuentas morosas</p>
+        </div>
+        <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
+          <p className="text-2xl font-black text-amber-300">{money(analytics?.montoTotal || allMorosos.reduce((s, m) => s + m.deuda, 0))}</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Saldo total</p>
+        </div>
+        <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
+          <p className="text-2xl font-black text-cyan-300">{analytics?.byPromotor?.[0]?.name || '—'}</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Promotor con más saldo</p>
+        </div>
+        <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
+          <p className="text-2xl font-black text-purple-300">{analytics?.byZona?.[0]?.name || '—'}</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Zona con más morosidad</p>
+        </div>
+      </div>
+
+      {analytics && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <MiniBar title="Morosidad por usuario" data={analytics.byUsuario} />
+          <MiniBar title="Morosidad por zona" data={analytics.byZona} />
+          <MiniBar title="Morosidad por tienda" data={analytics.byTienda} />
+          <MiniBar title="Morosidad por estrategia" data={analytics.byEstrategia} />
+          <MiniBar title="Morosidad por área" data={analytics.byArea} />
+          <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 min-h-[260px]">
+            <h3 className="text-sm font-bold text-slate-100 mb-3">Morosidad por mercado</h3>
+            <ResponsiveContainer width="100%" height={205}>
+              <PieChart>
+                <Pie data={analytics.byMercado.slice(0, 6)} dataKey="monto" nameKey="name" innerRadius={45} outerRadius={82} paddingAngle={2}>
+                  {analytics.byMercado.slice(0, 6).map((_, index) => <Cell key={index} fill={chartColors[index % chartColors.length]} />)}
+                </Pie>
+                <Tooltip formatter={(value: any) => money(Number(value))} contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,.12)', borderRadius: 8 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Channel Connections Banner */}
       <div className="bg-slate-900/90 backdrop-blur-md border border-white/10 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">

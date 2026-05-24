@@ -11,6 +11,7 @@ export interface SIACRecord {
   estrategia: string;
   nombrePromotor: string;
   usuarioPromotor: string;
+  morosidad?: string;
   ordenServicio: string;
   numPortar: string;
   telefonoAsignado: string;

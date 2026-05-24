@@ -3,32 +3,31 @@ import db, { AiJobs, AuditLog, AutomationRules, Metrics } from './db';
 import { infraMode, queueJob } from './infra';
 import { getReadinessGates } from './readiness';
 
-type ProviderName = 'claude' | 'gemini' | 'openai';
+type ProviderName = 'ollama' | 'gemini';
 
 const PROVIDERS: Array<{ name: ProviderName; configured: () => boolean; run: (prompt: string) => Promise<string> }> = [
-  { name: 'claude', configured: () => !!process.env.ANTHROPIC_API_KEY, run: callClaude },
+  { name: 'ollama', configured: () => !!process.env.OLLAMA_URL, run: callOllama },
   { name: 'gemini', configured: () => !!process.env.GEMINI_API_KEY, run: callGemini },
-  { name: 'openai', configured: () => !!process.env.OPENAI_API_KEY, run: callOpenAi },
 ];
 
-async function callClaude(prompt: string) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+async function callOllama(prompt: string) {
+  const baseUrl = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
+  const res = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY || '',
-      'anthropic-version': '2023-06-01',
+      ...(process.env.OLLAMA_API_KEY && { authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }),
     },
     body: JSON.stringify({
-      model: process.env.CLAUDE_MODEL || 'claude-3-5-haiku-latest',
-      max_tokens: 800,
-      temperature: 0,
+      model: process.env.OLLAMA_MODEL || 'glm-ocr:latest',
+      stream: false,
       messages: [{ role: 'user', content: prompt }],
+      options: { temperature: 0, num_predict: 1200 },
     }),
   });
-  if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 160)}`);
+  if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const data = await res.json() as any;
-  return data?.content?.[0]?.text || '';
+  return data?.message?.content || data?.response || '';
 }
 
 async function callGemini(prompt: string) {
@@ -42,24 +41,6 @@ async function callGemini(prompt: string) {
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const data = await res.json() as any;
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
-
-async function callOpenAi(prompt: string) {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${process.env.OPENAI_API_KEY || ''}`,
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0,
-    }),
-  });
-  if (!res.ok) throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 160)}`);
-  const data = await res.json() as any;
-  return data?.choices?.[0]?.message?.content || '';
 }
 
 export async function runAiWithFallback(prompt: string) {

@@ -70,7 +70,7 @@ export interface VisionOCRResponse {
 function friendlyOcrError(status: number, msg: string) {
   const lower = msg.toLowerCase();
   if (lower.includes('sin api key') || lower.includes('sin url configurada') || lower.includes('proveedores ocr fallaron')) {
-    return 'OCR sin proveedores IA configurados o sin lectura local confiable. Configura Claude/Gemini/OpenAI/Ollama en Ajustes > Integraciones o completa los campos manualmente.';
+    return 'OCR sin proveedores IA configurados o sin lectura local confiable. Configura Ollama/Gemini en Ajustes > Integraciones o completa los campos manualmente.';
   }
   if (lower.includes('payload') || lower.includes('too large') || status === 413) {
     return 'La imagen es demasiado pesada para OCR. Toma otra foto más cercana o sube una imagen más ligera.';

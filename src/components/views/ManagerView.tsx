@@ -101,6 +101,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [waStatus, setWaStatus] = useState<'disconnected'|'qr'|'authenticating'|'connected'>('disconnected');
   const [tgStatus, setTgStatus] = useState<'disconnected'|'polling'|'error'>('disconnected');
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
+  const [channelSummary, setChannelSummary] = useState({ conversations: 0, pendingApprovals: 0 });
   const [pendingUsers, setPendingUsers] = useState(0);
 
   const loadStats = async () => {
@@ -125,14 +126,20 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
     const loadChannels = async () => {
       if (!['GERENTE', 'SUPERVISOR'].includes(role)) return;
       try {
-        const [ws, tgs, msgs] = await Promise.all([
+        const [ws, tgs, msgs, conversations, outbox] = await Promise.all([
           fetch('/api/whatsapp/status').then(r => r.ok ? r.json() : null),
           fetch('/api/telegram/status').then(r => r.ok ? r.json() : null),
           fetch('/api/channels/messages').then(r => r.ok ? r.json() : []),
+          fetch('/api/channels/conversations').then(r => r.ok ? r.json() : []),
+          fetch('/api/agents/outbox').then(r => r.ok ? r.json() : []),
         ]);
         if (ws) setWaStatus(ws.status);
         if (tgs) setTgStatus(tgs.status);
         setRecentMessages((msgs as any[]).slice(0, 5));
+        setChannelSummary({
+          conversations: (conversations as any[]).filter(c => c.channel === 'whatsapp').length,
+          pendingApprovals: (outbox as any[]).filter(item => item.status === 'pending_approval').length,
+        });
       } catch {}
     };
     loadChannels();
@@ -443,6 +450,16 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                         ))}
                       </div>
                     )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                        <p className="text-lg font-bold text-white">{channelSummary.conversations}</p>
+                        <p className="text-[9px] text-slate-500 uppercase tracking-widest">Conversaciones</p>
+                      </div>
+                      <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-2">
+                        <p className="text-lg font-bold text-yellow-200">{channelSummary.pendingApprovals}</p>
+                        <p className="text-[9px] text-slate-500 uppercase tracking-widest">Aprobaciones</p>
+                      </div>
+                    </div>
                     <button
                       onClick={() => setActiveSection('Hub de Agentes')}
                       className="w-full text-[9px] text-emerald-400 border border-emerald-400/20 rounded-lg py-1.5 hover:bg-emerald-400/5 transition-colors font-bold uppercase tracking-widest"

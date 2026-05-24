@@ -4,8 +4,10 @@ import App from './App.tsx';
 import './index.css';
 import { Toaster } from 'sonner';
 import { installApiFetch } from './lib/apiClient';
+import { routeToDeviceVersion } from './lib/device';
 
 installApiFetch();
+const redirectedToDeviceVersion = routeToDeviceVersion();
 
 // Register PWA service worker
 if ('serviceWorker' in navigator) {
@@ -14,9 +16,11 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-    <Toaster position="top-right" richColors theme="dark" />
-  </StrictMode>,
-);
+if (!redirectedToDeviceVersion) {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+      <Toaster position="top-right" richColors theme="dark" />
+    </StrictMode>,
+  );
+}

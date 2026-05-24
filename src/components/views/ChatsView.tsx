@@ -29,6 +29,7 @@ type ChatChannel = 'whatsapp' | 'telegram';
 
 interface ChannelMessage {
   id: string;
+  conversationId?: string;
   from: string;
   fromName: string;
   to?: string;
@@ -38,6 +39,32 @@ interface ChannelMessage {
   direction?: 'incoming' | 'outgoing';
   chatId?: number;
   isGroup?: boolean;
+}
+
+interface ChannelConversation {
+  id: string;
+  channel: ChatChannel;
+  external_chat_id: string;
+  display_name?: string;
+  status: string;
+  intent?: string;
+  pending_outbox?: number;
+  last_body?: string;
+  last_message_at?: number;
+}
+
+interface AgentOutboxItem {
+  id: string;
+  conversationId: string;
+  type: string;
+  status: string;
+  channel: ChatChannel;
+  target: string;
+  message?: string | null;
+  action?: string | null;
+  payload?: Record<string, any>;
+  display_name?: string;
+  created_at: string;
 }
 
 interface ChannelStatus {
@@ -91,7 +118,7 @@ const CHANNELS: Array<{
   },
 ];
 
-const MEMORY_KEY = 'hd_chats_agent_memory';
+const RECEPTIONIST_PROFILE_ID = 'promoter_receptionist';
 
 const DEFAULT_MEMORY: BotMemory = {
   name: 'Agente Heavenly',
@@ -102,16 +129,17 @@ const DEFAULT_MEMORY: BotMemory = {
 };
 
 function loadBotMemory(): BotMemory {
-  try {
-    const saved = localStorage.getItem(MEMORY_KEY);
-    return saved ? { ...DEFAULT_MEMORY, ...JSON.parse(saved) } : DEFAULT_MEMORY;
-  } catch {
-    return DEFAULT_MEMORY;
-  }
+  return DEFAULT_MEMORY;
 }
 
-function persistBotMemory(memory: BotMemory) {
-  localStorage.setItem(MEMORY_KEY, JSON.stringify(memory));
+function normalizeProfile(data: any): BotMemory {
+  return {
+    name: data?.name || DEFAULT_MEMORY.name,
+    personality: data?.personality || DEFAULT_MEMORY.personality,
+    selfKnowledge: data?.selfKnowledge || data?.self_knowledge || DEFAULT_MEMORY.selfKnowledge,
+    knowledgeBase: data?.knowledgeBase || data?.knowledge_base || DEFAULT_MEMORY.knowledgeBase,
+    learnedNotes: Array.isArray(data?.learnedNotes) ? data.learnedNotes : DEFAULT_MEMORY.learnedNotes,
+  };
 }
 
 function buildGreeting(memory: BotMemory) {
@@ -163,6 +191,9 @@ function isReady(channel: ChatChannel, status?: string) {
 export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture, onOpenFolios }: ChatsViewProps) {
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('whatsapp');
   const [messages, setMessages] = useState<ChannelMessage[]>([]);
+  const [conversations, setConversations] = useState<ChannelConversation[]>([]);
+  const [outbox, setOutbox] = useState<AgentOutboxItem[]>([]);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [whatsAppStatus, setWhatsAppStatus] = useState<ChannelStatus>({});
   const [telegramStatus, setTelegramStatus] = useState<ChannelStatus>({});
   const [agents, setAgents] = useState<Record<string, AgentStatus>>({});
@@ -172,6 +203,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const [query, setQuery] = useState('');
   const [target, setTarget] = useState('');
   const [memory, setMemory] = useState<BotMemory>(() => loadBotMemory());
+  const [memorySaving, setMemorySaving] = useState(false);
   const [learningInput, setLearningInput] = useState('');
   const [message, setMessage] = useState(() => buildGreeting(loadBotMemory()));
   const [lastSync, setLastSync] = useState<number | null>(null);
@@ -184,10 +216,22 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
         fetch('/api/channels/messages'),
         fetch('/api/agents/status').catch(() => null),
       ]);
+      const [conversationsRes, outboxRes] = await Promise.all([
+        fetch('/api/channels/conversations').catch(() => null),
+        fetch('/api/agents/outbox').catch(() => null),
+      ]);
+      const profileRes = await fetch(`/api/agents/profiles/${RECEPTIONIST_PROFILE_ID}`).catch(() => null);
 
       if (waStatusRes.ok) setWhatsAppStatus(await waStatusRes.json());
       if (tgStatusRes.ok) setTelegramStatus(await tgStatusRes.json());
       if (agentsRes?.ok) setAgents(await agentsRes.json());
+      if (conversationsRes?.ok) setConversations(await conversationsRes.json());
+      if (outboxRes?.ok) setOutbox(await outboxRes.json());
+      if (profileRes?.ok) {
+        const profile = normalizeProfile(await profileRes.json());
+        setMemory(profile);
+        setMessage(current => current.trim() ? current : buildGreeting(profile));
+      }
       if (messagesRes.ok) {
         const data = await messagesRes.json();
         setMessages(Array.isArray(data) ? data : []);
@@ -216,7 +260,11 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
         .slice(0, 2);
       if (learned.length === 0) return current;
       const next = { ...current, learnedNotes: [...learned, ...current.learnedNotes].slice(0, 30) };
-      persistBotMemory(next);
+      fetch(`/api/agents/profiles/${RECEPTIONIST_PROFILE_ID}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      }).catch(() => {});
       return next;
     });
   }, [messages]);
@@ -239,10 +287,19 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
     });
   }, [messages]);
 
+  const activeConversations = useMemo(() => (
+    conversations.filter(conversation => conversation.channel === activeChannel)
+  ), [activeChannel, conversations]);
+
+  const pendingOutbox = useMemo(() => (
+    outbox.filter(item => item.status === 'pending_approval')
+  ), [outbox]);
+
   const filteredMessages = useMemo(() => {
     const term = query.trim().toLowerCase();
     return messages
       .filter(msg => msg.channel === activeChannel)
+      .filter(msg => !selectedConversationId || msg.conversationId === selectedConversationId)
       .filter(msg => {
         if (!term) return true;
         return [
@@ -254,7 +311,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
         ].filter(Boolean).some(value => String(value).toLowerCase().includes(term));
       })
       .sort((a, b) => b.timestamp - a.timestamp);
-  }, [activeChannel, messages, query]);
+  }, [activeChannel, messages, query, selectedConversationId]);
 
   const handleSend = async () => {
     const trimmedTarget = target.trim();
@@ -306,10 +363,25 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const activeStats = channelStats[activeChannel];
   const flowReady = Boolean(agents.capturista?.active && agents.consultor?.active);
 
-  const saveMemory = (nextMemory = memory) => {
-    persistBotMemory(nextMemory);
-    setMessage(buildGreeting(nextMemory));
-    toast.success('Memoria del agente guardada.');
+  const saveMemory = async (nextMemory = memory) => {
+    setMemorySaving(true);
+    try {
+      const res = await fetch(`/api/agents/profiles/${RECEPTIONIST_PROFILE_ID}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextMemory),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar la personalidad.');
+      const profile = normalizeProfile(data);
+      setMemory(profile);
+      setMessage(buildGreeting(profile));
+      toast.success('Personalidad del asistente guardada en base de datos.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar la personalidad.');
+    } finally {
+      setMemorySaving(false);
+    }
   };
 
   const addLearning = () => {
@@ -324,7 +396,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
     };
     setMemory(nextMemory);
     setLearningInput('');
-    saveMemory(nextMemory);
+    void saveMemory(nextMemory);
   };
 
   const toggleAgent = async (agent: 'capturista' | 'consultor') => {
@@ -341,6 +413,34 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
       toast.error(err instanceof Error ? err.message : 'No se pudo actualizar el agente.');
     } finally {
       setAgentBusy(state => ({ ...state, [agent]: false }));
+    }
+  };
+
+  const approveOutbox = async (id: string) => {
+    try {
+      const res = await fetch(`/api/agents/outbox/${id}/approve`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'No se pudo aprobar la propuesta.');
+      toast.success('Propuesta aprobada.');
+      await loadMessages();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo aprobar la propuesta.');
+    }
+  };
+
+  const rejectOutbox = async (id: string) => {
+    try {
+      const res = await fetch(`/api/agents/outbox/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Rechazado desde Chats' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'No se pudo rechazar la propuesta.');
+      toast.success('Propuesta rechazada.');
+      await loadMessages();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo rechazar la propuesta.');
     }
   };
 
@@ -481,11 +581,12 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
               </div>
               <button
                 type="button"
-                onClick={() => saveMemory()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-purple-400/30 bg-purple-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-100 hover:bg-purple-400/20"
+                onClick={() => void saveMemory()}
+                disabled={memorySaving}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-purple-400/30 bg-purple-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-100 hover:bg-purple-400/20 disabled:cursor-wait disabled:opacity-60"
               >
-                <Save className="h-3.5 w-3.5" />
-                Guardar
+                {memorySaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                {memorySaving ? 'Guardando' : 'Guardar'}
               </button>
             </div>
 
@@ -535,7 +636,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
                           onClick={() => {
                             const next = { ...memory, learnedNotes: memory.learnedNotes.filter((_, i) => i !== index) };
                             setMemory(next);
-                            saveMemory(next);
+                            void saveMemory(next);
                           }}
                           className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-rose-300"
                         >
@@ -547,6 +648,97 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_430px]">
+        <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Conversaciones</p>
+              <h2 className="text-xl font-black text-white">{activeChannel === 'whatsapp' ? 'WhatsApp ventas' : 'Telegram'}</h2>
+            </div>
+            {selectedConversationId && (
+              <button
+                type="button"
+                onClick={() => setSelectedConversationId(null)}
+                className="rounded-lg border border-slate-700 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white"
+              >
+                Ver todas
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3">
+            {activeConversations.length === 0 ? (
+              <p className="text-sm text-slate-500">Sin conversaciones persistidas en este canal.</p>
+            ) : activeConversations.slice(0, 9).map(conversation => (
+              <button
+                key={conversation.id}
+                type="button"
+                onClick={() => setSelectedConversationId(conversation.id)}
+                className={`rounded-xl border p-3 text-left transition-colors ${
+                  selectedConversationId === conversation.id
+                    ? 'border-cyan-400/60 bg-cyan-400/10'
+                    : 'border-white/10 bg-black/20 hover:border-cyan-400/30'
+                }`}
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-black text-white">{conversation.display_name || conversation.external_chat_id}</p>
+                  {Number(conversation.pending_outbox || 0) > 0 && (
+                    <span className="rounded-full bg-yellow-400/15 px-2 py-0.5 text-[9px] font-black text-yellow-200">
+                      {conversation.pending_outbox}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300">{conversation.intent || 'sin clasificar'} · {conversation.status}</p>
+                <p className="mt-1 truncate text-xs text-slate-400">{conversation.last_body || 'Sin mensajes'}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-4">
+          <div className="mb-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-yellow-200">Bandeja de aprobacion</p>
+            <h2 className="text-xl font-black text-white">{pendingOutbox.length} pendientes</h2>
+          </div>
+          <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+            {pendingOutbox.length === 0 ? (
+              <p className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-slate-500">Sin respuestas o acciones pendientes.</p>
+            ) : pendingOutbox.slice(0, 6).map(item => (
+              <div key={item.id} className="rounded-xl border border-yellow-400/20 bg-slate-950/80 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-yellow-200">
+                    {item.action || item.type}
+                  </span>
+                  <span className="text-[9px] text-slate-500">{new Date(item.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+                <p className="text-xs font-bold text-white">{item.display_name || item.target}</p>
+                {item.message && <p className="mt-2 whitespace-pre-wrap text-xs text-slate-300">{item.message}</p>}
+                {item.action === 'create_sale' && (
+                  <p className="mt-2 text-xs text-slate-300">
+                    Crear venta para <b>{item.payload?.nombre || 'cliente'}</b> · {item.payload?.telefono || 'sin telefono'}
+                  </p>
+                )}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => approveOutbox(item.id)}
+                    className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-200 hover:bg-emerald-400/20"
+                  >
+                    Aprobar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => rejectOutbox(item.id)}
+                    className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 hover:bg-rose-400/20"
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

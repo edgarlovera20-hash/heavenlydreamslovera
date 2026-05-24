@@ -57,8 +57,8 @@ const AVAILABLE_INTEGRATIONS: Integration[] = [
     category: 'Communication'
   },
   {
-    id: 'openai',
-    name: 'OpenAI / Gemini',
+    id: 'ollama',
+    name: 'Ollama / Gemini',
     description: 'Motor de inteligencia artificial para validación de capturas y agentes.',
     icon: Cpu,
     color: 'green',
@@ -161,7 +161,7 @@ export default function Integrations() {
         </div>
         
         <div className="space-y-3 font-mono">
-          <LogItem title="OpenAI API" status="SUCCESS" time="Hace 2 min" desc="Validación de captura ID-4589 completada exitosamente." />
+          <LogItem title="Ollama OCR" status="SUCCESS" time="Hace 2 min" desc="Validación de captura ID-4589 completada exitosamente." />
           <LogItem title="Google Drive" status="WAITING" time="Hace 15 min" desc="Sincronización de expediente 'Contrato_Gomez.pdf' en espera de red." />
           <LogItem title="Slack Webhook" status="SUCCESS" time="Hace 45 min" desc="Notificación de nueva venta enviada al canal #ventas-mexico." />
           <LogItem title="Discord" status="ERROR" time="Hace 1 hora" desc="Fallo en la autenticación del Bearer Token. Reintentando..." isError />
