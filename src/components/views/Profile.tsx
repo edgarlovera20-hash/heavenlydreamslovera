@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { auth } from '../../lib/firebase';
+import { UsersAPI, VentasAPI } from '../../services/db';
 
 interface Sale {
   id?: string;
@@ -51,7 +52,7 @@ function formatRelative(iso?: string): string {
 export default function Profile() {
   const session = auth.currentUser;
   const [avatar, setAvatar] = useState<string | null>(
-    session?.uid ? localStorage.getItem(`adhdreams_avatar_${session.uid}`) : null
+    session?.uid ? localStorage.getItem(`hd_avatar_${session.uid}`) : null
   );
   const [lbFilter, setLbFilter] = useState<'weekly' | 'monthly' | 'all-time'>('weekly');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,13 +62,15 @@ export default function Profile() {
 
   useEffect(() => {
     const load = () => {
-      try {
-        setSales(JSON.parse(localStorage.getItem('adhdreams_sales') || '[]'));
-        setUsers(JSON.parse(localStorage.getItem('adhdreams_users') || '[]'));
-      } catch {
-        setSales([]);
-        setUsers([]);
-      }
+      Promise.all([VentasAPI.getAll(), UsersAPI.getAll()])
+        .then(([salesRows, userRows]: any[]) => {
+          setSales(Array.isArray(salesRows) ? salesRows : []);
+          setUsers((Array.isArray(userRows) ? userRows : []).map((u: any) => ({
+            ...u,
+            displayName: u.displayName || u.nombre || u.username || u.email,
+          })));
+        })
+        .catch(() => { setSales([]); setUsers([]); });
     };
     load();
     const t = setInterval(load, 5000);
@@ -200,7 +203,7 @@ export default function Profile() {
       const url = reader.result as string;
       setAvatar(url);
       if (session?.uid) {
-        try { localStorage.setItem(`adhdreams_avatar_${session.uid}`, url); } catch { /* quota */ }
+        try { localStorage.setItem(`hd_avatar_${session.uid}`, url); } catch { /* quota */ }
       }
     };
     reader.readAsDataURL(file);

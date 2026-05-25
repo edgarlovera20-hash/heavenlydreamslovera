@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { MapPin, Plus, Trash2, Save, Search, User, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { logAudit } from '../../lib/auditLog';
 import { auth } from '../../lib/firebase';
 import { toast } from 'sonner';
+import { TerritoriesAPI, UsersAPI } from '../../services/db';
 
 interface Territory {
   id: string;
@@ -14,23 +15,47 @@ interface Territory {
   createdAt: string;
 }
 
-function loadTerritories(): Territory[] {
-  try { return JSON.parse(localStorage.getItem('adhdreams_territories') || '[]'); } catch { return []; }
-}
-function saveTerritories(t: Territory[]) { localStorage.setItem('adhdreams_territories', JSON.stringify(t)); }
-
-function loadUsers(): { uid: string; displayName?: string; email?: string; role?: string }[] {
-  try { return JSON.parse(localStorage.getItem('adhdreams_users') || '[]'); } catch { return []; }
-}
-
 export default function TerritoriesView() {
-  const [territories, setTerritories] = useState<Territory[]>(loadTerritories);
+  const [territories, setTerritories] = useState<Territory[]>([]);
+  const [users, setUsers] = useState<{ uid: string; displayName?: string; email?: string; role?: string }[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [colonia, setColonia] = useState('');
   const [delegacion, setDelegacion] = useState('');
   const [asesorId, setAsesorId] = useState('');
-  const users = useMemo(() => loadUsers().filter(u => u.role === 'ASESOR' || u.role === 'SUPERVISOR'), []);
+  const promotors = useMemo(() => users.filter(u => u.role === 'ASESOR' || u.role === 'SUPERVISOR'), [users]);
+
+  const loadData = async () => {
+    try {
+      const [territoryRows, userRows] = await Promise.all([TerritoriesAPI.getAll(), UsersAPI.getAll()]);
+      const normalizedUsers = (Array.isArray(userRows) ? userRows : []).map((u: any) => ({
+        ...u,
+        displayName: u.displayName || u.nombre || u.username || u.email,
+        role: String(u.role || '').toUpperCase(),
+      }));
+      setUsers(normalizedUsers);
+      setTerritories((Array.isArray(territoryRows) ? territoryRows : []).map((row: any) => {
+        const [colonia, delegacion = ''] = String(row.nombre || '').split(',').map((part) => part.trim());
+        const assigned = normalizedUsers.find((u: any) => u.uid === row.asesor_id);
+        return {
+          id: row.id,
+          colonia: colonia || row.nombre || 'Sin nombre',
+          delegacion,
+          asesorId: row.asesor_id || '',
+          asesorName: assigned?.displayName || row.asesor_id || 'Sin asignar',
+          createdAt: row.created_at || new Date().toISOString(),
+        };
+      }));
+      setLoadError('');
+    } catch (err) {
+      setTerritories([]);
+      setUsers([]);
+      setLoadError(err instanceof Error ? err.message : 'Backend no disponible');
+    }
+  };
+
+  useEffect(() => { void loadData(); }, []);
 
   const filtered = useMemo(() =>
     territories.filter(t => {
@@ -47,31 +72,27 @@ export default function TerritoriesView() {
     return map;
   }, [filtered]);
 
-  const addTerritory = () => {
+  const addTerritory = async () => {
     if (!colonia.trim() || !asesorId) { toast.error('Completa todos los campos.'); return; }
     const conflict = territories.find(t => t.colonia.toLowerCase() === colonia.trim().toLowerCase() && t.delegacion.toLowerCase() === delegacion.trim().toLowerCase());
     if (conflict) { toast.error(`La colonia ya está asignada a ${conflict.asesorName}.`); return; }
-    const user = users.find(u => u.uid === asesorId);
-    const t: Territory = {
-      id: crypto.randomUUID(),
-      colonia: colonia.trim(),
-      delegacion: delegacion.trim(),
-      asesorId,
-      asesorName: user?.displayName || user?.email || asesorId,
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [...territories, t];
-    saveTerritories(updated);
-    setTerritories(updated);
-    logAudit('VENTA_EDITADA', auth.currentUser?.uid || '', auth.currentUser?.displayName || '', { details: `Territorio asignado: ${t.colonia} → ${t.asesorName}` });
+    const user = promotors.find(u => u.uid === asesorId);
+    await TerritoriesAPI.create({
+      nombre: [colonia.trim(), delegacion.trim()].filter(Boolean).join(', '),
+      descripcion: `Asignado a ${user?.displayName || user?.email || asesorId}`,
+      asesor_id: asesorId,
+      color: '#0ea5e9',
+      poligono: null,
+    });
+    await loadData();
+    logAudit('VENTA_EDITADA', auth.currentUser?.uid || '', auth.currentUser?.displayName || '', { details: `Territorio asignado: ${colonia.trim()} -> ${user?.displayName || user?.email || asesorId}` });
     toast.success('Territorio asignado.');
     setColonia(''); setDelegacion(''); setAsesorId(''); setShowModal(false);
   };
 
-  const remove = (id: string) => {
-    const updated = territories.filter(t => t.id !== id);
-    saveTerritories(updated);
-    setTerritories(updated);
+  const remove = async (id: string) => {
+    await TerritoriesAPI.delete(id);
+    await loadData();
     toast.success('Territorio eliminado.');
   };
 
@@ -90,6 +111,12 @@ export default function TerritoriesView() {
           <Plus className="w-4 h-4" /> Asignar territorio
         </button>
       </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          No se pudieron cargar territorios reales del servidor: {loadError}
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative max-w-sm">
@@ -150,7 +177,7 @@ export default function TerritoriesView() {
                 <select value={asesorId} onChange={e => setAsesorId(e.target.value)}
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none [color-scheme:dark]">
                   <option value="">Seleccionar…</option>
-                  {users.map(u => <option key={u.uid} value={u.uid}>{u.displayName || u.email}</option>)}
+                  {promotors.map(u => <option key={u.uid} value={u.uid}>{u.displayName || u.email}</option>)}
                 </select>
               </div>
             </div>

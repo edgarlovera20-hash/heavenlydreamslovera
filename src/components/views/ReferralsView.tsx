@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, DollarSign, Plus, CheckCircle2, Clock, XCircle, MessageCircle, Trash2, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { getReferrals, addReferral, updateReferralStatus, getReferralStats, Referral } from '../../lib/referrals';
+import { getReferralStats, addReferral, refreshReferrals, updateReferralStatus, Referral } from '../../lib/referrals';
 import { auth } from '../../lib/firebase';
 import { chatUrl } from '../../lib/channels';
 import { toast } from 'sonner';
@@ -26,31 +26,31 @@ export default function ReferralsView() {
   const [form, setForm] = useState({ referidoPor: '', telefonoReferidor: '', nombreProspecto: '', telefonoProspecto: '' });
   const asesorId = auth.currentUser?.uid || 'anonymous';
 
-  const load = () => setRefs(getReferrals());
+  const load = () => { refreshReferrals().then(setRefs).catch(() => setRefs([])); };
   useEffect(load, []);
 
   const stats = getReferralStats(asesorId);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.referidoPor || !form.nombreProspecto || !form.telefonoProspecto) {
       toast.error('Completa los campos obligatorios.');
       return;
     }
-    addReferral({ ...form, asesorId });
+    await addReferral({ ...form, asesorId });
     setForm({ referidoPor: '', telefonoReferidor: '', nombreProspecto: '', telefonoProspecto: '' });
     setShowForm(false);
     load();
     toast.success('Referido registrado. ¡Commisión pendiente de $150 MXN!');
   };
 
-  const handleConvert = (id: string) => {
-    updateReferralStatus(id, 'convertido');
+  const handleConvert = async (id: string) => {
+    await updateReferralStatus(id, 'convertido');
     load();
     toast.success('¡Referido convertido! Comisión de $150 MXN acreditada.');
   };
 
-  const handleCancel = (id: string) => {
-    updateReferralStatus(id, 'cancelado');
+  const handleCancel = async (id: string) => {
+    await updateReferralStatus(id, 'cancelado');
     load();
   };
 

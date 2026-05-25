@@ -18,11 +18,25 @@ export interface AuditEntry {
   ip?: string;
 }
 
-const KEY = 'adhdreams_audit_log';
-const MAX_ENTRIES = 500;
-
 export function getAuditLog(): AuditEntry[] {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; }
+  return [];
+}
+
+export async function fetchAuditLog(limit = 200): Promise<AuditEntry[]> {
+  const res = await fetch(`/api/audit?limit=${limit}`);
+  if (!res.ok) throw new Error('No se pudo cargar la auditoria del servidor');
+  const rows = await res.json();
+  return (Array.isArray(rows) ? rows : []).map((row: any) => ({
+    id: String(row.id || row.created_at || crypto.randomUUID()),
+    timestamp: row.created_at || row.timestamp || new Date().toISOString(),
+    action: row.accion || row.action,
+    userId: row.user_id || row.userId || '',
+    userName: row.user_nombre || row.userName || '',
+    targetId: row.entidad_id || row.targetId || '',
+    targetLabel: row.entidad || row.targetLabel || '',
+    details: row.detalle || row.details || '',
+    ip: row.ip,
+  }));
 }
 
 export function logAudit(
@@ -31,18 +45,20 @@ export function logAudit(
   userName: string,
   opts: { targetId?: string; targetLabel?: string; details?: string } = {}
 ): void {
-  const entries = getAuditLog();
-  const entry: AuditEntry = {
-    id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    timestamp: new Date().toISOString(),
-    action,
-    userId,
-    userName,
-    ...opts,
-  };
-  entries.unshift(entry); // newest first
-  if (entries.length > MAX_ENTRIES) entries.length = MAX_ENTRIES;
-  localStorage.setItem(KEY, JSON.stringify(entries));
+  fetch('/api/audit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accion: action,
+      entidad: opts.targetLabel || 'frontend',
+      entidad_id: opts.targetId || null,
+      user_id: userId,
+      user_nombre: userName,
+      detalle: opts.details || null,
+    }),
+  }).catch(() => {
+    // La auditoria no debe bloquear el flujo principal, pero tampoco se guarda en navegador.
+  });
 }
 
 export const ACTION_LABELS: Record<AuditAction, string> = {

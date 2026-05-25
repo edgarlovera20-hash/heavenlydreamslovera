@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, FileText, Download, Eye, MoreVertical, X, ArrowLeft, Paperclip, Upload, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
+import { VentasAPI } from '../../services/db';
 
 type ContractStatus = 'Activo' | 'Pendiente' | 'Finalizado' | 'Cancelado';
 
@@ -52,14 +53,15 @@ export default function ContractsManager() {
   const [attachmentsByContract, setAttachmentsByContract] = useState<Record<string, File[]>>({});
   const [isVerifyingFile, setIsVerifyingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
-    const load = () => {
+    const load = async () => {
       try {
-        const sales: Sale[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
+        const sales: Sale[] = await VentasAPI.getAll();
         const list = sales.map<Contract>(s => ({
-          id: s.id || s.folio || `CTR-${Math.random().toString(36).slice(2, 9)}`,
+          id: s.id || s.folio || '',
           folio: s.folio,
           client: [s.nombres, s.apellidoPaterno, s.apellidoMaterno].filter(Boolean).join(' ') || 'Cliente sin nombre',
           type: s.paqueteNombre || 'Sin paquete',
@@ -69,8 +71,10 @@ export default function ContractsManager() {
           telefono: s.telefonoTitular,
         }));
         setContracts(list);
-      } catch {
+        setLoadError('');
+      } catch (err) {
         setContracts([]);
+        setLoadError(err instanceof Error ? err.message : 'Backend no disponible');
       }
     };
     load();
@@ -294,6 +298,11 @@ export default function ContractsManager() {
       </div>
 
       <div className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
+        {loadError && (
+          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            No se pudieron cargar contratos reales del servidor: {loadError}
+          </div>
+        )}
         <div className="flex flex-col md:flex-row gap-4 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />

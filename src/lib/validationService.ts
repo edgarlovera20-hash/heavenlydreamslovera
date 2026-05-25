@@ -32,9 +32,6 @@ export interface ValidationRequest {
   resolvedAt?: string;
 }
 
-const CONFIG_KEY = 'adhdreams_validation_config';
-const REQUESTS_KEY = 'adhdreams_validation_requests';
-
 export const DEFAULT_SCRIPT = [
   'Hola, te llamo de parte de Heavenly Dreams. ¿Estoy hablando con [[NOMBRE_CLIENTE]]?',
   '',
@@ -56,29 +53,32 @@ export const DEFAULT_CONFIG: ValidationConfig = {
 };
 
 export function getValidationConfig(): ValidationConfig {
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    return raw ? { ...DEFAULT_CONFIG, ...JSON.parse(raw) } : DEFAULT_CONFIG;
-  } catch { return DEFAULT_CONFIG; }
+  return DEFAULT_CONFIG;
 }
 
 export function saveValidationConfig(cfg: ValidationConfig) {
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+  fetch('/api/settings/validation_config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value: cfg }),
+  }).catch(() => {});
 }
 
 export function getValidationRequests(): ValidationRequest[] {
-  try { return JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]'); } catch { return []; }
+  return [];
 }
 
 export function saveValidationRequests(r: ValidationRequest[]) {
-  localStorage.setItem(REQUESTS_KEY, JSON.stringify(r));
+  void r;
 }
 
 export function updateValidationRequest(id: string, changes: Partial<ValidationRequest>) {
-  const all = getValidationRequests();
-  const updated = all.map(r => r.id === id ? { ...r, ...changes } : r);
-  saveValidationRequests(updated);
-  return updated;
+  fetch(`/api/validations/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(changes),
+  }).catch(() => {});
+  return [];
 }
 
 /** Construye el script con los datos reales del cliente */
@@ -195,41 +195,6 @@ export async function requestValidation(
       callStatusDetail: validation.last_error || validation.call_status || undefined,
     };
   } catch (backendError) {
-    console.warn('[validationService] Backend validation unavailable, using local fallback:', backendError);
+    throw backendError;
   }
-
-  const req: ValidationRequest = {
-    id: `val-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    saleId: sale.id,
-    folio: sale.folio || sale.id,
-    clientName: [sale.nombres, sale.apellidoPaterno].filter(Boolean).join(' ') || 'Cliente',
-    clientPhone: sale.telefonoTitular || '',
-    paquete: sale.paqueteNombre || '—',
-    precio: sale.rentaMensual || 0,
-    requestedBy,
-    requestedByName,
-    requestedAt: new Date().toISOString(),
-    status: 'PENDIENTE',
-    mode: cfg.mode,
-  };
-
-  if (cfg.mode === 'AI') {
-    if (!req.clientPhone) throw new Error('El cliente no tiene teléfono registrado.');
-    try {
-      const { callId } = cfg.aiProvider === 'retell'
-        ? await callRetell(cfg, req)
-        : await callBland(cfg, req);
-      req.callId = callId;
-      req.status = 'EN_LLAMADA';
-      req.callStatusDetail = 'Llamada iniciada';
-    } catch (err: any) {
-      req.status = 'ERROR';
-      req.callStatusDetail = err.message;
-    }
-  }
-  // Para ADMIN el status queda PENDIENTE — la notificación la maneja la UI
-
-  const all = getValidationRequests();
-  saveValidationRequests([req, ...all]);
-  return req;
 }

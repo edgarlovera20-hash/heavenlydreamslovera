@@ -1,6 +1,6 @@
 // API client — todas las llamadas al servidor (base de datos)
 
-const api = async (method: string, url: string, body?: any) => {
+export const api = async (method: string, url: string, body?: any) => {
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -13,6 +13,46 @@ const api = async (method: string, url: string, body?: any) => {
   return res.json();
 };
 
+export function normalizeSale(row: any) {
+  const metadata = (() => {
+    try { return typeof row?.metadata === 'string' ? JSON.parse(row.metadata) : row?.metadata || {}; } catch { return {}; }
+  })();
+  return {
+    ...metadata,
+    ...row,
+    id: row?.id || metadata.id,
+    folio: row?.folio || metadata.folio,
+    asesorId: row?.asesor_id || row?.asesorId || metadata.asesorId,
+    asesorNombre: row?.asesor_nombre || row?.asesorNombre || metadata.asesorNombre,
+    nombres: row?.nombres || metadata.nombres || metadata.clienteNombre,
+    apellidoPaterno: row?.apellido_paterno || row?.apellidoPaterno || metadata.apellidoPaterno,
+    apellidoMaterno: row?.apellido_materno || row?.apellidoMaterno || metadata.apellidoMaterno,
+    apellidos: row?.apellidos || metadata.apellidos,
+    telefono: row?.telefono || metadata.telefono,
+    telefonoTitular: row?.telefono_titular || row?.telefonoTitular || row?.telefono || metadata.telefonoTitular || metadata.telefono,
+    paqueteNombre: row?.paquete_nombre || row?.paqueteNombre || row?.plan || metadata.paqueteNombre || metadata.plan,
+    rentaMensual: Number(row?.renta_mensual ?? row?.rentaMensual ?? metadata.rentaMensual ?? 0),
+    fechaSolicitud: row?.fecha_solicitud || row?.fechaSolicitud || row?.created_at || metadata.fechaSolicitud,
+    status: String(row?.status || metadata.status || 'PENDIENTE').toUpperCase(),
+    colonia: row?.colonia || metadata.colonia,
+    delegacion: row?.delegacion || row?.municipio || metadata.delegacion || metadata.municipio,
+    municipio: row?.municipio || metadata.municipio,
+    direccion: row?.direccion || metadata.direccion,
+    zona: row?.zona || metadata.zona,
+    notes: row?.notas || row?.notes || metadata.notes || '',
+    notas: row?.notas || metadata.notas || metadata.notes || '',
+  };
+}
+
+export function normalizeUser(row: any) {
+  return {
+    ...row,
+    uid: row?.uid,
+    displayName: row?.displayName || row?.nombre || row?.username || row?.email,
+    role: String(row?.role || '').toUpperCase(),
+  };
+}
+
 // ── Usuarios ────────────────────────────────────────────────
 export const UsersAPI = {
   getAll: () => api('GET', '/api/users'),
@@ -24,7 +64,10 @@ export const UsersAPI = {
 
 // ── Ventas ──────────────────────────────────────────────────
 export const VentasAPI = {
-  getAll: (asesor_id?: string) => api('GET', asesor_id ? `/api/ventas?asesor_id=${asesor_id}` : '/api/ventas'),
+  getAll: async (asesor_id?: string) => {
+    const rows = await api('GET', asesor_id ? `/api/ventas?asesor_id=${asesor_id}` : '/api/ventas');
+    return Array.isArray(rows) ? rows.map(normalizeSale) : [];
+  },
   create: (data: any) => api('POST', '/api/ventas', data),
   update: (id: string, data: any) => api('PUT', `/api/ventas/${id}`, data),
   delete: (id: string) => api('DELETE', `/api/ventas/${id}`),
@@ -121,6 +164,12 @@ export const SettingsAPI = {
 // ── Audit Log ────────────────────────────────────────────────
 export const AuditAPI = {
   getAll: (limit = 200) => api('GET', `/api/audit?limit=${limit}`),
+  record: (data: any) => api('POST', '/api/audit', data),
+};
+
+export const ChannelsAPI = {
+  getAccounts: () => api('GET', '/api/channels/accounts'),
+  upsertAccount: (data: any) => api('POST', '/api/channels/accounts', data),
 };
 
 // ── Migración desde localStorage ────────────────────────────
@@ -128,10 +177,7 @@ export async function migrateLocalStorageToDb() {
   const MIGRATION_KEY = 'hd_db_migrated_v1';
   if (localStorage.getItem(MIGRATION_KEY)) return;
 
-  const migrations = [
-    { key: 'adhdreams_users', lsKey: 'adhdreams_users' },
-    { key: 'adhdreams_sales', lsKey: 'adhdreams_sales' },
-  ];
+  const migrations: Array<{ key: string; lsKey: string }> = [];
 
   for (const { key, lsKey } of migrations) {
     try {

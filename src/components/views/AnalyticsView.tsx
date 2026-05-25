@@ -7,33 +7,20 @@ import { BarChart3, Download, Calendar, MapPin, Percent, ReceiptText, Target } f
 import { cn, formatCurrency } from '../../lib/utils';
 import { exportToCSV, exportElementToPDF } from '../../lib/exportUtils';
 import { logAudit } from '../../lib/auditLog';
-import { loadSIAC } from '../../lib/siacParser';
+import { SiacAPI, UsersAPI, VentasAPI } from '../../services/db';
 
 const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 function useSales(period: string) {
   const [all, setAll] = useState<any[]>([]);
+  const [error, setError] = useState('');
   useEffect(() => {
-    fetch('/api/ventas').then(r => r.ok ? r.json() : []).then((data: any[]) => {
-      const source = Array.isArray(data) && data.length
-        ? data
-        : JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-      setAll(source.map((s: any) => ({
-        ...s,
-        fechaSolicitud: s.fecha_solicitud || s.created_at,
-        rentaMensual: s.renta_mensual || s.rentaMensual,
-        asesorId: s.asesor_id || s.asesorId,
-        paqueteNombre: s.paquete_nombre || s.paqueteNombre,
-      })));
-    }).catch(() => {
-      try {
-        setAll(JSON.parse(localStorage.getItem('adhdreams_sales') || '[]'));
-      } catch {
-        setAll([]);
-      }
-    });
+    VentasAPI.getAll()
+      .then((data: any[]) => { setAll(data); setError(''); })
+      .catch((err) => { setAll([]); setError(err instanceof Error ? err.message : 'Backend no disponible'); });
   }, []);
-  return useMemo(() => period === 'all' ? all : all.filter(s => (s.fechaSolicitud || '').startsWith(period)), [all, period]);
+  const filtered = useMemo(() => period === 'all' ? all : all.filter(s => (s.fechaSolicitud || '').startsWith(period)), [all, period]);
+  return { sales: filtered, error };
 }
 
 function normalizeStatus(value: unknown) {
@@ -113,8 +100,7 @@ function buildByPaquete(sales: any[]) {
   return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, value]) => ({ name, value }));
 }
 
-function buildOperationalEffectiveness(sales: any[]) {
-  const siacRecords = loadSIAC();
+function buildOperationalEffectiveness(sales: any[], siacRecords: any[]) {
   const totalCaptures = sales.length;
   const approvedSales = sales.filter(isApprovedSale);
   const postedSales = sales.filter(isPostedSale);
@@ -144,12 +130,13 @@ function buildOperationalEffectiveness(sales: any[]) {
   }
 
   for (const record of siacRecords) {
-    const key = record.zona || 'Sin zona';
+    const key = record.zona || record.area || 'Sin zona';
     if (!byZone.has(key)) byZone.set(key, { zona: key, clientes: 0, pagos: 0, ingresos: 0, capturas: 0, posteos: 0 });
     const row = byZone.get(key)!;
-    if (normalizeStatus(record.estatus).includes('POSTEADA')) {
+    if (normalizeStatus(record.estatus || record.estatus_siac).includes('POSTEADA')) {
       row.posteos++;
-      row.ingresos += Number(record.precio) || 0;
+      const price = Number(record.precio || String(record.paquete || '').match(/(\d{3,4})$/)?.[1] || 0);
+      row.ingresos += price;
     }
   }
 
@@ -212,16 +199,18 @@ function EffectivenessCard({
 
 export default function AnalyticsView() {
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
-  const sales = useSales(period === 'all' ? 'all' : period);
+  const { sales, error } = useSales(period === 'all' ? 'all' : period);
   const [users, setUsers] = useState<any[]>([]);
-  useEffect(() => { fetch('/api/users').then(r => r.ok ? r.json() : []).then(setUsers).catch(() => {}); }, []);
+  const [siacRecords, setSiacRecords] = useState<any[]>([]);
+  useEffect(() => { UsersAPI.getAll().then(setUsers).catch(() => setUsers([])); }, []);
+  useEffect(() => { SiacAPI.getAll().then((rows: any[]) => setSiacRecords(Array.isArray(rows) ? rows : [])).catch(() => setSiacRecords([])); }, []);
   const chartRef = useRef<HTMLDivElement>(null);
 
   const daily = useMemo(() => buildDailyData(sales, period), [sales, period]);
   const byAsesor = useMemo(() => buildByAsesor(sales, users), [sales, users]);
   const byStatus = useMemo(() => buildByStatus(sales), [sales]);
   const byPaquete = useMemo(() => buildByPaquete(sales), [sales]);
-  const effectiveness = useMemo(() => buildOperationalEffectiveness(sales), [sales]);
+  const effectiveness = useMemo(() => buildOperationalEffectiveness(sales, siacRecords), [sales, siacRecords]);
 
   const approved = sales.filter(isApprovedSale).length;
   const revenue = sales.filter(isApprovedSale).reduce((a, s) => a + (Number(s.rentaMensual) || 0), 0);
@@ -285,6 +274,12 @@ export default function AnalyticsView() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          No se pudieron cargar datos reales del servidor: {error}
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

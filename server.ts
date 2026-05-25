@@ -79,6 +79,7 @@ import {
   getConversationAutomation,
   getRecentChannelMessages,
   setIncomingMessageHandler,
+  upsertChannelAccount,
 } from "./server/messaging";
 import {
   approveAgentOutbox,
@@ -2495,6 +2496,24 @@ async function startServer() {
     res.json(AuditLog.getAll(limit));
   }));
 
+  app.post("/api/audit", authOnly, wrap((req: any, res: any) => {
+    const auth = req.auth || {};
+    const accion = String(req.body?.accion || req.body?.action || '').trim().slice(0, 80);
+    const entidad = String(req.body?.entidad || req.body?.entity || 'frontend').trim().slice(0, 80);
+    if (!accion) return res.status(400).json({ error: 'accion requerida' });
+    const entidadId = req.body?.entidad_id || req.body?.entityId || req.body?.targetId || null;
+    const detalle = req.body?.detalle || req.body?.detail || req.body?.details || null;
+    AuditLog.insert({
+      accion,
+      entidad,
+      entidad_id: entidadId == null ? null : String(entidadId).slice(0, 160),
+      user_id: auth.sub || req.body?.user_id || null,
+      user_nombre: auth.nombre || auth.username || req.body?.user_nombre || null,
+      detalle: detalle == null ? null : String(detalle).slice(0, 2000),
+    });
+    res.json({ ok: true });
+  }));
+
   // ── ENTERPRISE CONTROL PLANE ──────────────────────────────
   app.get("/api/enterprise/health", wrap((_req: any, res: any) => {
     res.json(enterpriseHealth());
@@ -2809,6 +2828,31 @@ async function startServer() {
 
   app.get("/api/channels/accounts", opsOnly, wrap((_req: any, res: any) => {
     res.json(getChannelAccounts());
+  }));
+
+  app.post("/api/channels/accounts", opsOnly, wrap((req: any, res: any) => {
+    const channel = String(req.body?.channel || '').trim();
+    const externalId = String(req.body?.externalId || req.body?.external_id || '').trim();
+    const label = String(req.body?.label || channel || 'canal').trim();
+    const status = String(req.body?.status || 'connected').trim();
+    if (!['whatsapp', 'telegram'].includes(channel)) return res.status(400).json({ error: 'channel invalido' });
+    if (!externalId) return res.status(400).json({ error: 'externalId requerido' });
+    upsertChannelAccount({
+      channel: channel as any,
+      label,
+      externalId,
+      status,
+      metadata: req.body?.metadata || {},
+    });
+    AuditLog.insert({
+      accion: 'UPSERT_CHANNEL_ACCOUNT',
+      entidad: 'channel_accounts',
+      entidad_id: `${channel}:${externalId}`,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.username || null,
+      detalle: label,
+    });
+    res.json({ ok: true });
   }));
 
   app.get("/api/channels/conversations", chatUserOnly, wrap((req: any, res: any) => {

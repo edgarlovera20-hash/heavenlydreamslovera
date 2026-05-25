@@ -1,46 +1,84 @@
+import { ReferralsAPI } from '../services/db';
+
 export interface Referral {
   id: string;
-  referidoPor: string;        // nombre del cliente que refirió
-  telefonoReferidor: string;  // teléfono del cliente referidor
-  nombreProspecto: string;    // nombre del prospecto referido
+  referidoPor: string;
+  telefonoReferidor: string;
+  nombreProspecto: string;
   telefonoProspecto: string;
-  comision: number;           // en pesos MXN
+  comision: number;
   estado: 'pendiente' | 'convertido' | 'cancelado';
-  folioVenta?: string;        // folio de la venta si se concretó
+  folioVenta?: string;
   fechaRegistro: string;
   asesorId: string;
 }
 
-const KEY = 'adhdreams_referrals';
-const COMISION_POR_REFERIDO = 150; // MXN
+const COMISION_POR_REFERIDO = 150;
+let cache: Referral[] = [];
+
+function normalize(row: any): Referral {
+  const metadata = (() => {
+    try { return typeof row?.metadata === 'string' ? JSON.parse(row.metadata) : row?.metadata || {}; } catch { return {}; }
+  })();
+  return {
+    id: row.id,
+    referidoPor: metadata.referidoPor || metadata.telefonoReferidor || row.referred_by || '',
+    telefonoReferidor: metadata.telefonoReferidor || '',
+    nombreProspecto: metadata.nombreProspecto || row.nombre || '',
+    telefonoProspecto: metadata.telefonoProspecto || row.telefono || '',
+    comision: Number(metadata.comision || COMISION_POR_REFERIDO),
+    estado: (row.status || metadata.estado || (row.convertido ? 'convertido' : 'pendiente')) as Referral['estado'],
+    folioVenta: metadata.folioVenta,
+    fechaRegistro: row.created_at || metadata.fechaRegistro || new Date().toISOString(),
+    asesorId: row.referred_by || metadata.asesorId || '',
+  };
+}
 
 export function getReferrals(): Referral[] {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; }
+  return cache;
 }
 
-export function addReferral(data: Omit<Referral, 'id' | 'fechaRegistro' | 'comision' | 'estado'>): Referral {
-  const ref: Referral = {
-    ...data,
-    id: `REF-${Date.now()}`,
-    comision: COMISION_POR_REFERIDO,
-    estado: 'pendiente',
-    fechaRegistro: new Date().toISOString(),
+export async function refreshReferrals(): Promise<Referral[]> {
+  const rows = await ReferralsAPI.getAll();
+  cache = (Array.isArray(rows) ? rows : []).map(normalize);
+  return cache;
+}
+
+export async function addReferral(data: Omit<Referral, 'id' | 'fechaRegistro' | 'comision' | 'estado'>): Promise<Referral> {
+  const payload = {
+    referred_by: data.asesorId,
+    nombre: data.nombreProspecto,
+    telefono: data.telefonoProspecto,
+    status: 'pendiente',
+    convertido: 0,
+    metadata: {
+      ...data,
+      comision: COMISION_POR_REFERIDO,
+      estado: 'pendiente',
+      fechaRegistro: new Date().toISOString(),
+    },
   };
-  const all = getReferrals();
-  all.push(ref);
-  localStorage.setItem(KEY, JSON.stringify(all));
-  return ref;
+  const created = await ReferralsAPI.create(payload);
+  await refreshReferrals();
+  return cache.find(r => r.id === created.id) || cache[0];
 }
 
-export function updateReferralStatus(id: string, estado: Referral['estado'], folioVenta?: string) {
-  const all = getReferrals().map(r =>
-    r.id === id ? { ...r, estado, ...(folioVenta ? { folioVenta } : {}) } : r
-  );
-  localStorage.setItem(KEY, JSON.stringify(all));
+export async function updateReferralStatus(id: string, estado: Referral['estado'], folioVenta?: string) {
+  const current = cache.find(r => r.id === id);
+  await ReferralsAPI.update(id, {
+    status: estado,
+    convertido: estado === 'convertido' ? 1 : 0,
+    metadata: {
+      ...(current || {}),
+      estado,
+      folioVenta: folioVenta || current?.folioVenta,
+    },
+  });
+  await refreshReferrals();
 }
 
 export function getReferralStats(asesorId?: string) {
-  const refs = asesorId ? getReferrals().filter(r => r.asesorId === asesorId) : getReferrals();
+  const refs = asesorId ? cache.filter(r => r.asesorId === asesorId) : cache;
   const convertidos = refs.filter(r => r.estado === 'convertido');
   return {
     total: refs.length,

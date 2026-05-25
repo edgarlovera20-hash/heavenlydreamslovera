@@ -4,7 +4,7 @@ import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContaine
 import { cn } from '../../lib/utils';
 import { aiAgent, CustomerData, EventType } from '../../services/aiAgent';
 import { LinkChannelModal } from '../ui/LinkChannelModal';
-import { getChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/channels';
+import { getChannels, refreshChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/channels';
 import { MorosidadAPI } from '../../services/db';
 import { toast } from 'sonner';
 
@@ -54,56 +54,6 @@ interface MorosidadAnalytics {
   byStatus: AnalyticsBucket[];
 }
 
-interface Sale {
-  id?: string;
-  folio?: string;
-  nombres?: string;
-  apellidoPaterno?: string;
-  apellidoMaterno?: string;
-  telefonoTitular?: string;
-  paqueteNombre?: string;
-  rentaMensual?: number;
-  status?: string;
-  fechaSolicitud?: string;
-}
-
-// Treat as moroso: sale APPROVED but with no payment registered after N days.
-// In absence of a payments table, we approximate using sales captured but still PENDIENTE
-// or APROBADA with fechaSolicitud older than 7 days. Real installation would tie to a billing
-// pipeline. This keeps Morosidad in sync with adhdreams_sales.
-function buildMorososFromSales(sales: Sale[]): Moroso[] {
-  const overridesRaw = localStorage.getItem('adhdreams_morosidad_overrides');
-  const overrides: Record<string, string> = overridesRaw ? JSON.parse(overridesRaw) : {};
-
-  return sales
-    .map<Moroso | null>(s => {
-      const renta = Number(s.rentaMensual) || 0;
-      const fecha = s.fechaSolicitud ? new Date(s.fechaSolicitud) : null;
-      if (!fecha || isNaN(fecha.getTime())) return null;
-      const dias = Math.floor((Date.now() - fecha.getTime()) / (1000 * 60 * 60 * 24));
-      if (dias < 1) return null; // Same day, not yet a moroso candidate
-
-      const key = s.id || s.folio || '';
-      const estadoOverride = overrides[key];
-
-      // Heuristic: a sale becomes moroso candidate when older than 1 day and not finalized
-      const status = (s.status || 'PENDIENTE').toUpperCase();
-      if (status === 'RECHAZADA' || status === 'FINALIZADO') return null;
-
-      const monthsOwed = Math.max(1, Math.floor(dias / 30));
-      return {
-        id: s.folio || s.id || `MOR-${key.slice(-6)}`,
-        cliente: [s.nombres, s.apellidoPaterno, s.apellidoMaterno].filter(Boolean).join(' ') || 'Cliente sin nombre',
-        telefono: s.telefonoTitular || '—',
-        deuda: renta * monthsOwed,
-        diasAtraso: dias,
-        estado: estadoOverride || 'Sin contactar',
-        paquete: s.paqueteNombre || 'Sin paquete',
-      };
-    })
-    .filter((m): m is Moroso => m !== null);
-}
-
 function parseMetadata(raw?: string) {
   try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
 }
@@ -131,6 +81,7 @@ export default function Morosidad() {
   const [allMorosos, setAllMorosos] = useState<Moroso[]>([]);
   const [analytics, setAnalytics] = useState<MorosidadAnalytics | null>(null);
   const [loadingData, setLoadingData] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -142,14 +93,10 @@ export default function Morosidad() {
         ]);
         setAllMorosos(buildMorososFromApi(Array.isArray(rows) ? rows : []));
         if (stats) setAnalytics(stats);
-        return;
-      } catch {}
-
-      try {
-        const sales: Sale[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-        setAllMorosos(buildMorososFromSales(sales));
-      } catch {
+        setLoadError('');
+      } catch (err) {
         setAllMorosos([]);
+        setLoadError(err instanceof Error ? err.message : 'Backend no disponible');
       } finally {
         setLoadingData(false);
       }
@@ -179,6 +126,10 @@ export default function Morosidad() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkChannels, setLinkChannels] = useState<ChannelKey[]>([]);
   const [channelState, setChannelState] = useState<ChannelsState>(getChannels());
+
+  useEffect(() => {
+    refreshChannels().then(setChannelState).catch(() => {});
+  }, []);
 
   const fileToBase64 = async (file: File) => {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -217,7 +168,7 @@ export default function Morosidad() {
   };
 
   const openLinkModal = (channels: ChannelKey[]) => { setLinkChannels(channels); setShowLinkModal(true); };
-  const closeLinkModal = () => { setShowLinkModal(false); setChannelState(getChannels()); };
+  const closeLinkModal = () => { setShowLinkModal(false); refreshChannels().then(setChannelState).catch(() => setChannelState(getChannels())); };
 
   const handleFilter = () => {
     setAppliedFilters({
@@ -321,7 +272,7 @@ export default function Morosidad() {
   return (
     <div className="max-w-[1600px] mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
+      <div>
           <h1 className="text-2xl font-bold text-slate-100 mb-1 tracking-tight flex items-center gap-2">
             <AlertTriangle className="w-6 h-6 text-red-400" />
             Gestión de Morosidad
@@ -345,6 +296,12 @@ export default function Morosidad() {
           </button>
         </div>
       </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          No se pudo cargar morosidad real del servidor: {loadError}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">

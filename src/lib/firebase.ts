@@ -11,7 +11,7 @@ export const auth: { currentUser: LocalUser | null } = {
 };
 
 try {
-  const saved = localStorage.getItem('adhdreams_session');
+  const saved = localStorage.getItem('hd_session');
   if (saved) auth.currentUser = JSON.parse(saved);
 } catch {
   // ignore

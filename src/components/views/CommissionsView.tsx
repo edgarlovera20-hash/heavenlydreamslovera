@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { DollarSign, Download, Settings, Save, RefreshCw, Award, CheckCircle2, X } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
-import { calculateCommissions, getCommissionRules, saveCommissionRules, CommissionRule } from '../../lib/commissions';
+import { calculateCommissions, getCommissionRules, refreshCommissionRules, saveCommissionRules, CommissionRule, CommissionResult } from '../../lib/commissions';
 import { exportToCSV } from '../../lib/exportUtils';
 import { logAudit } from '../../lib/auditLog';
 import { auth } from '../../lib/firebase';
@@ -11,7 +11,18 @@ export default function CommissionsView() {
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [showRules, setShowRules] = useState(false);
   const [rules, setRules] = useState<CommissionRule[]>(getCommissionRules());
-  const results = useMemo(() => calculateCommissions(period), [period]);
+  const [results, setResults] = useState<CommissionResult[]>([]);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    refreshCommissionRules().then(setRules).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    calculateCommissions(period)
+      .then((next) => { setResults(next); setLoadError(''); })
+      .catch((err) => { setResults([]); setLoadError(err instanceof Error ? err.message : 'Backend no disponible'); });
+  }, [period]);
 
   const totals = useMemo(() => ({
     base: results.reduce((a, r) => a + r.baseCommission, 0),
@@ -20,8 +31,8 @@ export default function CommissionsView() {
     total: results.reduce((a, r) => a + r.total, 0),
   }), [results]);
 
-  const saveRules = () => {
-    saveCommissionRules(rules);
+  const saveRules = async () => {
+    await saveCommissionRules(rules);
     setShowRules(false);
     logAudit('COMISION_CALCULADA', auth.currentUser?.uid||'', auth.currentUser?.displayName||'', { details: 'Reglas de comisión actualizadas' });
     toast.success('Reglas de comisión guardadas.');
@@ -63,6 +74,12 @@ export default function CommissionsView() {
           </button>
         </div>
       </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          No se pudieron calcular comisiones con datos reales del servidor: {loadError}
+        </div>
+      )}
 
       {/* Totals */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

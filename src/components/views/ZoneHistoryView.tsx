@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { MapPin, TrendingUp, Users, CheckCircle2, Clock, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { VentasAPI } from '../../services/db';
 
 interface SaleRecord {
   id?: string;
@@ -137,9 +138,12 @@ function ZoneRow({ zone }: { zone: ZoneGroup; key?: React.Key }) {
 export default function ZoneHistoryView() {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [search, setSearch] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    try { setSales(JSON.parse(localStorage.getItem('adhdreams_sales') || '[]')); } catch { setSales([]); }
+    VentasAPI.getAll()
+      .then((rows: any[]) => { setSales(rows); setLoadError(''); })
+      .catch((err) => { setSales([]); setLoadError(err instanceof Error ? err.message : 'Backend no disponible'); });
   }, []);
 
   const zones = useMemo(() => {
@@ -161,6 +165,12 @@ export default function ZoneHistoryView() {
         </h1>
         <p className="text-slate-400 text-sm">Analiza qué colonias tienen mayor penetración y convierte más.</p>
       </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          No se pudo cargar historial por zona desde servidor: {loadError}
+        </div>
+      )}
 
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

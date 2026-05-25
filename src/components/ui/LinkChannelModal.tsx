@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, MessageCircle, Send, CheckCircle2, Trash2, Loader2 } from 'lucide-react';
-import { CHANNEL_META, ChannelKey, ChannelLink, getChannels, setChannel } from '../../lib/channels';
+import { CHANNEL_META, ChannelKey, ChannelLink, getChannels, refreshChannels, setChannel } from '../../lib/channels';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 
@@ -25,12 +25,17 @@ export function LinkChannelModal({ open, onClose, initialChannel, allowedChannel
 
   useEffect(() => {
     if (!open) return;
-    setState(getChannels());
     const key = initialChannel || visibleKeys[0];
     setActive(key);
     const existing = getChannels()[key];
     setAlias(existing?.alias || '');
     setIdentifier(existing?.identifier || '');
+    refreshChannels().then(next => {
+      setState(next);
+      const fresh = next[key];
+      setAlias(fresh?.alias || '');
+      setIdentifier(fresh?.identifier || '');
+    }).catch(() => {});
   }, [open, initialChannel]);
 
   if (!open) return null;
@@ -65,7 +70,6 @@ export function LinkChannelModal({ open, onClose, initialChannel, allowedChannel
       }
     }
     setIsLinking(true);
-    // Simulate handshake — in production this would be a QR pairing or OAuth.
     setTimeout(() => {
       const link: ChannelLink = {
         alias: trimmedAlias,

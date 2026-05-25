@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 
-const NOTIFIED_KEY = 'adhdreams_notified_followups';
+import { VentasAPI } from '../services/db';
+
+const NOTIFIED_KEY = 'hd_notified_followups';
 
 function getNotified(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(NOTIFIED_KEY) || '[]')); } catch { return new Set(); }
@@ -24,9 +26,9 @@ export function useFollowUpReminders() {
       }
       if (Notification.permission !== 'granted') return;
 
-      const check = () => {
+      const check = async () => {
         try {
-          const sales: any[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
+          const sales: any[] = await VentasAPI.getAll();
           const notified = getNotified();
           const now = Date.now();
 

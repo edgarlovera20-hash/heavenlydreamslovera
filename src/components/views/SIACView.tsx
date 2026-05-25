@@ -4,7 +4,7 @@ import {
   RefreshCw, CheckCircle2, Clock, AlertTriangle, X, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
-import { parseSIACCsv, saveSIAC, loadSIAC, SIACRecord } from '../../lib/siacParser';
+import { parseSIACCsv, SIACRecord } from '../../lib/siacParser';
 import { exportToCSV } from '../../lib/exportUtils';
 import { logAudit } from '../../lib/auditLog';
 import { auth } from '../../lib/firebase';
@@ -88,7 +88,7 @@ async function uploadSIACRecords(records: SIACRecord[]) {
 }
 
 export default function SIACView() {
-  const [records, setRecords] = useState<SIACRecord[]>(() => loadSIAC());
+  const [records, setRecords] = useState<SIACRecord[]>([]);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterZona, setFilterZona] = useState('');
@@ -104,7 +104,6 @@ export default function SIACView() {
       const rows = await SiacAPI.getAll();
       const mapped = Array.isArray(rows) ? rows.map(serverToSIACRecord) : [];
       setRecords(mapped);
-      saveSIAC(mapped);
       if (showToast) toast.success(`${mapped.length} registros SIAC cargados desde la base de datos.`);
     } catch (err) {
       if (showToast) toast.error(err instanceof Error ? err.message : 'No se pudo cargar SIAC desde la base de datos.');
@@ -186,7 +185,6 @@ export default function SIACView() {
         const parsed = parseSIACCsv(text);
         if (parsed.length === 0) { toast.error('No se encontraron registros válidos en el CSV.'); return; }
         await uploadSIACRecords(parsed);
-        saveSIAC(parsed);
         setRecords(parsed);
         toast.success(`${parsed.length} registros SIAC importados y guardados en la base de datos.`);
       }

@@ -725,47 +725,6 @@ function sanitizeCaptureForServer(form: Partial<CustomerCaptureData>) {
   return safe;
 }
 
-function docFlag(value: unknown) {
-  return value ? 'registrado' : undefined;
-}
-
-function persistLocalSaleRecord(saved: any, saleData: Record<string, any>, form: Partial<CustomerCaptureData>) {
-  try {
-    const id = String(saved?.id || saleData.id || `${saleData.folio || 'venta'}-${Date.now()}`);
-    const record = {
-      id,
-      folio: saved?.folio || saleData.folio,
-      folioSiac: form.folioSiac || saleData.folio_siac,
-      servicioSiac: form.servicioSiac || saleData.servicio_siac,
-      asesorId: saleData.asesor_id || getCurrentUserId(),
-      nombres: form.nombres,
-      apellidoPaterno: form.apellidoPaterno,
-      apellidoMaterno: form.apellidoMaterno,
-      telefonoTitular: form.telefonoTitular,
-      fechaSolicitud: form.fechaSolicitud || saleData.fecha_solicitud || new Date().toISOString(),
-      tipoCliente: form.tipoCliente,
-      ineFrente: docFlag(form.ineFrente),
-      ineReverso: docFlag(form.ineReverso),
-      curpDoc: docFlag(form.curpDoc || form.curp),
-      comprobanteDomicilio: docFlag(form.comprobanteDomicilio),
-      gpsEvidence: docFlag(form.coordenadas),
-      coordenadas: form.coordenadas,
-      contratoFirmado: docFlag(form.contratoFirmado || form.solicitudFirmada),
-      solicitudFirmada: docFlag(form.solicitudFirmada),
-      videofirma: docFlag(form.videofirma),
-      audioLlamada: docFlag(form.audioLlamada),
-      capturaSiac: docFlag(form.capturaSiac || form.folioSiac),
-      anexoPortabilidad: docFlag(form.anexoPortabilidad),
-      anexoPortabilidad2: docFlag(form.anexoPortabilidad2),
-    };
-    const current = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-    const next = [record, ...current.filter((sale: any) => sale.id !== id && sale.folio !== record.folio)];
-    localStorage.setItem('adhdreams_sales', JSON.stringify(next));
-  } catch (err) {
-    console.warn('No se pudo guardar el expediente local:', err);
-  }
-}
-
 function getDraftKey() {
   return `${NEW_SALE_DRAFT_PREFIX}:${getCurrentUserId()}`;
 }
@@ -799,7 +758,7 @@ function detectDocumentMime(images: string[]) {
 export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<Partial<CustomerCaptureData>>({
-    folio: `FOL-${Math.floor(Math.random() * 1000000)}`,
+    folio: `FOL-${Date.now()}`,
     fechaSolicitud: new Date().toISOString().split('T')[0],
     tipoCliente: 'linea_nueva',
     tipoServicio: 'residencial',
@@ -1799,7 +1758,6 @@ const exportToPDF = async () => {
       
       // 3. Export PDF
       await exportToPDF();
-      persistLocalSaleRecord(savedSale, saleData, form);
       await idbDel(draftKeyRef.current);
       setDraftStatus('idle');
       setDraftUpdatedAt('');

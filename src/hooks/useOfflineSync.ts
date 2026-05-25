@@ -7,7 +7,7 @@ export interface OfflineQueueItem {
   queuedAt: string;
 }
 
-const QUEUE_KEY = 'adhdreams_offline_queue';
+const QUEUE_KEY = 'hd_offline_queue';
 
 function getQueue(): OfflineQueueItem[] {
   try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch { return []; }
@@ -30,18 +30,26 @@ export function useOfflineSync() {
     setPendingCount(q.length);
   }, []);
 
-  // Simulated sync: moves all queued items into adhdreams_sales and clears the queue.
-  // In production this would POST to Firebase / backend.
   const syncNow = useCallback(async () => {
     const q = getQueue();
     if (!q.length || !navigator.onLine) return;
     setSyncing(true);
-    await new Promise(r => setTimeout(r, 800)); // simulate network latency
-    const sales: unknown[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-    q.forEach(item => { if (item.type === 'sale') sales.push(item.data); });
-    localStorage.setItem('adhdreams_sales', JSON.stringify(sales));
-    saveQueue([]);
-    setPendingCount(0);
+    const remaining: OfflineQueueItem[] = [];
+    for (const item of q) {
+      try {
+        const endpoint = item.type === 'sale' ? '/api/mobile/capturas' : '/api/mobile/capturas';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.data),
+        });
+        if (!res.ok) remaining.push(item);
+      } catch {
+        remaining.push(item);
+      }
+    }
+    saveQueue(remaining);
+    setPendingCount(remaining.length);
     setSyncing(false);
   }, []);
 

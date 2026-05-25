@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Banknote,
@@ -14,6 +14,7 @@ import {
   Users,
 } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
+import { NominasAPI, UsersAPI, VentasAPI } from '../../services/db';
 
 type Tab =
   | 'seguimiento'
@@ -78,7 +79,6 @@ type PayrollQueryResult = {
 const PAYROLL_RECEIPTS_KEY = 'hd_payroll_transfer_receipts';
 const PAYROLL_BANK_DATA_KEY = 'hd_payroll_bank_data';
 const PAYROLL_ADVANCES_KEY = 'hd_payroll_advances';
-const PAYROLL_HISTORY_KEY = 'hd_payroll_history';
 const COMPANY_NAME = 'HEAVENLY DREAMS SAS DE CV';
 const COMPANY_ADDRESS = 'Avenida Tláhuac 3632, Interior A301, Colonia Culhuacán CTM Zona VIII, Código Postal 09800, Iztapalapa, Ciudad de México';
 
@@ -97,16 +97,14 @@ function writeJson<T>(key: string, value: T) {
 
 function getCurrentUser(): PayrollUser {
   const hdSession = readJson<any>('hd_session', {});
-  const oldSession = readJson<any>('adhdreams_current_user', {});
-  const user = hdSession?.user || hdSession || oldSession || {};
+  const user = hdSession?.user || hdSession || {};
   const id = String(user.uid || user.id || user.sub || user.email || 'current-user');
   const name = String(user.displayName || user.nombre || user.name || user.email || 'Edgar Lovera');
   const role = String(user.role || user.rol || '').toUpperCase();
   return { id, name, role };
 }
 
-function getPayrollUsers(): PayrollUser[] {
-  const storedUsers = readJson<any[]>('adhdreams_users', []);
+function normalizePayrollUsers(storedUsers: any[]): PayrollUser[] {
   const current = getCurrentUser();
   const users: PayrollUser[] = storedUsers
     .map(user => ({
@@ -120,7 +118,7 @@ function getPayrollUsers(): PayrollUser[] {
     users.unshift(current);
   }
 
-  return users.length ? users : [{ id: 'edgar-lovera', name: 'Edgar Lovera' }];
+  return users.length ? users : [current];
 }
 
 function getCurrentISOWeek(date = new Date()) {
@@ -180,8 +178,7 @@ function buildClientName(record: any) {
   ].filter(Boolean).join(' ').trim() || 'Cliente sin nombre';
 }
 
-function buildPayrollSales(year: number, week: number, userId: string): PayrollSale[] {
-  const rawSales = readJson<any[]>('adhdreams_sales', []);
+function buildPayrollSales(year: number, week: number, userId: string, rawSales: any[]): PayrollSale[] {
   return rawSales
     .map((sale, index) => {
       const date = parseDate(sale.fechaSolicitud || sale.fecha_solicitud || sale.fecha_captura || sale.fecha_os_alta || sale.created_at || sale.createdAt);
@@ -201,9 +198,9 @@ function buildPayrollSales(year: number, week: number, userId: string): PayrollS
     .filter(sale => userId === 'all' || !sale.userId || sale.userId === userId);
 }
 
-function buildPayrollResult(year: number, week: number, userId: string, users: PayrollUser[]): PayrollQueryResult {
+function buildPayrollResult(year: number, week: number, userId: string, users: PayrollUser[], salesSource: any[]): PayrollQueryResult {
   const { start, end } = getISOWeekRange(year, week);
-  const sales = buildPayrollSales(year, week, userId);
+  const sales = buildPayrollSales(year, week, userId, salesSource);
   const subtotal = sales.reduce((sum, sale) => sum + sale.commission, 0);
   const userLabel = userId === 'all'
     ? 'Todos los usuarios'
@@ -297,7 +294,9 @@ export default function Payroll() {
 }
 
 function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: boolean; managementMode?: boolean }) {
-  const users = useMemo(() => getPayrollUsers(), []);
+  const [users, setUsers] = useState<PayrollUser[]>(() => normalizePayrollUsers([]));
+  const [salesSource, setSalesSource] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState('');
   const currentWeek = useMemo(() => getCurrentISOWeek(), []);
   const currentUser = getCurrentUser();
   const defaultUserId = managementMode || isAdmin ? 'all' : currentUser.id;
@@ -308,33 +307,48 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
   const [isExporting, setIsExporting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [queryResult, setQueryResult] = useState<PayrollQueryResult>(() =>
-    buildPayrollResult(currentWeek.year, currentWeek.week, defaultUserId, users)
+    buildPayrollResult(currentWeek.year, currentWeek.week, defaultUserId, users, salesSource)
   );
   const receiptRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    Promise.all([UsersAPI.getAll(), VentasAPI.getAll()])
+      .then(([userRows, saleRows]: any[]) => {
+        const nextUsers = normalizePayrollUsers(Array.isArray(userRows) ? userRows : []);
+        const nextSales = Array.isArray(saleRows) ? saleRows : [];
+        setUsers(nextUsers);
+        setSalesSource(nextSales);
+        setQueryResult(buildPayrollResult(Number(year) || currentWeek.year, Number(week) || currentWeek.week, userId, nextUsers, nextSales));
+        setLoadError('');
+      })
+      .catch((err) => {
+        setUsers(normalizePayrollUsers([]));
+        setSalesSource([]);
+        setLoadError(err instanceof Error ? err.message : 'Backend no disponible');
+      });
+  }, []);
 
   const runSearch = () => {
     const parsedYear = Number(year) || currentWeek.year;
     const parsedWeek = Number(week) || currentWeek.week;
-    setQueryResult(buildPayrollResult(parsedYear, parsedWeek, userId, users));
+    setQueryResult(buildPayrollResult(parsedYear, parsedWeek, userId, users, salesSource));
     setSaved(false);
   };
 
-  const savePayroll = () => {
-    const history = readJson<any[]>(PAYROLL_HISTORY_KEY, []);
+  const savePayroll = async () => {
     const entry = {
-      id: `${Date.now()}-${queryResult.userLabel}`,
-      year: Number(year),
-      week: Number(week),
+      periodo: `${year}-S${week.padStart(2, '0')}`,
       userId,
-      userLabel: queryResult.userLabel,
-      paymentMethod,
-      sales: queryResult.sales,
-      subtotal: queryResult.subtotal,
-      discounts: queryResult.discounts,
+      asesor_id: userId === 'all' ? currentUser.id : userId,
+      ventas_count: queryResult.sales.length,
+      monto_base: queryResult.subtotal,
+      comisiones: queryResult.subtotal,
+      bonos: 0,
       total: queryResult.total,
-      createdAt: new Date().toISOString(),
+      status: 'generada',
+      metadata: { userLabel: queryResult.userLabel, paymentMethod, sales: queryResult.sales },
     };
-    writeJson(PAYROLL_HISTORY_KEY, [entry, ...history]);
+    await NominasAPI.create(entry);
     setSaved(true);
   };
 
@@ -352,6 +366,11 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
 
   return (
     <div className="space-y-8">
+      {loadError && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          No se pudieron cargar nóminas con datos reales del servidor: {loadError}
+        </div>
+      )}
       <section className="rounded-2xl border border-blue-300/25 bg-slate-900/70 p-6 shadow-xl">
         <div className="flex items-start gap-4 mb-6">
           <Search className="w-9 h-9 text-slate-100 mt-1" />

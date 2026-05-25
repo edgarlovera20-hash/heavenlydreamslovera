@@ -1,32 +1,20 @@
-// Vinculación de cuentas de mensajería para el CRM.
-//
-// Hay 3 canales:
-//   - whatsappVendedores: chat interno para vendedores (alertas de venta, anuncios, etc.)
-//   - whatsappClientes:   cuenta usada para hablar con clientes (cobranza, soporte, seguimiento)
-//   - telegramVendedores: canal en Telegram para vendedores
-//
-// El "vínculo" se persiste en localStorage. En una integración real esto guardaría
-// el access token / phone number id de la WhatsApp Cloud API o el bot token de Telegram.
-// Aquí mantenemos los datos mínimos (alias, identificador y timestamp) suficientes para
-// que la UI refleje el estado conectado y para abrir conversaciones con `wa.me` / `t.me`.
+import { ChannelsAPI } from '../services/db';
 
 export type ChannelKey = 'whatsappVendedores' | 'whatsappClientes' | 'telegramVendedores';
 
 export interface ChannelLink {
-  alias: string;          // Nombre amigable: "Equipo Ventas CDMX"
-  identifier: string;     // Teléfono E.164 (52...) o @handle de Telegram
-  linkedAt: string;       // ISO timestamp
+  alias: string;
+  identifier: string;
+  linkedAt: string;
 }
 
 export type ChannelsState = Partial<Record<ChannelKey, ChannelLink>>;
-
-const STORAGE_KEY = 'adhdreams_channels';
 
 export const CHANNEL_META: Record<ChannelKey, {
   label: string;
   audience: 'vendedores' | 'clientes';
   network: 'whatsapp' | 'telegram';
-  accent: string; // tailwind color class fragment
+  accent: string;
   description: string;
 }> = {
   whatsappVendedores: {
@@ -52,28 +40,68 @@ export const CHANNEL_META: Record<ChannelKey, {
   },
 };
 
-export function getChannels(): ChannelsState {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-  } catch {
-    return {};
+let cache: ChannelsState = {};
+
+function keyFromAccount(row: any): ChannelKey | null {
+  const metadata = (() => {
+    try { return typeof row?.metadata === 'string' ? JSON.parse(row.metadata) : row?.metadata || {}; } catch { return {}; }
+  })();
+  if (metadata.key === 'whatsappVendedores' || metadata.audience === 'vendedores' && row.channel === 'whatsapp') return 'whatsappVendedores';
+  if (metadata.key === 'whatsappClientes' || metadata.audience === 'clientes' && row.channel === 'whatsapp') return 'whatsappClientes';
+  if (metadata.key === 'telegramVendedores' || row.channel === 'telegram') return 'telegramVendedores';
+  return null;
+}
+
+function accountToLink(row: any): [ChannelKey, ChannelLink] | null {
+  const key = keyFromAccount(row);
+  if (!key || row?.status === 'disconnected') return null;
+  return [key, {
+    alias: row.label || CHANNEL_META[key].label,
+    identifier: row.external_id || row.externalId || '',
+    linkedAt: row.updated_at || row.created_at || new Date().toISOString(),
+  }];
+}
+
+export async function refreshChannels(): Promise<ChannelsState> {
+  const rows = await ChannelsAPI.getAccounts();
+  const next: ChannelsState = {};
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const entry = accountToLink(row);
+    if (entry) next[entry[0]] = entry[1];
   }
+  cache = next;
+  return next;
+}
+
+export function getChannels(): ChannelsState {
+  return cache;
 }
 
 export function setChannel(key: ChannelKey, link: ChannelLink | null) {
-  const state = getChannels();
-  if (link) state[key] = link;
-  else delete state[key];
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (link) cache = { ...cache, [key]: link };
+  else {
+    const next = { ...cache };
+    delete next[key];
+    cache = next;
+  }
+
+  const meta = CHANNEL_META[key];
+  const identifier = link?.identifier || key;
+  ChannelsAPI.upsertAccount({
+    channel: meta.network,
+    label: link?.alias || meta.label,
+    externalId: identifier,
+    status: link ? 'connected' : 'disconnected',
+    metadata: { key, audience: meta.audience, linkedAt: link?.linkedAt || null },
+  }).catch(() => {});
 }
 
 export function isLinked(key: ChannelKey): boolean {
-  return Boolean(getChannels()[key]);
+  return Boolean(cache[key]);
 }
 
-// Build a deep-link URL to start a chat. Phone numbers must be digits only (E.164 without +).
 export function chatUrl(key: ChannelKey, message?: string): string | null {
-  const link = getChannels()[key];
+  const link = cache[key];
   if (!link) return null;
   const meta = CHANNEL_META[key];
   if (meta.network === 'whatsapp') {
@@ -81,7 +109,6 @@ export function chatUrl(key: ChannelKey, message?: string): string | null {
     const params = message ? `?text=${encodeURIComponent(message)}` : '';
     return `https://wa.me/${phone}${params}`;
   }
-  // telegram
   const handle = link.identifier.replace(/^@/, '');
   return `https://t.me/${handle}`;
 }

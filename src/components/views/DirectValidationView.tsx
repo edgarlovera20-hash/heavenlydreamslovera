@@ -1,37 +1,57 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Zap, CheckCircle2, Search, Clock } from 'lucide-react';
-
-// Use same mock data structure as the CRM for consistency
 import { ClientData } from './MyClientsView';
+import { VentasAPI } from '../../services/db';
+import { requestValidation } from '../../lib/validationService';
+import { toast } from 'sonner';
+
+function currentUser() {
+  try { return JSON.parse(localStorage.getItem('hd_session') || 'null') || {}; } catch { return {}; }
+}
 
 export default function DirectValidationView({ onBack }: { onBack: () => void }) {
-  const pendingSales: ClientData[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]')
-    .filter((s: any) => s.status === 'PENDIENTE')
-    .map((s: any) => ({
-      id: s.id || s.folio || '',
-      name: `${s.nombres || ''} ${s.apellidoPaterno || ''}`.trim() || 'Sin nombre',
-      phone: s.telefonoTitular || '',
-      package: s.paqueteNombre || '',
-      status: 'Pendiente',
-      notes: '',
-      date: s.fechaSolicitud?.split('T')[0] || '',
-    }));
-  const [clients, setClients] = useState<ClientData[]>(pendingSales);
+  const [clients, setClients] = useState<ClientData[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [requestingId, setRequestingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    VentasAPI.getAll()
+      .then((sales: any[]) => {
+        setClients(sales
+          .filter((s: any) => String(s.status || '').toUpperCase() === 'PENDIENTE')
+          .map((s: any) => ({
+            id: s.id || s.folio || '',
+            name: `${s.nombres || ''} ${s.apellidoPaterno || ''}`.trim() || 'Sin nombre',
+            phone: s.telefonoTitular || s.telefono || '',
+            package: s.paqueteNombre || '',
+            status: 'Pendiente',
+            notes: s.notes || s.notas || '',
+            date: s.fechaSolicitud?.split('T')[0] || '',
+          })));
+        setLoadError('');
+      })
+      .catch((err) => { setClients([]); setLoadError(err instanceof Error ? err.message : 'Backend no disponible'); });
+  }, []);
 
   const filteredClients = clients.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleRequestValidation = (id: string) => {
+  const handleRequestValidation = async (id: string) => {
     setRequestingId(id);
-    // Simulate network request
-    setTimeout(() => {
+    try {
+      const sale = (await VentasAPI.getAll()).find((s: any) => (s.id || s.folio) === id);
+      if (!sale) throw new Error('Venta no encontrada en servidor');
+      const user = currentUser();
+      await requestValidation(sale, user.uid || 'sistema', user.displayName || user.email || 'Sistema');
       setClients(clients.filter(c => c.id !== id));
+      toast.success(`Validación directa solicitada para ${sale.folio || id}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo solicitar validación');
+    } finally {
       setRequestingId(null);
-      alert(`¡Validación directa solicitada exitosamente para el folio ${id}! El área correspondiente ya fue notificada.`);
-    }, 1500);
+    }
   };
 
   return (
@@ -50,6 +70,11 @@ export default function DirectValidationView({ onBack }: { onBack: () => void })
       </div>
 
       <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-white/10 p-6">
+        {loadError && (
+          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            No se pudieron cargar pendientes reales del servidor: {loadError}
+          </div>
+        )}
         <div className="relative max-w-md mb-6">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input 

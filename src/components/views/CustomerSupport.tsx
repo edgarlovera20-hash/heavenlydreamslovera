@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Search, Filter, Headphones, AlertCircle, MessageSquare, Clock, CheckCircle, X, AlertTriangle, Bot, Send, Loader2, MessageCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { aiAgent, CustomerData, EventType } from '../../services/aiAgent';
 import { LinkChannelModal } from '../ui/LinkChannelModal';
-import { getChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/channels';
+import { getChannels, refreshChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/channels';
+import { TicketsAPI } from '../../services/db';
 
 interface SupportTicket {
   id: string;
@@ -17,9 +18,9 @@ interface SupportTicket {
 }
 
 
-const tickets: SupportTicket[] = JSON.parse(localStorage.getItem('adhdreams_tickets') || '[]');
-
 export default function CustomerSupport() {
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [estado, setEstado] = useState('');
   const [prioridad, setPrioridad] = useState('');
@@ -43,7 +44,33 @@ export default function CustomerSupport() {
   const [channelState, setChannelState] = useState<ChannelsState>(getChannels());
 
   const openLinkModal = (channels: ChannelKey[]) => { setLinkChannels(channels); setShowLinkModal(true); };
-  const closeLinkModal = () => { setShowLinkModal(false); setChannelState(getChannels()); };
+  const closeLinkModal = () => { setShowLinkModal(false); refreshChannels().then(setChannelState).catch(() => setChannelState(getChannels())); };
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const rows = await TicketsAPI.getAll();
+        setTickets((Array.isArray(rows) ? rows : []).map((row: any) => ({
+          id: row.id,
+          cliente: row.cliente || row.nombre || row.titulo || 'Cliente sin nombre',
+          telefono: row.telefono || '',
+          asunto: row.asunto || row.descripcion || row.titulo || '',
+          estado: String(row.estado || row.status || 'ABIERTO').toUpperCase(),
+          prioridad: String(row.prioridad || 'MEDIA').toUpperCase(),
+          fecha: row.fecha || row.created_at || '',
+          agente: row.agente || row.asesor_id || 'Sin asignar',
+        })));
+        setLoadError('');
+      } catch (err) {
+        setTickets([]);
+        setLoadError(err instanceof Error ? err.message : 'Backend no disponible');
+      }
+    };
+    load();
+    const t = setInterval(load, 10000);
+    refreshChannels().then(setChannelState).catch(() => {});
+    return () => clearInterval(t);
+  }, []);
 
   const handleFilter = () => {
     setAppliedFilters({
@@ -117,11 +144,10 @@ export default function CustomerSupport() {
     setChatMessage('');
     setIsAiLoading(true);
 
-    // Map ticket to CustomerData
     const customerData: CustomerData = {
       nombre: selectedTicket.cliente,
-      deuda: selectedTicket.asunto.includes('cargo') || selectedTicket.asunto.includes('facturación') ? 500 : 0, // Mock logic
-      diasAtraso: selectedTicket.asunto.includes('cargo') ? 15 : 0,
+      deuda: 0,
+      diasAtraso: 0,
       esNuevo: false,
       telefono: selectedTicket.telefono,
       prioridad: selectedTicket.prioridad
@@ -153,6 +179,12 @@ export default function CustomerSupport() {
         </h1>
         <p className="text-slate-400 text-sm">Gestión de tickets, reportes y atención al cliente.</p>
       </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          No se pudieron cargar tickets reales del servidor: {loadError}
+        </div>
+      )}
 
       {/* Channel Connections Banner */}
       <div className="bg-slate-900/90 backdrop-blur-md border border-white/10 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">

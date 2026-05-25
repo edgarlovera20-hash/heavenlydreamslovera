@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Package, Plus, Trash2, Save, Edit2, X, Check } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
 import { logAudit } from '../../lib/auditLog';
 import { auth } from '../../lib/firebase';
 import { toast } from 'sonner';
+import { PackagesAPI } from '../../services/db';
 
 export interface CatalogPackage {
   id: string;
@@ -16,29 +17,13 @@ export interface CatalogPackage {
   activo: boolean;
 }
 
-const STORAGE_KEY = 'adhdreams_package_catalog';
-const DEFAULT_PACKAGES: CatalogPackage[] = [
-  { id: '1', nombre: 'Básico 50MB', megas: 50, rentaMensual: 299, segmento: 'RESIDENCIAL', tipoCliente: 'NUEVO', activo: true },
-  { id: '2', nombre: 'Estándar 100MB', megas: 100, rentaMensual: 399, segmento: 'RESIDENCIAL', tipoCliente: 'AMBOS', activo: true },
-  { id: '3', nombre: 'Plus 200MB', megas: 200, rentaMensual: 549, segmento: 'RESIDENCIAL', tipoCliente: 'AMBOS', activo: true },
-  { id: '4', nombre: 'Empresarial 500MB', megas: 500, rentaMensual: 999, segmento: 'EMPRESARIAL', tipoCliente: 'NUEVO', activo: true },
-  { id: '5', nombre: 'Empresarial 1GB', megas: 1000, rentaMensual: 1499, segmento: 'EMPRESARIAL', tipoCliente: 'AMBOS', activo: true },
-];
-
-function loadCatalog(): CatalogPackage[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : DEFAULT_PACKAGES;
-  } catch { return DEFAULT_PACKAGES; }
-}
-function saveCatalog(c: CatalogPackage[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(c)); }
-
 const EMPTY: Omit<CatalogPackage, 'id'> = {
   nombre: '', megas: 100, rentaMensual: 399, segmento: 'RESIDENCIAL', tipoCliente: 'NUEVO', extras: [], activo: true,
 };
 
 export default function PackageCatalogEditor() {
-  const [catalog, setCatalog] = useState<CatalogPackage[]>(loadCatalog);
+  const [catalog, setCatalog] = useState<CatalogPackage[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState<Omit<CatalogPackage, 'id'>>(EMPTY);
@@ -46,10 +31,39 @@ export default function PackageCatalogEditor() {
 
   const activeCount = useMemo(() => catalog.filter(p => p.activo).length, [catalog]);
 
-  const update = (id: string, changes: Partial<CatalogPackage>) => {
-    const updated = catalog.map(p => p.id === id ? { ...p, ...changes } : p);
-    saveCatalog(updated);
-    setCatalog(updated);
+  const loadCatalog = async () => {
+    try {
+      const rows = await PackagesAPI.getAll();
+      setCatalog((Array.isArray(rows) ? rows : []).map((row: any) => ({
+        id: row.id,
+        nombre: row.nombre,
+        megas: Number(row.megas || 0),
+        rentaMensual: Number(row.precio ?? row.rentaMensual ?? 0),
+        segmento: row.segmento || 'RESIDENCIAL',
+        tipoCliente: row.tipo_cliente || row.tipoCliente || 'AMBOS',
+        extras: row.descripcion ? String(row.descripcion).split(',').map(s => s.trim()).filter(Boolean) : [],
+        activo: row.activo !== 0,
+      })));
+      setLoadError('');
+    } catch (err) {
+      setCatalog([]);
+      setLoadError(err instanceof Error ? err.message : 'Backend no disponible');
+    }
+  };
+
+  useEffect(() => { void loadCatalog(); }, []);
+
+  const update = async (id: string, changes: Partial<CatalogPackage>) => {
+    await PackagesAPI.update(id, {
+      nombre: changes.nombre,
+      megas: changes.megas,
+      precio: changes.rentaMensual,
+      descripcion: changes.extras?.join(', '),
+      segmento: changes.segmento,
+      tipo_cliente: changes.tipoCliente,
+      activo: changes.activo === false ? 0 : 1,
+    });
+    await loadCatalog();
   };
 
   const startEdit = (pkg: CatalogPackage) => {
@@ -59,33 +73,35 @@ export default function PackageCatalogEditor() {
     setShowNew(false);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editingId) return;
     const extras = extrasInput.split(',').map(s => s.trim()).filter(Boolean);
-    const updated = catalog.map(p => p.id === editingId ? { ...p, ...form, extras } : p);
-    saveCatalog(updated);
-    setCatalog(updated);
+    await update(editingId, { ...form, extras });
     logAudit('VENTA_EDITADA', auth.currentUser?.uid || '', auth.currentUser?.displayName || '', { details: `Paquete editado: ${form.nombre}` });
     toast.success('Paquete actualizado.');
     setEditingId(null);
   };
 
-  const createNew = () => {
+  const createNew = async () => {
     if (!form.nombre.trim()) { toast.error('El nombre es requerido.'); return; }
     const extras = extrasInput.split(',').map(s => s.trim()).filter(Boolean);
-    const pkg: CatalogPackage = { ...form, id: crypto.randomUUID(), extras };
-    const updated = [...catalog, pkg];
-    saveCatalog(updated);
-    setCatalog(updated);
+    await PackagesAPI.create({
+      nombre: form.nombre,
+      megas: form.megas,
+      precio: form.rentaMensual,
+      descripcion: extras.join(', '),
+      segmento: form.segmento,
+      tipo_cliente: form.tipoCliente,
+    });
+    await loadCatalog();
     logAudit('VENTA_EDITADA', auth.currentUser?.uid || '', auth.currentUser?.displayName || '', { details: `Paquete creado: ${form.nombre}` });
     toast.success('Paquete creado.');
     setForm(EMPTY); setExtrasInput(''); setShowNew(false);
   };
 
-  const remove = (id: string) => {
-    const updated = catalog.filter(p => p.id !== id);
-    saveCatalog(updated);
-    setCatalog(updated);
+  const remove = async (id: string) => {
+    await PackagesAPI.delete(id);
+    await loadCatalog();
     toast.success('Paquete eliminado.');
   };
 
@@ -114,6 +130,12 @@ export default function PackageCatalogEditor() {
           <Plus className="w-4 h-4" /> Nuevo paquete
         </button>
       </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          No se pudo cargar el catálogo real del servidor: {loadError}
+        </div>
+      )}
 
       {/* New package form */}
       {showNew && (

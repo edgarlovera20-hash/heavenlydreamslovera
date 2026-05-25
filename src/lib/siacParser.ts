@@ -213,12 +213,10 @@ export function parseSIACCsv(csvText: string): SIACRecord[] {
   return records;
 }
 
-const KEY = 'adhdreams_siac';
-
 export function saveSIAC(records: SIACRecord[]) {
-  localStorage.setItem(KEY, JSON.stringify(records));
+  void records;
 }
 
 export function loadSIAC(): SIACRecord[] {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; }
+  return [];
 }

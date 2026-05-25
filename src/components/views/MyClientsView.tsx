@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Search, Filter, Download, Upload, MoreVertical, Edit, FileText, Database, ShieldAlert, Cpu } from 'lucide-react';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { VentasAPI } from '../../services/db';
 
 export interface ClientData {
   id: string;
@@ -17,6 +18,7 @@ export interface ClientData {
 export default function MyClientsView({ onBack }: { onBack: () => void }) {
   const [clients, setClients] = useState<ClientData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   
@@ -27,17 +29,21 @@ export default function MyClientsView({ onBack }: { onBack: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const sales: any[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-    setClients(sales.map((s: any) => ({
-      id: s.id || s.folio || `C-${Math.random().toString(36).slice(2, 7)}`,
-      name: `${s.nombres || ''} ${s.apellidoPaterno || ''}`.trim() || 'Sin nombre',
-      phone: s.telefonoTitular || '',
-      package: s.paqueteNombre || '',
-      status: s.status || 'PENDIENTE',
-      notes: s.notes || '',
-      date: s.fechaSolicitud?.split('T')[0] || '',
-    })));
-    setLoading(false);
+    VentasAPI.getAll()
+      .then((sales: any[]) => {
+        setClients(sales.map((s: any) => ({
+          id: s.id || s.folio || '',
+          name: `${s.nombres || ''} ${s.apellidoPaterno || ''} ${s.apellidoMaterno || ''}`.trim() || 'Sin nombre',
+          phone: s.telefonoTitular || s.telefono || '',
+          package: s.paqueteNombre || '',
+          status: s.status || 'PENDIENTE',
+          notes: s.notes || s.notas || '',
+          date: s.fechaSolicitud?.split('T')[0] || '',
+        })));
+        setLoadError('');
+      })
+      .catch((err) => { setClients([]); setLoadError(err instanceof Error ? err.message : 'Backend no disponible'); })
+      .finally(() => setLoading(false));
   }, []);
 
   const filteredClients = clients.filter(client => {
@@ -127,6 +133,17 @@ export default function MyClientsView({ onBack }: { onBack: () => void }) {
           setClients(prev => {
             const existingIds = new Set(prev.map(p => p.id));
             const toAdd = newClients.filter(nc => !existingIds.has(nc.id));
+            toAdd.forEach((client) => {
+              VentasAPI.create({
+                folio: client.id,
+                nombres: client.name,
+                telefono: client.phone,
+                plan: client.package,
+                status: client.status,
+                notas: client.notes,
+                fecha_solicitud: client.date || new Date().toISOString(),
+              }).catch(() => {});
+            });
             return [...prev, ...toAdd];
           });
         }
@@ -141,8 +158,9 @@ export default function MyClientsView({ onBack }: { onBack: () => void }) {
     setNoteText(client.notes);
   };
 
-  const saveNote = () => {
+  const saveNote = async () => {
     if (editingClient) {
+      await VentasAPI.update(editingClient.id, { notas: noteText });
       setClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, notes: noteText } : c));
       toast.success('Nota actualizada.');
       setEditingClient(null);
@@ -240,6 +258,13 @@ export default function MyClientsView({ onBack }: { onBack: () => void }) {
           {loading ? (
             <div className="h-full flex items-center justify-center">
               <Loader2 className="w-8 h-8 text-cyber-electric animate-spin" />
+            </div>
+          ) : loadError ? (
+            <div className="h-full flex items-center justify-center p-8 text-center text-red-200">
+              <div className="max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 p-6">
+                <ShieldAlert className="mx-auto mb-3 h-10 w-10 text-red-300" />
+                <p className="text-sm">No se pudieron cargar clientes reales del servidor: {loadError}</p>
+              </div>
             </div>
           ) : (
             <table className="w-full text-left text-sm text-cyber-electric/90">
