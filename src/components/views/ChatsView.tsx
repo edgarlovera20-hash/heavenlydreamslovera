@@ -557,7 +557,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
                   </div>
                   <h2 className="mt-1 text-2xl font-black text-white">{memory.name}</h2>
                   <p className="mt-2 max-w-4xl text-sm leading-relaxed text-slate-400">
-                    Consulta datos, inicia flujo de conversacion y prepara respuestas para WhatsApp o Telegram.
+                    Responde automaticamente cada mensaje entrante, consulta datos e inicia flujo de conversacion para WhatsApp o Telegram.
                   </p>
                 </div>
               </div>

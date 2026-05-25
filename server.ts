@@ -3073,12 +3073,24 @@ async function startServer() {
     agentState.consultor.lastRun = new Date().toISOString();
   }
 
+  async function autoSendAriuxReplies(result: any) {
+    const replies = (result?.outbox || []).filter((item: any) => item?.type === 'reply' && item?.message);
+    for (const item of replies) {
+      try {
+        await approveAgentOutbox(item.id, { sub: 'ariux-auto', uid: 'ariux-auto', nombre: 'ARIUX', name: 'ARIUX' }, sendChannelMessage);
+      } catch (err: any) {
+        AgentOutbox.update(item.id, { status: 'failed', error: err?.message || String(err) });
+        throw err;
+      }
+    }
+  }
+
   // Registrar handler durable en tiempo real para WhatsApp/Baileys y Telegram.
   setIncomingMessageHandler(async ({ conversation, message }) => {
     if (conversation?.channel === 'whatsapp' && String(conversation.external_chat_id || '').startsWith('clientes:')) return;
-    if (!agentState.capturista.active && !agentState.consultor.active) return;
     const result: any = await runAgentForMessage(conversation, message);
     if (!result || result.duplicate) return;
+    await autoSendAriuxReplies(result);
     const intent = result.decision?.intent;
     if (intent === 'venta') {
       agentState.capturista.processed++;
@@ -3086,7 +3098,10 @@ async function startServer() {
     } else if (intent === 'consulta_folio') {
       agentState.consultor.processed++;
       agentState.consultor.lastRun = new Date().toISOString();
+    } else {
+      agentState.capturista.lastRun = new Date().toISOString();
     }
+    persistAgentState();
   });
 
   setWhatsAppMessageHandler(null);
