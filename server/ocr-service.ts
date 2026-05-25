@@ -20,7 +20,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createHash } from 'node:crypto';
 import { getOllamaApiKey, getOllamaModel, getOllamaUrl, getOllamaUrlSource } from './ai-config';
-import { runTesseractIne, runTesseractComprobante, runTesseractSiac } from './ocr-tesseract';
+import { runTesseractIne, runTesseractComprobante, runTesseractSiac, shutdownTesseract } from './ocr-tesseract';
 
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
 const OLLAMA_URL        = getOllamaUrl();
@@ -38,7 +38,7 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
 
 const TIMEOUT_MS_LLM       = parsePositiveIntEnv('OCR_LLM_TIMEOUT_MS', 45_000);  // 45s para Gemini
 const TIMEOUT_MS_OLLAMA    = parsePositiveIntEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM * 3);
-const TIMEOUT_MS_TESSERACT = 60_000;  // 60s para tesseract local
+const TIMEOUT_MS_TESSERACT = parsePositiveIntEnv('OCR_TESSERACT_TIMEOUT_MS', 30_000);
 const MAX_OUTPUT_TOKENS    = parsePositiveIntEnv('OCR_MAX_OUTPUT_TOKENS', 1200);
 const CACHE_TTL_MS         = 10 * 60 * 1000;
 const CACHE_MAX_ENTRIES    = 100;
@@ -563,7 +563,15 @@ async function callTesseract(docType: OcrDocType, base64Images: string[]): Promi
       : runTesseractSiac;
   for (const b64 of base64Images) {
     const stripped = stripDataUrl(b64);
-    const r = await withTimeout(runner(stripped), TIMEOUT_MS_TESSERACT, 'Tesseract');
+    let r: { text: string; fields: Record<string, string> };
+    try {
+      r = await withTimeout(runner(stripped), TIMEOUT_MS_TESSERACT, 'Tesseract');
+    } catch (err: any) {
+      if (String(err?.message || '').includes('Tesseract timeout')) {
+        await shutdownTesseract().catch(() => undefined);
+      }
+      throw err;
+    }
     texts.push(r.text);
     for (const [k, v] of Object.entries(r.fields)) {
       if (v && (!merged[k] || v.length > merged[k].length)) merged[k] = v;
