@@ -3539,6 +3539,12 @@ async function startServer() {
     }
   }
 
+  const OCR_SUPPORTED_IMAGE_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+
+  function imageMimeFromDataUrl(value: string) {
+    return String(value || '').match(/^data:([^;]+);base64,/i)?.[1]?.toLowerCase() || '';
+  }
+
   async function runOcrEndpoint(req: any, res: any, docType: 'ine' | 'siac' | 'comprobante', runner: (imgs: string[]) => Promise<any>) {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
@@ -3552,6 +3558,16 @@ async function startServer() {
     const nonImage = imgs.find((img: string) => /^data:/i.test(String(img || '')) && !/^data:image\//i.test(String(img || '')));
     if (nonImage) {
       return res.status(415).json({ error: 'OCR solo acepta imagenes. Para audio, video o PDF usa carga de expediente.' });
+    }
+    const unsupportedImage = imgs.find((img: string) => {
+      const mime = imageMimeFromDataUrl(img);
+      return mime && !OCR_SUPPORTED_IMAGE_MIMES.has(mime);
+    });
+    if (unsupportedImage) {
+      const mime = imageMimeFromDataUrl(unsupportedImage);
+      return res.status(415).json({
+        error: `Formato de imagen no compatible para OCR: ${mime}. Usa JPG, PNG o WEBP; HEIC debe convertirse a JPG desde la app movil.`,
+      });
     }
     const startedAt = Date.now();
     try {

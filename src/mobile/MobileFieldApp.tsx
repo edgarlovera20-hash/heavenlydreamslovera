@@ -153,6 +153,8 @@ type CaptureDraft = {
   folioSiac: string;
   servicioSiac: string;
   videoFirmaLocal: boolean;
+  firmaClienteDataUrl: string;
+  solicitudFirmadaPdfLocal: boolean;
   notas: string;
   documents: CaptureDocument[];
 };
@@ -234,11 +236,13 @@ const EMPTY_DRAFT: CaptureDraft = {
   folioSiac: '',
   servicioSiac: '',
   videoFirmaLocal: false,
+  firmaClienteDataUrl: '',
+  solicitudFirmadaPdfLocal: false,
   notas: '',
   documents: [],
 };
 
-const CAPTURE_STEPS = ['Identidad/OCR', 'Cliente', 'Domicilio', 'Servicio', 'Paquetes', 'Streaming', 'Video firma', 'Confirmar'];
+const CAPTURE_STEPS = ['Identidad/OCR', 'Cliente', 'Domicilio', 'Servicio', 'Paquetes', 'Streaming', 'Firma', 'Confirmar'];
 const INE_IDENTITY_DOCUMENTS = ['INE_FRONTAL', 'INE_REVERSO'];
 const CURP_IDENTITY_DOCUMENT = 'CURP';
 
@@ -476,7 +480,7 @@ function buildPayrollSales(rawSales: any[], year: number, week: number): Payroll
 
 function hasDraftData(draft: CaptureDraft) {
   return Object.entries(draft).some(([key, value]) => {
-    if (['tipoVialidad', 'tipoCliente', 'tipoServicio', 'categoriaProducto', 'mismaDireccionIne', 'incluyeClaroVideo', 'streamingElegido', 'videoFirmaLocal'].includes(key)) return false;
+    if (['identityDocumentType', 'tipoVialidad', 'tipoCliente', 'tipoServicio', 'categoriaProducto', 'mismaDireccionIne', 'incluyeClaroVideo', 'streamingElegido', 'videoFirmaLocal', 'solicitudFirmadaPdfLocal'].includes(key)) return false;
     if (Array.isArray(value)) return value.length > 0;
     return String(value ?? '').trim().length > 0;
   });
@@ -970,11 +974,10 @@ export default function MobileFieldApp() {
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File | null>>({});
   const [submittingCapture, setSubmittingCapture] = useState(false);
   const [curpLoading, setCurpLoading] = useState(false);
-  const [videoFirmaActive, setVideoFirmaActive] = useState(false);
-  const [videoFirmaSavedName, setVideoFirmaSavedName] = useState('');
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaChunksRef = useRef<BlobPart[]>([]);
+  const [signaturePdfGenerating, setSignaturePdfGenerating] = useState(false);
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const signatureDrawingRef = useRef(false);
+  const signatureLastPointRef = useRef<{ x: number; y: number } | null>(null);
   const [folioQuery, setFolioQuery] = useState('');
   const [folioResults, setFolioResults] = useState<any[]>([]);
   const [folioLoading, setFolioLoading] = useState(false);
@@ -1350,13 +1353,6 @@ export default function MobileFieldApp() {
   }, [session?.uid, refreshBootstrap]);
 
   useEffect(() => {
-    return () => {
-      const stream = videoRef.current?.srcObject as MediaStream | null;
-      stream?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
-
-  useEffect(() => {
     let activeLoad = true;
     readOfflineQueue().then((items) => {
       if (activeLoad) setOfflineQueue(items);
@@ -1408,6 +1404,29 @@ export default function MobileFieldApp() {
     document.documentElement.classList.toggle('hd-mobile-compact', Boolean(settings.compact));
     document.documentElement.classList.toggle('hd-reduce-motion', Boolean(settings.reduceMotion));
   }, [settings]);
+
+  useEffect(() => {
+    if (draftStep !== 6) return;
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(320, Math.round(rect.width || 320));
+    const height = 180;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, width, height);
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#020617';
+    if (draft.firmaClienteDataUrl) {
+      const image = new Image();
+      image.onload = () => ctx.drawImage(image, 0, 0, width, height);
+      image.src = draft.firmaClienteDataUrl;
+    }
+  }, [draft.firmaClienteDataUrl, draftStep]);
 
   const loadModule = useCallback(async (section: MobileSection) => {
     if (!session?.uid) return;
@@ -1548,63 +1567,209 @@ export default function MobileFieldApp() {
     if (showNotice) notify('success', 'Borrador movil limpiado.');
   };
 
-  const startVideoFirma = async () => {
-    try {
-      if (typeof MediaRecorder === 'undefined') {
-        notify('error', 'Este navegador no permite grabar video. Sube un archivo de video firma.');
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      setVideoFirmaActive(true);
-      setVideoFirmaSavedName('');
-      window.setTimeout(() => {
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      }, 0);
-      mediaChunksRef.current = [];
-      const preferredType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-        ? 'video/webm;codecs=vp8,opus'
-        : MediaRecorder.isTypeSupported('video/webm')
-          ? 'video/webm'
-          : '';
-      const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (event) => {
-        if (event.data?.size) mediaChunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => {
-        const mimeType = recorder.mimeType || 'video/webm';
-        const blob = new Blob(mediaChunksRef.current, { type: mimeType });
-        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-        const fileName = `video-firma-${Date.now()}.${ext}`;
-        const file = new File([blob], fileName, { type: mimeType, lastModified: Date.now() });
-        setSelectedFiles((current) => ({ ...current, VIDEO_FIRMA: file }));
-        setDraft((current) => ({
-          ...current,
-          videoFirmaLocal: true,
-          documents: [
-            ...current.documents.filter((doc) => doc.type !== 'VIDEO_FIRMA'),
-            { type: 'VIDEO_FIRMA', fileName, size: file.size, selectedAt: new Date().toISOString() },
-          ],
-        }));
-        setVideoFirmaSavedName(fileName);
-        mediaChunksRef.current = [];
-        notify('success', 'Video firma guardada en el expediente.');
-      };
-      recorder.start();
-      notify('success', 'Grabando video firma con audio.');
-    } catch (err: any) {
-      notify('error', err?.message || 'No se pudo abrir la camara para video firma.');
-    }
+  const saveSignatureFromCanvas = useCallback(() => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return '';
+    const dataUrl = canvas.toDataURL('image/png');
+    updateDraft({
+      firmaClienteDataUrl: dataUrl,
+      videoFirmaLocal: true,
+      solicitudFirmadaPdfLocal: false,
+    });
+    setSelectedFiles((current) => {
+      const next = { ...current };
+      delete next.SOLICITUD_FIRMADA;
+      return next;
+    });
+    setDraft((current) => ({
+      ...current,
+      documents: current.documents.filter((doc) => doc.type !== 'SOLICITUD_FIRMADA'),
+    }));
+    return dataUrl;
+  }, [updateDraft]);
+
+  const signaturePoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
   };
 
-  const stopVideoFirma = () => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
+  const beginSignature = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    const point = signaturePoint(event);
+    const canvas = signatureCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!point || !canvas || !ctx) return;
+    canvas.setPointerCapture?.(event.pointerId);
+    signatureDrawingRef.current = true;
+    signatureLastPointRef.current = point;
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+  };
+
+  const drawSignature = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!signatureDrawingRef.current) return;
+    event.preventDefault();
+    const point = signaturePoint(event);
+    const canvas = signatureCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!point || !ctx) return;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#020617';
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+    signatureLastPointRef.current = point;
+  };
+
+  const endSignature = (event?: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!signatureDrawingRef.current) return;
+    event?.preventDefault();
+    signatureDrawingRef.current = false;
+    signatureLastPointRef.current = null;
+    const ctx = signatureCanvasRef.current?.getContext('2d');
+    ctx?.beginPath();
+    saveSignatureFromCanvas();
+  };
+
+  const clearSignature = () => {
+    const canvas = signatureCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSelectedFiles((current) => {
+      const next = { ...current };
+      delete next.SOLICITUD_FIRMADA;
+      return next;
+    });
+    updateDraft({
+      firmaClienteDataUrl: '',
+      videoFirmaLocal: false,
+      solicitudFirmadaPdfLocal: false,
+      documents: draft.documents.filter((doc) => doc.type !== 'SOLICITUD_FIRMADA'),
+    });
+  };
+
+  const buildSignedPdfFile = useCallback(async (saleId = `BORRADOR-${Date.now()}`) => {
+    const signatureDataUrl = draft.firmaClienteDataUrl || saveSignatureFromCanvas();
+    if (!signatureDataUrl) throw new Error('Dibuja primero la firma del cliente.');
+
+    const [{ default: jsPDF }, QRCode] = await Promise.all([
+      import('jspdf'),
+      import('qrcode'),
+    ]);
+
+    const pdf = new jsPDF('p', 'mm', 'letter');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const margin = 16;
+    const now = new Date();
+    const clientName = fullName(draft) || 'Cliente pendiente';
+    const totalMensual = Number(draft.rentaMensual || 0) + streamingTotal(draft);
+    const verification = {
+      app: 'Heavenly Dreams Campo',
+      type: 'SOLICITUD_FIRMADA',
+      saleId,
+      client: clientName,
+      phone: draft.telefonoTitular || draft.telefono,
+      curp: draft.curp,
+      package: draft.paqueteNombre,
+      signedAt: now.toISOString(),
+    };
+    const qrDataUrl = await QRCode.toDataURL(JSON.stringify(verification), { margin: 1, width: 220 });
+
+    pdf.setFillColor(7, 21, 39);
+    pdf.rect(0, 0, pageWidth, 28, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(16);
+    pdf.text('Heavenly Dreams - Solicitud firmada', margin, 13);
+    pdf.setFontSize(9);
+    pdf.text(`Folio interno: ${saleId}`, margin, 21);
+
+    pdf.setTextColor(15, 23, 42);
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Datos del cliente', margin, 42);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Nombre: ${clientName}`, margin, 50);
+    pdf.text(`CURP: ${draft.curp || 'Pendiente'}`, margin, 58);
+    pdf.text(`Telefono: ${draft.telefonoTitular || draft.telefono || 'Pendiente'}`, margin, 66);
+    pdf.text(`Direccion: ${buildAddress(draft) || 'Pendiente'}`, margin, 74, { maxWidth: pageWidth - margin * 2 });
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Servicio contratado', margin, 92);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Paquete: ${draft.paqueteNombre || 'Pendiente'}`, margin, 100);
+    pdf.text(`Renta mensual estimada: ${formatMoney(totalMensual)}`, margin, 108);
+    pdf.text(`Tipo: ${draft.tipoCliente === 'portado' ? 'Portabilidad' : 'Linea nueva'} / ${draft.tipoServicio}`, margin, 116);
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Consentimiento', margin, 134);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.text(
+      'El titular acepta la contratacion capturada en campo, autoriza el tratamiento de sus datos para validar la solicitud y reconoce que la firma autografa digital queda integrada al expediente.',
+      margin,
+      142,
+      { maxWidth: pageWidth - margin * 2 },
+    );
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Firma del cliente', margin, 168);
+    pdf.setDrawColor(15, 23, 42);
+    pdf.rect(margin, 174, 96, 34);
+    pdf.addImage(signatureDataUrl, 'PNG', margin + 4, 176, 88, 28);
+    pdf.line(margin, 211, margin + 96, 211);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(clientName, margin, 218, { maxWidth: 96 });
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('QR de verificacion', pageWidth - margin - 48, 168);
+    pdf.addImage(qrDataUrl, 'PNG', pageWidth - margin - 44, 174, 42, 42);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    pdf.text(now.toLocaleString('es-MX'), pageWidth - margin - 48, 221, { maxWidth: 48 });
+
+    const blob = pdf.output('blob');
+    const safeId = String(saleId).replace(/[^a-zA-Z0-9_-]+/g, '_');
+    return new File([blob], `Solicitud_firmada_${safeId}.pdf`, { type: 'application/pdf', lastModified: Date.now() });
+  }, [draft, saveSignatureFromCanvas]);
+
+  const attachSignedPdfFile = useCallback((file: File) => {
+    setSelectedFiles((current) => ({ ...current, SOLICITUD_FIRMADA: file }));
+    setDraft((current) => ({
+      ...current,
+      videoFirmaLocal: true,
+      solicitudFirmadaPdfLocal: true,
+      documents: [
+        ...current.documents.filter((doc) => doc.type !== 'SOLICITUD_FIRMADA'),
+        { type: 'SOLICITUD_FIRMADA', fileName: file.name, size: file.size, selectedAt: new Date().toISOString() },
+      ],
+    }));
+  }, []);
+
+  const prepareSignedPdf = async () => {
+    if (!draft.firmaClienteDataUrl) {
+      notify('error', 'Dibuja la firma del cliente antes de generar el PDF.');
+      return null;
     }
-    const stream = videoRef.current?.srcObject as MediaStream | null;
-    stream?.getTracks().forEach((track) => track.stop());
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setVideoFirmaActive(false);
+    setSignaturePdfGenerating(true);
+    try {
+      const file = await buildSignedPdfFile();
+      attachSignedPdfFile(file);
+      notify('success', 'PDF firmado con QR listo para guardar.');
+      return file;
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo generar el PDF firmado.');
+      return null;
+    } finally {
+      setSignaturePdfGenerating(false);
+    }
   };
 
   const validateCurp = async () => {
@@ -1745,10 +1910,26 @@ export default function MobileFieldApp() {
       notify('error', 'El telefono de referencia debe tener 10 digitos.');
       return;
     }
+    if (!draft.firmaClienteDataUrl) {
+      setDraftStep(6);
+      notify('error', 'Dibuja la firma del cliente para generar la solicitud firmada.');
+      return;
+    }
     const payload = capturePayload();
-    const files = Object.entries(selectedFiles)
+    let files = Object.entries(selectedFiles)
       .filter(([, file]) => Boolean(file))
       .map(([docType, file]) => ({ docType, file: file as File }));
+    let draftSignedPdf: File;
+    try {
+      draftSignedPdf = await buildSignedPdfFile();
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo generar la solicitud firmada.');
+      return;
+    }
+    files = [
+      ...files.filter((fileItem) => fileItem.docType !== 'SOLICITUD_FIRMADA'),
+      { docType: 'SOLICITUD_FIRMADA', file: draftSignedPdf },
+    ];
     if (!online) {
       await enqueueOffline({ kind: 'capture', payload, files });
       await clearDraft(false);
@@ -1762,7 +1943,13 @@ export default function MobileFieldApp() {
         body: JSON.stringify(payload),
       });
 
-      for (const fileItem of files) {
+      const savedSignedPdf = await buildSignedPdfFile(saved.id);
+      const uploadFiles = [
+        ...files.filter((fileItem) => fileItem.docType !== 'SOLICITUD_FIRMADA'),
+        { docType: 'SOLICITUD_FIRMADA', file: savedSignedPdf },
+      ];
+
+      for (const fileItem of uploadFiles) {
         const contentBase64 = await fileToBase64(fileItem.file);
         await apiJson('/api/document-files', {
           method: 'POST',
@@ -2486,24 +2673,35 @@ export default function MobileFieldApp() {
           {draftStep === 6 && (
             <div className="space-y-3">
               <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
-                <p className="text-sm font-black text-cyan-100">Video firma local</p>
-                <p className="mt-1 text-xs leading-5 text-slate-300">Pide al cliente decir su nombre completo y aceptar la contratacion mientras se ve en camara.</p>
+                <p className="text-sm font-black text-cyan-100">Firma digital del cliente</p>
+                <p className="mt-1 text-xs leading-5 text-slate-300">El cliente dibuja su firma. La app genera una solicitud PDF con la firma y un QR de verificacion para el expediente.</p>
               </div>
-              <div className="aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black/50">
-                {videoFirmaActive ? <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-slate-500">Camara inactiva</div>}
+              <div className="rounded-2xl border border-white/10 bg-white p-2">
+                <canvas
+                  ref={signatureCanvasRef}
+                  className="h-44 w-full touch-none rounded-xl bg-white"
+                  onPointerDown={beginSignature}
+                  onPointerMove={drawSignature}
+                  onPointerUp={endSignature}
+                  onPointerLeave={endSignature}
+                  aria-label="Firma del cliente"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={startVideoFirma} disabled={videoFirmaActive} className="h-12 rounded-2xl bg-cyan-300 font-black text-slate-950 disabled:opacity-40">Iniciar</button>
-                <button onClick={stopVideoFirma} disabled={!videoFirmaActive} className="h-12 rounded-2xl border border-rose-300/25 bg-rose-300/10 font-black text-rose-100 disabled:opacity-40">Detener</button>
+                <button onClick={clearSignature} className="h-12 rounded-2xl border border-rose-300/25 bg-rose-300/10 font-black text-rose-100">Limpiar</button>
+                <button onClick={prepareSignedPdf} disabled={!draft.firmaClienteDataUrl || signaturePdfGenerating} className="h-12 rounded-2xl bg-cyan-300 font-black text-slate-950 disabled:opacity-45">
+                  {signaturePdfGenerating ? 'Generando...' : 'Generar PDF'}
+                </button>
               </div>
-              <button onClick={() => updateDraft({ videoFirmaLocal: !draft.videoFirmaLocal })} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
+              <div className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
                 <span className="min-w-0 text-sm font-black text-slate-100">
-                  Consentimiento de video firma capturado
-                  {videoFirmaSavedName && <span className="mt-1 block truncate text-xs font-semibold text-slate-400">{videoFirmaSavedName}</span>}
+                  Solicitud firmada con QR
+                  <span className="mt-1 block truncate text-xs font-semibold text-slate-400">
+                    {draft.solicitudFirmadaPdfLocal ? 'PDF listo para subirse al expediente' : draft.firmaClienteDataUrl ? 'Firma capturada, genera el PDF' : 'Pendiente de firma'}
+                  </span>
                 </span>
-                <span className={cx('rounded-full px-3 py-1 text-xs font-black', draft.videoFirmaLocal ? 'bg-emerald-300 text-slate-950' : 'bg-slate-700 text-slate-200')}>{draft.videoFirmaLocal ? 'SI' : 'NO'}</span>
-              </button>
-              {docRow('VIDEO_FIRMA', 'Subir video firma existente', 'ine', undefined, 'video/*', false)}
+                <span className={cx('rounded-full px-3 py-1 text-xs font-black', draft.solicitudFirmadaPdfLocal ? 'bg-emerald-300 text-slate-950' : 'bg-slate-700 text-slate-200')}>{draft.solicitudFirmadaPdfLocal ? 'PDF' : 'NO'}</span>
+              </div>
               {docRow('AUDIO_LLAMADA', 'Subir audio de llamada', 'ine', undefined, 'audio/*', false)}
             </div>
           )}
@@ -2519,7 +2717,7 @@ export default function MobileFieldApp() {
               <SummaryRow label="Direccion" value={buildAddress(draft) || 'Pendiente'} />
               <SummaryRow label="Paquete" value={`${draft.paqueteNombre || 'Pendiente'} - ${formatMoney(draft.rentaMensual || 0)}`} />
               <SummaryRow label="Streaming" value={`${draft.streamingElegido} + ${draft.plataformasAdicionales.length} adicional(es)`} />
-              <SummaryRow label="Video firma" value={draft.videoFirmaLocal ? 'Capturada localmente' : 'Pendiente'} />
+              <SummaryRow label="Firma" value={draft.firmaClienteDataUrl ? (draft.solicitudFirmadaPdfLocal ? 'PDF con QR listo' : 'Firma capturada') : 'Pendiente'} />
               <SummaryRow label="Documentos" value={`${draft.documents.length} seleccionados`} />
               {draftSavedAt && <p className="text-xs text-slate-500">Borrador recuperable: {shortDate(draftSavedAt)}</p>}
               <button onClick={submitCapture} disabled={submittingCapture} className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.14em] text-slate-950 disabled:cursor-wait disabled:opacity-60">
