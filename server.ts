@@ -2150,6 +2150,8 @@ async function startServer() {
   app.get("/api/siac/search", authOnly, wrap((req: any, res: any) => {
     const folio = (req.query.folio as string || '').trim();
     if (!folio) return res.json([]);
+    const exact = SiacRecords.getByFolio(folio);
+    if (exact) return res.json([exact]);
     res.json(SiacRecords.search(folio));
   }));
 

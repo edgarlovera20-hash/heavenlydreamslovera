@@ -537,6 +537,42 @@ function mergeById(existing: any[], incoming: any[]) {
   return Array.from(map.values());
 }
 
+function normalizeFolioLookup(value: any) {
+  return String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
+}
+
+function folioLookupValue(item: any) {
+  return String(item?.folio_siac || item?.folio || '').trim();
+}
+
+function mergeFolioRecord(base: any, extra: any) {
+  if (!base) return extra;
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(extra || {})) {
+    if (value !== undefined && value !== null && String(value).trim() !== '' && (merged[key] === undefined || merged[key] === null || String(merged[key]).trim() === '')) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+function uniqueFolioResults(items: any[], query = '') {
+  const exactQuery = normalizeFolioLookup(query);
+  const map = new Map<string, any>();
+  for (const item of items || []) {
+    if (!item) continue;
+    const folio = folioLookupValue(item);
+    const key = folio
+      ? `folio:${normalizeFolioLookup(folio)}`
+      : `id:${String(item.id || item.captura_id || item.telefono || Math.random())}`;
+    map.set(key, mergeFolioRecord(map.get(key), item));
+  }
+  const results = Array.from(map.values());
+  if (!exactQuery) return results;
+  const exact = results.filter((item) => normalizeFolioLookup(folioLookupValue(item)) === exactQuery);
+  return exact.length ? exact.slice(0, 1) : results;
+}
+
 function chatKey(value: any) {
   return String(value?.conversation_id || value?.conversationId || value?.external_chat_id || value?.externalChatId || value?.chatId || value?.from || value?.to || value?.id || '');
 }
@@ -981,6 +1017,7 @@ export default function MobileFieldApp() {
   const [folioQuery, setFolioQuery] = useState('');
   const [folioResults, setFolioResults] = useState<any[]>([]);
   const [folioLoading, setFolioLoading] = useState(false);
+  const folioSearchSeqRef = useRef(0);
   const [clients, setClients] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
   const [followUps, setFollowUps] = useState<any[]>([]);
@@ -1978,20 +2015,24 @@ export default function MobileFieldApp() {
   const searchFolio = async () => {
     const q = folioQuery.trim();
     if (!q) return;
+    const searchSeq = folioSearchSeqRef.current + 1;
+    folioSearchSeqRef.current = searchSeq;
+    setFolioResults([]);
     setFolioLoading(true);
     try {
-      const results: any[] = [];
-      const exact = await fetch(`/api/siac/${encodeURIComponent(q)}`);
-      if (exact.ok) results.push(await exact.json());
-      const [siac, status] = await Promise.all([
-        apiJson<any[]>(`/api/siac/search?folio=${encodeURIComponent(q)}`).catch(() => []),
-        apiJson<any[]>(`/api/folios/status?q=${encodeURIComponent(q)}`).catch(() => []),
-      ]);
-      setFolioResults([...results, ...siac, ...status]);
+      const exact = await apiJson<any>(`/api/siac/${encodeURIComponent(q)}`).catch(() => null);
+      const status = await apiJson<any[]>(`/api/folios/status?q=${encodeURIComponent(q)}`).catch(() => []);
+      const siac = exact ? [] : await apiJson<any[]>(`/api/siac/search?folio=${encodeURIComponent(q)}`).catch(() => []);
+      const combined = exact
+        ? [exact, ...status.filter((item) => normalizeFolioLookup(folioLookupValue(item)) === normalizeFolioLookup(q))]
+        : [...siac, ...status];
+      if (folioSearchSeqRef.current === searchSeq) {
+        setFolioResults(uniqueFolioResults(combined, q));
+      }
     } catch (err: any) {
       notify('error', err?.message || 'No se pudo consultar folio.');
     } finally {
-      setFolioLoading(false);
+      if (folioSearchSeqRef.current === searchSeq) setFolioLoading(false);
     }
   };
 
@@ -2746,7 +2787,10 @@ export default function MobileFieldApp() {
         <div className="flex gap-2">
           <input
             value={folioQuery}
-            onChange={(event) => setFolioQuery(event.target.value)}
+            onChange={(event) => {
+              setFolioQuery(event.target.value);
+              setFolioResults([]);
+            }}
             onKeyDown={(event) => event.key === 'Enter' && searchFolio()}
             placeholder="Folio, telefono o cliente"
             className="min-w-0 flex-1 rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 text-[16px] outline-none focus:border-cyan-300"
