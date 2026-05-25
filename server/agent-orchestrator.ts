@@ -29,6 +29,7 @@ type SendChannelMessage = (channel: string, target: string, message: string) => 
 const INTENTS: Intent[] = ['venta', 'consulta_folio', 'soporte', 'morosidad', 'otro'];
 const PROPOSED_ACTIONS: ProposedAction[] = ['create_sale', 'update_lead', 'schedule_followup', 'escalate_human'];
 const DEFAULT_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
+const AI_DECISION_TIMEOUT_MS = Math.max(3000, Number(process.env.AGENT_AI_TIMEOUT_MS || 8000));
 
 function json(value: any) {
   return JSON.stringify(value ?? {});
@@ -213,6 +214,27 @@ function defaultProfileReply(profile: any) {
   return String(profile?.metadata?.defaultMessage || DEFAULT_ARIUX_MESSAGE).trim();
 }
 
+function isSimpleGreeting(text: string) {
+  const normalized = String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  return /^(hola|holi|buenos dias|buen dia|buenas tardes|buenas noches|buenas|hi|hello|hey|\/start|\/star|\/inicio|\/inicios)$/.test(normalized);
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    promise.finally(() => {
+      if (timer) clearTimeout(timer);
+    }),
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} excedio ${ms}ms`)), ms);
+    }),
+  ]);
+}
+
 function buildQwenDecisionPrompt(conversation: any, message: any, rules: AgentDecision) {
   const profile = AgentProfiles.getById('promoter_receptionist') as any;
   const memory = conversation?.memory || {};
@@ -325,8 +347,12 @@ function decisionFromModel(rules: AgentDecision, modelPayload: any, ai: { provid
 
 async function decide(conversation: any, message: any): Promise<AgentDecision> {
   const rules = decideWithRules(conversation, message);
+  const text = String(message?.body || '');
+  if (rules.intent === 'consulta_folio' || isSimpleGreeting(text)) {
+    return rules;
+  }
   try {
-    const ai = await runAiWithFallback(buildQwenDecisionPrompt(conversation, message, rules));
+    const ai = await withTimeout(runAiWithFallback(buildQwenDecisionPrompt(conversation, message, rules)), AI_DECISION_TIMEOUT_MS, 'Qwen decision');
     const parsed = parseModelJson(ai.output);
     if (!parsed) throw new Error('Qwen no devolvio JSON valido');
     return decisionFromModel(rules, parsed, ai, message);

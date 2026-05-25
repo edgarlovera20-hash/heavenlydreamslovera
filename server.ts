@@ -3138,20 +3138,32 @@ async function startServer() {
     for (const conversation of conversations) {
       try {
         const result: any = await runAgentForConversation(conversation.id);
-        if (result && !result.duplicate && !result.idle) agentState.capturista.processed++;
-      } catch { agentState.capturista.errors++; }
+        if (result && !result.duplicate && !result.idle) {
+          await autoSendAriuxReplies(result);
+          agentState.capturista.processed++;
+        }
+      } catch (err: any) {
+        agentState.capturista.errors++;
+        console.warn('[ARIUX] Capturista no pudo procesar conversacion:', err?.message || err);
+      }
     }
     agentState.capturista.lastRun = new Date().toISOString();
   }
 
   // Agente Consultor: responde consultas de folio SIAC en WA + Telegram
   async function runConsultorAgent() {
-    const conversations = getChannelConversations(80).filter((conversation: any) => conversation.intent === 'consulta_folio' || conversation.status === 'nuevo');
+    const conversations = getChannelConversations(80).filter((conversation: any) => conversation.intent === 'consulta_folio');
     for (const conversation of conversations) {
       try {
         const result: any = await runAgentForConversation(conversation.id);
-        if (result && !result.duplicate && !result.idle) agentState.consultor.processed++;
-      } catch { agentState.consultor.errors++; }
+        if (result && !result.duplicate && !result.idle) {
+          await autoSendAriuxReplies(result);
+          agentState.consultor.processed++;
+        }
+      } catch (err: any) {
+        agentState.consultor.errors++;
+        console.warn('[ARIUX] Consultor no pudo procesar conversacion:', err?.message || err);
+      }
     }
     agentState.consultor.lastRun = new Date().toISOString();
   }
@@ -3173,20 +3185,26 @@ async function startServer() {
 
   // Registrar handler durable en tiempo real para WhatsApp/Baileys y Telegram.
   setIncomingMessageHandler(async ({ conversation, message }) => {
-    const result: any = await runAgentForMessage(conversation, message);
-    if (!result || result.duplicate) return;
-    await autoSendAriuxReplies(result);
-    const intent = result.decision?.intent;
-    if (intent === 'venta') {
-      agentState.capturista.processed++;
-      agentState.capturista.lastRun = new Date().toISOString();
-    } else if (intent === 'consulta_folio') {
-      agentState.consultor.processed++;
-      agentState.consultor.lastRun = new Date().toISOString();
-    } else {
-      agentState.capturista.lastRun = new Date().toISOString();
+    try {
+      const result: any = await runAgentForMessage(conversation, message);
+      if (!result || result.duplicate) return;
+      await autoSendAriuxReplies(result);
+      const intent = result.decision?.intent;
+      if (intent === 'venta') {
+        agentState.capturista.processed++;
+        agentState.capturista.lastRun = new Date().toISOString();
+      } else if (intent === 'consulta_folio') {
+        agentState.consultor.processed++;
+        agentState.consultor.lastRun = new Date().toISOString();
+      } else {
+        agentState.capturista.lastRun = new Date().toISOString();
+      }
+      persistAgentState();
+    } catch (err: any) {
+      agentState.capturista.errors++;
+      persistAgentState();
+      console.warn('[ARIUX] Error procesando mensaje entrante:', err?.message || err);
     }
-    persistAgentState();
   });
 
   setWhatsAppMessageHandler(null);
@@ -3218,7 +3236,7 @@ async function startServer() {
   }
 
   for (const [agent, state] of Object.entries(agentState)) {
-    if (state.active) startAgentTimer(agent).catch(() => {
+    if (state.active) startAgentTimer(agent, true).catch(() => {
       agentState[agent].active = false;
       agentState[agent].errors++;
       persistAgentState();
