@@ -7,6 +7,7 @@ import { getChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/chann
 
 interface SiacRecord {
   id: string;
+  source_id: string | null;
   folio_siac: string;
   fecha_captura: string | null;
   estrategia: string | null;
@@ -41,20 +42,20 @@ interface SiacRecord {
 }
 
 const columnsConfig = [
-  { id: 'id',                  label: 'ID' },
+  { id: 'source_id',           label: 'ID' },
   { id: 'calidad',             label: 'CALIDAD' },
   { id: 'morosidad',           label: 'MOROSIDAD' },
   { id: 'estatus_siac',        label: 'ESTATUS' },
   { id: 'fecha_captura',       label: 'FECHA DE CAPTURA' },
   { id: 'folio_siac',          label: 'FOLIO' },
   { id: 'telefono_asignado',   label: 'TEL. TITULAR' },
-  { id: 'telefono_referencia', label: 'TEL. REFERENCIA' },
+  { id: 'telefono_referencia', label: 'TEL. CELULAR' },
   { id: 'correo',              label: 'CORREO ELECTRÓNICO' },
-  { id: 'linea_contratada',    label: 'NÚM. PORTABILIDAD' },
-  { id: 'telefono_portado',    label: 'NÚMERO A PORTAR' },
+  { id: 'telefono_portado',    label: 'TEL. A PORTAR' },
+  { id: 'tipo_linea',          label: 'TIPO DE LÍNEA' },
+  { id: 'linea_contratada',    label: 'SEGMENTO' },
   { id: 'estatus_pisa',        label: 'ETAPA PISA' },
   { id: 'paquete',             label: 'PAQUETE' },
-  { id: 'tipo_linea',          label: 'TIPO CONTRATACIÓN' },
   { id: 'area',                label: 'ÁREA' },
   { id: 'estrategia',          label: 'ESTRATEGIA' },
   { id: 'promotor',            label: 'USUARIO' },
@@ -266,20 +267,13 @@ export default function ConsultasSeguimiento() {
     await fetchAll();
   };
 
-  const getDisplayId = (id: string | null) => {
-    if (!id) return '--';
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) hash = Math.imul(31, hash) + id.charCodeAt(i) | 0;
-    return (hash >>> 0).toString().slice(0, 6).padStart(6, '0');
-  };
-
   const handleExport = () => {
     if (filteredData.length === 0) return;
     const header = columnsConfig.map(c => `"${c.label}"`).join(',');
     const rows = filteredData.map(item => 
       columnsConfig.map(c => {
         let val = (item as any)[c.id];
-        if (c.id === 'id') val = getDisplayId(val as string);
+        if (c.id === 'source_id') val = item.source_id || item.id;
         return `"${val ? String(val).replace(/"/g, '""') : ''}"`;
       }).join(',')
     );
@@ -438,7 +432,7 @@ export default function ConsultasSeguimiento() {
   const tgUrl = chatUrl('telegramVendedores');
 
   const getCellValue = (item: SiacRecord, colId: string): string => {
-    if (colId === 'id') return getDisplayId(item.id);
+    if (colId === 'source_id') return item.source_id || item.id || '--';
     if (colId === 'calidad') return recordQualityLabel(item);
     return (item as any)[colId] ?? '--';
   };

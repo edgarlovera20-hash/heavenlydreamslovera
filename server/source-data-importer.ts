@@ -5,6 +5,7 @@ import db, { ClientesCrm, Morosidad, SiacRecords } from './db';
 
 export const DEFAULT_SIAC_SOURCE = process.env.SIAC_PRIMARY_SOURCE || 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\SIAC PPIES.csv';
 export const DEFAULT_MOROSOS_SOURCE = process.env.MOROSOS_PRIMARY_SOURCE || 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\MOROSOS APP.csv';
+export const SIAC_IMPORTER_VERSION = 'siac-ppies-v2';
 
 type SourceInput = { sourcePath?: string; buffer?: Buffer; fileName?: string; replace?: boolean };
 
@@ -42,7 +43,7 @@ function parseCsvLine(line: string): string[] {
 function parseCsvRows(text: string) {
   const lines = text.split(/\r?\n/).filter(line => line.trim());
   if (!lines.length) return [];
-  const headers = parseCsvLine(lines[0]);
+  const headers = uniqueHeaders(parseCsvLine(lines[0]));
   return lines.slice(1).map(line => {
     const cols = parseCsvLine(line);
     const row: Record<string, string> = {};
@@ -67,6 +68,21 @@ function normalizeHeader(value: string) {
     .replace(/[^a-zA-Z0-9]+/g, ' ')
     .trim()
     .toUpperCase();
+}
+
+function baseHeaderKey(key: string) {
+  return key.replace(/__\d+$/, '');
+}
+
+function uniqueHeaders(headers: string[]) {
+  const seen = new Map<string, number>();
+  return headers.map((header, index) => {
+    const base = String(header || `Columna ${index + 1}`).trim() || `Columna ${index + 1}`;
+    const normalized = normalizeHeader(base) || `COLUMNA ${index + 1}`;
+    const count = (seen.get(normalized) || 0) + 1;
+    seen.set(normalized, count);
+    return count === 1 ? base : `${base}__${count}`;
+  });
 }
 
 function clean(value: any) {
@@ -117,7 +133,7 @@ async function parseXlsxRows(buffer: Buffer) {
     if (row.some(Boolean)) rows.push(row.map(value => value || ''));
   }
   if (!rows.length) return [];
-  const headers = rows[0].map(String);
+  const headers = uniqueHeaders(rows[0].map(String));
   return rows.slice(1).map(cols => {
     const row: Record<string, string> = {};
     headers.forEach((header, index) => { row[header] = cols[index] ?? ''; });
@@ -125,13 +141,27 @@ async function parseXlsxRows(buffer: Buffer) {
   });
 }
 
-function headerValue(row: Record<string, any>, aliases: string[]) {
+function headerMatches(row: Record<string, any>, aliases: string[]) {
   const entries = Object.entries(row);
   const normalizedAliases = aliases.map(normalizeHeader);
-  const exact = entries.find(([key]) => normalizedAliases.includes(normalizeHeader(key)));
-  if (exact) return clean(exact[1]);
-  const partial = entries.find(([key]) => normalizedAliases.some(alias => normalizeHeader(key).includes(alias)));
-  return partial ? clean(partial[1]) : null;
+  const exact = entries.filter(([key]) => normalizedAliases.includes(normalizeHeader(baseHeaderKey(key))));
+  if (exact.length) return exact;
+  return entries.filter(([key]) => normalizedAliases.some(alias => normalizeHeader(baseHeaderKey(key)).includes(alias)));
+}
+
+function headerValueAt(row: Record<string, any>, aliases: string[], index = 0) {
+  const match = headerMatches(row, aliases)[index];
+  return match ? clean(match[1]) : null;
+}
+
+function headerValue(row: Record<string, any>, aliases: string[]) {
+  return headerValueAt(row, aliases, 0);
+}
+
+function headerValueLast(row: Record<string, any>, aliases: string[]) {
+  const matches = headerMatches(row, aliases);
+  const match = matches[matches.length - 1];
+  return match ? clean(match[1]) : null;
 }
 
 function dateValue(row: Record<string, any>, aliases: string[]) {
@@ -161,14 +191,20 @@ export async function importSiacSource(input: SourceInput = {}) {
     const osAlta = headerValue(row, ['Orden de Servicio', 'Orrden de Servicio', 'OS de Pago']);
     const telefono = digits10(headerValue(row, ['Telefono']));
     const telefonoAsignado = digits10(headerValue(row, ['Telefono Asignado', 'Telfono Asignado', 'Tel Pago'])) || null;
-    const telefonoPortado = digits10(headerValue(row, ['Telefono de Portabilidad', 'Telefono Portado'])) || telefono;
+    const telefonoPortado = digits10(headerValue(row, ['Telefono de Portabilidad', 'Telefono Portado', 'Numero a Portar']));
     const zona = headerValue(row, ['Zona']);
     if (!folio && !osAlta && !telefono && !zona) { skipped++; continue; }
     try {
+      const sourceId = headerValue(row, ['ID']) || String(imported + skipped + 1);
+      const tipoLinea = headerValue(row, ['Tipo de Linea']);
+      const segmentoLinea = headerValueLast(row, ['Tipo de Linea']) || tipoLinea;
+      const tipoCliente = headerValueAt(row, ['Tipo de Cliente'], 0);
+      const tipoServicio = headerValue(row, ['Tipo de Servicio']) || headerValueAt(row, ['Tipo de Cliente'], 1);
       const usuario = headerValue(row, ['Usuario']);
       const promotor = headerValue(row, ['Nombre Promotor', 'Promotor']) || usuario;
       SiacRecords.upsert({
         id: randomUUID(),
+        source_id: sourceId,
         folio_siac: folio,
         fecha_captura: dateValue(row, ['Fecha de Captura', 'Fecha Captura']),
         estrategia: headerValue(row, ['Estrategia']),
@@ -176,8 +212,8 @@ export async function importSiacSource(input: SourceInput = {}) {
         usuario,
         morosidad: headerValue(row, ['Morosidad']),
         estatus_siac: headerValue(row, ['Estatus SIAC', 'Estatus']),
-        tipo_linea: headerValue(row, ['Tipo de Linea']),
-        linea_contratada: headerValue(row, ['Tipo de Linea']),
+        tipo_linea: tipoLinea,
+        linea_contratada: segmentoLinea,
         area: headerValue(row, ['Area']) || zona,
         division: headerValue(row, ['Division']) || headerValue(row, ['Distrito']),
         tienda: headerValue(row, ['Tienda']),
@@ -191,8 +227,8 @@ export async function importSiacSource(input: SourceInput = {}) {
         fecha_os_alta: dateValue(row, ['Fecha Posteo', 'Fecha OS Alta']),
         estatus_pisa: headerValue(row, ['Etapa PISA', 'Estatus Elaborada']),
         fecha_cambio_estatus: dateValue(row, ['Fecha cambio estatus', 'Fecha Posteo']),
-        tipo_cliente: headerValue(row, ['Tipo de Cliente']),
-        tipo_servicio: headerValue(row, ['Tipo de Cliente 1', 'Tipo de Servicio']),
+        tipo_cliente: tipoCliente,
+        tipo_servicio: tipoServicio,
         correo: headerValue(row, ['Correo Electronico', 'Correo']),
         estatus_etapa: headerValue(row, ['Etapa PISA', 'Estatus Etapa']),
         campana: null,

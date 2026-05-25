@@ -29,6 +29,7 @@ try {
 
 // Add new columns to siac_records if they don't exist yet
 const newSiacCols = [
+  { name: 'source_id',           def: 'TEXT' },
   { name: 'telefono_referencia', def: 'TEXT' },
   { name: 'zona',               def: 'TEXT' },
   { name: 'distrito',           def: 'TEXT' },
@@ -99,6 +100,7 @@ db.exec(`
   -- Registros SIAC (columna clave: folio_siac)
   CREATE TABLE IF NOT EXISTS siac_records (
     id                  TEXT PRIMARY KEY,
+    source_id           TEXT,
     folio_siac          TEXT UNIQUE NOT NULL,
     fecha_captura       TEXT,
     estrategia          TEXT,
@@ -823,8 +825,15 @@ export const Ventas = {
   delete: (id: string) => db.prepare('DELETE FROM ventas WHERE id=?').run(id),
 };
 
+const siacDateOrder = `
+  CASE
+    WHEN fecha_captura LIKE '__/__/____' THEN substr(fecha_captura, 7, 4) || '-' || substr(fecha_captura, 4, 2) || '-' || substr(fecha_captura, 1, 2)
+    ELSE fecha_captura
+  END DESC
+`;
+
 export const SiacRecords = {
-  getAll: () => db.prepare('SELECT * FROM siac_records ORDER BY fecha_captura DESC').all(),
+  getAll: () => db.prepare(`SELECT * FROM siac_records ORDER BY ${siacDateOrder}`).all(),
   getPage: ({ limit = 200, offset = 0, q = '', updatedSince = '' }: { limit?: number; offset?: number; q?: string; updatedSince?: string }) => {
     const where: string[] = [];
     const params: Record<string, any> = { limit, offset };
@@ -843,7 +852,7 @@ export const SiacRecords = {
     return db.prepare(`
       SELECT * FROM siac_records
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      ORDER BY fecha_captura DESC
+      ORDER BY ${siacDateOrder}
       LIMIT @limit OFFSET @offset
     `).all(params);
   },
@@ -858,7 +867,7 @@ export const SiacRecords = {
          OR zona LIKE @q
          OR distrito LIKE @q
          OR colonia LIKE @q
-      ORDER BY fecha_captura DESC
+      ORDER BY ${siacDateOrder}
       LIMIT 50`
   ).all({ q: `%${folio}%` }),
   getByFolio: (folio: string) => db.prepare(
@@ -866,7 +875,7 @@ export const SiacRecords = {
   ).get(folio),
   upsert: (data: any) => db.prepare(`
     INSERT INTO siac_records (
-      id, folio_siac, fecha_captura, estrategia, promotor, estatus_siac,
+      id, source_id, folio_siac, fecha_captura, estrategia, promotor, estatus_siac,
       tipo_linea, linea_contratada, area, division, tienda, paquete,
       observaciones, respuesta_telmex, motivo_rechazo, telefono_asignado,
       telefono_portado, os_alta, fecha_os_alta, estatus_pisa,
@@ -874,7 +883,7 @@ export const SiacRecords = {
       estatus_etapa, campana, telefono_referencia, zona, distrito, colonia,
       usuario, morosidad
     ) VALUES (
-      @id, @folio_siac, @fecha_captura, @estrategia, @promotor, @estatus_siac,
+      @id, @source_id, @folio_siac, @fecha_captura, @estrategia, @promotor, @estatus_siac,
       @tipo_linea, @linea_contratada, @area, @division, @tienda, @paquete,
       @observaciones, @respuesta_telmex, @motivo_rechazo, @telefono_asignado,
       @telefono_portado, @os_alta, @fecha_os_alta, @estatus_pisa,
@@ -882,6 +891,7 @@ export const SiacRecords = {
       @estatus_etapa, @campana, @telefono_referencia, @zona, @distrito, @colonia,
       @usuario, @morosidad
     ) ON CONFLICT(folio_siac) DO UPDATE SET
+      source_id=excluded.source_id,
       fecha_captura=excluded.fecha_captura,
       estrategia=excluded.estrategia,
       promotor=excluded.promotor,
@@ -912,7 +922,7 @@ export const SiacRecords = {
       colonia=excluded.colonia,
       usuario=excluded.usuario,
       morosidad=excluded.morosidad
-  `).run({ usuario: null, morosidad: null, ...data }),
+  `).run({ source_id: null, usuario: null, morosidad: null, ...data }),
   deleteAll: () => db.prepare('DELETE FROM siac_records').run(),
   count: () => (db.prepare('SELECT COUNT(*) as c FROM siac_records').get() as any).c,
 };

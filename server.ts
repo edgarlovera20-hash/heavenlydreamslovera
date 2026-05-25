@@ -31,6 +31,7 @@ import { getSiacCSVFingerprint, importSiacCSV } from "./server/siac-importer";
 import {
   DEFAULT_MOROSOS_SOURCE,
   DEFAULT_SIAC_SOURCE,
+  SIAC_IMPORTER_VERSION,
   getSourceFingerprint,
   importMorososSource,
   importSiacSource,
@@ -778,6 +779,7 @@ async function startServer() {
   function normalizeSiacRow(row: any) {
     return {
       id: row.id || randomUUID(),
+      source_id: row.source_id || row.sourceId || row.ID || row.idOrigen || null,
       folio_siac: row.folio_siac || row.folioSiac || row.folio || '',
       fecha_captura: row.fecha_captura || row.fechaCaptura || null,
       estrategia: row.estrategia || null,
@@ -1998,6 +2000,7 @@ async function startServer() {
       replace: req.query.replace === '1' || req.body?.replace !== false,
     });
     Settings.set('siac_primary_source_fingerprint', result.fingerprint);
+    Settings.set('siac_primary_importer_version', SIAC_IMPORTER_VERSION);
     AuditLog.insert({
       accion: 'IMPORT_SIAC_PRIMARY_SOURCE',
       entidad: 'siac_records',
@@ -3290,9 +3293,11 @@ async function startServer() {
   try {
     const siacPrimaryFingerprint = getSourceFingerprint(DEFAULT_SIAC_SOURCE);
     const storedSiacPrimaryFingerprint = Settings.get('siac_primary_source_fingerprint');
-    if (siacPrimaryFingerprint && (SiacRecords.count() === 0 || storedSiacPrimaryFingerprint !== siacPrimaryFingerprint)) {
+    const storedSiacImporterVersion = Settings.get('siac_primary_importer_version');
+    if (siacPrimaryFingerprint && (SiacRecords.count() === 0 || storedSiacPrimaryFingerprint !== siacPrimaryFingerprint || storedSiacImporterVersion !== SIAC_IMPORTER_VERSION)) {
       const result = await importSiacSource({ sourcePath: DEFAULT_SIAC_SOURCE, replace: true });
       Settings.set('siac_primary_source_fingerprint', result.fingerprint);
+      Settings.set('siac_primary_importer_version', SIAC_IMPORTER_VERSION);
       console.log(`[SIAC] Fuente principal sincronizada: ${result.imported} registros válidos`);
     } else {
       const siacCsvFingerprint = getSiacCSVFingerprint();
