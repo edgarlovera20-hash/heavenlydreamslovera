@@ -3192,13 +3192,16 @@ async function startServer() {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
+    const startedAt = Date.now();
     try {
       const result = await runner(imgs);
+      const totalDurationMs = Date.now() - startedAt;
       const fieldsCount = result.fieldsCount ?? countOcrFields(result.fields);
       const payload = {
         provider: result.provider,
         model: result.model,
         durationMs: result.durationMs,
+        totalDurationMs,
         fallbackReason: result.fallbackReason,
         cached: Boolean(result.cached),
         strategy: result.strategy,
@@ -3209,7 +3212,7 @@ async function startServer() {
         manualRequired: Boolean(result.manualRequired),
         warning: result.warning,
       };
-      console.log(`[OCR-${docType}]`, result.provider, result.model, `${result.durationMs}ms`, `${imgs.length}img`, JSON.stringify(result.fields));
+      console.log(`[OCR-${docType}]`, result.provider, result.model, `${result.durationMs}ms`, `total=${totalDurationMs}ms`, `${imgs.length}img`, JSON.stringify(result.fields));
       recordOcrTelemetry(req, 'completed', docType, payload);
       res.json({
         text: result.text,
@@ -3217,6 +3220,7 @@ async function startServer() {
         provider: result.provider,
         model: result.model,
         durationMs: result.durationMs,
+        totalDurationMs,
         fallbackReason: result.fallbackReason,
         cached: Boolean(result.cached),
         strategy: result.strategy,

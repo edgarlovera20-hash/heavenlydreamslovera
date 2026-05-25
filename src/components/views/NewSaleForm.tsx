@@ -537,6 +537,15 @@ function hasStrongIdentityResult(result?: Partial<CustomerCaptureData> | null) {
   return new Set(names).size >= 2;
 }
 
+function ocrFieldScore(result?: Partial<CustomerCaptureData> | null) {
+  if (!result) return 0;
+  return Object.values(result).filter(value => String(value || '').trim()).length;
+}
+
+function isGoodEnoughOcrResult(result?: Partial<CustomerCaptureData> | null) {
+  return hasStrongIdentityResult(result) || ocrFieldScore(result) >= 5;
+}
+
 async function rotateImagesForOcr(images: string[], turns: number) {
   let output = [...images];
   for (let i = 0; i < turns; i++) {
@@ -553,9 +562,8 @@ async function analyzeDocumentWithOrientationFallback(
   const attempts = canTryRotations
     ? [
         { turns: 0, progress: 18 },
-        { turns: 1, progress: 48 },
-        { turns: 3, progress: 72 },
-        { turns: 2, progress: 88 },
+        { turns: 1, progress: 58 },
+        { turns: 3, progress: 82 },
       ]
     : [{ turns: 0, progress: 18 }];
   let best: Partial<CustomerCaptureData> | null = null;
@@ -565,14 +573,15 @@ async function analyzeDocumentWithOrientationFallback(
     if (onProgress) onProgress(attempt.progress);
     const images = attempt.turns ? await rotateImagesForOcr(imgs, attempt.turns) : imgs;
     const result = await aiAgent.analyzeDocument(images, detectDocumentMime(images), onProgress);
-    const score = result ? Object.values(result).filter(value => String(value || '').trim()).length : 0;
+    const score = ocrFieldScore(result as Partial<CustomerCaptureData> | null);
     if (score > bestScore) {
       best = result as Partial<CustomerCaptureData> | null;
       bestScore = score;
     }
-    if (hasStrongIdentityResult(result as Partial<CustomerCaptureData> | null)) {
+    if (isGoodEnoughOcrResult(result as Partial<CustomerCaptureData> | null)) {
       return { result: result as Partial<CustomerCaptureData>, adjusted: attempt.turns > 0 };
     }
+    if (attempt.turns === 0 && bestScore >= 3) break;
   }
 
   return { result: best, adjusted: false };

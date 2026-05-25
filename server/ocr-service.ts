@@ -39,6 +39,7 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
 const TIMEOUT_MS_LLM       = parsePositiveIntEnv('OCR_LLM_TIMEOUT_MS', 45_000);  // 45s para Gemini
 const TIMEOUT_MS_OLLAMA    = parsePositiveIntEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM * 3);
 const TIMEOUT_MS_TESSERACT = 60_000;  // 60s para tesseract local
+const MAX_OUTPUT_TOKENS    = parsePositiveIntEnv('OCR_MAX_OUTPUT_TOKENS', 1200);
 const CACHE_TTL_MS         = 10 * 60 * 1000;
 const CACHE_MAX_ENTRIES    = 100;
 
@@ -214,6 +215,19 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
     const t = setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms);
     p.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
   });
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number, label: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err: any) {
+    if (err?.name === 'AbortError') throw new Error(`${label} timeout (${ms}ms)`);
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // ─── VALIDACIÓN DE OUTPUT (rechaza basura, fuerza fallback) ──────────────────
@@ -404,7 +418,7 @@ async function callGemini(prompt: string, base64Images: string[]): Promise<strin
       contents: [{ role: 'user', parts }],
       generationConfig: {
         temperature: 0.0,
-        maxOutputTokens: 2000,
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
       },
     }),
     TIMEOUT_MS_LLM,
@@ -435,19 +449,20 @@ async function callOllama(prompt: string, base64Images: string[]): Promise<strin
     }],
     options: {
       temperature: 0.0,
-      num_predict: 2000,
+      num_predict: MAX_OUTPUT_TOKENS,
     },
   };
 
-  const res = await withTimeout(
-    fetch(`${OLLAMA_URL}/api/chat`, {
+  const res = await fetchWithTimeout(
+    `${OLLAMA_URL}/api/chat`,
+    {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(OLLAMA_API_KEY && { 'Authorization': `Bearer ${OLLAMA_API_KEY}` }),
       },
       body: JSON.stringify(payload),
-    }),
+    },
     TIMEOUT_MS_OLLAMA, // Ollama local puede tardar más en primera ejecución
     'Ollama'
   );
@@ -477,13 +492,14 @@ async function checkOllamaHealth() {
   }
 
   try {
-    const res = await withTimeout(
-      fetch(`${OLLAMA_URL}/api/tags`, {
+    const res = await fetchWithTimeout(
+      `${OLLAMA_URL}/api/tags`,
+      {
         method: 'GET',
         headers: {
           ...(OLLAMA_API_KEY && { 'Authorization': `Bearer ${OLLAMA_API_KEY}` }),
         },
-      }),
+      },
       Math.min(TIMEOUT_MS_OLLAMA, 10_000),
       'Ollama health'
     );
@@ -597,8 +613,17 @@ function parseProviderList(value?: string | null): OcrProvider[] {
   return providers;
 }
 
+function uniqueProviders(providers: OcrProvider[]): OcrProvider[] {
+  const unique: OcrProvider[] = [];
+  for (const provider of providers) {
+    if (!unique.includes(provider)) unique.push(provider);
+  }
+  return unique;
+}
+
 function completeOrder(preferred: OcrProvider[]): OcrProvider[] {
-  return [...preferred, ...VALID_PROVIDERS.filter(provider => !preferred.includes(provider))];
+  const uniquePreferred = uniqueProviders(preferred);
+  return [...uniquePreferred, ...VALID_PROVIDERS.filter(provider => !uniquePreferred.includes(provider))];
 }
 
 function providerOrderFor(docType: OcrDocType): OcrProvider[] {

@@ -1613,6 +1613,25 @@ export default function MobileFieldApp() {
     }));
   };
 
+  const applyOcrFieldsToDraft = (fields: any) => {
+    updateDraft({
+      nombres: pick(fields, 'nombres', 'nombre', 'name') || draft.nombres,
+      apellidoPaterno: pick(fields, 'apellidoPaterno', 'apellido_paterno', 'primerApellido') || draft.apellidoPaterno,
+      apellidoMaterno: pick(fields, 'apellidoMaterno', 'apellido_materno', 'segundoApellido') || draft.apellidoMaterno,
+      curp: pick(fields, 'curp', 'CURP') || draft.curp,
+      folioIne: pick(fields, 'folioIne', 'folio_ine', 'claveElector', 'cic', 'ocr') || draft.folioIne,
+      fechaNacimiento: pick(fields, 'fechaNacimiento', 'fecha_nacimiento', 'birthDate') || draft.fechaNacimiento,
+      sexo: pick(fields, 'sexo', 'genero') || draft.sexo,
+      estadoNacimiento: pick(fields, 'estadoNacimiento', 'entidadNacimiento', 'estado') || draft.estadoNacimiento,
+      calle: pick(fields, 'calle', 'domicilioCalle', 'street') || draft.calle,
+      colonia: pick(fields, 'colonia', 'asentamiento') || draft.colonia,
+      delegacion: pick(fields, 'delegacion', 'municipio', 'alcaldia') || draft.delegacion,
+      ciudad: pick(fields, 'ciudad', 'estado') || draft.ciudad,
+      codigoPostal: pick(fields, 'codigoPostal', 'cp', 'codigo_postal') || draft.codigoPostal,
+      folioSiac: pick(fields, 'folio_siac', 'folioSiac', 'folio') || draft.folioSiac,
+    });
+  };
+
   const runDocumentOcr = async (docType: string, mode: 'ine' | 'comprobante' | 'siac') => {
     const file = selectedFiles[docType];
     if (!file) {
@@ -1622,22 +1641,7 @@ export default function MobileFieldApp() {
     try {
       const data = await runMobileOcr(file, mode);
       const fields = data.fields || data.extracted || data.data || data;
-      updateDraft({
-        nombres: pick(fields, 'nombres', 'nombre', 'name') || draft.nombres,
-        apellidoPaterno: pick(fields, 'apellidoPaterno', 'apellido_paterno', 'primerApellido') || draft.apellidoPaterno,
-        apellidoMaterno: pick(fields, 'apellidoMaterno', 'apellido_materno', 'segundoApellido') || draft.apellidoMaterno,
-        curp: pick(fields, 'curp', 'CURP') || draft.curp,
-        folioIne: pick(fields, 'folioIne', 'folio_ine', 'claveElector', 'cic', 'ocr') || draft.folioIne,
-        fechaNacimiento: pick(fields, 'fechaNacimiento', 'fecha_nacimiento', 'birthDate') || draft.fechaNacimiento,
-        sexo: pick(fields, 'sexo', 'genero') || draft.sexo,
-        estadoNacimiento: pick(fields, 'estadoNacimiento', 'entidadNacimiento', 'estado') || draft.estadoNacimiento,
-        calle: pick(fields, 'calle', 'domicilioCalle', 'street') || draft.calle,
-        colonia: pick(fields, 'colonia', 'asentamiento') || draft.colonia,
-        delegacion: pick(fields, 'delegacion', 'municipio', 'alcaldia') || draft.delegacion,
-        ciudad: pick(fields, 'ciudad', 'estado') || draft.ciudad,
-        codigoPostal: pick(fields, 'codigoPostal', 'cp', 'codigo_postal') || draft.codigoPostal,
-        folioSiac: pick(fields, 'folio_siac', 'folioSiac', 'folio') || draft.folioSiac,
-      });
+      applyOcrFieldsToDraft(fields);
       notify('success', 'OCR aplicado al borrador.');
     } catch (err: any) {
       notify('error', err?.message || 'No se pudo ejecutar OCR.');
@@ -1769,10 +1773,15 @@ export default function MobileFieldApp() {
       notify('error', 'Sube frente y reverso de INE antes de iniciar OCR.');
       return;
     }
-    for (const type of targets) {
-      await runDocumentOcr(type, 'ine');
+    try {
+      const files = targets.map((type) => selectedFiles[type]).filter(Boolean) as File[];
+      const data = await runMobileOcr(files, 'ine');
+      const fields = data.fields || data.extracted || data.data || data;
+      applyOcrFieldsToDraft(fields);
+      notify('success', 'OCR de INE aplicado al borrador.');
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo ejecutar OCR de INE.');
     }
-    notify('success', 'OCR de INE aplicado al borrador.');
   };
 
   const selectPackage = (pkg: PackageCatalogItem) => {
