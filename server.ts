@@ -2805,10 +2805,17 @@ async function startServer() {
     const metadata = parseMetadata(row?.metadata);
     const key = String(metadata.key || '').toLowerCase();
     const audience = String(metadata.audience || '').toLowerCase();
-    return normalizeWhatsAppAccount(
-      metadata.account ||
-      (key === 'whatsappclientes' || audience === 'clientes' ? 'clientes' : 'promotores')
-    );
+    const account = String(metadata.account || '').toLowerCase();
+    const label = String(row?.label || '').toLowerCase();
+    const externalId = String(row?.external_id || row?.externalId || row?.id || '').toLowerCase();
+    const fingerprint = `${account} ${key} ${audience} ${label} ${externalId}`;
+    if (/(cliente|clientes|whatsappclientes|gestion de clientes|gestión de clientes)/i.test(fingerprint)) {
+      return normalizeWhatsAppAccount('clientes');
+    }
+    if (/(promotor|promotores|vendedor|vendedores|whatsappvendedores|heavenly-dreams-main|heavenly-dreams-promotores)/i.test(fingerprint)) {
+      return normalizeWhatsAppAccount('promotores');
+    }
+    return normalizeWhatsAppAccount(metadata.account || 'promotores');
   }
 
   function withLiveChannelAccountStatus(row: any) {

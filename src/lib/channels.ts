@@ -46,8 +46,17 @@ function keyFromAccount(row: any): ChannelKey | null {
   const metadata = (() => {
     try { return typeof row?.metadata === 'string' ? JSON.parse(row.metadata) : row?.metadata || {}; } catch { return {}; }
   })();
-  if (metadata.account === 'promotores') return 'whatsappVendedores';
-  if (metadata.account === 'clientes') return 'whatsappClientes';
+  const fingerprint = [
+    metadata.account,
+    metadata.key,
+    metadata.audience,
+    row?.label,
+    row?.external_id,
+    row?.externalId,
+    row?.id,
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (metadata.account === 'promotores' || /(promotor|promotores|vendedor|vendedores|whatsappvendedores)/i.test(fingerprint)) return 'whatsappVendedores';
+  if (metadata.account === 'clientes' || /(cliente|clientes|whatsappclientes|gestion de clientes|gestión de clientes)/i.test(fingerprint)) return 'whatsappClientes';
   if (metadata.key === 'whatsappVendedores' || metadata.audience === 'vendedores' && row.channel === 'whatsapp') return 'whatsappVendedores';
   if (metadata.key === 'whatsappClientes' || metadata.audience === 'clientes' && row.channel === 'whatsapp') return 'whatsappClientes';
   if (metadata.key === 'telegramVendedores' || row.channel === 'telegram') return 'telegramVendedores';
