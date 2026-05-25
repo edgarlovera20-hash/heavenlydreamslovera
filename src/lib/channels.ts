@@ -67,12 +67,31 @@ function accountToLink(row: any): [ChannelKey, ChannelLink] | null {
   }];
 }
 
+function linkPriority(row: any) {
+  const metadata = (() => {
+    try { return typeof row?.metadata === 'string' ? JSON.parse(row.metadata) : row?.metadata || {}; } catch { return {}; }
+  })();
+  const identifier = String(row?.external_id || row?.externalId || '');
+  const digits = identifier.replace(/\D/g, '');
+  if (digits.length >= 10) return 50;
+  if (metadata.linkedAt) return 40;
+  if (metadata.engine === 'baileys') return 20;
+  if (/^whatsapp(vendedores|clientes)?$/i.test(identifier)) return 5;
+  return 30;
+}
+
 export async function refreshChannels(): Promise<ChannelsState> {
   const rows = await ChannelsAPI.getAccounts();
   const next: ChannelsState = {};
+  const priorities: Partial<Record<ChannelKey, number>> = {};
   for (const row of Array.isArray(rows) ? rows : []) {
     const entry = accountToLink(row);
-    if (entry) next[entry[0]] = entry[1];
+    if (!entry) continue;
+    const priority = linkPriority(row);
+    if (!next[entry[0]] || priority >= (priorities[entry[0]] || 0)) {
+      next[entry[0]] = entry[1];
+      priorities[entry[0]] = priority;
+    }
   }
   cache = next;
   return next;
