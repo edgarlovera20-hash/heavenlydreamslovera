@@ -10,6 +10,13 @@ function readAsDataUrl(file: File) {
 export async function runMobileOcr(fileOrFiles: File | File[], mode: 'ine' | 'comprobante' | 'siac' = 'ine') {
   const files = Array.isArray(fileOrFiles) ? fileOrFiles.filter(Boolean) : [fileOrFiles];
   if (files.length === 0) throw new Error('Selecciona primero un archivo o foto.');
+  const invalid = files.find((file) => !file.type.startsWith('image/'));
+  if (invalid) {
+    if (invalid.type === 'application/pdf' || invalid.name.toLowerCase().endsWith('.pdf')) {
+      throw new Error('El OCR movil todavia no lee PDF directo. Guarda el PDF en expediente o sube una foto/imagen del documento.');
+    }
+    throw new Error('OCR solo acepta imagenes. Audio, video y PDF se guardan como expediente.');
+  }
   const images = await Promise.all(files.map(readAsDataUrl));
   const endpoint = mode === 'comprobante'
     ? '/api/vision/comprobante'

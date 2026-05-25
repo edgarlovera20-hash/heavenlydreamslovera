@@ -489,7 +489,6 @@ async function startServer() {
   const HOST = process.env.HOST?.trim();
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
   const registrationLimiter = rateLimit('registration', 8, 60 * 60 * 1000);
-  const ocrLimiter = rateLimit('ocr', 40, 15 * 60 * 1000);
   const authOnly = requireAuth;
   const opsOnly = requireRole('GERENTE', 'SUPERVISOR');
   const chatUserOnly = requireRole('GERENTE', 'SUPERVISOR', 'ASESOR');
@@ -2848,6 +2847,28 @@ async function startServer() {
     capturista: null, archivero: null, consultor: null, validador: null,
   };
 
+  const AGENT_STATE_SETTINGS_KEY = 'agent_runtime_state_v1';
+
+  function persistAgentState() {
+    const snapshot = Object.fromEntries(Object.entries(agentState).map(([key, state]) => [
+      key,
+      { active: state.active, lastRun: state.lastRun, processed: state.processed, errors: state.errors },
+    ]));
+    Settings.set(AGENT_STATE_SETTINGS_KEY, snapshot);
+  }
+
+  const savedAgentState = Settings.get(AGENT_STATE_SETTINGS_KEY) || {};
+  for (const [key, saved] of Object.entries(savedAgentState as Record<string, any>)) {
+    if (!agentState[key] || !saved) continue;
+    agentState[key] = {
+      ...agentState[key],
+      active: Boolean(saved.active),
+      lastRun: saved.lastRun || null,
+      processed: Number(saved.processed || 0),
+      errors: Number(saved.errors || 0),
+    };
+  }
+
   // ── Helpers compartidos por agentes ──────────────────────
   const extractField = (text: string, key: string) => {
     const re = new RegExp(`${key}[:\\s]+([^\\n,]+)`, 'i');
@@ -2969,6 +2990,32 @@ async function startServer() {
     validador: async () => { agentState.validador.lastRun = new Date().toISOString(); },
   };
 
+  async function startAgentTimer(agent: string, runImmediately = false) {
+    const runner = AGENT_RUNNERS[agent];
+    if (!runner) return;
+    if (agentTimers[agent]) clearInterval(agentTimers[agent]!);
+    if (runImmediately) await runner();
+    agentTimers[agent] = setInterval(async () => {
+      try {
+        await runner();
+        persistAgentState();
+      } catch {
+        if (agentState[agent]) {
+          agentState[agent].errors++;
+          persistAgentState();
+        }
+      }
+    }, 30_000);
+  }
+
+  for (const [agent, state] of Object.entries(agentState)) {
+    if (state.active) startAgentTimer(agent).catch(() => {
+      agentState[agent].active = false;
+      agentState[agent].errors++;
+      persistAgentState();
+    });
+  }
+
   app.get("/api/agents/status", chatUserOnly, wrap((_req: any, res: any) => {
     res.json(agentState);
   }));
@@ -3004,12 +3051,9 @@ async function startServer() {
     } else {
       // Activar
       agentState[agent].active = true;
-      const runner = AGENT_RUNNERS[agent];
-      if (runner) {
-        await runner();
-        agentTimers[agent] = setInterval(runner, 30_000); // cada 30 s
-      }
+      await startAgentTimer(agent, true);
     }
+    persistAgentState();
     res.json({ agent, active: agentState[agent].active });
   }));
 
@@ -3018,6 +3062,7 @@ async function startServer() {
     const runner = AGENT_RUNNERS[agent];
     if (!runner) return res.status(404).json({ error: 'Agente no encontrado' });
     await runner();
+    persistAgentState();
     res.json({ ok: true, state: agentState[agent] });
   }));
 
@@ -3399,6 +3444,16 @@ async function startServer() {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
     if (imgs.length === 0) return res.status(400).json({ error: 'Falta image o images' });
+    const pdf = imgs.find((img: string) => /^data:application\/pdf/i.test(String(img || '')));
+    if (pdf) {
+      return res.status(415).json({
+        error: 'OCR de PDF no esta disponible todavia. Guarda el PDF en expediente o sube una foto/imagen del documento para escanearlo.',
+      });
+    }
+    const nonImage = imgs.find((img: string) => /^data:/i.test(String(img || '')) && !/^data:image\//i.test(String(img || '')));
+    if (nonImage) {
+      return res.status(415).json({ error: 'OCR solo acepta imagenes. Para audio, video o PDF usa carga de expediente.' });
+    }
     const startedAt = Date.now();
     try {
       const result = await runner(imgs);
@@ -3445,15 +3500,15 @@ async function startServer() {
 
   // ── OCR MULTI-MODELO Y AUTOMATIZABLE ──────────────────────────────────────
   // Acepta { image: "..." } o { images: ["frente","reverso"] } — múltiples mejoran precisión.
-  app.post("/api/vision/ocr", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
+  app.post("/api/vision/ocr", authOnly, wrap(async (req: any, res: any) => {
     return runOcrEndpoint(req, res, 'ine', runIneOcr);
   }));
 
-  app.post("/api/vision/siac", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
+  app.post("/api/vision/siac", authOnly, wrap(async (req: any, res: any) => {
     return runOcrEndpoint(req, res, 'siac', runSiacOcr);
   }));
 
-  app.post("/api/vision/comprobante", authOnly, ocrLimiter, wrap(async (req: any, res: any) => {
+  app.post("/api/vision/comprobante", authOnly, wrap(async (req: any, res: any) => {
     return runOcrEndpoint(req, res, 'comprobante', runComprobanteOcr);
   }));
 

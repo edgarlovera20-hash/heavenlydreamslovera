@@ -257,6 +257,8 @@ const DOCUMENT_TYPES = [
   { type: 'COMPROBANTE_DOMICILIO', label: 'Comprobante', mode: 'comprobante' as const },
   { type: 'CAPTURA_SIAC', label: 'Captura SIAC', mode: 'siac' as const },
   { type: 'SOLICITUD_FIRMADA', label: 'Solicitud firmada', mode: 'ine' as const },
+  { type: 'VIDEO_FIRMA', label: 'Video firma', mode: 'ine' as const },
+  { type: 'AUDIO_LLAMADA', label: 'Audio llamada', mode: 'ine' as const },
 ];
 
 const PRIMARY_NAV: Array<{ id: MobileSection; label: string; icon: IconName }> = [
@@ -967,7 +969,10 @@ export default function MobileFieldApp() {
   const [submittingCapture, setSubmittingCapture] = useState(false);
   const [curpLoading, setCurpLoading] = useState(false);
   const [videoFirmaActive, setVideoFirmaActive] = useState(false);
+  const [videoFirmaSavedName, setVideoFirmaSavedName] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaChunksRef = useRef<BlobPart[]>([]);
   const [folioQuery, setFolioQuery] = useState('');
   const [folioResults, setFolioResults] = useState<any[]>([]);
   const [folioLoading, setFolioLoading] = useState(false);
@@ -1508,19 +1513,57 @@ export default function MobileFieldApp() {
 
   const startVideoFirma = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      if (typeof MediaRecorder === 'undefined') {
+        notify('error', 'Este navegador no permite grabar video. Sube un archivo de video firma.');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setVideoFirmaActive(true);
-      updateDraft({ videoFirmaLocal: true });
+      setVideoFirmaSavedName('');
       window.setTimeout(() => {
         if (videoRef.current) videoRef.current.srcObject = stream;
       }, 0);
-      notify('success', 'Video firma local iniciada.');
+      mediaChunksRef.current = [];
+      const preferredType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+        ? 'video/webm;codecs=vp8,opus'
+        : MediaRecorder.isTypeSupported('video/webm')
+          ? 'video/webm'
+          : '';
+      const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) mediaChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const mimeType = recorder.mimeType || 'video/webm';
+        const blob = new Blob(mediaChunksRef.current, { type: mimeType });
+        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+        const fileName = `video-firma-${Date.now()}.${ext}`;
+        const file = new File([blob], fileName, { type: mimeType, lastModified: Date.now() });
+        setSelectedFiles((current) => ({ ...current, VIDEO_FIRMA: file }));
+        setDraft((current) => ({
+          ...current,
+          videoFirmaLocal: true,
+          documents: [
+            ...current.documents.filter((doc) => doc.type !== 'VIDEO_FIRMA'),
+            { type: 'VIDEO_FIRMA', fileName, size: file.size, selectedAt: new Date().toISOString() },
+          ],
+        }));
+        setVideoFirmaSavedName(fileName);
+        mediaChunksRef.current = [];
+        notify('success', 'Video firma guardada en el expediente.');
+      };
+      recorder.start();
+      notify('success', 'Grabando video firma con audio.');
     } catch (err: any) {
       notify('error', err?.message || 'No se pudo abrir la camara para video firma.');
     }
   };
 
   const stopVideoFirma = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
     const stream = videoRef.current?.srcObject as MediaStream | null;
     stream?.getTracks().forEach((track) => track.stop());
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -2119,7 +2162,14 @@ export default function MobileFieldApp() {
     const packages = availablePackagesForDraft(draft);
     const selectedPackage = selectedPackageForDraft(draft);
     const totalMensual = Number(draft.rentaMensual || 0) + streamingTotal(draft);
-    const docRow = (type: string, label: string, mode: 'ine' | 'comprobante' | 'siac', capture?: 'environment') => {
+    const docRow = (
+      type: string,
+      label: string,
+      mode: 'ine' | 'comprobante' | 'siac',
+      capture?: 'environment',
+      accept = 'image/*,.pdf',
+      ocrEnabled = true,
+    ) => {
       const selected = draft.documents.find((item) => item.type === type);
       return (
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
@@ -2132,14 +2182,16 @@ export default function MobileFieldApp() {
           </div>
           <input
             type="file"
-            accept="image/*,.pdf"
+            accept={accept}
             capture={capture}
             onChange={(event) => handleDocumentSelected(type, event.currentTarget.files?.[0] || null)}
             className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-xl file:border-0 file:bg-cyan-300 file:px-3 file:py-2 file:text-sm file:font-black file:text-slate-950"
           />
-          <button onClick={() => runDocumentOcr(type, mode)} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-xs font-black uppercase tracking-[0.1em] text-cyan-100">
-            OCR de este documento
-          </button>
+          {ocrEnabled && (
+            <button onClick={() => runDocumentOcr(type, mode)} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-xs font-black uppercase tracking-[0.1em] text-cyan-100">
+              OCR de este documento
+            </button>
+          )}
         </div>
       );
     };
@@ -2367,9 +2419,14 @@ export default function MobileFieldApp() {
                 <button onClick={stopVideoFirma} disabled={!videoFirmaActive} className="h-12 rounded-2xl border border-rose-300/25 bg-rose-300/10 font-black text-rose-100 disabled:opacity-40">Detener</button>
               </div>
               <button onClick={() => updateDraft({ videoFirmaLocal: !draft.videoFirmaLocal })} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
-                <span className="text-sm font-black text-slate-100">Consentimiento de video firma capturado</span>
+                <span className="min-w-0 text-sm font-black text-slate-100">
+                  Consentimiento de video firma capturado
+                  {videoFirmaSavedName && <span className="mt-1 block truncate text-xs font-semibold text-slate-400">{videoFirmaSavedName}</span>}
+                </span>
                 <span className={cx('rounded-full px-3 py-1 text-xs font-black', draft.videoFirmaLocal ? 'bg-emerald-300 text-slate-950' : 'bg-slate-700 text-slate-200')}>{draft.videoFirmaLocal ? 'SI' : 'NO'}</span>
               </button>
+              {docRow('VIDEO_FIRMA', 'Subir video firma existente', 'ine', undefined, 'video/*', false)}
+              {docRow('AUDIO_LLAMADA', 'Subir audio de llamada', 'ine', undefined, 'audio/*', false)}
             </div>
           )}
 

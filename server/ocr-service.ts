@@ -31,14 +31,20 @@ const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'adaptive').toLowerCase()
 const GEMINI_MODEL    = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const OLLAMA_MODEL    = getOllamaModel();
 
+function parseTimeoutEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  if (Number.isFinite(value) && value === 0) return 0;
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
 function parsePositiveIntEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
-const TIMEOUT_MS_LLM       = parsePositiveIntEnv('OCR_LLM_TIMEOUT_MS', 45_000);  // 45s para Gemini
-const TIMEOUT_MS_OLLAMA    = parsePositiveIntEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM * 3);
-const TIMEOUT_MS_TESSERACT = parsePositiveIntEnv('OCR_TESSERACT_TIMEOUT_MS', 30_000);
+const TIMEOUT_MS_LLM       = parseTimeoutEnv('OCR_LLM_TIMEOUT_MS', 45_000);  // 0 desactiva timeout
+const TIMEOUT_MS_OLLAMA    = parseTimeoutEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM > 0 ? TIMEOUT_MS_LLM * 3 : 0);
+const TIMEOUT_MS_TESSERACT = parseTimeoutEnv('OCR_TESSERACT_TIMEOUT_MS', 30_000);
 const MAX_OUTPUT_TOKENS    = parsePositiveIntEnv('OCR_MAX_OUTPUT_TOKENS', 1200);
 const CACHE_TTL_MS         = 10 * 60 * 1000;
 const CACHE_MAX_ENTRIES    = 100;
@@ -211,6 +217,7 @@ function modelTagMatches(availableModel: string, configuredModel: string): boole
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  if (!ms) return p;
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms);
     p.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
@@ -218,6 +225,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number, label: string) {
+  if (!ms) return fetch(url, init);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ms);
   try {
