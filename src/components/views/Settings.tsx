@@ -1007,12 +1007,26 @@ function ChannelCard({
               <div className="text-[10px] text-slate-500 mt-1">Conectado el {connectedAtFmt}</div>
             )}
           </div>
-          <button
-            onClick={onDisconnect}
-            className="w-full bg-red-600/15 hover:bg-red-600/25 text-red-400 border border-red-500/20 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2"
-          >
-            <Power className="w-3.5 h-3.5" /> Desconectar cuenta
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              onClick={onConnect}
+              className={cn(
+                'w-full py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 border',
+                isWA
+                  ? 'bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border-emerald-500/20'
+                  : 'bg-sky-600/15 hover:bg-sky-600/25 text-sky-300 border-sky-500/20',
+              )}
+            >
+              {isWA ? <QrCode className="w-3.5 h-3.5" /> : <Key className="w-3.5 h-3.5" />}
+              {isWA ? 'Re-vincular QR' : 'Cambiar token'}
+            </button>
+            <button
+              onClick={onDisconnect}
+              className="w-full bg-red-600/15 hover:bg-red-600/25 text-red-400 border border-red-500/20 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2"
+            >
+              <Power className="w-3.5 h-3.5" /> Desconectar
+            </button>
+          </div>
         </div>
       ) : (
         <div className="relative">

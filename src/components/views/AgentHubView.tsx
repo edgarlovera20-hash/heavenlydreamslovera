@@ -30,6 +30,8 @@ interface TgStatus {
   status: 'disconnected' | 'polling' | 'error';
   error: string | null;
   botToken: string | null;
+  botName?: string | null;
+  configured?: boolean;
 }
 interface AgentOutboxItem {
   id: string;
@@ -108,6 +110,7 @@ export default function AgentHubView() {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<'agents' | 'approvals' | 'telegram' | 'messages' | 'manual'>('agents');
   const [tgToken, setTgToken] = useState('');
+  const [showTelegramTokenForm, setShowTelegramTokenForm] = useState(false);
   const [tgConnecting, setTgConnecting] = useState(false);
   const [manual, setManual] = useState({ nombres: '', telefono: '', plan: '', canal: 'app' });
   const [toast, setToast] = useState<string | null>(null);
@@ -161,7 +164,12 @@ export default function AgentHubView() {
         body: JSON.stringify({ token: tgToken.trim() }),
       });
       const d = await r.json();
-      if (d.ok) { pop(`✅ Telegram conectado como @${d.botName}`); setTgToken(''); await loadAll(); }
+      if (d.ok) {
+        pop(`✅ Telegram conectado como @${d.botName}`);
+        setTgToken('');
+        setShowTelegramTokenForm(false);
+        await loadAll();
+      }
       else pop(`❌ ${d.error}`);
     } finally { setTgConnecting(false); }
   };
@@ -169,6 +177,7 @@ export default function AgentHubView() {
   const disconnectTelegram = async () => {
     await fetch('/api/telegram/stop', { method: 'POST' });
     pop('Telegram desconectado');
+    setShowTelegramTokenForm(false);
     await loadAll();
   };
 
@@ -440,14 +449,24 @@ export default function AgentHubView() {
             </div>
             {tgStatus.status === 'polling' && (
               <>
-                <p className="text-xs text-blue-300">✅ Bot activo y escuchando mensajes en tiempo real.</p>
+                <p className="text-xs text-blue-300">
+                  ✅ Bot activo{tgStatus.botName ? ` como @${tgStatus.botName}` : ''} y escuchando mensajes en tiempo real.
+                </p>
                 <p className="text-[10px] text-slate-500">Los agentes Capturista y Consultor procesan mensajes entrantes inmediatamente.</p>
-                <button
-                  onClick={disconnectTelegram}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold uppercase tracking-widest hover:bg-rose-500/20 transition-all"
-                >
-                  <XCircle className="w-4 h-4" /> Desconectar bot
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setShowTelegramTokenForm(v => !v)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-bold uppercase tracking-widest hover:bg-blue-500/20 transition-all"
+                  >
+                    <Key className="w-4 h-4" /> {showTelegramTokenForm ? 'Ocultar cambio' : 'Cambiar token'}
+                  </button>
+                  <button
+                    onClick={disconnectTelegram}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold uppercase tracking-widest hover:bg-rose-500/20 transition-all"
+                  >
+                    <XCircle className="w-4 h-4" /> Desconectar bot
+                  </button>
+                </div>
               </>
             )}
             {tgStatus.status === 'error' && (
@@ -459,10 +478,10 @@ export default function AgentHubView() {
           </div>
 
           {/* Formulario de conexión */}
-          {tgStatus.status !== 'polling' && (
+          {(tgStatus.status !== 'polling' || showTelegramTokenForm) && (
             <div className="bg-[#0a0d14] border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Key className="w-4 h-4 text-blue-400" /> Conectar Bot de Telegram
+                <Key className="w-4 h-4 text-blue-400" /> {tgStatus.status === 'polling' ? 'Cambiar token de Telegram' : 'Conectar Bot de Telegram'}
               </h3>
 
               <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-1">
@@ -491,7 +510,7 @@ export default function AgentHubView() {
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-bold text-xs uppercase tracking-widest hover:bg-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {tgConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                {tgConnecting ? 'Verificando token…' : 'Conectar Telegram'}
+                {tgConnecting ? 'Verificando token…' : tgStatus.status === 'polling' ? 'Guardar nuevo token' : 'Conectar Telegram'}
               </button>
             </div>
           )}

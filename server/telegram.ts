@@ -20,6 +20,7 @@ let status: Status = 'disconnected';
 let lastError: string | null = null;
 let pollingAbort: AbortController | null = null;
 let lastUpdateId = 0;
+let currentBotName: string | null = null;
 
 const messageBuffer: TgMessage[] = [];
 const MAX_MESSAGES = 200;
@@ -32,7 +33,13 @@ export function setTelegramMessageHandler(fn: (msg: TgMessage) => void) {
 }
 
 export function getTelegramStatus() {
-  return { status, error: lastError, botToken: botToken ? '***' : null };
+  return {
+    status,
+    error: lastError,
+    botToken: botToken ? '***' : null,
+    botName: currentBotName,
+    configured: !!botToken,
+  };
 }
 
 function persistStatus(botName?: string | null) {
@@ -138,10 +145,11 @@ export async function initTelegram(token: string): Promise<{ ok: boolean; botNam
   stopTelegram();
 
   botToken = token;
+  currentBotName = me.result.username || null;
   status = 'polling';
   lastError = null;
   lastUpdateId = 0;
-  persistStatus(me.result.username);
+  persistStatus(currentBotName);
 
   pollingAbort = new AbortController();
   pollLoop(token, pollingAbort).catch(err => {
@@ -157,6 +165,7 @@ export function stopTelegram() {
   pollingAbort?.abort();
   pollingAbort = null;
   botToken = null;
+  currentBotName = null;
   status = 'disconnected';
   lastError = null;
   persistStatus();

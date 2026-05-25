@@ -3750,8 +3750,12 @@ async function startServer() {
     console.warn('[MOROSOS] No se pudo sincronizar fuente principal:', err?.message || err);
   }
 
-  // Auto-reconectar Telegram si había token guardado
-  const savedToken = Settings.get('telegram_bot_token');
+  // Auto-reconectar Telegram. El valor guardado en Settings tiene prioridad;
+  // si nunca se guardo uno, usa el secreto del entorno del servidor.
+  const storedTelegramToken = Settings.get('telegram_bot_token');
+  const savedToken = typeof storedTelegramToken === 'string'
+    ? storedTelegramToken
+    : (process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN || '');
   if (savedToken) {
     initTelegram(savedToken)
       .then(r => r.ok
