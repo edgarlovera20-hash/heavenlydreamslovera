@@ -2415,9 +2415,55 @@ async function startServer() {
   // ── CUOTAS ─────────────────────────────────────────────────
   app.get("/api/quotas", opsOnly, wrap((_req: any, res: any) => res.json(Quotas.getAll())));
 
+  app.get("/api/quotas/me", authOnly, wrap((req: any, res: any) => {
+    const quota = Quotas.getByUser(req.auth.sub) as any;
+    res.json(quota || {
+      user_id: req.auth.sub,
+      meta: 10,
+      periodo: new Date().toISOString().slice(0, 7),
+      mensaje: '',
+      updated_by: null,
+      notified_at: null,
+      updated_at: null,
+    });
+  }));
+
   app.put("/api/quotas/:userId", opsOnly, wrap((req: any, res: any) => {
-    Quotas.set(req.params.userId, req.body.meta);
-    res.json({ ok: true });
+    const meta = Number.parseInt(String(req.body?.meta ?? 0), 10);
+    if (!Number.isFinite(meta) || meta < 0) return res.status(400).json({ error: 'Meta invalida.' });
+    const periodo = String(req.body?.periodo || new Date().toISOString().slice(0, 7)).slice(0, 7);
+    const mensaje = String(req.body?.mensaje || '').trim().slice(0, 700);
+    const notify = req.body?.notify !== false;
+    const user = Users.getById(req.params.userId) as any;
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+    const notifiedAt = notify ? new Date().toISOString() : null;
+    Quotas.set(req.params.userId, {
+      meta,
+      periodo,
+      mensaje,
+      updated_by: req.auth?.sub || null,
+      notified_at: notifiedAt,
+    });
+    const quota = Quotas.getByUser(req.params.userId) as any;
+    AuditLog.insert({
+      accion: 'META_ESTABLECIDA',
+      entidad: 'quotas',
+      entidad_id: req.params.userId,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: `Meta ${meta} ventas para ${user.nombre || user.username} (${periodo})`,
+    });
+    if (notify) {
+      const content = mensaje || `Tu meta para ${periodo} es de ${meta} ventas aprobadas. Revisa tu progreso en Mi Perfil.`;
+      Announcements.create({
+        id: randomUUID(),
+        titulo: `Meta actualizada: ${user.nombre || user.username}`,
+        contenido: content,
+        tipo: 'goal',
+        autor_id: req.auth?.sub || null,
+      });
+    }
+    res.json({ ok: true, quota });
   }));
 
   // ── COMISIONES ─────────────────────────────────────────────

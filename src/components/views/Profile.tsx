@@ -7,6 +7,7 @@ import {
 import { cn } from '../../lib/utils';
 import { auth } from '../../lib/firebase';
 import { UsersAPI, VentasAPI } from '../../services/db';
+import { sendPushNotification } from '../../lib/notifications';
 
 interface Sale {
   id?: string;
@@ -24,6 +25,15 @@ interface UserRecord {
   displayName?: string;
   nombre?: string;
   role?: string;
+}
+
+interface QuotaRecord {
+  user_id: string;
+  meta: number;
+  periodo?: string;
+  mensaje?: string;
+  updated_at?: string;
+  notified_at?: string;
 }
 
 interface TimelineEntry {
@@ -59,23 +69,44 @@ export default function Profile() {
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
+  const [goal, setGoal] = useState<QuotaRecord | null>(null);
 
   useEffect(() => {
     const load = () => {
-      Promise.all([VentasAPI.getAll(), UsersAPI.getAll()])
-        .then(([salesRows, userRows]: any[]) => {
+      Promise.all([
+        VentasAPI.getAll().catch(() => []),
+        UsersAPI.getAll().catch(() => []),
+        fetch('/api/quotas/me', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null),
+      ])
+        .then(([salesRows, userRows, quotaRow]: any[]) => {
           setSales(Array.isArray(salesRows) ? salesRows : []);
           setUsers((Array.isArray(userRows) ? userRows : []).map((u: any) => ({
             ...u,
             displayName: u.displayName || u.nombre || u.username || u.email,
           })));
+          setGoal(quotaRow ? { ...quotaRow, meta: Number(quotaRow.meta || 0) } : null);
         })
-        .catch(() => { setSales([]); setUsers([]); });
+        .catch(() => { setSales([]); setUsers([]); setGoal(null); });
     };
     load();
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    if (!goal?.notified_at || !session?.uid) return;
+    const key = `hd_quota_notice_${session.uid}`;
+    try {
+      if (localStorage.getItem(key) === goal.notified_at) return;
+      localStorage.setItem(key, goal.notified_at);
+    } catch {
+      // ignore storage errors; still show the in-app message once for this render
+    }
+    sendPushNotification('Meta actualizada', {
+      body: goal.mensaje || `Tu meta es de ${goal.meta || 10} ventas aprobadas.`,
+      type: 'success',
+    });
+  }, [goal?.notified_at, goal?.mensaje, goal?.meta, session?.uid]);
 
   const userName = session?.displayName || session?.email?.split('@')[0] || 'Usuario';
   const userRoleRaw = (session?.role || 'ASESOR').toLowerCase();
@@ -96,6 +127,13 @@ export default function Profile() {
   const successRate = foliosTotales > 0
     ? ((ventasPagadas / foliosTotales) * 100).toFixed(1)
     : '0';
+  const goalMeta = Number(goal?.meta || 10);
+  const goalPeriod = goal?.periodo || new Date().toISOString().slice(0, 7);
+  const goalPeriodLabel = new Date(`${goalPeriod}-01T00:00:00`).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  const goalSales = mySales.filter(s => (s.fechaSolicitud || '').startsWith(goalPeriod));
+  const goalApproved = goalSales.filter(s => s.status === 'APROBADA' || s.status === 'PROCEDIO').length;
+  const goalProgress = goalMeta > 0 ? Math.min(100, Math.round((goalApproved / goalMeta) * 100)) : 0;
+  const goalMissing = Math.max(0, goalMeta - goalApproved);
 
   // Streak: consecutive days with at least one sale, counting back from today
   const streakDays = useMemo(() => {
@@ -329,6 +367,48 @@ export default function Profile() {
               <p className="text-2xl font-bold text-white">{points}</p>
               <p className="text-xs text-slate-500 mt-1">Ranking: #{myRank}</p>
             </div>
+          </div>
+
+          {/* TEAM GOAL */}
+          <div className="glass-panel rounded-2xl p-5 border border-cyan-400/20 bg-cyan-400/5">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Target className="w-4 h-4 text-cyan-300" />
+                  Meta asignada
+                </h3>
+                <p className="text-[11px] text-slate-500 uppercase tracking-widest mt-1">{goalPeriodLabel}</p>
+              </div>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest border',
+                goalProgress >= 100 ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300'
+              )}>
+                {goalProgress}%
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center mb-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-lg font-black text-white">{goalMeta}</p>
+                <p className="text-[9px] uppercase tracking-widest text-slate-500">Meta</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-lg font-black text-emerald-300">{goalApproved}</p>
+                <p className="text-[9px] uppercase tracking-widest text-slate-500">Aprobadas</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-lg font-black text-amber-300">{goalMissing}</p>
+                <p className="text-[9px] uppercase tracking-widest text-slate-500">Faltan</p>
+              </div>
+            </div>
+            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden mb-4">
+              <div
+                className={cn('h-full rounded-full', goalProgress >= 100 ? 'bg-emerald-400' : 'bg-cyan-400')}
+                style={{ width: `${goalProgress}%` }}
+              />
+            </div>
+            <p className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300 whitespace-pre-wrap">
+              {goal?.mensaje || 'Tu meta se mostrará aquí cuando gerencia agregue un mensaje personalizado.'}
+            </p>
           </div>
 
           {/* NEXT TARGET ENGINE */}

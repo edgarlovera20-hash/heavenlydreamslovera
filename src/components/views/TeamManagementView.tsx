@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Target, Edit2, UserX, UserCheck, Save, X, TrendingUp, Award, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, Target, Edit2, UserX, UserCheck, Save, X, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
 import { logAudit } from '../../lib/auditLog';
 function getCurrentUser() { try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s) : null; } catch { return null; } }
@@ -15,6 +15,15 @@ interface TeamMember {
   active?: boolean;
   zona?: string;
   fechaIngreso?: string;
+}
+
+interface QuotaRecord {
+  user_id: string;
+  meta: number;
+  periodo?: string;
+  mensaje?: string;
+  updated_at?: string;
+  notified_at?: string;
 }
 
 let _allSalesCache: any[] = [];
@@ -38,16 +47,22 @@ function normalizeMember(user: any): TeamMember {
   };
 }
 
-function normalizeQuotas(rows: any): Record<string, number> {
+function normalizeQuotas(rows: any): Record<string, QuotaRecord> {
   if (!Array.isArray(rows)) return rows || {};
-  return Object.fromEntries(rows.map(row => [row.user_id, Number(row.meta || 0)]));
+  return Object.fromEntries(rows.map(row => [row.user_id, { ...row, meta: Number(row.meta || 0) }]));
 }
 
 export default function TeamManagementView() {
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const [quotas, setQuotasState] = useState<Record<string, number>>({});
-  const [editingQuota, setEditingQuota] = useState<string | null>(null);
-  const [tempQuota, setTempQuota] = useState('');
+  const [quotas, setQuotasState] = useState<Record<string, QuotaRecord>>({});
+  const [editingGoal, setEditingGoal] = useState<{
+    uid: string;
+    name: string;
+    meta: string;
+    periodo: string;
+    mensaje: string;
+    notify: boolean;
+  } | null>(null);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -67,14 +82,46 @@ export default function TeamManagementView() {
 
   useEffect(() => { load(); }, []);
 
-  const saveQuota = async (uid: string) => {
-    const val = parseInt(tempQuota);
+  const openGoalEditor = (member: TeamMember, quota: QuotaRecord) => {
+    setEditingGoal({
+      uid: member.uid,
+      name: member.displayName || member.nombre || member.email,
+      meta: String(quota.meta || 10),
+      periodo: quota.periodo || period,
+      mensaje: quota.mensaje || `Tu meta para ${quota.periodo || period} es cumplir ${quota.meta || 10} ventas aprobadas. Revisa tu avance en Mi Perfil.`,
+      notify: true,
+    });
+  };
+
+  const saveQuota = async () => {
+    if (!editingGoal) return;
+    const val = parseInt(editingGoal.meta);
     if (isNaN(val) || val < 0) { toast.error('Meta inválida.'); return; }
     try {
-      await fetch(`/api/quotas/${uid}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ meta: val }) });
-      setQuotasState(prev => ({ ...prev, [uid]: val }));
-      setEditingQuota(null);
-      toast.success('Meta guardada.');
+      const res = await fetch(`/api/quotas/${editingGoal.uid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meta: val,
+          periodo: editingGoal.periodo,
+          mensaje: editingGoal.mensaje,
+          notify: editingGoal.notify,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'Error al guardar meta.');
+      setQuotasState(prev => ({
+        ...prev,
+        [editingGoal.uid]: data?.quota || {
+          user_id: editingGoal.uid,
+          meta: val,
+          periodo: editingGoal.periodo,
+          mensaje: editingGoal.mensaje,
+          notified_at: editingGoal.notify ? new Date().toISOString() : null,
+        },
+      }));
+      setEditingGoal(null);
+      toast.success(editingGoal.notify ? 'Meta guardada y mensaje enviado.' : 'Meta guardada.');
     } catch { toast.error('Error al guardar meta.'); }
   };
 
@@ -151,7 +198,8 @@ export default function TeamManagementView() {
           </div>
         ) : members.map(m => {
           const stats = getMemberStats(m.uid, period);
-          const quota = quotas[m.uid] || 10;
+          const quotaRow = quotas[m.uid] || { user_id: m.uid, meta: 10, periodo: period, mensaje: '' };
+          const quota = quotaRow.meta || 10;
           const progress = Math.min(100, Math.round((stats.approved / quota) * 100));
           const isActive = m.active !== false;
           const isExpanded = expanded === m.uid;
@@ -189,17 +237,9 @@ export default function TeamManagementView() {
                 {/* Goal progress */}
                 <div className="hidden lg:flex flex-col items-end gap-1 w-32 shrink-0">
                   <div className="flex items-center justify-between w-full">
-                    {editingQuota === m.uid ? (
-                      <div className="flex items-center gap-1">
-                        <input type="number" value={tempQuota} onChange={e => setTempQuota(e.target.value)} className="w-14 bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none" />
-                        <button onClick={() => saveQuota(m.uid)} className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded"><Save className="w-3 h-3" /></button>
-                        <button onClick={() => setEditingQuota(null)} className="p-1 text-slate-400 hover:bg-white/5 rounded"><X className="w-3 h-3" /></button>
-                      </div>
-                    ) : (
-                      <button onClick={() => { setEditingQuota(m.uid); setTempQuota(String(quota)); }} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-white transition-colors">
-                        <Target className="w-3 h-3" /> Meta: {quota}
-                      </button>
-                    )}
+                    <button onClick={() => openGoalEditor(m, quotaRow)} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-white transition-colors">
+                      <Target className="w-3 h-3" /> Meta: {quota}
+                    </button>
                     <span className={cn('text-[10px] font-bold', progress >= 100 ? 'text-emerald-400' : progress >= 60 ? 'text-amber-400' : 'text-slate-400')}>{progress}%</span>
                   </div>
                   <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -211,6 +251,9 @@ export default function TeamManagementView() {
                 <div className="flex items-center gap-1 shrink-0">
                   <button onClick={() => setEditingMember({ ...m })} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Editar">
                     <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => openGoalEditor(m, quotaRow)} className="p-2 text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors" title="Editar meta y enviar mensaje">
+                    <Target className="w-3.5 h-3.5" />
                   </button>
                   <button onClick={() => toggleActive(m.uid)} className={cn('p-2 rounded-lg transition-colors', isActive ? 'text-red-400 hover:bg-red-500/10' : 'text-emerald-400 hover:bg-emerald-500/10')} title={isActive ? 'Desactivar' : 'Reactivar'}>
                     {isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
@@ -244,9 +287,13 @@ export default function TeamManagementView() {
                     <p className="text-[9px] text-slate-500 uppercase tracking-widest">Meta mensual</p>
                     <p className="text-sm font-bold text-white">{quota} ventas</p>
                   </div>
+                  <div className="md:col-span-2">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-widest">Mensaje de meta</p>
+                    <p className="text-sm font-bold text-slate-200 line-clamp-2">{quotaRow.mensaje || 'Sin mensaje personalizado.'}</p>
+                  </div>
                   <div>
                     <p className="text-[9px] text-slate-500 uppercase tracking-widest">Progreso meta</p>
-                    <p className={cn('text-sm font-bold', progress >= 100 ? 'text-emerald-400' : 'text-amber-400')}>{progress >= 100 ? '✅ Cumplida' : `${progress}% (${stats.approved}/${quota})`}</p>
+                    <p className={cn('text-sm font-bold', progress >= 100 ? 'text-emerald-400' : 'text-amber-400')}>{progress >= 100 ? 'Cumplida' : `${progress}% (${stats.approved}/${quota})`}</p>
                   </div>
                   {m.zona && <div><p className="text-[9px] text-slate-500 uppercase tracking-widest">Zona asignada</p><p className="text-sm font-bold text-white">{m.zona}</p></div>}
                   {m.fechaIngreso && <div><p className="text-[9px] text-slate-500 uppercase tracking-widest">Fecha ingreso</p><p className="text-sm font-bold text-white">{m.fechaIngreso}</p></div>}
@@ -256,6 +303,80 @@ export default function TeamManagementView() {
           );
         })}
       </div>
+
+      {/* Goal modal */}
+      {editingGoal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-cyan-500/30 rounded-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  <Target className="w-4 h-4 text-cyan-300" />
+                  Meta de {editingGoal.name}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Se mostrará en Mi Perfil y puede enviar un aviso al usuario.</p>
+              </div>
+              <button onClick={() => setEditingGoal(null)} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/5"><X className="w-4 h-4" /></button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Meta mensual</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={editingGoal.meta}
+                  onChange={e => setEditingGoal(p => p ? { ...p, meta: e.target.value } : p)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Período</label>
+                <input
+                  type="month"
+                  value={editingGoal.periodo}
+                  onChange={e => setEditingGoal(p => p ? { ...p, periodo: e.target.value } : p)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none [color-scheme:dark]"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <MessageSquare className="w-3.5 h-3.5" />
+                Mensaje para el asesor
+              </label>
+              <textarea
+                value={editingGoal.mensaje}
+                onChange={e => setEditingGoal(p => p ? { ...p, mensaje: e.target.value } : p)}
+                rows={4}
+                maxLength={700}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                placeholder="Escribe el mensaje que verá en Mi Perfil..."
+              />
+              <p className="text-[10px] text-slate-500 text-right">{editingGoal.mensaje.length}/700</p>
+            </div>
+
+            <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={editingGoal.notify}
+                onChange={e => setEditingGoal(p => p ? { ...p, notify: e.target.checked } : p)}
+                className="h-4 w-4 accent-cyan-500"
+              />
+              Enviar aviso y mostrar notificación en el Perfil
+            </label>
+
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setEditingGoal(null)} className="flex-1 px-4 py-2.5 border border-white/10 text-slate-300 rounded-xl text-sm font-bold hover:bg-white/5 transition-colors">Cancelar</button>
+              <button onClick={saveQuota} className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2">
+                <Save className="w-4 h-4" />
+                Guardar meta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit modal */}
       {editingMember && (

@@ -123,7 +123,9 @@ export const TerritoriesAPI = {
 // ── Cuotas ──────────────────────────────────────────────────
 export const QuotasAPI = {
   getAll: () => api('GET', '/api/quotas'),
-  set: (userId: string, meta: number) => api('PUT', `/api/quotas/${userId}`, { meta }),
+  getMe: () => api('GET', '/api/quotas/me'),
+  set: (userId: string, data: number | { meta: number; periodo?: string; mensaje?: string; notify?: boolean }) =>
+    api('PUT', `/api/quotas/${userId}`, typeof data === 'number' ? { meta: data } : data),
 };
 
 // ── Comisiones ──────────────────────────────────────────────

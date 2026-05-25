@@ -189,6 +189,9 @@ db.exec(`
     user_id     TEXT PRIMARY KEY,
     meta        INTEGER NOT NULL DEFAULT 0,
     periodo     TEXT,
+    mensaje     TEXT,
+    updated_by  TEXT,
+    notified_at TEXT,
     updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE
   );
@@ -839,6 +842,12 @@ try {
 } catch (e) { console.warn('[DB] Migracion sessions omitida:', e); }
 
 try {
+  ensureColumn('quotas', 'mensaje', 'TEXT');
+  ensureColumn('quotas', 'updated_by', 'TEXT');
+  ensureColumn('quotas', 'notified_at', 'TEXT');
+} catch (e) { console.warn('[DB] Migracion quotas omitida:', e); }
+
+try {
   [
     { name: 'provider', def: 'TEXT' },
     { name: 'provider_call_id', def: 'TEXT' },
@@ -1155,10 +1164,25 @@ export const Referrals = {
 
 export const Quotas = {
   getAll: () => db.prepare('SELECT * FROM quotas').all(),
-  set: (userId: string, meta: number) => db.prepare(`
-    INSERT INTO quotas (user_id,meta,updated_at) VALUES (?,?,datetime('now'))
-    ON CONFLICT(user_id) DO UPDATE SET meta=excluded.meta, updated_at=excluded.updated_at
-  `).run(userId, meta),
+  getByUser: (userId: string) => db.prepare('SELECT * FROM quotas WHERE user_id=?').get(userId),
+  set: (userId: string, input: any) => db.prepare(`
+    INSERT INTO quotas (user_id,meta,periodo,mensaje,updated_by,notified_at,updated_at)
+    VALUES (@user_id,@meta,@periodo,@mensaje,@updated_by,@notified_at,datetime('now'))
+    ON CONFLICT(user_id) DO UPDATE SET
+      meta=excluded.meta,
+      periodo=excluded.periodo,
+      mensaje=excluded.mensaje,
+      updated_by=excluded.updated_by,
+      notified_at=excluded.notified_at,
+      updated_at=excluded.updated_at
+  `).run({
+    user_id: userId,
+    meta: Number(input?.meta || 0),
+    periodo: input?.periodo || null,
+    mensaje: input?.mensaje || null,
+    updated_by: input?.updated_by || null,
+    notified_at: input?.notified_at || null,
+  }),
 };
 
 export const CommissionRules = {
