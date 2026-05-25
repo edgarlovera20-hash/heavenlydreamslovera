@@ -72,6 +72,24 @@ function extractName(from: any): string {
   return parts.length ? parts.join(' ') : from.username || String(from.id);
 }
 
+function extractTelegramBody(msg: any) {
+  const text = String(msg?.text || msg?.caption || '').trim();
+  if (text) return text;
+  if (msg?.sticker) return `[sticker recibido${msg.sticker.emoji ? ` ${msg.sticker.emoji}` : ''}]`;
+  if (msg?.photo) return '[imagen recibida: posible INE o expediente]';
+  if (msg?.document) return `[documento recibido: ${msg.document.file_name || 'documento'}]`;
+  if (msg?.audio || msg?.voice) return '[audio recibido]';
+  if (msg?.video || msg?.video_note) return '[video recibido]';
+  if (msg?.contact) return '[contacto recibido]';
+  if (msg?.location) return '[ubicacion recibida]';
+  return '[mensaje recibido sin texto]';
+}
+
+function telegramMessageTypes(msg: any) {
+  return ['text', 'caption', 'sticker', 'photo', 'document', 'audio', 'voice', 'video', 'video_note', 'contact', 'location']
+    .filter(key => msg?.[key]);
+}
+
 async function pollLoop(token: string, abort: AbortController) {
   while (!abort.signal.aborted) {
     try {
@@ -91,13 +109,14 @@ async function pollLoop(token: string, abort: AbortController) {
       for (const update of data.result ?? []) {
         lastUpdateId = update.update_id;
         const msg = update.message;
-        if (!msg?.text) continue;
+        if (!msg) continue;
+        const body = extractTelegramBody(msg);
 
         const entry: TgMessage = {
           id: String(update.update_id),
           from: String(msg.from?.id ?? msg.chat.id),
           fromName: extractName(msg.from),
-          body: msg.text,
+          body,
           timestamp: msg.date * 1000,
           chatId: msg.chat.id,
           isGroup: msg.chat.type !== 'private',
@@ -117,7 +136,7 @@ async function pollLoop(token: string, abort: AbortController) {
           fromName: entry.fromName,
           timestamp: entry.timestamp,
           isGroup: entry.isGroup,
-          metadata: { from: entry.from },
+          metadata: { from: entry.from, messageTypes: telegramMessageTypes(msg) },
         });
 
         if (onMessageCallback) onMessageCallback(entry);

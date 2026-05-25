@@ -195,7 +195,7 @@ function normalizePhoneOrJid(value: string) {
 
 function extractBody(message: any): string {
   const payload = message?.message || {};
-  return (
+  const text = (
     payload.conversation ||
     payload.extendedTextMessage?.text ||
     payload.imageMessage?.caption ||
@@ -205,6 +205,22 @@ function extractBody(message: any): string {
     payload.listResponseMessage?.title ||
     ''
   ).trim();
+  if (text) return text;
+  if (payload.stickerMessage) return '[sticker recibido]';
+  if (payload.imageMessage) return '[imagen recibida: posible INE o expediente]';
+  if (payload.documentMessage) {
+    const fileName = payload.documentMessage.fileName || payload.documentMessage.title || 'documento';
+    return `[documento recibido: ${fileName}]`;
+  }
+  if (payload.audioMessage) return '[audio recibido]';
+  if (payload.videoMessage) return '[video recibido]';
+  if (payload.contactMessage || payload.contactsArrayMessage) return '[contacto recibido]';
+  if (payload.locationMessage || payload.liveLocationMessage) return '[ubicacion recibida]';
+  return '[mensaje recibido sin texto]';
+}
+
+function messageTypes(message: any) {
+  return Object.keys(message?.message || {});
 }
 
 function normalizeTimestamp(value: any) {
@@ -385,7 +401,7 @@ async function startBaileysSocket(runtime: WaRuntime) {
         fromName: entry.fromName,
         timestamp: entry.timestamp,
         isGroup: entry.isGroup,
-        metadata: { rawId: entry.id, account: runtime.account, jid: entry.from },
+        metadata: { rawId: entry.id, account: runtime.account, jid: entry.from, messageTypes: messageTypes(msg) },
       });
       if (runtime.messageHandler) {
         try {

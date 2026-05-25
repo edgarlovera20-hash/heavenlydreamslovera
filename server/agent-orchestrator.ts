@@ -74,16 +74,62 @@ function extractFields(text: string, conversation: any) {
   return Object.fromEntries(Object.entries(fields).filter(([, value]) => value != null && String(value).trim() !== ''));
 }
 
+function extractEmail(text: string) {
+  return String(text || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || null;
+}
+
+function extractFolioCandidate(text: string) {
+  const raw = String(text || '').trim();
+  const prefixed = raw.match(/\b(?:folio|siac|estatus|consulta)\s*[:#-]?\s*([A-Z0-9-]{5,})\b/i)?.[1];
+  if (prefixed) return prefixed;
+  if (/^\s*(?:folio\s*)?[A-Z0-9-]{5,}\s*$/i.test(raw) && /\d/.test(raw)) {
+    return raw.replace(/^folio\s*/i, '').trim();
+  }
+  return raw.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i)?.[1] || null;
+}
+
+function isMediaSignal(text: string) {
+  return /^\[(sticker|imagen|documento|audio|video|contacto|ubicacion|mensaje recibido sin texto)/i.test(String(text || '').trim());
+}
+
+function buildAutonomousReply(text: string, profile: any) {
+  const lower = String(text || '').toLowerCase();
+  const email = extractEmail(text);
+  const baseOptions = 'Puedo ayudarte con 🔎 consulta de folios, 📁 guardar expediente o 📝 iniciar una captura. ¿Qué hacemos primero?';
+  if (email) {
+    return `Recibí el correo ${email} 📩. Lo puedo usar para el expediente o seguimiento del cliente. ${baseOptions}`;
+  }
+  if (lower.includes('sticker recibido')) {
+    return `Sticker recibido 😄. Me quedo en modo trabajo: ${baseOptions}`;
+  }
+  if (lower.includes('imagen recibida')) {
+    return `Imagen recibida 📸. Si es INE, comprobante o documento del expediente, la dejo identificada para el flujo. Dime nombre del cliente o folio para relacionarla.`;
+  }
+  if (lower.includes('documento recibido')) {
+    return `Documento recibido 📄. Lo puedo guardar en expediente o asociarlo a una captura. ¿Me pasas nombre del cliente, teléfono o folio?`;
+  }
+  if (lower.includes('audio recibido')) {
+    return `Audio recibido 🎧. Para avanzar rapido, escríbeme el dato clave: folio, nombre del cliente o qué trámite quieres iniciar.`;
+  }
+  if (lower.includes('video recibido')) {
+    return `Video recibido 🎥. Si corresponde a evidencia o firma, lo podemos guardar en expediente. ¿A qué cliente o folio lo relaciono?`;
+  }
+  if (/\bine\b|credencial|frente|reverso/i.test(text)) {
+    return `Perfecto, si es INE necesito frente y reverso 🪪. También dime nombre del cliente o folio para guardar bien el expediente.`;
+  }
+  return defaultProfileReply(profile);
+}
+
 function classifyIntent(text: string): { intent: Intent; confidence: number } {
   const body = text.toLowerCase();
-  if (/^\s*(?:folio\s*)?[a-z0-9-]{5,}\s*$/i.test(text) && /\d/.test(text)) {
-    return { intent: 'consulta_folio', confidence: 0.9 };
-  }
   if (/\b(folio|consulta|estatus|siac|mi folio)\b/.test(body)) return { intent: 'consulta_folio', confidence: 0.88 };
   if (/\b(contratar|quiero internet|paquete|cobertura|fibra|instalar|servicio|alta)\b/.test(body)) return { intent: 'venta', confidence: 0.86 };
+  if (body.includes('nombre:') && (body.includes('tel:') || body.includes('telefono:') || body.includes('teléfono:'))) return { intent: 'venta', confidence: 0.92 };
   if (/\b(pagar|adeudo|debo|atraso|promesa|liquido|cobranza)\b/.test(body)) return { intent: 'morosidad', confidence: 0.8 };
   if (/\b(falla|soporte|ayuda|problema|no funciona|queja)\b/.test(body)) return { intent: 'soporte', confidence: 0.78 };
-  if (body.includes('nombre:') && (body.includes('tel:') || body.includes('telefono:') || body.includes('teléfono:'))) return { intent: 'venta', confidence: 0.92 };
+  if (extractFolioCandidate(text) && !extractEmail(text) && !isMediaSignal(text)) {
+    return { intent: 'consulta_folio', confidence: 0.9 };
+  }
   return { intent: 'otro', confidence: 0.45 };
 }
 
@@ -107,12 +153,12 @@ function buildSalesReply(fields: Record<string, any>, missing: string[]) {
 }
 
 function buildFolioReply(text: string) {
-  const folio = text.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i)?.[1];
+  const folio = extractFolioCandidate(text);
   if (!folio) return { reply: 'Enviame el numero de folio para consultar. Ejemplo: folio 123456', fields: {} };
   const record = SiacRecords.getByFolio(folio) as any;
-  if (!record) return { reply: `No encontre el folio ${folio}. Puedo escalarlo a un asesor para revision.`, fields: { folio } };
+  if (!record) return { reply: `Busqué el folio ${folio} 🔎 y no lo encontré en la base disponible. ¿Quieres que lo escale a un asesor o me compartes otro folio?`, fields: { folio } };
   return {
-    reply: `Folio ${record.folio_siac}\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha captura: ${record.fecha_captura || 'N/D'}\nPaquete: ${record.paquete || 'N/D'}`,
+    reply: `Folio ${record.folio_siac} ✅\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha captura: ${record.fecha_captura || 'N/D'}\nPaquete: ${record.paquete || 'N/D'}`,
     fields: { folio, found: true },
   };
 }
@@ -163,7 +209,7 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
     extractedFields: fields,
     proposedReply: (() => {
       const profile = AgentProfiles.getById('promoter_receptionist') as any;
-      return defaultProfileReply(profile);
+      return buildAutonomousReply(text, profile);
     })(),
     proposedActions: [],
     requiresApproval: true,
@@ -246,12 +292,20 @@ Analiza el mensaje entrante para Heavenly Dreams CRM.
 
 Reglas:
 - Responde SOLO JSON valido, sin markdown y sin explicaciones.
+- ARIUX debe responder ante cualquier mensaje entrante, aunque sea corto, raro o incompleto.
+- Tono: social, profesional, rapido, con humor ligero cuando ayude. Usa 1 a 3 emojis utiles, sin saturar.
+- Siempre termina con una pregunta o siguiente paso concreto cuando falte contexto.
 - No inventes folios, telefonos, nombres, paquetes ni direcciones.
 - Todas las acciones requieren aprobacion humana aunque el JSON diga lo contrario.
+- Si el mensaje es solo un numero, codigo o folio, usa intent "consulta_folio".
 - Si el cliente pide estatus/folio/SIAC, usa intent "consulta_folio".
 - Si quiere contratar, instalar, cotizar o pasar datos de venta, usa intent "venta".
 - Si habla de falla o queja, usa intent "soporte".
 - Si habla de adeudo/pago/promesa de pago, usa intent "morosidad".
+- Si recibe un email, pregunta si debe guardarlo en expediente, usarlo para seguimiento o asociarlo a cliente.
+- Si recibe INE, imagen, PDF o documento, confirma recepcion y pide nombre/folio/telefono para relacionar expediente.
+- Si recibe sticker, audio o video, responde de forma amable y con humor ligero; pide el dato operativo que falta.
+- Si no entiendes el mensaje, ofrece opciones: consultar folio, guardar expediente o iniciar captura.
 - proposedActions solo puede usar: create_sale, update_lead, schedule_followup, escalate_human.
 
 Perfil del agente:
@@ -278,6 +332,9 @@ ${JSON.stringify({
 
 Mensaje:
 ${String(message.body || '').slice(0, 2500)}
+
+Metadata del mensaje:
+${JSON.stringify(message.metadata || {})}
 
 Devuelve exactamente:
 {
