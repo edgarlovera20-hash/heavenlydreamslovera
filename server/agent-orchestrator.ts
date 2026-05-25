@@ -76,6 +76,9 @@ function extractFields(text: string, conversation: any) {
 
 function classifyIntent(text: string): { intent: Intent; confidence: number } {
   const body = text.toLowerCase();
+  if (/^\s*(?:folio\s*)?[a-z0-9-]{5,}\s*$/i.test(text) && /\d/.test(text)) {
+    return { intent: 'consulta_folio', confidence: 0.9 };
+  }
   if (/\b(folio|consulta|estatus|siac|mi folio)\b/.test(body)) return { intent: 'consulta_folio', confidence: 0.88 };
   if (/\b(contratar|quiero internet|paquete|cobertura|fibra|instalar|servicio|alta)\b/.test(body)) return { intent: 'venta', confidence: 0.86 };
   if (/\b(pagar|adeudo|debo|atraso|promesa|liquido|cobranza)\b/.test(body)) return { intent: 'morosidad', confidence: 0.8 };
