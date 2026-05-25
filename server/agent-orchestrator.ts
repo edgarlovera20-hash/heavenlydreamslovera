@@ -169,19 +169,22 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
 function stripVisibleThinking(value: string) {
   return String(value || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^[\s\S]*?<\/think>/i, '')
     .replace(/^\s*\/?no_think\s*/i, '')
     .trim();
 }
 
 function parseModelJson(output: string) {
   const clean = stripVisibleThinking(output);
-  const match = clean.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch {
-    return null;
+  for (let start = clean.lastIndexOf('{'); start >= 0; start = clean.lastIndexOf('{', start - 1)) {
+    const candidate = clean.slice(start).trim();
+    const end = candidate.lastIndexOf('}');
+    if (end < 0) continue;
+    try {
+      return JSON.parse(candidate.slice(0, end + 1));
+    } catch {}
   }
+  return null;
 }
 
 function clampConfidence(value: any, fallback: number) {

@@ -14,6 +14,7 @@ const PROVIDERS: Array<{ name: ProviderName; configured: () => boolean; run: (pr
 function stripVisibleThinking(value: string) {
   return String(value || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^[\s\S]*?<\/think>/i, '')
     .replace(/^\s*\/?no_think\s*/i, '')
     .trim();
 }
@@ -36,8 +37,9 @@ async function callOllama(prompt: string) {
           role: 'system',
           content: 'Eres Qwen 3 operando Heavenly Dreams CRM. Responde en espanol, sin razonamiento visible, sin etiquetas <think>, y entrega solo lo que se pide.',
         },
-        { role: 'user', content: prompt },
+        { role: 'user', content: `/no_think\n${prompt}` },
       ],
+      think: false,
       options: { temperature: 0.2, num_predict: 1200, num_ctx: 8192 },
     }),
   });
@@ -91,9 +93,14 @@ Respuesta: ${text}`;
 }
 
 function safeJson(text: string) {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try { return JSON.parse(match[0]); } catch { return null; }
+  const clean = stripVisibleThinking(text);
+  for (let start = clean.lastIndexOf('{'); start >= 0; start = clean.lastIndexOf('{', start - 1)) {
+    const candidate = clean.slice(start).trim();
+    const end = candidate.lastIndexOf('}');
+    if (end < 0) continue;
+    try { return JSON.parse(candidate.slice(0, end + 1)); } catch {}
+  }
+  return null;
 }
 
 export function enqueueAiJob(type: string, payload: any, priority = 5) {
