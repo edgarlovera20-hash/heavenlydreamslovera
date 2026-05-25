@@ -12,6 +12,7 @@ import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
 import { OfflineBanner } from '../ui/OfflineBanner';
 import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
+import DataGridHero from '../ui/data-grid-hero';
 import { PremiumBadge, PremiumCard, PremiumKpiCard, SectionHeader } from '../ui/premium';
 
 const Settings = lazy(() => import('./Settings'));
@@ -76,7 +77,6 @@ function ClockText() {
 }
 
 import { Role } from '../../App';
-import NetworkPattern from '../ui/NetworkPattern';
 
 interface ManagerViewProps {
   role: Role;
@@ -290,6 +290,21 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+        <DataGridHero
+          rows={26}
+          cols={38}
+          spacing={5}
+          duration={5.4}
+          color="hsl(var(--blue))"
+          animationType="wave"
+          pulseEffect
+          mouseGlow
+          opacityMin={0.035}
+          opacityMax={0.34}
+          background="linear-gradient(180deg, #071424 0%, #06101d 100%)"
+          className="hd-module-stage flex min-h-0 flex-1 flex-col"
+          contentClassName="flex min-h-0 flex-1 flex-col"
+        >
         
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
@@ -544,6 +559,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           )}
         </div>
         </div>
+        </DataGridHero>
       </main>
 
       {/* Agent Designer Modal */}

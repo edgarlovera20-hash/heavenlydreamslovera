@@ -21,9 +21,9 @@
     --theme-matrix: #10b981;
     --theme-text-main: #f8fafc;
     --hd-bg: #07111f;
-    --hd-surface: rgba(13, 26, 45, 0.9);
-    --hd-surface-strong: rgba(8, 17, 31, 0.96);
-    --hd-surface-muted: rgba(148, 163, 184, 0.07);
+    --hd-surface: #0d1a2d;
+    --hd-surface-strong: #08111f;
+    --hd-surface-muted: #12233a;
     --hd-border: rgba(125, 211, 252, 0.18);
     --hd-border-strong: rgba(125, 211, 252, 0.34);
     --hd-text: #f8fafc;
@@ -68,7 +68,7 @@
     background: var(--hd-surface);
     border: 1px solid var(--hd-border);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
-    backdrop-filter: blur(18px);
+    backdrop-filter: none;
   }
 
   .glass-panel-neon {
@@ -77,7 +77,7 @@
       radial-gradient(circle at 20% 0%, rgba(34, 211, 238, 0.1), transparent 32%);
     border: 1px solid var(--hd-border-strong);
     box-shadow: var(--hd-shadow);
-    backdrop-filter: blur(20px);
+    backdrop-filter: none;
   }
 
   .text-glow {
@@ -98,7 +98,7 @@
     border: 1px solid var(--hd-border);
     background: var(--hd-surface);
     box-shadow: var(--hd-shadow);
-    backdrop-filter: blur(18px);
+    backdrop-filter: none;
   }
 
   .hd-cyber-panel::before {
@@ -109,17 +109,17 @@
   .hd-cyber-card {
     border-radius: var(--hd-radius-md);
     border: 1px solid var(--hd-border);
-    background: var(--hd-surface-muted);
+    background: var(--hd-surface-strong);
     box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16);
-    backdrop-filter: blur(12px);
+    backdrop-filter: none;
   }
 
   .hd-cyber-card-soft {
     border-radius: var(--hd-radius-md);
     border: 1px solid rgba(255, 255, 255, 0.09);
-    background: rgba(148, 163, 184, 0.055);
+    background: var(--hd-surface-strong);
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.14);
-    backdrop-filter: blur(12px);
+    backdrop-filter: none;
   }
 
   .hd-cyber-input {
