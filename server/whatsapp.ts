@@ -5,6 +5,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import Pino from 'pino';
 import qrcode from 'qrcode';
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ingestChannelMessage, recordOutgoingChannelMessage, upsertChannelAccount } from './messaging';
@@ -50,8 +51,22 @@ const ACCOUNT_LABELS: Record<WhatsAppAccount, string> = {
   promotores: 'WhatsApp Promotores',
   clientes: 'WhatsApp Clientes',
 };
+
+function hasStoredCredentials(externalId: string) {
+  return existsSync(path.resolve(AUTH_BASE_PATH, externalId, 'creds.json'));
+}
+
+function defaultPromoterExternalId() {
+  if (process.env.WHATSAPP_PROMOTORES_CLIENT_ID) return process.env.WHATSAPP_PROMOTORES_CLIENT_ID;
+  if (process.env.WHATSAPP_CLIENT_ID) return process.env.WHATSAPP_CLIENT_ID;
+  if (!hasStoredCredentials('heavenly-dreams-promotores') && hasStoredCredentials('heavenly-dreams-main')) {
+    return 'heavenly-dreams-main';
+  }
+  return 'heavenly-dreams-promotores';
+}
+
 const ACCOUNT_ENV_IDS: Record<WhatsAppAccount, string> = {
-  promotores: process.env.WHATSAPP_PROMOTORES_CLIENT_ID || process.env.WHATSAPP_CLIENT_ID || 'heavenly-dreams-promotores',
+  promotores: defaultPromoterExternalId(),
   clientes: process.env.WHATSAPP_CLIENTES_CLIENT_ID || 'heavenly-dreams-clientes',
 };
 
