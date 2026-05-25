@@ -87,6 +87,7 @@ import {
   runAgentForConversation,
   runAgentForMessage,
 } from "./server/agent-orchestrator";
+import { registerFinanceEnterpriseRoutes } from "./server/finance-enterprise";
 
 // ── CSV helpers ────────────────────────────────────────────────
 function toCsv(rows: any[]): string {
@@ -134,6 +135,9 @@ const ALLOWED_TABLES = [
   'automation_rules', 'ai_jobs', 'metrics', 'system_events', 'sessions',
   'capturas', 'documentos_cliente', 'clientes_crm', 'morosidad',
   'estatus_folios', 'logs_sistema', 'document_files', 'oauth_accounts',
+  'weekly_financial_cycles', 'financial_movements', 'financial_alerts',
+  'financial_invoices', 'financial_deposits', 'financial_predictions',
+  'financial_audit_logs', 'financial_files',
 ];
 
 const DOCUMENT_TYPES = [
@@ -1378,6 +1382,8 @@ async function startServer() {
       monthRevenue: Number(salesStats?.monthRevenue || 0),
     });
   }));
+
+  registerFinanceEnterpriseRoutes(app);
 
   // ── MOBILE PWA: endpoints compactos para asesores en campo ───────────────
   function mobileUser(auth: any) {

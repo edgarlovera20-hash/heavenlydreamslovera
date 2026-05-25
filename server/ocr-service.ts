@@ -52,7 +52,7 @@ const CACHE_MAX_ENTRIES    = 100;
 const VALID_PROVIDER_NAMES = ['ollama', 'gemini', 'tesseract'] as const;
 
 export type OcrProvider = typeof VALID_PROVIDER_NAMES[number];
-export type OcrDocType  = 'ine' | 'comprobante' | 'siac';
+export type OcrDocType  = 'ine' | 'comprobante' | 'siac' | 'financial';
 export type OcrStrategy = 'adaptive' | 'quality' | 'fast' | 'local';
 
 export interface OcrResult {
@@ -177,10 +177,35 @@ Extract ONLY these fields. Respond with valid JSON (use "" if not found):
 
 Do NOT include explanations, markdown, or text outside the JSON.`;
 
+const FINANCIAL_PROMPT = `You are an expert financial OCR system for Telmex/SocioMax weekly payment screenshots.
+
+The screenshot may contain a table with financial amounts. Extract exactly these fields when visible.
+Use numbers only for money fields. Do not invent values. If a field is missing, use "".
+
+Respond ONLY with valid JSON:
+
+{
+  "semana": "",
+  "anio": "",
+  "empresa": "",
+  "gerente": "",
+  "pagoGerente": "",
+  "pagoPromotor": "",
+  "iva": "",
+  "descuentos": "",
+  "totalPagoGerente": "",
+  "totalPagoPromotor": "",
+  "totalFacturar": "",
+  "rawText": "all visible text exactly as read"
+}
+
+Do NOT include markdown or explanations.`;
+
 const PROMPTS: Record<OcrDocType, string> = {
   ine: INE_PROMPT,
   comprobante: COMPROBANTE_PROMPT,
   siac: SIAC_PROMPT,
+  financial: FINANCIAL_PROMPT,
 };
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
@@ -611,6 +636,12 @@ const DOC_ORDERS: Record<OcrDocType, Record<OcrStrategy, OcrProvider[]>> = {
     fast: ['ollama', 'gemini', 'tesseract'],
     local: ['ollama', 'tesseract', 'gemini'],
   },
+  financial: {
+    adaptive: ['ollama', 'gemini', 'tesseract'],
+    quality: ['ollama', 'gemini', 'tesseract'],
+    fast: ['ollama', 'gemini', 'tesseract'],
+    local: ['ollama', 'tesseract', 'gemini'],
+  },
 };
 
 function currentStrategy(): OcrStrategy {
@@ -763,6 +794,10 @@ export async function runComprobanteOcr(images: string | string[]): Promise<Cach
 
 export async function runSiacOcr(images: string | string[]): Promise<CachedOcrResult> {
   return runOcrWithFallback('siac', images);
+}
+
+export async function runFinancialOcr(images: string | string[]): Promise<CachedOcrResult> {
+  return runOcrWithFallback('financial', images);
 }
 
 export async function checkOcrStatus() {

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Settings as SettingsIcon, PieChart, ChevronLeft, ChevronRight,
   User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, ImagePlus, Gamepad2, FolderOpen,
   Cpu, Database, Smartphone, Sun, Moon, X, Crown, Zap, Bot, Home, MessageSquare, MessageCircle,
-  MapPin, WifiOff, RefreshCw, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall
+  MapPin, WifiOff, RefreshCw, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall, ReceiptText
 } from 'lucide-react';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
@@ -44,6 +44,7 @@ const UserManagementView = lazy(() => import('./UserManagementView'));
 const EnterpriseOpsView = lazy(() => import('./EnterpriseOpsView'));
 const ChatsView = lazy(() => import('./ChatsView'));
 const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
+const FinancesEnterpriseView = lazy(() => import('./FinancesEnterpriseView'));
 const OPS_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'];
 const ADMIN_ROLES = ['GERENTE', 'ADMINISTRACION'];
 
@@ -253,6 +254,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
           {ADMIN_ROLES.includes(role) && (
             <NavGroup label="Gerencia">
+              {role === 'GERENTE' && <NavItem icon={ReceiptText} color="yellow" label="Finanzas Enterprise" active={activeSection === 'Finanzas Enterprise'} onClick={() => setActiveSection('Finanzas Enterprise')} />}
               <NavItem icon={Users} color="cyan" label="Gestión de Usuarios" active={activeSection === 'Gestión de Usuarios'} onClick={() => setActiveSection('Gestión de Usuarios')} badge={pendingUsers > 0 ? pendingUsers : undefined} />
               <NavItem icon={MapPin} color="cyan" label="Territorios" active={activeSection === 'Territorios'} onClick={() => setActiveSection('Territorios')} />
               <NavItem icon={Package} color="purple" label="Catálogo" active={activeSection === 'Catálogo'} onClick={() => setActiveSection('Catálogo')} />
@@ -415,6 +417,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   <QuickAction icon={AlertTriangle} label="Morosidad" color="red" onClick={() => setActiveSection('Morosidad')} />
                   <QuickAction icon={Headphones} label="Soporte" color="purple" onClick={() => setActiveSection('Soporte a Clientes')} />
                   {OPS_ROLES.includes(role) && <>
+                    {role === 'GERENTE' && <QuickAction icon={ReceiptText} label="Finanzas" color="yellow" onClick={() => setActiveSection('Finanzas Enterprise')} />}
                     <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
                     <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
                     <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
@@ -541,6 +544,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Config. Llamadas' && <ValidationConfigView />}
             {activeSection === 'Hub de Agentes' && <AgentHubView />}
             {activeSection === 'Gestión de Usuarios' && <UserManagementView />}
+            {activeSection === 'Finanzas Enterprise' && role === 'GERENTE' && <FinancesEnterpriseView />}
             {activeSection === 'Chats' && (
               <ChatsView
                 onOpenSettings={() => setActiveSection('Ajustes')}
@@ -553,7 +557,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios', 'Finanzas Enterprise'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
