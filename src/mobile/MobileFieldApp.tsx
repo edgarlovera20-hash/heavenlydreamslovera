@@ -18,7 +18,7 @@ const MODULE_CACHE_PREFIX = 'hd_mobile_module_cache_v1:';
 const COMPANY_NAME = 'HEAVENLY DREAMS SAS DE CV';
 const COMPANY_ADDRESS = 'Avenida Tlahuac 3632, Interior A301, Colonia Culhuacan CTM Zona VIII, CP 09800, Iztapalapa, Ciudad de Mexico';
 
-type IconName = 'badge' | 'camera' | 'check' | 'chevron-left' | 'chevron-right' | 'clipboard' | 'cloud-off' | 'folder' | 'home' | 'id' | 'loader' | 'logout' | 'map' | 'message' | 'refresh' | 'save' | 'search' | 'send' | 'settings' | 'shield' | 'smartphone' | 'user' | 'users' | 'wallet' | 'wifi' | 'wifi-off';
+type IconName = 'badge' | 'camera' | 'check' | 'chevron-left' | 'chevron-right' | 'clipboard' | 'cloud-off' | 'folder' | 'home' | 'id' | 'loader' | 'logout' | 'map' | 'message' | 'phone' | 'refresh' | 'save' | 'search' | 'send' | 'settings' | 'shield' | 'smartphone' | 'user' | 'users' | 'wallet' | 'wifi' | 'wifi-off';
 type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'perfil' | 'ajustes';
 type DraftSaveState = 'idle' | 'saving' | 'saved';
 type Notice = { kind: 'success' | 'error'; message: string } | null;
@@ -155,6 +155,10 @@ type CaptureDraft = {
   videoFirmaLocal: boolean;
   firmaClienteDataUrl: string;
   solicitudFirmadaPdfLocal: boolean;
+  savedCaptureId: string;
+  validationRequestId: string;
+  expedienteGuardado: boolean;
+  callRequestedAt: string;
   notas: string;
   documents: CaptureDocument[];
 };
@@ -176,6 +180,7 @@ function MobileIcon({ name, className = '' }: { name: IconName; className?: stri
     logout: <><path {...common} d="M10 17l5-5-5-5" /><path {...common} d="M15 12H3" /><path {...common} d="M12 4h7v16h-7" /></>,
     map: <><path {...common} d="M12 21s7-5.2 7-11a7 7 0 0 0-14 0c0 5.8 7 11 7 11z" /><circle {...common} cx="12" cy="10" r="2" /></>,
     message: <path {...common} d="M4 5h16v11H8l-4 4V5z" />,
+    phone: <><path {...common} d="M22 16.9v3a2 2 0 0 1-2.2 2 19.7 19.7 0 0 1-8.6-3.1 19.3 19.3 0 0 1-6-6A19.7 19.7 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.7.6 2.5a2 2 0 0 1-.5 2.1L8 9.5a16 16 0 0 0 6.5 6.5l1.2-1.2a2 2 0 0 1 2.1-.5c.8.3 1.6.5 2.5.6a2 2 0 0 1 1.7 2z" /></>,
     refresh: <><path {...common} d="M20 6v5h-5" /><path {...common} d="M4 18v-5h5" /><path {...common} d="M18 9a6 6 0 0 0-10-3M6 15a6 6 0 0 0 10 3" /></>,
     save: <><path {...common} d="M5 4h12l2 2v14H5V4z" /><path {...common} d="M8 4v6h8V4M8 17h8" /></>,
     search: <><circle {...common} cx="11" cy="11" r="6" /><path {...common} d="M16 16l4 4" /></>,
@@ -238,11 +243,15 @@ const EMPTY_DRAFT: CaptureDraft = {
   videoFirmaLocal: false,
   firmaClienteDataUrl: '',
   solicitudFirmadaPdfLocal: false,
+  savedCaptureId: '',
+  validationRequestId: '',
+  expedienteGuardado: false,
+  callRequestedAt: '',
   notas: '',
   documents: [],
 };
 
-const CAPTURE_STEPS = ['Identidad/OCR', 'Cliente', 'Domicilio', 'Servicio', 'Paquetes', 'Streaming', 'Firma', 'Confirmar'];
+const CAPTURE_STEPS = ['Identidad/OCR', 'Cliente', 'Domicilio', 'Servicio', 'Paquetes', 'Streaming', 'Video firma', 'Confirmar'];
 const INE_IDENTITY_DOCUMENTS = ['INE_FRONTAL', 'INE_REVERSO'];
 const CURP_IDENTITY_DOCUMENT = 'CURP';
 
@@ -1011,6 +1020,7 @@ export default function MobileFieldApp() {
   const [submittingCapture, setSubmittingCapture] = useState(false);
   const [curpLoading, setCurpLoading] = useState(false);
   const [signaturePdfGenerating, setSignaturePdfGenerating] = useState(false);
+  const [validationCallRequesting, setValidationCallRequesting] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureDrawingRef = useRef(false);
   const signatureLastPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -1329,6 +1339,11 @@ export default function MobileFieldApp() {
         categoriaProducto: draft.categoriaProducto,
         streamingTotal: streamingTotal(draft),
         videoFirmaLocal: draft.videoFirmaLocal,
+        solicitudFirmadaPdfLocal: draft.solicitudFirmadaPdfLocal,
+        savedCaptureId: draft.savedCaptureId || null,
+        validationRequestId: draft.validationRequestId || null,
+        expedienteGuardado: draft.expedienteGuardado,
+        callRequestedAt: draft.callRequestedAt || null,
         direccionCompleta: buildAddress(draft),
       },
     };
@@ -1929,7 +1944,7 @@ export default function MobileFieldApp() {
     }
   };
 
-  const submitCapture = async () => {
+  const validateCaptureReady = () => {
     const phone = normalizePhone(draft.telefono || draft.telefonoTitular);
     const titularPhone = normalizePhone(draft.telefonoTitular || draft.telefono);
     const referenciaPhone = normalizePhone(draft.telefonoReferencia);
@@ -1937,25 +1952,119 @@ export default function MobileFieldApp() {
     if (identityError) {
       setDraftStep(0);
       notify('error', identityError);
-      return;
+      return false;
     }
     if (!draft.nombres.trim() || phone.length !== 10 || titularPhone.length !== 10 || !draft.calle.trim() || !draft.paqueteNombre) {
       notify('error', 'Nombre, telefono, telefono titular, domicilio y paquete son requeridos.');
-      return;
+      return false;
     }
     if (referenciaPhone && referenciaPhone.length !== 10) {
       notify('error', 'El telefono de referencia debe tener 10 digitos.');
-      return;
+      return false;
     }
     if (!draft.firmaClienteDataUrl) {
       setDraftStep(6);
       notify('error', 'Dibuja la firma del cliente para generar la solicitud firmada.');
+      return false;
+    }
+    return true;
+  };
+
+  const selectedFilesForUpload = () => Object.entries(selectedFiles)
+    .filter(([, file]) => Boolean(file))
+    .map(([docType, file]) => ({ docType, file: file as File }));
+
+  const uploadExpedienteFiles = async (captureId: string, files: Array<{ docType: string; file: File }>) => {
+    for (const fileItem of files) {
+      const contentBase64 = await fileToBase64(fileItem.file);
+      await apiJson('/api/document-files', {
+        method: 'POST',
+        body: JSON.stringify({
+          captureId,
+          saleId: captureId,
+          docType: fileItem.docType,
+          fileName: fileItem.file.name,
+          mimeType: fileItem.file.type || 'application/octet-stream',
+          contentBase64,
+        }),
+      });
+    }
+  };
+
+  const buildExpedienteFiles = async (captureId?: string) => {
+    const signedPdf = await buildSignedPdfFile(captureId);
+    return [
+      ...selectedFilesForUpload().filter((fileItem) => fileItem.docType !== 'SOLICITUD_FIRMADA'),
+      { docType: 'SOLICITUD_FIRMADA', file: signedPdf },
+    ];
+  };
+
+  const requestValidationCall = async () => {
+    if (!validateCaptureReady()) return;
+    if (!online) {
+      notify('error', 'Necesitas conexion para pedir llamada y guardar el expediente.');
+      return;
+    }
+    setValidationCallRequesting(true);
+    try {
+      const existingCaptureId = draft.savedCaptureId;
+      const saved = existingCaptureId
+        ? { id: existingCaptureId, validation: draft.validationRequestId ? { id: draft.validationRequestId } : null }
+        : await apiJson<any>('/api/mobile/capturas', {
+            method: 'POST',
+            body: JSON.stringify(capturePayload()),
+          });
+
+      const captureId = saved.id;
+      if (!draft.expedienteGuardado || !existingCaptureId) {
+        const files = await buildExpedienteFiles(captureId);
+        await uploadExpedienteFiles(captureId, files);
+        const signedPdf = files.find((fileItem) => fileItem.docType === 'SOLICITUD_FIRMADA')?.file;
+        if (signedPdf) attachSignedPdfFile(signedPdf);
+      }
+
+      let validationId = saved.validation?.id || draft.validationRequestId || '';
+      if (!validationId) {
+        const created = await apiJson<any>('/api/validations', {
+          method: 'POST',
+          body: JSON.stringify({
+            sale_id: captureId,
+            status: 'PENDIENTE',
+            notas: 'Llamada solicitada desde video firma movil. Expediente y solicitud firmada generados en campo.',
+            script_type: 'video_firma',
+          }),
+        });
+        validationId = created?.validation?.id || created?.id || '';
+      }
+
+      updateDraft({
+        savedCaptureId: captureId,
+        validationRequestId: validationId,
+        expedienteGuardado: true,
+        callRequestedAt: new Date().toISOString(),
+        videoFirmaLocal: true,
+        solicitudFirmadaPdfLocal: true,
+      });
+      await refreshBootstrap();
+      notify('success', 'Expediente guardado y llamada solicitada a validacion.');
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo pedir la llamada.');
+    } finally {
+      setValidationCallRequesting(false);
+    }
+  };
+
+  const submitCapture = async () => {
+    if (!validateCaptureReady()) return;
+    if (draft.savedCaptureId) {
+      await clearDraft(false);
+      await refreshBootstrap();
+      setActive('seguimiento');
+      notify('success', 'Expediente y validacion ya guardados.');
       return;
     }
     const payload = capturePayload();
-    let files = Object.entries(selectedFiles)
-      .filter(([, file]) => Boolean(file))
-      .map(([docType, file]) => ({ docType, file: file as File }));
+    let files = selectedFilesForUpload();
     let draftSignedPdf: File;
     try {
       draftSignedPdf = await buildSignedPdfFile();
@@ -1986,20 +2095,7 @@ export default function MobileFieldApp() {
         { docType: 'SOLICITUD_FIRMADA', file: savedSignedPdf },
       ];
 
-      for (const fileItem of uploadFiles) {
-        const contentBase64 = await fileToBase64(fileItem.file);
-        await apiJson('/api/document-files', {
-          method: 'POST',
-          body: JSON.stringify({
-            captureId: saved.id,
-            saleId: saved.id,
-            docType: fileItem.docType,
-            fileName: fileItem.file.name,
-            mimeType: fileItem.file.type || 'application/octet-stream',
-            contentBase64,
-          }),
-        });
-      }
+      await uploadExpedienteFiles(saved.id, uploadFiles);
 
       await clearDraft(false);
       await refreshBootstrap();
@@ -2714,8 +2810,8 @@ export default function MobileFieldApp() {
           {draftStep === 6 && (
             <div className="space-y-3">
               <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
-                <p className="text-sm font-black text-cyan-100">Firma digital del cliente</p>
-                <p className="mt-1 text-xs leading-5 text-slate-300">El cliente dibuja su firma. La app genera una solicitud PDF con la firma y un QR de verificacion para el expediente.</p>
+                <p className="text-sm font-black text-cyan-100">Video firma, expediente y validacion</p>
+                <p className="mt-1 text-xs leading-5 text-slate-300">Captura la firma, genera el PDF con QR, adjunta video o audio de llamada y pide validacion desde este mismo paso.</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white p-2">
                 <canvas
@@ -2743,6 +2839,20 @@ export default function MobileFieldApp() {
                 </span>
                 <span className={cx('rounded-full px-3 py-1 text-xs font-black', draft.solicitudFirmadaPdfLocal ? 'bg-emerald-300 text-slate-950' : 'bg-slate-700 text-slate-200')}>{draft.solicitudFirmadaPdfLocal ? 'PDF' : 'NO'}</span>
               </div>
+              <button
+                onClick={requestValidationCall}
+                disabled={!draft.firmaClienteDataUrl || validationCallRequesting || submittingCapture}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 font-black uppercase tracking-[0.12em] text-emerald-100 disabled:opacity-45"
+              >
+                <MobileIcon name={validationCallRequesting ? 'loader' : 'phone'} className={cx('h-4 w-4', validationCallRequesting && 'animate-spin')} />
+                {validationCallRequesting ? 'Guardando expediente...' : draft.callRequestedAt ? 'Llamada solicitada' : 'Pedir llamada'}
+              </button>
+              {draft.savedCaptureId && (
+                <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-xs font-semibold text-emerald-100">
+                  Expediente guardado para validacion: {draft.validationRequestId ? `validacion ${draft.validationRequestId.slice(0, 8)}` : 'pendiente en mesa'}.
+                </div>
+              )}
+              {docRow('VIDEO_FIRMA', 'Subir video firma', 'ine', undefined, 'video/*', false)}
               {docRow('AUDIO_LLAMADA', 'Subir audio de llamada', 'ine', undefined, 'audio/*', false)}
             </div>
           )}
@@ -2758,7 +2868,7 @@ export default function MobileFieldApp() {
               <SummaryRow label="Direccion" value={buildAddress(draft) || 'Pendiente'} />
               <SummaryRow label="Paquete" value={`${draft.paqueteNombre || 'Pendiente'} - ${formatMoney(draft.rentaMensual || 0)}`} />
               <SummaryRow label="Streaming" value={`${draft.streamingElegido} + ${draft.plataformasAdicionales.length} adicional(es)`} />
-              <SummaryRow label="Firma" value={draft.firmaClienteDataUrl ? (draft.solicitudFirmadaPdfLocal ? 'PDF con QR listo' : 'Firma capturada') : 'Pendiente'} />
+              <SummaryRow label="Video firma" value={draft.savedCaptureId ? 'Expediente y validacion guardados' : draft.firmaClienteDataUrl ? (draft.solicitudFirmadaPdfLocal ? 'PDF con QR listo' : 'Firma capturada') : 'Pendiente'} />
               <SummaryRow label="Documentos" value={`${draft.documents.length} seleccionados`} />
               {draftSavedAt && <p className="text-xs text-slate-500">Borrador recuperable: {shortDate(draftSavedAt)}</p>}
               <button onClick={submitCapture} disabled={submittingCapture} className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.14em] text-slate-950 disabled:cursor-wait disabled:opacity-60">
