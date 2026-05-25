@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import {
   Bot, Zap, Archive, Search, Phone, Play, Square, RefreshCw,
-  Activity, MessageSquare, Plus, Send, User, Info,
+  Activity, MessageSquare, Plus, User, Info,
   Key, CheckCircle2, XCircle, Loader2,
 } from 'lucide-react';
+
+const NewSaleForm = lazy(() => import('./NewSaleForm'));
 
 interface AgentStatus {
   active: boolean;
@@ -102,6 +104,14 @@ function timeAgo(iso: string | null) {
   return `hace ${Math.floor(d / 3_600_000)} h`;
 }
 
+function ViewLoader() {
+  return (
+    <div className="h-48 flex items-center justify-center rounded-2xl border border-slate-800 bg-[#0a0d14] text-xs font-bold uppercase tracking-widest text-cyan-300/70">
+      Cargando flujo de venta...
+    </div>
+  );
+}
+
 export default function AgentHubView() {
   const [agents, setAgents] = useState<AgentState | null>(null);
   const [messages, setMessages] = useState<ChannelMsg[]>([]);
@@ -112,7 +122,6 @@ export default function AgentHubView() {
   const [tgToken, setTgToken] = useState('');
   const [showTelegramTokenForm, setShowTelegramTokenForm] = useState(false);
   const [tgConnecting, setTgConnecting] = useState(false);
-  const [manual, setManual] = useState({ nombres: '', telefono: '', plan: '', canal: 'app' });
   const [toast, setToast] = useState<string | null>(null);
 
   const pop = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
@@ -215,22 +224,6 @@ export default function AgentHubView() {
     }
   };
 
-  const saveManual = async () => {
-    if (!manual.nombres || !manual.telefono) { pop('Nombre y teléfono son requeridos'); return; }
-    const r = await fetch('/api/ventas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        asesor_id: 'manual_hub', asesor_nombre: 'Captura Manual',
-        nombres: manual.nombres, telefono: manual.telefono,
-        plan: manual.plan || null, status: 'pendiente',
-        notas: `Canal: ${manual.canal}`,
-        fecha_solicitud: new Date().toISOString().split('T')[0],
-      }),
-    });
-    if (r.ok) { setManual({ nombres: '', telefono: '', plan: '', canal: 'app' }); pop('✅ Venta guardada'); }
-  };
-
   const agentList = AGENT_META.map(m => ({
     ...m,
     status: agents?.[m.id as keyof AgentState] ?? { active: false, lastRun: null, processed: 0, errors: 0 },
@@ -241,7 +234,7 @@ export default function AgentHubView() {
     { id: 'approvals', label: `Aprobaciones (${outbox.filter(item => item.status === 'pending_approval').length})` },
     { id: 'telegram', label: `Telegram${tgStatus.status === 'polling' ? ' 🟢' : ' ⚪'}` },
     { id: 'messages', label: `Mensajes (${messages.length})` },
-    { id: 'manual', label: 'Captura Manual' },
+    { id: 'manual', label: 'Nueva Venta' },
   ] as const;
 
   return (
@@ -574,52 +567,21 @@ export default function AgentHubView() {
         </div>
       )}
 
-      {/* ── MANUAL CAPTURE ── */}
+      {/* ── COMPLETE SALE FLOW ── */}
       {tab === 'manual' && (
-        <div className="bg-[#0a0d14] border border-slate-800 rounded-2xl p-6 max-w-md space-y-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Plus className="w-5 h-5 text-cyan-400" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-widest">Captura Manual de Venta</h3>
+        <div className="space-y-4">
+          <div className="bg-[#0a0d14] border border-cyan-400/20 rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Plus className="w-5 h-5 text-cyan-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-widest">Flujo completo de nueva venta</h3>
+            </div>
+            <p className="text-xs text-slate-500">
+              Captura cliente, INE, CURP oficial, domicilio, mapa, paquete, portabilidad, firma, expediente y validación desde el mismo flujo.
+            </p>
           </div>
-          <p className="text-xs text-slate-500">Registra una venta directamente indicando el canal de origen.</p>
-
-          <div className="space-y-3">
-            {[
-              { label: 'Canal *', el: (
-                <select value={manual.canal} onChange={e => setManual(s => ({ ...s, canal: e.target.value }))}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40">
-                  <option value="app">App</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="telegram">Telegram</option>
-                </select>
-              )},
-              { label: 'Nombre del cliente *', el: (
-                <input value={manual.nombres} onChange={e => setManual(s => ({ ...s, nombres: e.target.value }))}
-                  placeholder="Juan Pérez"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40" />
-              )},
-              { label: 'Teléfono *', el: (
-                <input value={manual.telefono} onChange={e => setManual(s => ({ ...s, telefono: e.target.value }))}
-                  placeholder="5551234567"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40" />
-              )},
-              { label: 'Plan / Servicio', el: (
-                <input value={manual.plan} onChange={e => setManual(s => ({ ...s, plan: e.target.value }))}
-                  placeholder="Internet 100MB"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40" />
-              )},
-            ].map(({ label, el }) => (
-              <div key={label}>
-                <label className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-1.5">{label}</label>
-                {el}
-              </div>
-            ))}
-
-            <button onClick={saveManual}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold text-xs uppercase tracking-widest hover:bg-cyan-500/20 transition-all">
-              <Send className="w-4 h-4" /> Guardar Venta
-            </button>
-          </div>
+          <Suspense fallback={<ViewLoader />}>
+            <NewSaleForm onBack={() => setTab('agents')} />
+          </Suspense>
         </div>
       )}
 
