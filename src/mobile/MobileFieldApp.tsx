@@ -19,7 +19,7 @@ const COMPANY_NAME = 'HEAVENLY DREAMS SAS DE CV';
 const COMPANY_ADDRESS = 'Avenida Tlahuac 3632, Interior A301, Colonia Culhuacan CTM Zona VIII, CP 09800, Iztapalapa, Ciudad de Mexico';
 
 type IconName = 'badge' | 'camera' | 'check' | 'chevron-left' | 'chevron-right' | 'clipboard' | 'cloud-off' | 'folder' | 'home' | 'id' | 'loader' | 'logout' | 'map' | 'message' | 'phone' | 'refresh' | 'save' | 'search' | 'send' | 'settings' | 'shield' | 'smartphone' | 'user' | 'users' | 'wallet' | 'wifi' | 'wifi-off';
-type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'perfil' | 'ajustes';
+type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'usuarios' | 'aprobaciones' | 'perfil' | 'ajustes';
 type DraftSaveState = 'idle' | 'saving' | 'saved';
 type Notice = { kind: 'success' | 'error'; message: string } | null;
 type QueueStatus = 'queued' | 'syncing' | 'failed';
@@ -39,12 +39,12 @@ type SessionUser = {
 
 type MobileBootstrap = {
   user: SessionUser;
-  permissions: { role?: string; canManage: boolean; mobile: boolean };
+  permissions: { role?: string; canManage: boolean; mobile: boolean; canApproveHuman?: boolean };
   featureFlags?: { mobilePwaPrimary?: boolean; offlineQueue?: boolean; moduleCache?: boolean; agentApprovals?: boolean };
   nav?: MobileSection[];
   sync?: { serverTime: number; staleAfterMs: number; supportsUpdatedSince: boolean };
   agentInboxSummary?: { pendingApproval: number; conversationsOpen: number; latestDecisionAt?: string | null };
-  counts: { ventas: number; pendientes: number; hoy: number; clientes: number; documentosPendientes: number; folios: number; chatsAbiertos?: number; aprobaciones?: number };
+  counts: { ventas: number; pendientes: number; hoy: number; clientes: number; documentosPendientes: number; folios: number; chatsAbiertos?: number; aprobaciones?: number; usuariosPendientes?: number };
   channels: { whatsapp: any; telegram: any };
   recentSales: any[];
   pendingFollowUps: any[];
@@ -298,7 +298,9 @@ const MODULES: Array<{ id: MobileSection; label: string; icon: IconName; caption
   { id: 'documentos', label: 'Expediente', icon: 'folder', caption: 'Documentos por captura' },
   { id: 'seguimiento', label: 'Seguimiento', icon: 'badge', caption: 'Avance, pendientes y próximos pasos' },
   { id: 'nominas', label: 'Nóminas', icon: 'wallet', caption: 'Pagos y comisiones propias' },
-  { id: 'chats', label: 'Chats', icon: 'message', caption: 'WhatsApp operativo ligero' },
+  { id: 'chats', label: 'Chats', icon: 'message', caption: 'WhatsApp y Telegram con apoyo de agentes' },
+  { id: 'usuarios', label: 'Usuarios nuevos', icon: 'users', caption: 'Aprobar o rechazar cuentas pendientes' },
+  { id: 'aprobaciones', label: 'Aprobaciones IA', icon: 'shield', caption: 'Autorizar respuestas y acciones de agentes' },
   { id: 'ajustes', label: 'Ajustes', icon: 'settings', caption: 'Cache, sesión y modo campo' },
 ];
 
@@ -382,6 +384,7 @@ function displayName(session?: SessionUser | null) {
 function roleLabel(role?: string) {
   const normalized = String(role || 'ASESOR').toUpperCase();
   if (normalized === 'GERENTE') return 'gerente';
+  if (normalized === 'ADMINISTRACION') return 'administracion';
   if (normalized === 'SUPERVISOR') return 'supervisor';
   if (normalized === 'ADMIN') return 'admin';
   return 'asesor';
@@ -1060,10 +1063,13 @@ export default function MobileFieldApp() {
   const payrollReceiptFileRef = useRef<HTMLInputElement | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [conversations, setConversations] = useState<any[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+  const [agentOutbox, setAgentOutbox] = useState<any[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messagePhone, setMessagePhone] = useState('');
   const [messageText, setMessageText] = useState('');
   const [moduleLoading, setModuleLoading] = useState(false);
+  const [managerActionBusy, setManagerActionBusy] = useState<string | null>(null);
   const [offlineQueue, setOfflineQueue] = useState<OfflineQueueItem[]>([]);
   const [syncingQueue, setSyncingQueue] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
@@ -1076,6 +1082,9 @@ export default function MobileFieldApp() {
   const profileName = displayName(profileUser || session);
   const profileRole = String(profileUser?.role || session?.role || 'ASESOR').toUpperCase();
   const profileRoleLabel = roleLabel(profileRole);
+  const canApproveMobile = Boolean(bootstrap?.permissions.canApproveHuman) || ['GERENTE', 'ADMINISTRACION', 'ADMIN', 'SUPERUSER'].includes(profileRole);
+  const canManageMobile = Boolean(bootstrap?.permissions.canManage) || canApproveMobile || profileRole === 'SUPERVISOR';
+  const canUseMobileChats = canManageMobile;
 
   const profileModel = useMemo(() => {
     const allSales = Array.isArray(bootstrap?.recentSales) ? bootstrap.recentSales : [];
@@ -1495,7 +1504,7 @@ export default function MobileFieldApp() {
 
   const loadModule = useCallback(async (section: MobileSection) => {
     if (!session?.uid) return;
-    if (!['clientes', 'documentos', 'seguimiento', 'nominas', 'chats'].includes(section)) return;
+    if (!['clientes', 'documentos', 'seguimiento', 'nominas', 'chats', 'usuarios', 'aprobaciones'].includes(section)) return;
     setModuleLoading(true);
     try {
       const cached = await readModuleCache<any>(section);
@@ -1511,6 +1520,8 @@ export default function MobileFieldApp() {
           setConversations(cached.data.conversations || []);
           setMessages(cached.data.messages || cached.data || []);
         }
+        if (section === 'usuarios') setPendingUsers(cached.data.users || cached.data || []);
+        if (section === 'aprobaciones') setAgentOutbox(cached.data.outbox || cached.data || []);
       }
       const since = cached?.savedAt && bootstrap?.sync?.supportsUpdatedSince ? `?updatedSince=${cached.savedAt}` : '';
       if (section === 'clientes') {
@@ -1548,6 +1559,16 @@ export default function MobileFieldApp() {
         setConversations(next.conversations);
         setMessages(next.messages);
         await writeModuleCache(section, next);
+      }
+      if (section === 'usuarios') {
+        const data = await apiJson<any[]>('/api/users/pending');
+        setPendingUsers(data || []);
+        await writeModuleCache(section, { users: data || [] });
+      }
+      if (section === 'aprobaciones') {
+        const data = await apiJson<any[]>('/api/agents/outbox?limit=150');
+        setAgentOutbox(data || []);
+        await writeModuleCache(section, { outbox: data || [] });
       }
     } catch (err: any) {
       notify('error', err?.message || 'No se pudo cargar el modulo.');
@@ -2216,6 +2237,70 @@ export default function MobileFieldApp() {
     }
   };
 
+  const approvePendingUser = async (uid: string) => {
+    if (!canApproveMobile) return;
+    setManagerActionBusy(`user-approve-${uid}`);
+    try {
+      await apiJson(`/api/users/${uid}/approve`, { method: 'POST' });
+      setPendingUsers((current) => current.filter((user) => String(user.uid) !== String(uid)));
+      await refreshBootstrap();
+      notify('success', 'Usuario aprobado.');
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo aprobar el usuario.');
+    } finally {
+      setManagerActionBusy(null);
+    }
+  };
+
+  const rejectPendingUser = async (uid: string) => {
+    if (!canApproveMobile) return;
+    setManagerActionBusy(`user-reject-${uid}`);
+    try {
+      await apiJson(`/api/users/${uid}/reject`, { method: 'POST' });
+      setPendingUsers((current) => current.filter((user) => String(user.uid) !== String(uid)));
+      await refreshBootstrap();
+      notify('success', 'Usuario rechazado.');
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo rechazar el usuario.');
+    } finally {
+      setManagerActionBusy(null);
+    }
+  };
+
+  const approveAgentProposal = async (id: string) => {
+    if (!canApproveMobile) return;
+    setManagerActionBusy(`agent-approve-${id}`);
+    try {
+      await apiJson(`/api/agents/outbox/${id}/approve`, { method: 'POST' });
+      setAgentOutbox((current) => current.map((item) => String(item.id) === String(id) ? { ...item, status: 'approved' } : item));
+      await refreshBootstrap();
+      notify('success', 'Propuesta de agente aprobada.');
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo aprobar la propuesta.');
+    } finally {
+      setManagerActionBusy(null);
+    }
+  };
+
+  const rejectAgentProposal = async (id: string) => {
+    if (!canApproveMobile) return;
+    setManagerActionBusy(`agent-reject-${id}`);
+    try {
+      await apiJson(`/api/agents/outbox/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Rechazado desde version movil' }),
+      });
+      setAgentOutbox((current) => current.map((item) => String(item.id) === String(id) ? { ...item, status: 'rejected' } : item));
+      await refreshBootstrap();
+      notify('success', 'Propuesta de agente rechazada.');
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo rechazar la propuesta.');
+    } finally {
+      setManagerActionBusy(null);
+    }
+  };
+
   const runIneOcr = async () => {
     const targets = INE_IDENTITY_DOCUMENTS.filter((type) => selectedFiles[type]);
     if (targets.length !== INE_IDENTITY_DOCUMENTS.length) {
@@ -2409,8 +2494,14 @@ export default function MobileFieldApp() {
     );
   }
 
-  const canUseWhatsApp = String(session.role || '').toUpperCase() === 'SUPERVISOR';
-  const visibleModules = MODULES.filter((module) => canUseWhatsApp || module.id !== 'chats');
+  const primaryNav = canUseMobileChats
+    ? PRIMARY_NAV.map((item) => item.id === 'clientes' ? { id: 'chats' as MobileSection, label: 'Chats', icon: 'message' as IconName } : item)
+    : PRIMARY_NAV;
+  const visibleModules = MODULES.filter((module) => {
+    if (module.id === 'chats') return canUseMobileChats;
+    if (module.id === 'usuarios' || module.id === 'aprobaciones') return canApproveMobile;
+    return true;
+  });
 
   const renderContent = () => {
     if (active === 'inicio') {
@@ -2430,7 +2521,7 @@ export default function MobileFieldApp() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <Metric label="Ventas" value={bootstrap?.counts.ventas ?? 0} />
               <Metric label="Pendientes" value={bootstrap?.counts.pendientes ?? 0} />
-              {canUseWhatsApp ? (
+              {canManageMobile ? (
                 <>
                   <Metric label="Chats abiertos" value={bootstrap?.counts.chatsAbiertos ?? bootstrap?.agentInboxSummary?.conversationsOpen ?? 0} />
                   <Metric label="Aprobaciones" value={bootstrap?.counts.aprobaciones ?? bootstrap?.agentInboxSummary?.pendingApproval ?? 0} />
@@ -2453,6 +2544,24 @@ export default function MobileFieldApp() {
               <MobileIcon name="search" className="mb-2 h-5 w-5" />
               <span className="block text-xs font-black uppercase tracking-[0.08em]">Folios</span>
             </button>
+            {canUseMobileChats && (
+              <button onClick={() => setActive('chats')} className="hd-cyber-secondary min-h-20 px-3 py-3 text-left">
+                <MobileIcon name="message" className="mb-2 h-5 w-5" />
+                <span className="block text-xs font-black uppercase tracking-[0.08em]">Chats</span>
+              </button>
+            )}
+            {canApproveMobile && (
+              <button onClick={() => setActive('usuarios')} className="hd-cyber-secondary min-h-20 px-3 py-3 text-left">
+                <MobileIcon name="users" className="mb-2 h-5 w-5" />
+                <span className="block text-xs font-black uppercase tracking-[0.08em]">Usuarios</span>
+              </button>
+            )}
+            {canApproveMobile && (
+              <button onClick={() => setActive('aprobaciones')} className="hd-cyber-secondary min-h-20 px-3 py-3 text-left">
+                <MobileIcon name="shield" className="mb-2 h-5 w-5" />
+                <span className="block text-xs font-black uppercase tracking-[0.08em]">Aprobaciones</span>
+              </button>
+            )}
           </div>
 
           {(offlineQueue.length > 0 || hasDraftData(draft)) && (
@@ -2499,7 +2608,9 @@ export default function MobileFieldApp() {
     if (active === 'documentos') return renderDocuments();
     if (active === 'seguimiento') return renderFollowUps();
     if (active === 'nominas') return renderPayroll();
-    if (active === 'chats') return canUseWhatsApp ? renderChats() : renderSettings();
+    if (active === 'chats') return canUseMobileChats ? renderChats() : renderSettings();
+    if (active === 'usuarios') return canApproveMobile ? renderUserApprovals() : renderSettings();
+    if (active === 'aprobaciones') return canApproveMobile ? renderAgentApprovals() : renderSettings();
     if (active === 'perfil') return renderProfile();
     return renderSettings();
   };
@@ -2527,7 +2638,7 @@ export default function MobileFieldApp() {
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-cyber-electric/20 bg-cyber-black/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_30px_rgba(3,154,220,0.08)] backdrop-blur-xl">
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
-          {PRIMARY_NAV.map((item) => {
+          {primaryNav.map((item) => {
             const selected = active === item.id;
             return (
               <button
@@ -3498,6 +3609,140 @@ export default function MobileFieldApp() {
           </button>
         </div>
       </Panel>
+    );
+  }
+
+  function renderUserApprovals() {
+    const users = pendingUsers.filter((user) => Number(user.activo) === 2 || String(user.status || '').toLowerCase() === 'pending');
+    return (
+      <div className="space-y-4">
+        <Panel>
+          <ModuleHeader title="Usuarios nuevos" loading={moduleLoading} onRefresh={() => loadModule('usuarios')} />
+          <div className="grid grid-cols-2 gap-2">
+            <Metric label="Pendientes" value={users.length || bootstrap?.counts.usuariosPendientes || 0} />
+            <Metric label="Autoriza" value={profileRole === 'GERENTE' ? 'Gerencia' : 'Admin'} />
+          </div>
+          <p className="mt-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold leading-5 text-cyan-100">
+            Las cuentas nuevas quedan bloqueadas hasta que gerente o administracion las apruebe.
+          </p>
+        </Panel>
+
+        <Panel>
+          {moduleLoading && users.length === 0 && <ModuleSkeleton />}
+          {!moduleLoading && users.length === 0 && <EmptyState icon="users" text="No hay usuarios pendientes por aprobar." />}
+          <div className="space-y-3">
+            {users.map((user: any) => {
+              const uid = String(user.uid || user.id || '');
+              const name = [user.nombre, user.apellidoPaterno, user.apellidoMaterno].filter(Boolean).join(' ').trim() || user.displayName || user.username || 'Usuario nuevo';
+              const approveBusy = managerActionBusy === `user-approve-${uid}`;
+              const rejectBusy = managerActionBusy === `user-reject-${uid}`;
+              return (
+                <div key={uid} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-100">
+                      <MobileIcon name="user" className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-black text-white">{name}</p>
+                      <p className="mt-1 truncate text-xs font-bold text-slate-400">{user.email || user.username || 'Sin correo'}</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <SummaryRow label="Rol" value={user.role || 'ASESOR'} />
+                        <SummaryRow label="Zona" value={user.zona || user.zonaOperativa || 'N/D'} />
+                      </div>
+                      <p className="mt-2 text-[11px] font-bold text-slate-500">Registro: {shortDate(user.created_at || user.createdAt)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => approvePendingUser(uid)}
+                      disabled={!uid || Boolean(managerActionBusy)}
+                      className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-xs font-black uppercase tracking-[0.12em] text-emerald-100 disabled:opacity-50"
+                    >
+                      <MobileIcon name={approveBusy ? 'loader' : 'check'} className={cx('h-4 w-4', approveBusy && 'animate-spin')} />
+                      Aprobar
+                    </button>
+                    <button
+                      onClick={() => rejectPendingUser(uid)}
+                      disabled={!uid || Boolean(managerActionBusy)}
+                      className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-rose-300/25 bg-rose-400/10 text-xs font-black uppercase tracking-[0.12em] text-rose-100 disabled:opacity-50"
+                    >
+                      <MobileIcon name={rejectBusy ? 'loader' : 'logout'} className={cx('h-4 w-4', rejectBusy && 'animate-spin')} />
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      </div>
+    );
+  }
+
+  function renderAgentApprovals() {
+    const pending = agentOutbox.filter((item) => String(item.status || '').toLowerCase() === 'pending_approval');
+    return (
+      <div className="space-y-4">
+        <Panel>
+          <ModuleHeader title="Aprobaciones IA" loading={moduleLoading} onRefresh={() => loadModule('aprobaciones')} />
+          <div className="grid grid-cols-2 gap-2">
+            <Metric label="Pendientes IA" value={pending.length || bootstrap?.agentInboxSummary?.pendingApproval || 0} />
+            <Metric label="Chats abiertos" value={bootstrap?.agentInboxSummary?.conversationsOpen ?? bootstrap?.counts.chatsAbiertos ?? 0} />
+          </div>
+          <p className="mt-3 rounded-2xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs font-bold leading-5 text-amber-100">
+            Ningun agente envia respuestas sensibles o crea acciones sin aprobacion humana de gerencia o administracion.
+          </p>
+        </Panel>
+
+        <Panel>
+          {moduleLoading && pending.length === 0 && <ModuleSkeleton />}
+          {!moduleLoading && pending.length === 0 && <EmptyState icon="shield" text="No hay acciones de agentes pendientes." />}
+          <div className="space-y-3">
+            {pending.map((item: any) => {
+              const id = String(item.id || '');
+              const approveBusy = managerActionBusy === `agent-approve-${id}`;
+              const rejectBusy = managerActionBusy === `agent-reject-${id}`;
+              const actionLabel = item.action || item.type || 'propuesta';
+              return (
+                <div key={id} className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-amber-100">
+                      {actionLabel}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">{shortDate(item.created_at)}</span>
+                  </div>
+                  <p className="text-sm font-black text-white">{item.display_name || item.target || item.channel || 'Conversacion'}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">{item.channel || 'canal'} · {item.target || 'sin destino'}</p>
+                  {item.message && <p className="mt-3 whitespace-pre-wrap rounded-2xl border border-white/10 bg-black/25 p-3 text-sm leading-5 text-slate-200">{item.message}</p>}
+                  {item.action === 'create_sale' && (
+                    <p className="mt-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-xs leading-5 text-cyan-100">
+                      Crear venta para <b>{item.payload?.nombre || item.payload?.nombres || 'cliente'}</b> · {item.payload?.telefono || 'sin telefono'}
+                    </p>
+                  )}
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => approveAgentProposal(id)}
+                      disabled={!id || Boolean(managerActionBusy)}
+                      className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-xs font-black uppercase tracking-[0.12em] text-emerald-100 disabled:opacity-50"
+                    >
+                      <MobileIcon name={approveBusy ? 'loader' : 'check'} className={cx('h-4 w-4', approveBusy && 'animate-spin')} />
+                      Aprobar
+                    </button>
+                    <button
+                      onClick={() => rejectAgentProposal(id)}
+                      disabled={!id || Boolean(managerActionBusy)}
+                      className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-rose-300/25 bg-rose-400/10 text-xs font-black uppercase tracking-[0.12em] text-rose-100 disabled:opacity-50"
+                    >
+                      <MobileIcon name={rejectBusy ? 'loader' : 'logout'} className={cx('h-4 w-4', rejectBusy && 'animate-spin')} />
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      </div>
     );
   }
 

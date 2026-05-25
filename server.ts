@@ -494,7 +494,7 @@ async function startServer() {
   const adminOnly = requireRole('GERENTE', 'ADMINISTRACION');
   const opsOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR');
   const chatUserOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR');
-  const mobileOnly = requireRole('ASESOR', 'SUPERVISOR');
+  const mobileOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR');
   const managerOnly = adminOnly;
 
   function canManage(auth: any) {
@@ -1459,6 +1459,7 @@ async function startServer() {
     const payroll = mobilePayroll(req, 12);
     const conversations = getChannelConversations(80);
     const pendingOutbox = AgentOutbox.getAll(100).filter((item: any) => item.status === 'pending_approval');
+    const pendingUsers = Users.getAll().filter((user: any) => user.activo === 2).length;
     const today = new Date().toISOString().slice(0, 10);
     const pendingSales = sales.filter((sale: any) => String(sale.status || 'pendiente').toLowerCase() === 'pendiente').length;
     const todaySales = sales.filter((sale: any) => String(sale.fecha_solicitud || sale.created_at || '').startsWith(today)).length;
@@ -1466,14 +1467,14 @@ async function startServer() {
     const openConversations = conversations.filter((conversation: any) => !['cerrado', 'closed'].includes(String(conversation.status || '').toLowerCase())).length;
     res.json({
       user: mobileUser(req.auth),
-      permissions: { role: req.auth.role, canManage: canManage(req.auth), mobile: true },
+      permissions: { role: req.auth.role, canManage: canManage(req.auth), canApproveHuman: canApproveHuman(req.auth), mobile: true },
       featureFlags: {
         mobilePwaPrimary: true,
         offlineQueue: true,
         moduleCache: true,
         agentApprovals: true,
       },
-      nav: ['inicio', 'venta', 'folios', 'clientes', 'documentos', 'seguimiento', 'nominas', 'chats', 'perfil', 'ajustes'],
+      nav: ['inicio', 'venta', 'folios', 'clientes', 'documentos', 'seguimiento', 'nominas', 'chats', 'usuarios', 'aprobaciones', 'perfil', 'ajustes'],
       sync: {
         serverTime: Date.now(),
         staleAfterMs: 45000,
@@ -1493,6 +1494,7 @@ async function startServer() {
         folios: followUps.length,
         chatsAbiertos: openConversations,
         aprobaciones: pendingOutbox.length,
+        usuariosPendientes: pendingUsers,
       },
       channels: {
         whatsapp: getWhatsAppStatus('promotores'),
