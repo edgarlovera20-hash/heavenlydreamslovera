@@ -159,6 +159,9 @@ type CaptureDraft = {
   validationRequestId: string;
   expedienteGuardado: boolean;
   callRequestedAt: string;
+  curpAgentRequestedAt: string;
+  curpAgentDraft: string;
+  curpAgentMessage: string;
   notas: string;
   documents: CaptureDocument[];
 };
@@ -247,6 +250,9 @@ const EMPTY_DRAFT: CaptureDraft = {
   validationRequestId: '',
   expedienteGuardado: false,
   callRequestedAt: '',
+  curpAgentRequestedAt: '',
+  curpAgentDraft: '',
+  curpAgentMessage: '',
   notas: '',
   documents: [],
 };
@@ -254,6 +260,7 @@ const EMPTY_DRAFT: CaptureDraft = {
 const CAPTURE_STEPS = ['Identidad/OCR', 'Cliente', 'Domicilio', 'Servicio', 'Paquetes', 'Streaming', 'Video firma', 'Confirmar'];
 const INE_IDENTITY_DOCUMENTS = ['INE_FRONTAL', 'INE_REVERSO'];
 const CURP_IDENTITY_DOCUMENT = 'CURP';
+const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
 
 const STREAMING_ADDONS = [
   { id: 'netflix_basico', provider: 'Netflix', name: 'Basico con anuncios', price: 99 },
@@ -1239,6 +1246,8 @@ export default function MobileFieldApp() {
     setDraft((current) => ({
       ...current,
       identityDocumentType,
+      folioIne: identityDocumentType === 'curp' ? '' : current.folioIne,
+      mismaDireccionIne: identityDocumentType === 'ine',
       documents: current.documents.filter((doc) => !removeTypes.includes(doc.type)),
     }));
     setSelectedFiles((current) => {
@@ -1262,23 +1271,25 @@ export default function MobileFieldApp() {
       }
       return '';
     }
-    if (!hasDraftDocument(CURP_IDENTITY_DOCUMENT) && draft.curp.trim().length !== 18) {
-      return 'Sube el documento CURP o captura una CURP de 18 caracteres para consultarla.';
+    if (!hasDraftDocument(CURP_IDENTITY_DOCUMENT) && !CURP_RE.test(draft.curp.trim().toUpperCase()) && !draft.curpAgentRequestedAt) {
+      return 'Sube el documento CURP, captura una CURP valida o usa Solicitar CURP con agente.';
     }
     return '';
-  }, [draft.curp, draft.identityDocumentType, hasDraftDocument]);
+  }, [draft.curp, draft.curpAgentRequestedAt, draft.identityDocumentType, hasDraftDocument]);
 
   const capturePayload = useCallback(() => {
     const phone = normalizePhone(draft.telefono || draft.telefonoTitular);
     const titularPhone = normalizePhone(draft.telefonoTitular || draft.telefono);
     const referenciaPhone = normalizePhone(draft.telefonoReferencia);
+    const identityDocumentType = draft.identityDocumentType || 'ine';
+    const folioIne = identityDocumentType === 'ine' ? draft.folioIne.trim().toUpperCase() : '';
     return {
       nombres: draft.nombres.trim(),
       apellidoPaterno: draft.apellidoPaterno.trim(),
       apellidoMaterno: draft.apellidoMaterno.trim(),
       apellidos: [draft.apellidoPaterno, draft.apellidoMaterno].filter(Boolean).join(' ').trim(),
       curp: draft.curp.trim().toUpperCase(),
-      identityDocumentType: draft.identityDocumentType || 'ine',
+      identityDocumentType,
       fechaNacimiento: draft.fechaNacimiento,
       sexo: draft.sexo,
       estadoNacimiento: draft.estadoNacimiento,
@@ -1303,8 +1314,8 @@ export default function MobileFieldApp() {
       coordenadas: draft.coordenadas,
       gpsLatitud: draft.gpsLatitud,
       gpsLongitud: draft.gpsLongitud,
-      folio_ine: draft.folioIne,
-      folioIne: draft.folioIne,
+      folio_ine: folioIne,
+      folioIne,
       tipo_cliente: draft.tipoCliente,
       tipoCliente: draft.tipoCliente,
       tipo_servicio: draft.tipoServicio,
@@ -1332,6 +1343,8 @@ export default function MobileFieldApp() {
         source: 'mobile-pwa',
         mobileVersion: 1,
         ...draft,
+        identityDocumentType,
+        folioIne,
         telefonoTitular: titularPhone,
         telefonoReferencia: referenciaPhone,
         tipoContratacion: draft.tipoCliente,
@@ -1825,8 +1838,9 @@ export default function MobileFieldApp() {
   };
 
   const validateCurp = async () => {
-    if (!draft.curp) {
-      notify('error', 'Captura la CURP.');
+    const curp = draft.curp.trim().toUpperCase();
+    if (!CURP_RE.test(curp)) {
+      notify('error', 'Escribe una CURP valida de 18 caracteres o usa Solicitar CURP con agente.');
       return;
     }
     setCurpLoading(true);
@@ -1834,14 +1848,14 @@ export default function MobileFieldApp() {
       const data = await apiJson<any>('/api/curp/lookup', {
         method: 'POST',
         body: JSON.stringify({
-          curp: draft.curp,
+          curp,
           nombres: draft.nombres,
           apellidoPaterno: draft.apellidoPaterno,
           apellidoMaterno: draft.apellidoMaterno,
         }),
       });
       updateDraft({
-        curp: data.curp || draft.curp,
+        curp: data.curp || curp,
         nombres: data.nombres || draft.nombres,
         apellidoPaterno: data.apellidoPaterno || draft.apellidoPaterno,
         apellidoMaterno: data.apellidoMaterno || draft.apellidoMaterno,
@@ -1858,23 +1872,48 @@ export default function MobileFieldApp() {
   };
 
   const generateCurp = async () => {
+    const payload = {
+      nombres: draft.nombres.trim(),
+      apellidoPaterno: draft.apellidoPaterno.trim(),
+      apellidoMaterno: draft.apellidoMaterno.trim(),
+      fechaNacimiento: draft.fechaNacimiento,
+      sexo: draft.sexo,
+      estadoNacimiento: draft.estadoNacimiento.trim().toUpperCase(),
+      curp: draft.curp.trim().toUpperCase(),
+    };
+    const missing = [
+      ['nombres', 'nombre'],
+      ['apellidoPaterno', 'apellido paterno'],
+      ['fechaNacimiento', 'fecha de nacimiento'],
+      ['sexo', 'sexo'],
+      ['estadoNacimiento', 'estado de nacimiento'],
+    ].filter(([key]) => !String((payload as any)[key] || '').trim()).map(([, label]) => label);
+    if (missing.length > 0) {
+      setDraftStep(1);
+      notify('error', `Completa ${missing.join(', ')} para solicitar la CURP con agente.`);
+      return;
+    }
     setCurpLoading(true);
+    const officialWindow = window.open('https://www.gob.mx/curp/', '_blank', 'noopener,noreferrer');
     try {
       const data = await apiJson<any>('/api/curp/gobmx-agent', {
         method: 'POST',
-        body: JSON.stringify({
-          nombres: draft.nombres,
-          apellidoPaterno: draft.apellidoPaterno,
-          apellidoMaterno: draft.apellidoMaterno,
-          fechaNacimiento: draft.fechaNacimiento,
-          sexo: draft.sexo,
-          estadoNacimiento: draft.estadoNacimiento,
-        }),
+        body: JSON.stringify(payload),
       });
-      updateDraft({ curp: data.curp || draft.curp });
-      notify('success', 'CURP generada en el flujo movil.');
+      if (data.gobMxUrl && officialWindow) officialWindow.location.href = data.gobMxUrl;
+      if (data.clipboardText && navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(data.clipboardText).catch(() => undefined);
+      }
+      updateDraft({
+        curp: data.curp || draft.curp,
+        curpAgentRequestedAt: new Date().toISOString(),
+        curpAgentDraft: data.curpDraft || '',
+        curpAgentMessage: data.message || 'Solicitud CURP enviada al agente gob.mx.',
+      });
+      notify('success', data.official ? 'CURP oficial recibida.' : 'Agente CURP preparado. Descarga o adjunta el PDF oficial cuando lo tengas.');
     } catch (err: any) {
-      notify('error', err?.message || 'No se pudo generar CURP.');
+      officialWindow?.close();
+      notify('error', err?.message || 'No se pudo solicitar CURP con agente.');
     } finally {
       setCurpLoading(false);
     }
@@ -1909,13 +1948,14 @@ export default function MobileFieldApp() {
     }));
   };
 
-  const applyOcrFieldsToDraft = (fields: any) => {
+  const applyOcrFieldsToDraft = (fields: any, sourceDocType = '') => {
+    const fromCurpDocument = sourceDocType === CURP_IDENTITY_DOCUMENT;
     updateDraft({
       nombres: pick(fields, 'nombres', 'nombre', 'name') || draft.nombres,
       apellidoPaterno: pick(fields, 'apellidoPaterno', 'apellido_paterno', 'primerApellido') || draft.apellidoPaterno,
       apellidoMaterno: pick(fields, 'apellidoMaterno', 'apellido_materno', 'segundoApellido') || draft.apellidoMaterno,
       curp: pick(fields, 'curp', 'CURP') || draft.curp,
-      folioIne: pick(fields, 'folioIne', 'folio_ine', 'claveElector', 'cic', 'ocr') || draft.folioIne,
+      folioIne: fromCurpDocument ? '' : (pick(fields, 'folioIne', 'folio_ine', 'claveElector', 'cic', 'ocr') || draft.folioIne),
       fechaNacimiento: pick(fields, 'fechaNacimiento', 'fecha_nacimiento', 'birthDate') || draft.fechaNacimiento,
       sexo: pick(fields, 'sexo', 'genero') || draft.sexo,
       estadoNacimiento: pick(fields, 'estadoNacimiento', 'entidadNacimiento', 'estado') || draft.estadoNacimiento,
@@ -1937,7 +1977,7 @@ export default function MobileFieldApp() {
     try {
       const data = await runMobileOcr(file, mode);
       const fields = data.fields || data.extracted || data.data || data;
-      applyOcrFieldsToDraft(fields);
+      applyOcrFieldsToDraft(fields, docType);
       notify('success', 'OCR aplicado al borrador.');
     } catch (err: any) {
       notify('error', err?.message || 'No se pudo ejecutar OCR.');
@@ -2186,7 +2226,7 @@ export default function MobileFieldApp() {
       const files = targets.map((type) => selectedFiles[type]).filter(Boolean) as File[];
       const data = await runMobileOcr(files, 'ine');
       const fields = data.fields || data.extracted || data.data || data;
-      applyOcrFieldsToDraft(fields);
+      applyOcrFieldsToDraft(fields, 'INE');
       notify('success', 'OCR de INE aplicado al borrador.');
     } catch (err: any) {
       notify('error', err?.message || 'No se pudo ejecutar OCR de INE.');
@@ -2548,14 +2588,17 @@ export default function MobileFieldApp() {
     const ineFrontReady = hasDraftDocument('INE_FRONTAL');
     const ineBackReady = hasDraftDocument('INE_REVERSO');
     const curpDocumentReady = hasDraftDocument(CURP_IDENTITY_DOCUMENT);
-    const curpTextReady = draft.curp.trim().length === 18;
+    const curpTextReady = CURP_RE.test(draft.curp.trim().toUpperCase());
+    const curpAgentRequested = Boolean(draft.curpAgentRequestedAt);
     const identityStatus = identityDocumentType === 'ine'
       ? `${ineFrontReady ? 'Frente listo' : 'Falta frente'} / ${ineBackReady ? 'Reverso listo' : 'falta reverso'}`
       : curpDocumentReady
         ? 'Documento CURP listo'
         : curpTextReady
-          ? 'CURP capturada para consulta'
-          : 'Sube CURP o captura la clave';
+          ? 'CURP valida capturada'
+          : curpAgentRequested
+            ? 'CURP solicitada al agente'
+            : 'Sube CURP, escribe la clave o solicitala con agente';
 
     return (
       <Panel>
@@ -2613,7 +2656,7 @@ export default function MobileFieldApp() {
                 <p className="mt-1 text-xs leading-5 text-slate-400">
                   {identityDocumentType === 'ine'
                     ? 'Sube frente y reverso. El OCR autocompleta nombre, CURP, folio INE y domicilio detectado.'
-                    : 'Sube el documento CURP o captura la clave para consultarla antes de confirmar la venta.'}
+                    : 'No se pedira Folio INE. Puedes subir el PDF/foto CURP, escribirla si ya la tienes o solicitarla al agente gob.mx con los datos del cliente.'}
                 </p>
                 <p className="mt-2 text-[11px] font-black uppercase tracking-[0.12em] text-cyan-100">{identityStatus}</p>
               </div>
@@ -2629,11 +2672,23 @@ export default function MobileFieldApp() {
               ) : (
                 <>
                   {docRow(CURP_IDENTITY_DOCUMENT, 'Documento CURP', 'ine', undefined, 'image/*,.pdf')}
-                  <Field label="CURP" value={draft.curp} onChange={(value) => updateDraft({ curp: value.toUpperCase().slice(0, 18) })} placeholder="CURP del cliente" />
-                  <button onClick={validateCurp} disabled={curpLoading || draft.curp.trim().length !== 18} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.12em] text-slate-950 disabled:opacity-45">
-                    <MobileIcon name={curpLoading ? 'loader' : 'id'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
-                    Consultar CURP
-                  </button>
+                  <Field label="CURP (opcional)" value={draft.curp} onChange={(value) => updateDraft({ curp: value.toUpperCase().slice(0, 18), curpAgentRequestedAt: '', curpAgentDraft: '', curpAgentMessage: '' })} placeholder="Solo si ya la trae el cliente" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={validateCurp} disabled={curpLoading || !curpTextReady} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.08em] text-slate-950 disabled:opacity-45">
+                      <MobileIcon name={curpLoading ? 'loader' : 'id'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
+                      Validar
+                    </button>
+                    <button onClick={generateCurp} disabled={curpLoading} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-slate-100 disabled:opacity-60">
+                      <MobileIcon name={curpLoading ? 'loader' : 'search'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
+                      Solicitar
+                    </button>
+                  </div>
+                  {draft.curpAgentMessage && (
+                    <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-xs font-semibold leading-5 text-emerald-100">
+                      {draft.curpAgentMessage}
+                      {draft.curpAgentDraft && <span className="mt-1 block font-mono text-cyan-100">Borrador: {draft.curpAgentDraft}</span>}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -2646,22 +2701,40 @@ export default function MobileFieldApp() {
                 <Field label="Apellido paterno" value={draft.apellidoPaterno} onChange={(value) => updateDraft({ apellidoPaterno: value })} />
                 <Field label="Apellido materno" value={draft.apellidoMaterno} onChange={(value) => updateDraft({ apellidoMaterno: value })} />
               </div>
-              <Field label="CURP" value={draft.curp} onChange={(value) => updateDraft({ curp: value.toUpperCase().slice(0, 18) })} placeholder="CURP del cliente" />
-              <Field label="Folio INE" value={draft.folioIne} onChange={(value) => updateDraft({ folioIne: value.toUpperCase() })} placeholder="OCR / CIC / clave elector" />
+              <Field
+                label={identityDocumentType === 'ine' ? 'CURP' : 'CURP (opcional si ya la tiene)'}
+                value={draft.curp}
+                onChange={(value) => updateDraft({ curp: value.toUpperCase().slice(0, 18), curpAgentRequestedAt: '', curpAgentDraft: '', curpAgentMessage: '' })}
+                placeholder={identityDocumentType === 'ine' ? 'Autorrelleno por OCR o captura manual' : 'El agente puede solicitarla con los datos'}
+              />
+              {identityDocumentType === 'ine' && (
+                <Field label="Folio INE" value={draft.folioIne} onChange={(value) => updateDraft({ folioIne: value.toUpperCase() })} placeholder="OCR / CIC / clave elector" />
+              )}
+              {identityDocumentType === 'curp' && (
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-xs font-semibold leading-5 text-cyan-100">
+                  Opcion CURP activa: no se pide Folio INE. Si no tienes la CURP, completa nacimiento, sexo y estado para solicitarla con el agente.
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Nacimiento" type="date" value={draft.fechaNacimiento} onChange={(value) => updateDraft({ fechaNacimiento: value })} />
                 <SelectField label="Sexo" value={draft.sexo} onChange={(value) => updateDraft({ sexo: value })} options={['', 'H', 'M']} />
               </div>
               <Field label="Estado nacimiento" value={draft.estadoNacimiento} onChange={(value) => updateDraft({ estadoNacimiento: value.toUpperCase() })} placeholder="DF, MC, NL..." />
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={validateCurp} disabled={curpLoading} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-cyan-300/25 bg-cyan-300/10 text-sm font-black text-cyan-100 disabled:opacity-60">
+                <button onClick={validateCurp} disabled={curpLoading || !curpTextReady} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-cyan-300/25 bg-cyan-300/10 text-sm font-black text-cyan-100 disabled:opacity-60">
                   <MobileIcon name={curpLoading ? 'loader' : 'id'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
-                  Consultar CURP
+                  Validar CURP
                 </button>
                 <button onClick={generateCurp} disabled={curpLoading} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-slate-100 disabled:opacity-60">
-                  Generar
+                  Solicitar
                 </button>
               </div>
+              {draft.curpAgentMessage && (
+                <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-xs font-semibold leading-5 text-emerald-100">
+                  {draft.curpAgentMessage}
+                  {draft.curpAgentDraft && <span className="mt-1 block font-mono text-cyan-100">Borrador: {draft.curpAgentDraft}</span>}
+                </div>
+              )}
               <Field label="Telefono" value={draft.telefono} onChange={(value) => updateDraft({ telefono: normalizePhone(value) })} placeholder="5512345678" inputMode="tel" />
               <Field label="Telefono titular" value={draft.telefonoTitular} onChange={(value) => updateDraft({ telefonoTitular: normalizePhone(value) })} placeholder="5512345678" inputMode="tel" />
               <Field label="Telefono referencia" value={draft.telefonoReferencia} onChange={(value) => updateDraft({ telefonoReferencia: normalizePhone(value) })} placeholder="Opcional" inputMode="tel" />
@@ -2687,13 +2760,19 @@ export default function MobileFieldApp() {
               </div>
               <Field label="Referencias" value={draft.referencias} onChange={(value) => updateDraft({ referencias: value })} multiline />
               <button onClick={() => updateDraft({ mismaDireccionIne: !draft.mismaDireccionIne })} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
-                <span className="text-sm font-black text-slate-100">La direccion coincide con la INE</span>
+                <span className="text-sm font-black text-slate-100">
+                  {identityDocumentType === 'ine' ? 'La direccion coincide con la INE' : 'Domicilio confirmado por el cliente'}
+                </span>
                 <span className={cx('rounded-full px-3 py-1 text-xs font-black', draft.mismaDireccionIne ? 'bg-emerald-300 text-slate-950' : 'bg-amber-300 text-slate-950')}>{draft.mismaDireccionIne ? 'SI' : 'NO'}</span>
               </button>
               {!draft.mismaDireccionIne && (
                 <div className="space-y-3">
                   {docRow('COMPROBANTE_DOMICILIO', 'Comprobante domicilio', 'comprobante', 'environment')}
-                  <p className="text-xs leading-5 text-amber-100">Si la direccion de la INE no coincide, usa OCR del comprobante y ajusta el mapa.</p>
+                  <p className="text-xs leading-5 text-amber-100">
+                    {identityDocumentType === 'ine'
+                      ? 'Si la direccion de la INE no coincide, usa OCR del comprobante y ajusta el mapa.'
+                      : 'Como elegiste CURP, usa comprobante o captura manual para validar domicilio y mapa.'}
+                  </p>
                 </div>
               )}
               <Suspense fallback={<div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">Cargando mapa...</div>}>
@@ -2861,7 +2940,8 @@ export default function MobileFieldApp() {
             <div className="space-y-3">
               <SummaryRow label="Cliente" value={fullName(draft) || 'Sin nombre'} />
               <SummaryRow label="Identidad" value={identityDocumentType === 'ine' ? `INE - ${identityStatus}` : `CURP - ${identityStatus}`} />
-              <SummaryRow label="CURP" value={draft.curp || 'Pendiente'} />
+              <SummaryRow label="CURP" value={draft.curp || (draft.curpAgentRequestedAt ? `Solicitada al agente${draft.curpAgentDraft ? ` (${draft.curpAgentDraft})` : ''}` : 'Pendiente')} />
+              {identityDocumentType === 'ine' && <SummaryRow label="Folio INE" value={draft.folioIne || 'Pendiente'} />}
               <SummaryRow label="Telefono" value={draft.telefono || 'Pendiente'} />
               <SummaryRow label="Telefono titular" value={draft.telefonoTitular || 'Pendiente'} />
               <SummaryRow label="Referencia" value={draft.telefonoReferencia || 'Opcional'} />
