@@ -2021,7 +2021,7 @@ export default function MobileFieldApp() {
     );
   }
 
-  const canUseWhatsApp = String(session.role || '').toUpperCase() === 'GERENTE';
+  const canUseWhatsApp = String(session.role || '').toUpperCase() === 'SUPERVISOR';
   const visibleModules = MODULES.filter((module) => canUseWhatsApp || module.id !== 'chats');
 
   const renderContent = () => {

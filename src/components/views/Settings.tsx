@@ -28,7 +28,7 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState<Tab>('usuarios');
 
   const role = currentSessionRole();
-  const canManageChannels = ['GERENTE', 'ADMIN', 'SUPERUSER'].includes(role);
+  const canManageChannels = ['GERENTE', 'ADMINISTRACION', 'ADMIN', 'SUPERUSER'].includes(role);
 
   const tabs = [
     { id: 'usuarios', label: 'Gestión de Usuarios', icon: Users },
@@ -756,7 +756,7 @@ const DEFAULT_CHANNELS: Record<ChannelKey, ChannelState> = {
 function CanalesTab() {
   // Restricción de rol — solo GERENTE/ADMIN puede ver/configurar canales
   const role = currentSessionRole();
-  const isAuthorized = role === 'GERENTE' || role === 'ADMIN';
+  const isAuthorized = role === 'GERENTE' || role === 'ADMINISTRACION' || role === 'ADMIN';
 
   const [channels, setChannels] = useState<typeof DEFAULT_CHANNELS>(() => {
     const saved = localStorage.getItem('adhdreams_channels_v2');

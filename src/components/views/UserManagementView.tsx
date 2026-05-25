@@ -18,6 +18,7 @@ interface AppUser {
 
 const ROLE_LABELS: Record<string, string> = {
   GERENTE: 'Gerente',
+  ADMINISTRACION: 'Administración',
   SUPERVISOR: 'Supervisor',
   ASESOR: 'Asesor',
 };

@@ -8,7 +8,7 @@ async function hashPassword(plain: string): Promise<string> {
 
 interface RegisterFormProps {
   onBack: () => void;
-  pendingRole: 'GERENTE' | 'SUPERVISOR' | 'ASESOR' | null;
+  pendingRole: 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'ASESOR' | null;
 }
 
 const TERMS_VERSION = '1.0';

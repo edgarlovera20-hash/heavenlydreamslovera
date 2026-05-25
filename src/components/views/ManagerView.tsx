@@ -44,6 +44,8 @@ const UserManagementView = lazy(() => import('./UserManagementView'));
 const EnterpriseOpsView = lazy(() => import('./EnterpriseOpsView'));
 const ChatsView = lazy(() => import('./ChatsView'));
 const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
+const OPS_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'];
+const ADMIN_ROLES = ['GERENTE', 'ADMINISTRACION'];
 
 const SectionLoader = () => (
   <div className="flex flex-col items-center justify-center h-48 gap-4" role="status" aria-live="polite">
@@ -87,7 +89,7 @@ interface ManagerViewProps {
 }
 
 export default function ManagerView({ role, onBack, currentUser, isLightMode, onToggleTheme }: ManagerViewProps) {
-  const [activeSection, setActiveSection] = useState(['GERENTE', 'SUPERVISOR'].includes(role) ? 'Dashboard' : 'Perfil');
+  const [activeSection, setActiveSection] = useState(OPS_ROLES.includes(role) ? 'Dashboard' : 'Perfil');
   const [showAgentDesigner, setShowAgentDesigner] = useState(false);
   const { isOnline, pendingCount, syncing, syncNow } = useOfflineSync();
   useFollowUpReminders();
@@ -107,7 +109,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [pendingUsers, setPendingUsers] = useState(0);
 
   const loadStats = async () => {
-    if (!['GERENTE', 'SUPERVISOR'].includes(role)) return;
+    if (!OPS_ROLES.includes(role)) return;
     try {
       const res = await fetch('/api/dashboard/summary');
       if (!res.ok) return;
@@ -126,7 +128,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   useEffect(() => {
     loadStats();
     const loadChannels = async () => {
-      if (!['GERENTE', 'SUPERVISOR'].includes(role)) return;
+      if (!OPS_ROLES.includes(role)) return;
       try {
         const [ws, tgs, msgs, conversations, outbox] = await Promise.all([
           fetch('/api/whatsapp/status').then(r => r.ok ? r.json() : null),
@@ -145,14 +147,16 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       } catch {}
     };
     loadChannels();
-    const statsTimer = ['GERENTE', 'SUPERVISOR'].includes(role) ? setInterval(loadStats, 30000) : undefined;
-    const channelTimer = ['GERENTE', 'SUPERVISOR'].includes(role) ? setInterval(loadChannels, 30000) : undefined;
+    const statsTimer = OPS_ROLES.includes(role) ? setInterval(loadStats, 30000) : undefined;
+    const channelTimer = OPS_ROLES.includes(role) ? setInterval(loadChannels, 30000) : undefined;
     return () => { clearInterval(statsTimer); clearInterval(channelTimer); };
   }, [role]);
 
   const userName = currentUser?.displayName || 'Usuario';
   const userRoleLabel = (currentUser?.role || role) === 'GERENTE'
     ? 'SUPERUSER'
+    : (currentUser?.role || role) === 'ADMINISTRACION'
+      ? 'ADMINISTRACION'
     : (currentUser?.role || role);
   const notificationCount = pendingSales + pendingUsers;
 
@@ -210,7 +214,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
         </div>
 
         <nav className="flex-1 py-4 px-3 overflow-y-auto custom-scrollbar relative z-10" aria-label="Navegación principal">
-          {['GERENTE', 'SUPERVISOR'].includes(role) && (
+          {OPS_ROLES.includes(role) && (
             <div className="mb-3">
               <NavItem icon={LayoutDashboard} color="cyan" label="Dashboard" active={activeSection === 'Dashboard'} onClick={() => setActiveSection('Dashboard')} />
             </div>
@@ -230,10 +234,10 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
           <NavGroup label="Administración">
             <NavItem icon={Wallet} color="yellow" label="Nóminas" active={activeSection === 'Nóminas'} onClick={() => setActiveSection('Nóminas')} />
-            {role === 'GERENTE' && <NavItem icon={SettingsIcon} color="slate" label="Ajustes" active={activeSection === 'Ajustes'} onClick={() => setActiveSection('Ajustes')} />}
+            {ADMIN_ROLES.includes(role) && <NavItem icon={SettingsIcon} color="slate" label="Ajustes" active={activeSection === 'Ajustes'} onClick={() => setActiveSection('Ajustes')} />}
           </NavGroup>
 
-          {['GERENTE', 'SUPERVISOR'].includes(role) && (
+          {OPS_ROLES.includes(role) && (
             <NavGroup label="Administración Avanzada">
               <NavItem icon={BarChart3} color="cyan" label="Efectividad" active={activeSection === 'Analytics'} onClick={() => setActiveSection('Analytics')} />
               <NavItem icon={Users} color="blue" label="Equipo y Metas" active={activeSection === 'Equipo y Metas'} onClick={() => setActiveSection('Equipo y Metas')} />
@@ -241,13 +245,13 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             </NavGroup>
           )}
 
-          {['GERENTE', 'SUPERVISOR'].includes(role) && (
+          {OPS_ROLES.includes(role) && (
             <NavGroup label="Agentes IA">
               <NavItem icon={Bot} color="purple" label="Hub de Agentes" active={activeSection === 'Hub de Agentes'} onClick={() => setActiveSection('Hub de Agentes')} />
             </NavGroup>
           )}
 
-          {role === 'GERENTE' && (
+          {ADMIN_ROLES.includes(role) && (
             <NavGroup label="Gerencia">
               <NavItem icon={Users} color="cyan" label="Gestión de Usuarios" active={activeSection === 'Gestión de Usuarios'} onClick={() => setActiveSection('Gestión de Usuarios')} badge={pendingUsers > 0 ? pendingUsers : undefined} />
               <NavItem icon={MapPin} color="cyan" label="Territorios" active={activeSection === 'Territorios'} onClick={() => setActiveSection('Territorios')} />
@@ -270,8 +274,8 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
           <NavGroup label="Sistema">
             <NavItem icon={User} color="blue" label="Perfil" active={activeSection === 'Perfil'} onClick={() => setActiveSection('Perfil')} />
-            {['GERENTE', 'SUPERVISOR'].includes(role) && <NavItem icon={Zap} color="yellow" label="Integraciones" active={activeSection === 'Integraciones'} onClick={() => setActiveSection('Integraciones')} />}
-            {['GERENTE', 'SUPERVISOR'].includes(role) && <NavItem icon={Bot} color="purple" label="Diseñador IA" active={false} onClick={() => setShowAgentDesigner(true)} />}
+            {OPS_ROLES.includes(role) && <NavItem icon={Zap} color="yellow" label="Integraciones" active={activeSection === 'Integraciones'} onClick={() => setActiveSection('Integraciones')} />}
+            {OPS_ROLES.includes(role) && <NavItem icon={Bot} color="purple" label="Diseñador IA" active={false} onClick={() => setShowAgentDesigner(true)} />}
             <NavItem icon={Gamepad2} color="green" label="Juego" active={activeSection === 'Juego'} onClick={() => setActiveSection('Juego')} />
           </NavGroup>
         </nav>
@@ -410,7 +414,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   <QuickAction icon={Users} label="Seguimiento" color="blue" onClick={() => setActiveSection('Seguimiento de Clientes')} />
                   <QuickAction icon={AlertTriangle} label="Morosidad" color="red" onClick={() => setActiveSection('Morosidad')} />
                   <QuickAction icon={Headphones} label="Soporte" color="purple" onClick={() => setActiveSection('Soporte a Clientes')} />
-                  {['GERENTE', 'SUPERVISOR'].includes(role) && <>
+                  {OPS_ROLES.includes(role) && <>
                     <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
                     <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
                     <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
@@ -419,7 +423,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
               </PremiumCard>
 
               {/* ── SYNC RELAYS: Canal Status + Mensajes Recientes ── */}
-              {['GERENTE', 'SUPERVISOR'].includes(role) && (
+              {OPS_ROLES.includes(role) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* WhatsApp panel */}
                   <PremiumCard className="p-5 space-y-4">

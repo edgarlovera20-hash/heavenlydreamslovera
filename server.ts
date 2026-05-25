@@ -490,12 +490,18 @@ async function startServer() {
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
   const registrationLimiter = rateLimit('registration', 8, 60 * 60 * 1000);
   const authOnly = requireAuth;
-  const opsOnly = requireRole('GERENTE', 'SUPERVISOR');
-  const chatUserOnly = requireRole('GERENTE', 'SUPERVISOR', 'ASESOR');
-  const managerOnly = requireRole('GERENTE');
+  const adminOnly = requireRole('GERENTE', 'ADMINISTRACION');
+  const opsOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR');
+  const chatUserOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR');
+  const mobileOnly = requireRole('ASESOR', 'SUPERVISOR');
+  const managerOnly = adminOnly;
 
   function canManage(auth: any) {
-    return ['GERENTE', 'SUPERVISOR'].includes(auth?.role);
+    return ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'].includes(auth?.role);
+  }
+
+  function canApproveHuman(auth: any) {
+    return ['GERENTE', 'ADMINISTRACION'].includes(auth?.role);
   }
 
   function canAccessVenta(auth: any, venta: any) {
@@ -935,7 +941,7 @@ async function startServer() {
 
   function safeUserRole(value: any) {
     const role = String(value || 'ASESOR').trim().toUpperCase();
-    return ['ASESOR', 'SUPERVISOR', 'GERENTE'].includes(role) ? role : 'ASESOR';
+    return ['ASESOR', 'SUPERVISOR', 'GERENTE', 'ADMINISTRACION'].includes(role) ? role : 'ASESOR';
   }
 
   function safeActivo(value: any, fallback: number) {
@@ -952,7 +958,7 @@ async function startServer() {
       email: String(body?.email || '').trim().toLowerCase(),
       username: String(body?.username || '').trim(),
       password: body?.password,
-      role: publicRegistration ? (requestedRole === 'GERENTE' ? 'ASESOR' : requestedRole) : requestedRole,
+      role: publicRegistration ? (['GERENTE', 'ADMINISTRACION'].includes(requestedRole) ? 'ASESOR' : requestedRole) : requestedRole,
       zona: body?.zona ?? body?.zonaOperativa ?? null,
       puesto: body?.puesto ?? null,
       activo: publicRegistration ? 2 : safeActivo(body?.activo, 1),
@@ -966,12 +972,52 @@ async function startServer() {
       res.status(403).json({ error: 'Cuenta no autorizada.' });
       return null;
     }
-    if (user.role !== 'GERENTE') {
+    if (!canApproveHuman(user)) {
       res.status(403).json({ error: 'Permisos insuficientes' });
       return null;
     }
     return { ...auth, role: user.role, name: user.nombre };
   }
+
+  const FIXED_MANAGER_EMAIL = 'edgarlovera20@gmail.com';
+  const FIXED_MANAGER_USERNAME = 'edgarlovera20';
+
+  function isFixedManagerUser(user: any) {
+    return String(user?.email || '').toLowerCase() === FIXED_MANAGER_EMAIL
+      || String(user?.username || '').toLowerCase() === FIXED_MANAGER_USERNAME;
+  }
+
+  function ensureFixedManagerAccount() {
+    const passwordHash = String(process.env.FIXED_MANAGER_PASSWORD_HASH || '').trim();
+    const existing = (Users.getByEmail(FIXED_MANAGER_EMAIL) || Users.getByUsername(FIXED_MANAGER_USERNAME)) as any;
+    if (!existing && !passwordHash) return;
+    if (existing) {
+      const update: Record<string, any> = {
+        nombre: existing.nombre || 'Edgar Lovera',
+        email: FIXED_MANAGER_EMAIL,
+        username: FIXED_MANAGER_USERNAME,
+        role: 'GERENTE',
+        activo: 1,
+      };
+      if (passwordHash) update.password = passwordHash;
+      Users.update(existing.uid, update);
+      return;
+    }
+    Users.create({
+      uid: 'uid_edgarlovera20',
+      nombre: 'Edgar Lovera',
+      email: FIXED_MANAGER_EMAIL,
+      username: FIXED_MANAGER_USERNAME,
+      role: 'GERENTE',
+      password: passwordHash,
+      zona: null,
+      puesto: 'Gerente',
+      activo: 1,
+    });
+    console.log('[DB] Gerente fijo creado desde FIXED_MANAGER_PASSWORD_HASH.');
+  }
+
+  ensureFixedManagerAccount();
 
   // ── USUARIOS ────────────────────────────────────────────────
   app.get("/api/users", opsOnly, wrap((_req: any, res: any) => {
@@ -1026,11 +1072,11 @@ async function startServer() {
       return res.status(403).json({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador.', code: 'INACTIVE' });
     AuditLog.insert({ accion: 'LOGIN', entidad: 'users', entidad_id: user.uid, user_id: user.uid, user_nombre: user.nombre, detalle: null });
     const { password: _, ...safe } = user;
-    const managerRequiresWebAuthn = user.role === 'GERENTE' && isWebAuthnRequired(req);
+    const managerRequiresWebAuthn = ['GERENTE', 'ADMINISTRACION'].includes(user.role) && isWebAuthnRequired(req);
     if (managerRequiresWebAuthn && userHasPasskey(user.uid)) {
       return res.json({ requiresWebAuthn: true, webAuthnUserId: user.uid, nombre: user.nombre, role: user.role });
     }
-    const session = issueSessionCookie(res, user, req, user.role === 'GERENTE'
+    const session = issueSessionCookie(res, user, req, ['GERENTE', 'ADMINISTRACION'].includes(user.role)
       ? { webAuthnVerified: !managerRequiresWebAuthn, webAuthnEnrollmentRequired: managerRequiresWebAuthn }
       : {});
     res.json({ ...safe, ...session, webAuthnEnrollmentRequired: managerRequiresWebAuthn });
@@ -1249,16 +1295,17 @@ async function startServer() {
 
   // Aprobar cuenta
   app.post("/api/users/:uid/approve", managerOnly, wrap((req: any, res: any) => {
-    Users.update(req.params.uid, { activo: 1 });
     const u = Users.getById(req.params.uid) as any;
+    Users.update(req.params.uid, isFixedManagerUser(u) ? { activo: 1, role: 'GERENTE' } : { activo: 1 });
     AuditLog.insert({ accion: 'APPROVE_USER', entidad: 'users', entidad_id: req.params.uid, user_id: req.body.by || null, user_nombre: null, detalle: u?.nombre || null });
     res.json({ ok: true });
   }));
 
   // Rechazar / desactivar cuenta
   app.post("/api/users/:uid/reject", managerOnly, wrap((req: any, res: any) => {
-    Users.update(req.params.uid, { activo: 0 });
     const u = Users.getById(req.params.uid) as any;
+    if (isFixedManagerUser(u)) return res.status(403).json({ error: 'La cuenta gerente fija no puede desactivarse.' });
+    Users.update(req.params.uid, { activo: 0 });
     AuditLog.insert({ accion: 'REJECT_USER', entidad: 'users', entidad_id: req.params.uid, user_id: req.body.by || null, user_nombre: null, detalle: u?.nombre || null });
     res.json({ ok: true });
   }));
@@ -1266,6 +1313,13 @@ async function startServer() {
   // Editar datos de usuario
   app.put("/api/users/:uid", managerOnly, wrap((req: any, res: any) => {
     const { password, uid: _uid, ...data } = req.body;
+    const u = Users.getById(req.params.uid) as any;
+    if (isFixedManagerUser(u)) {
+      data.email = FIXED_MANAGER_EMAIL;
+      data.username = FIXED_MANAGER_USERNAME;
+      data.role = 'GERENTE';
+      data.activo = 1;
+    }
     Users.update(req.params.uid, data);
     res.json({ ok: true });
   }));
@@ -1274,13 +1328,14 @@ async function startServer() {
   app.delete("/api/users/:uid", managerOnly, wrap((req: any, res: any) => {
     const u = Users.getById(req.params.uid) as any;
     if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (isFixedManagerUser(u)) return res.status(403).json({ error: 'La cuenta gerente fija no puede eliminarse.' });
     Users.delete(req.params.uid);
     AuditLog.insert({ accion: 'DELETE_USER', entidad: 'users', entidad_id: req.params.uid, user_id: null, user_nombre: null, detalle: u.nombre || u.username || null });
     res.json({ ok: true });
   }));
 
   // Contar pendientes (para notificaciones)
-  app.get("/api/users/pending-count", opsOnly, wrap((_req: any, res: any) => {
+  app.get("/api/users/pending-count", adminOnly, wrap((_req: any, res: any) => {
     const count = Users.getAll().filter((u: any) => u.activo === 2).length;
     res.json({ count });
   }));
@@ -1395,7 +1450,7 @@ async function startServer() {
     });
   }
 
-  app.get("/api/mobile/bootstrap", authOnly, wrap((req: any, res: any) => {
+  app.get("/api/mobile/bootstrap", mobileOnly, wrap((req: any, res: any) => {
     const sales = mobileSales(req, 60);
     const captures = mobileCaptures(req, 40);
     const clients = mobileClients(req, 40);
@@ -1450,7 +1505,7 @@ async function startServer() {
     });
   }));
 
-  app.post("/api/mobile/capturas", authOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/mobile/capturas", mobileOnly, wrap(async (req: any, res: any) => {
     const body = req.body || {};
     const nombres = String(body.nombres || '').trim();
     const apellidoPaterno = String(body.apellidoPaterno || body.apellido_paterno || '').trim();
@@ -1522,11 +1577,11 @@ async function startServer() {
     res.json({ ...savedSale, validation });
   }));
 
-  app.get("/api/mobile/clientes", authOnly, wrap((req: any, res: any) => {
+  app.get("/api/mobile/clientes", mobileOnly, wrap((req: any, res: any) => {
     res.json(filterUpdatedSince(mobileClients(req, 100), req.query?.updatedSince));
   }));
 
-  app.get("/api/mobile/documentos", authOnly, wrap((req: any, res: any) => {
+  app.get("/api/mobile/documentos", mobileOnly, wrap((req: any, res: any) => {
     const captures = filterUpdatedSince(mobileCaptures(req, 60), req.query?.updatedSince).map((capture: any) => ({
       ...capture,
       documentos: DocumentosCliente.getByCaptura(capture.id),
@@ -1535,15 +1590,15 @@ async function startServer() {
     res.json({ captures });
   }));
 
-  app.get("/api/mobile/seguimiento", authOnly, wrap((req: any, res: any) => {
+  app.get("/api/mobile/seguimiento", mobileOnly, wrap((req: any, res: any) => {
     res.json(filterUpdatedSince(mobileFollowUps(req, 100), req.query?.updatedSince));
   }));
 
-  app.get("/api/mobile/nominas", authOnly, wrap((req: any, res: any) => {
+  app.get("/api/mobile/nominas", mobileOnly, wrap((req: any, res: any) => {
     res.json(filterUpdatedSince(mobilePayroll(req, 80), req.query?.updatedSince));
   }));
 
-  app.get("/api/mobile/chats", chatUserOnly, wrap((req: any, res: any) => {
+  app.get("/api/mobile/chats", mobileOnly, wrap((req: any, res: any) => {
     const messages = filterUpdatedSince(getRecentChannelMessages(120), req.query?.updatedSince);
     const conversations = getChannelConversations(120).map((conversation: any) => ({
       ...conversation,
@@ -1552,7 +1607,7 @@ async function startServer() {
     res.json({ conversations, messages });
   }));
 
-  app.post("/api/mobile/whatsapp/send", chatUserOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/mobile/whatsapp/send", mobileOnly, wrap(async (req: any, res: any) => {
     const phone = normalizePhone10(req.body?.phone || req.body?.telefono);
     const message = String(req.body?.message || req.body?.mensaje || '').trim();
     if (phone.length !== 10 || !message) return res.status(400).json({ error: 'phone de 10 digitos y message son requeridos' });
@@ -1769,7 +1824,7 @@ async function startServer() {
     res.send(buffer);
   }));
 
-  app.patch("/api/document-files/:id/review", opsOnly, wrap((req: any, res: any) => {
+  app.patch("/api/document-files/:id/review", adminOnly, wrap((req: any, res: any) => {
     const allowed = new Set(['PENDIENTE', 'VALIDADO', 'SOSPECHOSO', 'RECHAZADO']);
     const review_status = String(req.body?.review_status || '').toUpperCase();
     if (!allowed.has(review_status)) return res.status(400).json({ error: 'review_status invalido' });
@@ -1782,7 +1837,7 @@ async function startServer() {
     res.json(DocumentFiles.getById(req.params.id));
   }));
 
-  app.patch("/api/documentos-cliente/:id", opsOnly, wrap((req: any, res: any) => {
+  app.patch("/api/documentos-cliente/:id", adminOnly, wrap((req: any, res: any) => {
     const allowed = ['status_documento', 'validado_por', 'fecha_validacion', 'observaciones'];
     const update: Record<string, any> = {};
     for (const key of allowed) if (Object.prototype.hasOwnProperty.call(req.body, key)) update[key] = req.body[key];
@@ -2243,7 +2298,7 @@ async function startServer() {
     res.json({ ok: true, id: data.id, validation: ValidationRequests.getById(data.id) });
   }));
 
-  app.post("/api/validations/:id/call", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/validations/:id/call", adminOnly, wrap(async (req: any, res: any) => {
     const validation = await startValidationCallForRequest(req.params.id, req.body?.provider || null);
     logSystem(req, 'VALIDATION_CALL_STARTED', 'validation_requests', req.params.id, validation.provider || null, {
       provider: validation.provider,
@@ -2254,7 +2309,7 @@ async function startServer() {
     res.json({ ok: true, validation });
   }));
 
-  app.post("/api/validations/:id/retry", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/validations/:id/retry", adminOnly, wrap(async (req: any, res: any) => {
     const validation = await startValidationCallForRequest(req.params.id, req.body?.provider || null);
     logSystem(req, 'VALIDATION_CALL_RETRY', 'validation_requests', req.params.id, validation.provider || null, {
       attempts: validation.attempts,
@@ -2263,7 +2318,7 @@ async function startServer() {
     res.json({ ok: true, validation });
   }));
 
-  app.post("/api/validations/:id/sync", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/validations/:id/sync", adminOnly, wrap(async (req: any, res: any) => {
     const current = ValidationRequests.getById(req.params.id) as any;
     if (!current) return res.status(404).json({ error: 'Validacion no encontrada' });
     const result = await syncValidationWithProvider(current);
@@ -2278,7 +2333,7 @@ async function startServer() {
     res.json({ ok: true, validation: ValidationRequests.getById(req.params.id) });
   }));
 
-  app.post("/api/validations/:id/approve", opsOnly, wrap((req: any, res: any) => {
+  app.post("/api/validations/:id/approve", adminOnly, wrap((req: any, res: any) => {
     const current = ValidationRequests.getById(req.params.id) as any;
     if (!current) return res.status(404).json({ error: 'Validacion no encontrada' });
     ValidationRequests.update(req.params.id, {
@@ -2293,7 +2348,7 @@ async function startServer() {
     res.json({ ok: true, validation: ValidationRequests.getById(req.params.id), sale: current.sale_id ? Ventas.getById(current.sale_id) : null });
   }));
 
-  app.post("/api/validations/:id/reject", opsOnly, wrap((req: any, res: any) => {
+  app.post("/api/validations/:id/reject", adminOnly, wrap((req: any, res: any) => {
     const current = ValidationRequests.getById(req.params.id) as any;
     if (!current) return res.status(404).json({ error: 'Validacion no encontrada' });
     ValidationRequests.update(req.params.id, {
@@ -2308,7 +2363,7 @@ async function startServer() {
     res.json({ ok: true, validation: ValidationRequests.getById(req.params.id), sale: current.sale_id ? Ventas.getById(current.sale_id) : null });
   }));
 
-  app.put("/api/validations/:id", opsOnly, wrap((req: any, res: any) => {
+  app.put("/api/validations/:id", adminOnly, wrap((req: any, res: any) => {
     ValidationRequests.update(req.params.id, req.body);
     res.json({ ok: true, validation: ValidationRequests.getById(req.params.id) });
   }));
@@ -2445,27 +2500,27 @@ async function startServer() {
     res.json(enterpriseHealth());
   }));
 
-  app.get("/api/enterprise/readiness", requireRole('GERENTE', 'SUPERVISOR'), wrap(async (_req: any, res: any) => {
+  app.get("/api/enterprise/readiness", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (_req: any, res: any) => {
     res.json(await getEnterpriseReadiness());
   }));
 
-  app.post("/api/enterprise/events", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.post("/api/enterprise/events", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
     res.json(recordEvent(req.body.event, req.body.payload || {}, (req as any).auth));
   }));
 
-  app.get("/api/enterprise/metrics", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.get("/api/enterprise/metrics", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 200, 1000);
     res.json(Metrics.getRecent(limit));
   }));
 
-  app.post("/api/enterprise/metrics", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.post("/api/enterprise/metrics", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
     recordMetric(req.body.name, Number(req.body.value ?? 1), req.body.tags || {});
     res.json({ ok: true });
   }));
 
   app.get("/api/inventory", opsOnly, wrap((_req: any, res: any) => res.json(InventoryItems.getAll())));
 
-  app.post("/api/inventory", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.post("/api/inventory", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
     const allowedTypes = new Set(['modem', 'sim', 'uniforme', 'herramienta', 'otro']);
     const allowedStates = new Set(['disponible', 'asignado', 'danado', 'baja']);
     const data = {
@@ -2487,7 +2542,7 @@ async function startServer() {
     res.json(InventoryItems.getById(data.id));
   }));
 
-  app.patch("/api/inventory/:id", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.patch("/api/inventory/:id", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
     const allowedTypes = new Set(['modem', 'sim', 'uniforme', 'herramienta', 'otro']);
     const allowedStates = new Set(['disponible', 'asignado', 'danado', 'baja']);
     if (req.body.tipo && !allowedTypes.has(req.body.tipo)) return res.status(400).json({ error: 'tipo de activo invalido' });
@@ -2505,7 +2560,7 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
-  app.get("/api/automation/rules", requireRole('GERENTE', 'SUPERVISOR'), wrap((_req: any, res: any) => {
+  app.get("/api/automation/rules", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((_req: any, res: any) => {
     res.json(AutomationRules.getAll());
   }));
 
@@ -2556,7 +2611,7 @@ async function startServer() {
     res.json(job);
   });
 
-  app.get("/api/telmex/jobs", requireRole('GERENTE', 'SUPERVISOR'), wrap((_req: any, res: any) => {
+  app.get("/api/telmex/jobs", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((_req: any, res: any) => {
     res.json(listTelmexJobs());
   }));
 
@@ -2566,29 +2621,29 @@ async function startServer() {
     res.json(job);
   }));
 
-  app.patch("/api/telmex/status/:id", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.patch("/api/telmex/status/:id", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
     const job = updateTelmexAutomationJob(req.params.id, req.body || {}, req.auth);
     if (!job) return res.status(404).json({ error: 'trabajo Telmex no encontrado' });
     res.json(job);
   }));
 
-  app.post("/api/telmex/login", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('login'));
-  app.post("/api/telmex/coverage", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('coverage'));
-  app.post("/api/telmex/create-order", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('create-order'));
-  app.post("/api/telmex/send-otp", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
-  app.post("/api/telmex/confirm-otp", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
+  app.post("/api/telmex/login", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('login'));
+  app.post("/api/telmex/coverage", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('coverage'));
+  app.post("/api/telmex/create-order", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('create-order'));
+  app.post("/api/telmex/send-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
+  app.post("/api/telmex/confirm-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
   app.get("/telmex/status/:id", authOnly, wrap((req: any, res: any) => {
     const job = getTelmexJob(req.params.id);
     if (!job) return res.status(404).json({ error: 'trabajo Telmex no encontrado' });
     res.json(job);
   }));
-  app.post("/telmex/login", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('login'));
-  app.post("/telmex/coverage", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('coverage'));
-  app.post("/telmex/create-order", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('create-order'));
-  app.post("/telmex/send-otp", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
-  app.post("/telmex/confirm-otp", requireRole('GERENTE', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
+  app.post("/telmex/login", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('login'));
+  app.post("/telmex/coverage", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('coverage'));
+  app.post("/telmex/create-order", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('create-order'));
+  app.post("/telmex/send-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
+  app.post("/telmex/confirm-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
 
-  app.post("/api/ai/run", requireRole('GERENTE', 'SUPERVISOR'), wrap(async (req: any, res: any) => {
+  app.post("/api/ai/run", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (req: any, res: any) => {
     if (!req.body.prompt) return res.status(400).json({ error: 'prompt requerido' });
     res.json(await runAiWithFallback(req.body.prompt));
   }));
@@ -2598,15 +2653,15 @@ async function startServer() {
     res.json(await classifyMorosityReply(req.body.text));
   }));
 
-  app.get("/api/ai/jobs", requireRole('GERENTE', 'SUPERVISOR'), wrap((_req: any, res: any) => {
+  app.get("/api/ai/jobs", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((_req: any, res: any) => {
     res.json(AiJobs.getAll());
   }));
 
-  app.post("/api/ai/jobs", requireRole('GERENTE', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.post("/api/ai/jobs", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
     res.json(enqueueAiJob(req.body.type || 'generic', req.body.payload || {}, Number(req.body.priority ?? 5)));
   }));
 
-  app.post("/api/ai/jobs/process-next", requireRole('GERENTE', 'SUPERVISOR'), wrap(async (_req: any, res: any) => {
+  app.post("/api/ai/jobs/process-next", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (_req: any, res: any) => {
     res.json(await processNextAiJob() || { ok: true, idle: true });
   }));
 
@@ -2671,7 +2726,7 @@ async function startServer() {
   }
 
   const safeWhatsAppStatus = (status: any, role?: string) => {
-    if (role === 'GERENTE' || role === 'SUPERUSER' || role === 'ADMIN') return status;
+    if (role === 'GERENTE' || role === 'ADMINISTRACION' || role === 'SUPERUSER' || role === 'ADMIN') return status;
     if (status?.promotores || status?.clientes) {
       return Object.fromEntries(Object.entries(status).map(([key, value]: any) => {
         const { sessionPath: _sessionPath, ...safe } = value || {};
@@ -2784,11 +2839,11 @@ async function startServer() {
     res.json(AgentOutbox.getAll(parseLimit(req.query.limit, 200, 500)));
   }));
 
-  app.post("/api/agents/outbox/:id/approve", chatUserOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/agents/outbox/:id/approve", adminOnly, wrap(async (req: any, res: any) => {
     res.json(await approveAgentOutbox(req.params.id, req.auth, sendChannelMessage));
   }));
 
-  app.post("/api/agents/outbox/:id/reject", chatUserOnly, wrap((req: any, res: any) => {
+  app.post("/api/agents/outbox/:id/reject", adminOnly, wrap((req: any, res: any) => {
     res.json(rejectAgentOutbox(req.params.id, req.auth, req.body?.reason));
   }));
 

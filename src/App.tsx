@@ -12,7 +12,7 @@ import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Sca
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
-export type Role = 'GERENTE' | 'SUPERVISOR' | 'ASESOR';
+export type Role = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'ASESOR';
 
 // Session helpers — server is source of truth; localStorage is only a cache for reloads
 const SESSION_KEY = 'hd_session';
@@ -463,7 +463,7 @@ export default function App() {
       )}
 
       {/* Required passkey enrollment for managers */}
-      {role === 'GERENTE' && passkeyEnrollmentRequired && (
+      {['GERENTE', 'ADMINISTRACION'].includes(role || '') && passkeyEnrollmentRequired && (
         <div className="absolute inset-0 z-[80] bg-cyber-black/95 backdrop-blur-xl flex items-center justify-center px-6">
           <div className="w-full max-w-md glass-panel-neon rounded-3xl p-8 text-center border border-yellow-400/30">
             <div className="w-16 h-16 rounded-2xl mx-auto mb-5 bg-yellow-400/10 border border-yellow-400/40 flex items-center justify-center text-yellow-300">
@@ -471,7 +471,7 @@ export default function App() {
             </div>
             <h2 className="text-xl font-black text-white uppercase tracking-widest mb-3">Passkey requerida</h2>
             <p className="text-sm text-slate-300 mb-6">
-              Las cuentas de gerencia deben registrar biometría/passkey verificada por el servidor antes de entrar al CRM.
+              Las cuentas de gerencia o administración deben registrar biometría/passkey verificada por el servidor antes de entrar al CRM.
             </p>
             {!passkeySupported && (
               <p className="text-xs text-yellow-200 border border-yellow-400/30 bg-yellow-400/10 rounded-lg p-3 mb-4">

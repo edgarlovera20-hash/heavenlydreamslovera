@@ -90,7 +90,7 @@ function providerConfig(provider: string) {
 
 function safeRole(value: any) {
   const role = String(value || 'ASESOR').toUpperCase();
-  return ['ASESOR', 'SUPERVISOR', 'GERENTE'].includes(role) ? role : 'ASESOR';
+  return ['ASESOR', 'SUPERVISOR', 'GERENTE', 'ADMINISTRACION'].includes(role) ? role : 'ASESOR';
 }
 
 function htmlEscape(value: any) {
@@ -206,7 +206,7 @@ function linkOAuth(profile: OAuthProfile, user: any) {
 
 function createPendingOAuthUser(profile: OAuthProfile, role: string) {
   const requestedRole = safeRole(role);
-  const publicRole = requestedRole === 'GERENTE' ? 'ASESOR' : requestedRole;
+  const publicRole = ['GERENTE', 'ADMINISTRACION'].includes(requestedRole) ? 'ASESOR' : requestedRole;
   const user = {
     uid: randomUUID(),
     nombre: profile.displayName,
@@ -232,9 +232,9 @@ function createPendingOAuthUser(profile: OAuthProfile, role: string) {
 }
 
 function sessionForOAuthUser(user: any, req: Request, res: Response) {
-  const managerRequiresWebAuthn = user.role === 'GERENTE' && isWebAuthnRequired(req);
+  const managerRequiresWebAuthn = ['GERENTE', 'ADMINISTRACION'].includes(user.role) && isWebAuthnRequired(req);
   const { password: _password, ...safe } = user;
-  const { accessToken: _accessToken, ...session } = issueSessionCookie(res, user, req, user.role === 'GERENTE'
+  const { accessToken: _accessToken, ...session } = issueSessionCookie(res, user, req, ['GERENTE', 'ADMINISTRACION'].includes(user.role)
     ? { webAuthnVerified: !managerRequiresWebAuthn, webAuthnEnrollmentRequired: managerRequiresWebAuthn }
     : {});
   return {

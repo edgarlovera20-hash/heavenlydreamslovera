@@ -13,7 +13,7 @@ if (process.env.NODE_ENV === 'production' && JWT_SECRET === DEFAULT_JWT_SECRET) 
   throw new Error('JWT_SECRET es obligatorio en producción');
 }
 
-export type AppRole = 'GERENTE' | 'SUPERVISOR' | 'ASESOR';
+export type AppRole = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'ASESOR';
 
 type SessionOptions = {
   webAuthnVerified?: boolean;
@@ -202,7 +202,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     }
     auth.role = currentUser.role;
     auth.name = currentUser.nombre;
-    if (auth.role === 'GERENTE' && auth.webAuthnEnrollmentRequired === true && auth.webAuthnVerified !== true && !allowsPendingManagerPasskey(req)) {
+    if (['GERENTE', 'ADMINISTRACION'].includes(auth.role) && auth.webAuthnEnrollmentRequired === true && auth.webAuthnVerified !== true && !allowsPendingManagerPasskey(req)) {
       return res.status(403).json({
         error: 'Passkey requerida para completar el acceso de gerencia.',
         code: 'WEBAUTHN_REQUIRED',

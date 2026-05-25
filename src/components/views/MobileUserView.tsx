@@ -60,7 +60,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
     { id: 'Juego', label: 'Juego', icon: Gamepad2, color: 'pink' },
   ];
 
-  if (role === 'GERENTE') {
+  if (role === 'GERENTE' || role === 'ADMINISTRACION') {
     availableSections = [
       { id: 'Perfil', label: 'Perfil', icon: User, color: 'blue' },
       { id: 'Documentación', label: 'Documentos', icon: FolderOpen, color: 'cyan' },
