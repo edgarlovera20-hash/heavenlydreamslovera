@@ -91,7 +91,7 @@ function requiredMissing(fields: Record<string, any>) {
 
 function buildSalesReply(fields: Record<string, any>, missing: string[]) {
   const profile = AgentProfiles.getById('promoter_receptionist') as any;
-  const agentName = profile?.name || 'Agente Heavenly';
+  const agentName = profile?.name || 'ARIUX';
   if (missing.length > 0) {
     return `Hola, soy ${agentName}. Te ayudo a ordenar esta contratacion. Para avanzar necesito: ${missing.join(', ')}.`;
   }
@@ -156,7 +156,7 @@ function decide(conversation: any, message: any): AgentDecision {
     proposedReply: (() => {
       const profile = AgentProfiles.getById('promoter_receptionist') as any;
       const learned = (profile?.learnedNotes || []).slice(0, 2).join(' ');
-      return `Hola, soy ${profile?.name || 'Agente Heavenly'}. ${profile?.selfKnowledge || 'Recibo a los promotores de Heavenly Dreams.'} ${profile?.knowledgeBase || 'Puedo ayudarte con contrataciones, folios y soporte.'} ${learned}`.trim();
+      return `Hola, soy ${profile?.name || 'ARIUX'}. ${profile?.selfKnowledge || 'Recibo a los promotores de Heavenly Dreams.'} ${profile?.knowledgeBase || 'Puedo ayudarte con contrataciones, folios y soporte.'} ${learned}`.trim();
     })(),
     proposedActions: [],
     requiresApproval: true,

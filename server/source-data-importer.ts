@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import JSZip from 'jszip';
 import db, { ClientesCrm, Morosidad, SiacRecords } from './db';
 
-export const DEFAULT_SIAC_SOURCE = process.env.SIAC_PRIMARY_SOURCE || 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\SIAC PPIES.xlsx';
+export const DEFAULT_SIAC_SOURCE = process.env.SIAC_PRIMARY_SOURCE || 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\SIAC PPIES.csv';
 export const DEFAULT_MOROSOS_SOURCE = process.env.MOROSOS_PRIMARY_SOURCE || 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\MOROSOS APP.csv';
 
 type SourceInput = { sourcePath?: string; buffer?: Buffer; fileName?: string; replace?: boolean };

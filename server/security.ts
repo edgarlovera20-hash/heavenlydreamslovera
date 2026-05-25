@@ -186,6 +186,22 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   if (!token) return res.status(401).json({ error: 'Token requerido' });
   try {
     const auth = verifyAccessToken(token);
+    const currentUser = Users.getById(auth.sub) as any;
+    if (!currentUser) return res.status(401).json({ error: 'Usuario inválido' });
+    if (currentUser.activo === 2) {
+      return res.status(403).json({
+        error: 'Tu cuenta está pendiente de aprobación por el administrador.',
+        code: 'PENDING_APPROVAL',
+      });
+    }
+    if (currentUser.activo !== 1) {
+      return res.status(403).json({
+        error: 'Tu cuenta no está autorizada para usar la aplicación.',
+        code: 'ACCOUNT_NOT_AUTHORIZED',
+      });
+    }
+    auth.role = currentUser.role;
+    auth.name = currentUser.nombre;
     if (auth.role === 'GERENTE' && auth.webAuthnEnrollmentRequired === true && auth.webAuthnVerified !== true && !allowsPendingManagerPasskey(req)) {
       return res.status(403).json({
         error: 'Passkey requerida para completar el acceso de gerencia.',

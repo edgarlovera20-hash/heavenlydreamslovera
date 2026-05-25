@@ -4,7 +4,7 @@ import {
   LogOut, TrendingUp, ArrowUpRight, ArrowDownRight,
   LayoutDashboard, Settings as SettingsIcon, PieChart, ChevronLeft, ChevronRight,
   User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, ImagePlus, Gamepad2, FolderOpen,
-  Cpu, Database, Smartphone, Sun, Moon, X, Crown, Zap, Bot, Home, MessageSquare,
+  Cpu, Database, Smartphone, Sun, Moon, X, Crown, Zap, Bot, Home, MessageSquare, MessageCircle,
   MapPin, WifiOff, RefreshCw, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall
 } from 'lucide-react';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
@@ -21,6 +21,7 @@ const Profile = lazy(() => import('./Profile'));
 const ConsultasSeguimiento = lazy(() => import('./ConsultasSeguimiento'));
 const Game = lazy(() => import('./Game'));
 const CustomerSupport = lazy(() => import('./CustomerSupport'));
+const ClientChatCrmView = lazy(() => import('./ClientChatCrmView'));
 const Morosidad = lazy(() => import('./Morosidad'));
 const MyFilesView = lazy(() => import('./MyFilesView'));
 const Integrations = lazy(() => import('./Integrations'));
@@ -261,6 +262,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
           <NavGroup label="Comunicación">
             <NavItem icon={Headphones} color="purple" label="Soporte a Clientes" active={activeSection === 'Soporte a Clientes'} onClick={() => setActiveSection('Soporte a Clientes')} />
+            <NavItem icon={MessageCircle} color="green" label="Chat para Clientes" active={activeSection === 'Chat para Clientes'} onClick={() => setActiveSection('Chat para Clientes')} />
             <NavItem icon={AlertTriangle} color="red" label="Morosidad" active={activeSection === 'Morosidad'} onClick={() => setActiveSection('Morosidad')} />
             <NavItem icon={Megaphone} color="cyan" label="Anuncios" active={activeSection === 'Anuncios'} onClick={() => setActiveSection('Anuncios')} />
           </NavGroup>
@@ -511,6 +513,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Captura y Validación' && <CaptureValidation />}
             {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
             {activeSection === 'Soporte a Clientes' && <CustomerSupport />}
+            {activeSection === 'Chat para Clientes' && <ClientChatCrmView />}
             {activeSection === 'Morosidad' && <Morosidad />}
             {activeSection === 'Juego' && <Game />}
             {activeSection === 'Integraciones' && <Integrations />}
@@ -541,7 +544,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>

@@ -1188,13 +1188,18 @@ function normalizeAgentProfile(row: any) {
 
 const DEFAULT_RECEPTIONIST_PROFILE = {
   id: 'promoter_receptionist',
-  name: 'Agente Heavenly',
-  role: 'Recepcion de promotores',
-  personality: 'Cordial, claro, rapido y profesional. Saluda con confianza, pide datos concretos y no suena como robot generico.',
-  self_knowledge: 'Soy el asistente que recibe a los promotores de Heavenly Dreams. Puedo guiarlos para registrar clientes, consultar folios SIAC y ordenar la informacion antes de pasarla al equipo.',
-  knowledge_base: 'Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC. Si falta informacion, hago preguntas cortas y concretas.',
+  name: 'ARIUX',
+  role: 'Agente de promotores',
+  personality: 'Cordial, claro, rapido y profesional. Habla como apoyo de campo: directo, atento y sin sonar como robot generico.',
+  self_knowledge: 'Soy ARIUX, el agente de WhatsApp y Telegram para promotores de Heavenly Dreams. Ayudo a consultar datos, iniciar conversaciones y ordenar informacion antes de pasarla al flujo operativo.',
+  knowledge_base: 'Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Si falta informacion, hago preguntas cortas y concretas.',
   learned_notes: JSON.stringify([]),
-  metadata: JSON.stringify({ audience: 'promotores', channel: 'chats' }),
+  metadata: JSON.stringify({
+    audience: 'promotores',
+    channel: 'whatsapp_telegram',
+    humor: 'Ligero y respetuoso; solo usa humor cuando ayuda a bajar tension.',
+    responseStyle: 'Responde breve, claro, accionable y con siguiente paso concreto.',
+  }),
 };
 
 export const ChannelAccounts = {
@@ -1346,7 +1351,25 @@ export const AgentTasks = {
 
 export const AgentProfiles = {
   getById: (id: string) => {
-    const row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id);
+    let row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id) as any;
+    if (row && id === DEFAULT_RECEPTIONIST_PROFILE.id && String(row.name || '').trim().toLowerCase() === 'agente heavenly') {
+      const existing = normalizeAgentProfile(row) as any;
+      AgentProfiles.upsert({
+        id,
+        name: DEFAULT_RECEPTIONIST_PROFILE.name,
+        role: DEFAULT_RECEPTIONIST_PROFILE.role,
+        personality: existing?.personality || DEFAULT_RECEPTIONIST_PROFILE.personality,
+        selfKnowledge: existing?.selfKnowledge || DEFAULT_RECEPTIONIST_PROFILE.self_knowledge,
+        knowledgeBase: existing?.knowledgeBase || DEFAULT_RECEPTIONIST_PROFILE.knowledge_base,
+        learnedNotes: existing?.learnedNotes || [],
+        metadata: {
+          ...parseJson(DEFAULT_RECEPTIONIST_PROFILE.metadata, {}),
+          ...(existing?.metadata || {}),
+          migratedFrom: 'Agente Heavenly',
+        },
+      });
+      row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id) as any;
+    }
     if (row) return normalizeAgentProfile(row);
     if (id === DEFAULT_RECEPTIONIST_PROFILE.id) {
       AgentProfiles.upsert(DEFAULT_RECEPTIONIST_PROFILE);
@@ -1565,6 +1588,7 @@ export const DocumentFiles = {
 
 export const ClientesCrm = {
   getAll: () => db.prepare('SELECT * FROM clientes_crm ORDER BY created_at DESC').all(),
+  getById: (id: string) => db.prepare('SELECT * FROM clientes_crm WHERE id=?').get(id),
   upsert: (data: any) => db.prepare(`
     INSERT INTO clientes_crm
       (id,captura_id,folio,nombre,telefono,whatsapp,correo,direccion,fecha_alta,status_cliente,ultimo_contacto,proximo_seguimiento,nivel_satisfaccion,riesgo_cancelacion,vendedor_asignado,metadata)
@@ -1584,6 +1608,11 @@ export const ClientesCrm = {
       metadata=excluded.metadata,
       updated_at=datetime('now')
   `).run(data),
+  update: (id: string, data: any) => updateById('clientes_crm', 'id', id, data, [
+    'nombre', 'telefono', 'whatsapp', 'correo', 'direccion', 'fecha_alta',
+    'status_cliente', 'ultimo_contacto', 'proximo_seguimiento',
+    'nivel_satisfaccion', 'riesgo_cancelacion', 'vendedor_asignado', 'metadata',
+  ]),
 };
 
 export const Morosidad = {

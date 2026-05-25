@@ -455,6 +455,7 @@ async function startServer() {
   const ocrLimiter = rateLimit('ocr', 40, 15 * 60 * 1000);
   const authOnly = requireAuth;
   const opsOnly = requireRole('GERENTE', 'SUPERVISOR');
+  const chatUserOnly = requireRole('GERENTE', 'SUPERVISOR', 'ASESOR');
   const managerOnly = requireRole('GERENTE');
 
   function canManage(auth: any) {
@@ -516,6 +517,124 @@ async function startServer() {
       meta.codigoPostal || meta.codigo_postal ? `CP ${meta.codigoPostal || meta.codigo_postal}` : '',
     ];
     return parts.filter(Boolean).join(', ') || venta.direccion || null;
+  }
+
+  function clientChatAgentEnabled() {
+    return Settings.get('client_chat_agent_enabled') === true;
+  }
+
+  function clientChatMeta(client: any) {
+    return parseMetadata(client?.metadata);
+  }
+
+  function clientChatName(client: any) {
+    return String(client?.nombre || client?.cliente || 'cliente').trim() || 'cliente';
+  }
+
+  function clientChatPhone(client: any) {
+    return String(client?.whatsapp || client?.telefono || '').replace(/\D/g, '').slice(-10);
+  }
+
+  function buildClientChatMessage(type: string, client: any, question = '') {
+    const name = clientChatName(client);
+    const amount = Number(client?.monto_adeudo || 0);
+    const days = Number(client?.dias_atraso || 0);
+    const folio = client?.folio ? ` Folio: ${client.folio}.` : '';
+    const trimmedQuestion = String(question || '').trim();
+    if (type === 'welcome') {
+      return `Hola ${name}, bienvenido a Heavenly Dreams. Soy ARIUX Clientes y estoy aqui para ayudarte con dudas, seguimiento de tu servicio y pagos.${folio} Guardaremos este canal para cualquier apoyo que necesites.`;
+    }
+    if (type === 'autopay') {
+      return `Hola ${name}, para que tu servicio no tenga interrupciones te invitamos a domiciliar tu pago. Es una forma sencilla de mantenerlo al corriente. Si te interesa, responde DOMICILIAR y un asesor te comparte los pasos.`;
+    }
+    if (type === 'payment') {
+      const debt = amount > 0 ? ` de $${amount.toLocaleString('es-MX')}` : '';
+      const delay = days > 0 ? ` con ${days} dias de atraso` : '';
+      return `Hola ${name}, detectamos un saldo pendiente${debt}${delay}. Queremos ayudarte a regularizar tu servicio hoy. Responde PAGAR y te compartimos opciones de pago o convenio.`;
+    }
+    if (type === 'question') {
+      const lower = trimmedQuestion.toLowerCase();
+      if (lower.includes('domicil')) return buildClientChatMessage('autopay', client);
+      if (lower.includes('pago') || lower.includes('adeudo') || lower.includes('saldo')) return buildClientChatMessage(client?.morosidad_id ? 'payment' : 'autopay', client);
+      if (lower.includes('falla') || lower.includes('internet') || lower.includes('modem')) {
+        return `Hola ${name}, gracias por avisarnos. Para revisar tu servicio, responde con tu folio, telefono de contacto y una breve descripcion de la falla. ARIUX Clientes lo deja listo para seguimiento.`;
+      }
+      if (lower.includes('folio') || lower.includes('estatus')) {
+        return `Hola ${name}, claro. Enviame tu folio SIAC o telefono registrado y revisamos el estatus disponible.`;
+      }
+      return `Hola ${name}, gracias por escribir. Soy ARIUX Clientes. Sobre tu duda: ${trimmedQuestion || 'cuentame que necesitas revisar'}. Te apoyamos con seguimiento, pagos, domiciliacion o estatus de servicio.`;
+    }
+    return String(question || '').trim();
+  }
+
+  function getClientChatRows(req: any, limit = 400) {
+    const sql = `
+      SELECT
+        c.*,
+        m.id AS morosidad_id,
+        m.monto_adeudo,
+        m.dias_atraso,
+        m.fecha_vencimiento,
+        m.ultimo_pago,
+        m.status_cobranza,
+        m.convenio,
+        m.observaciones AS morosidad_observaciones
+      FROM clientes_crm c
+      LEFT JOIN morosidad m ON m.cliente_id=c.id OR (m.folio IS NOT NULL AND m.folio=c.folio)
+      ${canManage(req.auth) ? '' : 'WHERE c.vendedor_asignado=@userId'}
+      ORDER BY COALESCE(m.dias_atraso, 0) DESC, c.created_at DESC
+      LIMIT @limit
+    `;
+    return (db as any).prepare(sql).all({ userId: req.auth?.sub, limit });
+  }
+
+  function getClientChatById(req: any, id: string) {
+    const row = getClientChatRows(req, 1000).find((client: any) => client.id === id);
+    return row || null;
+  }
+
+  function markClientChatContact(client: any, type: string, message: string) {
+    const now = new Date().toISOString();
+    const metadata = clientChatMeta(client);
+    const clientChat = {
+      ...(metadata.clientChat || {}),
+      lastMessageType: type,
+      lastMessageAt: now,
+      lastMessage: message.slice(0, 500),
+    };
+    if (type === 'welcome') clientChat.welcomeSentAt = now;
+    if (type === 'autopay') clientChat.domiciliationInvitedAt = now;
+    if (type === 'payment') clientChat.paymentReminderSentAt = now;
+    ClientesCrm.update(client.id, {
+      ultimo_contacto: now,
+      status_cliente: type === 'payment' ? 'COBRANZA' : 'CONTACTADO',
+      proximo_seguimiento: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+      metadata: JSON.stringify({ ...metadata, clientChat }),
+    });
+  }
+
+  async function sendClientChatMessage(client: any, type: string, message: string) {
+    const phone = clientChatPhone(client);
+    if (phone.length !== 10) throw new Error('Cliente sin WhatsApp valido de 10 digitos');
+    const result = await sendWhatsAppMessage(phone, message);
+    markClientChatContact(client, type, message);
+    return result;
+  }
+
+  function maybeAutoWelcomeClient(client: any) {
+    if (!client || !clientChatAgentEnabled()) return;
+    const metadata = clientChatMeta(client);
+    if (metadata.clientChat?.welcomeSentAt) return;
+    const phone = clientChatPhone(client);
+    if (phone.length !== 10) return;
+    setTimeout(() => {
+      const fresh = ClientesCrm.getById(client.id) as any;
+      if (!fresh || clientChatMeta(fresh).clientChat?.welcomeSentAt) return;
+      const message = buildClientChatMessage('welcome', fresh);
+      sendClientChatMessage(fresh, 'welcome', message).catch((err) => {
+        console.warn('[client-chat-agent] Bienvenida no enviada:', err?.message || err);
+      });
+    }, 1500);
   }
 
   function syncOperationalTablesFromSale(req: any, sale: any) {
@@ -626,6 +745,8 @@ async function startServer() {
       vendedor_asignado: sale.asesor_id,
       metadata: JSON.stringify({ origen: 'captura', venta_id: sale.id }),
     });
+    const crmClient = (db as any).prepare('SELECT * FROM clientes_crm WHERE folio=?').get(folio);
+    maybeAutoWelcomeClient(crmClient);
 
     EstatusFolios.upsert({
       id: randomUUID(),
@@ -686,20 +807,55 @@ async function startServer() {
     return safe;
   }
 
+  function safeUserRole(value: any) {
+    const role = String(value || 'ASESOR').trim().toUpperCase();
+    return ['ASESOR', 'SUPERVISOR', 'GERENTE'].includes(role) ? role : 'ASESOR';
+  }
+
+  function safeActivo(value: any, fallback: number) {
+    const n = Number(value);
+    return [0, 1, 2].includes(n) ? n : fallback;
+  }
+
+  function normalizeUserPayload(body: any, options: { publicRegistration: boolean }) {
+    const publicRegistration = options.publicRegistration;
+    const requestedRole = safeUserRole(body?.role);
+    return {
+      uid: randomUUID(),
+      nombre: String(body?.nombre || body?.displayName || body?.username || '').trim(),
+      email: String(body?.email || '').trim().toLowerCase(),
+      username: String(body?.username || '').trim(),
+      password: body?.password,
+      role: publicRegistration ? (requestedRole === 'GERENTE' ? 'ASESOR' : requestedRole) : requestedRole,
+      zona: body?.zona ?? body?.zonaOperativa ?? null,
+      puesto: body?.puesto ?? null,
+      activo: publicRegistration ? 2 : safeActivo(body?.activo, 1),
+    };
+  }
+
   function assertManager(req: any, res: any) {
     const auth = getBearerAuth(req);
-    if (auth.role !== 'GERENTE') {
+    const user = auth ? Users.getById(auth.sub) as any : null;
+    if (!user || user.activo !== 1) {
+      res.status(403).json({ error: 'Cuenta no autorizada.' });
+      return null;
+    }
+    if (user.role !== 'GERENTE') {
       res.status(403).json({ error: 'Permisos insuficientes' });
       return null;
     }
-    return auth;
+    return { ...auth, role: user.role, name: user.nombre };
   }
 
   // ── USUARIOS ────────────────────────────────────────────────
-  app.get("/api/users", opsOnly, wrap((_req: any, res: any) => res.json(Users.getAll().map(safeUser))));
+  app.get("/api/users", opsOnly, wrap((_req: any, res: any) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(Users.getAll().map(safeUser));
+  }));
 
   app.post("/api/users", registrationLimiter, wrap((req: any, res: any) => {
-    if (!req.body.fromRegistration) {
+    const publicRegistration = req.body?.fromRegistration === true;
+    if (!publicRegistration) {
       try {
         if (!assertManager(req, res)) return;
       } catch {
@@ -711,19 +867,19 @@ async function startServer() {
         code: 'PUBLIC_REGISTRATION_DISABLED',
       });
     }
-    // Si viene de registro público usa activo=2 (pendiente); si lo crea un admin usa activo=1
-    const defaultActivo = req.body.fromRegistration ? 2 : 1;
-    const { fromRegistration: _fr, ...body } = req.body;
-    const data = {
-      uid: randomUUID(),
-      role: 'ASESOR',
-      zona: null,
-      puesto: null,
-      activo: defaultActivo,
-      ...body,
-    };
+    const data = normalizeUserPayload(req.body, { publicRegistration });
+    if (!data.nombre || !data.email || !data.username || !data.password) {
+      return res.status(400).json({ error: 'Nombre, email, usuario y contraseña son requeridos.' });
+    }
     Users.create(data);
-    AuditLog.insert({ accion: 'CREATE_USER', entidad: 'users', entidad_id: data.uid, user_id: req.body.createdBy || null, user_nombre: data.nombre, detalle: null });
+    AuditLog.insert({
+      accion: publicRegistration ? 'CREATE_USER_PENDING_APPROVAL' : 'CREATE_USER',
+      entidad: 'users',
+      entidad_id: data.uid,
+      user_id: publicRegistration ? null : req.auth?.sub || null,
+      user_nombre: data.nombre,
+      detalle: publicRegistration ? 'Registro público: cuenta bloqueada hasta aprobación gerencial' : null,
+    });
     res.json(safeUser(Users.getById(data.uid)));
   }));
 
@@ -1253,7 +1409,7 @@ async function startServer() {
     res.json(filterUpdatedSince(mobilePayroll(req, 80), req.query?.updatedSince));
   }));
 
-  app.get("/api/mobile/chats", managerOnly, wrap((req: any, res: any) => {
+  app.get("/api/mobile/chats", chatUserOnly, wrap((req: any, res: any) => {
     const messages = filterUpdatedSince(getRecentChannelMessages(120), req.query?.updatedSince);
     const conversations = getChannelConversations(120).map((conversation: any) => ({
       ...conversation,
@@ -1262,7 +1418,7 @@ async function startServer() {
     res.json({ conversations, messages });
   }));
 
-  app.post("/api/mobile/whatsapp/send", managerOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/mobile/whatsapp/send", chatUserOnly, wrap(async (req: any, res: any) => {
     const phone = normalizePhone10(req.body?.phone || req.body?.telefono);
     const message = String(req.body?.message || req.body?.mensaje || '').trim();
     if (phone.length !== 10 || !message) return res.status(400).json({ error: 'phone de 10 digitos y message son requeridos' });
@@ -1525,6 +1681,86 @@ async function startServer() {
   app.get("/api/clientes-crm", authOnly, wrap((req: any, res: any) => {
     if (canManage(req.auth)) return res.json(ClientesCrm.getAll());
     res.json((db as any).prepare('SELECT * FROM clientes_crm WHERE vendedor_asignado=? ORDER BY created_at DESC').all(req.auth.sub));
+  }));
+
+  app.get("/api/client-chat-crm", authOnly, wrap((req: any, res: any) => {
+    const clients = getClientChatRows(req, parseLimit(req.query.limit, 400, 1000)).map((client: any) => ({
+      ...client,
+      metadata: clientChatMeta(client),
+      clientChat: clientChatMeta(client).clientChat || {},
+      phone10: clientChatPhone(client),
+      suggestedAction: client.morosidad_id ? 'payment' : clientChatMeta(client).clientChat?.welcomeSentAt ? 'autopay' : 'welcome',
+    }));
+    const analytics = {
+      total: clients.length,
+      nuevos: clients.filter((client: any) => String(client.status_cliente || '').toUpperCase() === 'NUEVO').length,
+      bienvenidasPendientes: clients.filter((client: any) => !client.clientChat?.welcomeSentAt && client.phone10.length === 10).length,
+      morosos: clients.filter((client: any) => client.morosidad_id).length,
+      domiciliarPendiente: clients.filter((client: any) => !client.clientChat?.domiciliationInvitedAt && !client.morosidad_id).length,
+      montoMoroso: clients.reduce((sum: number, client: any) => sum + (Number(client.monto_adeudo) || 0), 0),
+    };
+    res.json({
+      agent: {
+        name: 'ARIUX Clientes',
+        active: clientChatAgentEnabled(),
+        channel: 'whatsapp',
+      },
+      analytics,
+      clients,
+    });
+  }));
+
+  app.post("/api/client-chat-crm/agent", opsOnly, wrap((req: any, res: any) => {
+    const active = req.body?.active === true;
+    Settings.set('client_chat_agent_enabled', active);
+    AuditLog.insert({
+      accion: active ? 'CLIENT_CHAT_AGENT_ENABLED' : 'CLIENT_CHAT_AGENT_DISABLED',
+      entidad: 'settings',
+      entidad_id: 'client_chat_agent_enabled',
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: null,
+    });
+    res.json({ ok: true, active });
+  }));
+
+  app.post("/api/client-chat-crm/:id/message", authOnly, wrap(async (req: any, res: any) => {
+    const client = getClientChatById(req, req.params.id);
+    if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
+    const type = String(req.body?.type || 'question');
+    const custom = String(req.body?.message || req.body?.question || '').trim();
+    const message = type === 'custom' && custom ? custom : buildClientChatMessage(type, client, custom);
+    if (req.body?.preview === true || req.body?.send === false) {
+      return res.json({ ok: true, preview: true, message, clientId: client.id });
+    }
+    const result = await sendClientChatMessage(client, type, message);
+    logSystem(req, 'CLIENT_CHAT_MESSAGE_SENT', 'clientes_crm', client.id, type, { phone: clientChatPhone(client), result });
+    res.json({ ok: true, message, result, client: ClientesCrm.getById(client.id) });
+  }));
+
+  app.post("/api/client-chat-crm/run", opsOnly, wrap(async (req: any, res: any) => {
+    const mode = String(req.body?.mode || 'welcome_pending');
+    const max = Math.min(Number(req.body?.limit || 20) || 20, 50);
+    const clients = getClientChatRows(req, 1000).filter((client: any) => {
+      const meta = clientChatMeta(client);
+      if (clientChatPhone(client).length !== 10) return false;
+      if (mode === 'morosos') return Boolean(client.morosidad_id) && !meta.clientChat?.paymentReminderSentAt;
+      if (mode === 'autopay') return !client.morosidad_id && !meta.clientChat?.domiciliationInvitedAt;
+      return !meta.clientChat?.welcomeSentAt;
+    }).slice(0, max);
+    const results: any[] = [];
+    for (const client of clients) {
+      const type = mode === 'morosos' ? 'payment' : mode === 'autopay' ? 'autopay' : 'welcome';
+      const message = buildClientChatMessage(type, client);
+      try {
+        const result = await sendClientChatMessage(client, type, message);
+        results.push({ id: client.id, ok: true, type, result });
+      } catch (err: any) {
+        results.push({ id: client.id, ok: false, type, error: err?.message || String(err) });
+      }
+    }
+    logSystem(req, 'CLIENT_CHAT_AGENT_RUN', 'clientes_crm', null, mode, { total: results.length, ok: results.filter(item => item.ok).length });
+    res.json({ ok: true, mode, processed: results.length, results });
   }));
 
   app.get("/api/morosidad", opsOnly, wrap((_req: any, res: any) => {
@@ -2200,14 +2436,19 @@ async function startServer() {
   }));
 
   // ── WHATSAPP ───────────────────────────────────────────────
-  app.get("/api/whatsapp/status", opsOnly, (req, res) => res.json(getWhatsAppStatus()));
+  app.get("/api/whatsapp/status", chatUserOnly, (req: any, res) => {
+    const status = getWhatsAppStatus();
+    if (req.auth?.role === 'GERENTE') return res.json(status);
+    const { sessionPath: _sessionPath, ...safeStatus } = status as any;
+    res.json(safeStatus);
+  });
   app.get("/api/whatsapp/qr", opsOnly, (req, res) => res.json({ qr: getWhatsAppQR(), status: getWhatsAppStatus() }));
 
   app.post("/api/whatsapp/init", opsOnly, wrap(async (_req: any, res: any) => {
     await initWhatsApp(); res.json({ ok: true });
   }));
 
-  app.post("/api/whatsapp/send", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/whatsapp/send", chatUserOnly, wrap(async (req: any, res: any) => {
     const { phone, message } = req.body;
     if (!phone || !message) return res.status(400).json({ error: 'phone y message son requeridos' });
     res.json(await sendWhatsAppMessage(phone, message));
@@ -2218,17 +2459,17 @@ async function startServer() {
   }));
 
   // Mensajes recibidos (para panel admin/gerente)
-  app.get("/api/whatsapp/messages", opsOnly, wrap((req: any, res: any) => {
+  app.get("/api/whatsapp/messages", chatUserOnly, wrap((req: any, res: any) => {
     const limit = parseLimit(req.query.limit, 100, 500);
     res.json(getRecentChannelMessages(limit, queryString(req.query.updatedSince)).filter((msg: any) => msg.channel === 'whatsapp'));
   }));
 
   // ── TELEGRAM ──────────────────────────────────────────────
-  app.get("/api/telegram/status", opsOnly, wrap((_req: any, res: any) => {
+  app.get("/api/telegram/status", chatUserOnly, wrap((_req: any, res: any) => {
     res.json(getTelegramStatus());
   }));
 
-  app.get("/api/telegram/messages", opsOnly, wrap((req: any, res: any) => {
+  app.get("/api/telegram/messages", chatUserOnly, wrap((req: any, res: any) => {
     const limit = parseLimit(req.query.limit, 100, 500);
     res.json(getRecentChannelMessages(limit, queryString(req.query.updatedSince)).filter((msg: any) => msg.channel === 'telegram'));
   }));
@@ -2250,7 +2491,7 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
-  app.post("/api/telegram/send", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/telegram/send", chatUserOnly, wrap(async (req: any, res: any) => {
     const { chatId, message } = req.body;
     if (!chatId || !message) return res.status(400).json({ error: 'chatId y message requeridos' });
     res.json(await sendTelegramMessage(chatId, message));
@@ -2266,50 +2507,50 @@ async function startServer() {
     res.json(getChannelAccounts());
   }));
 
-  app.get("/api/channels/conversations", opsOnly, wrap((req: any, res: any) => {
+  app.get("/api/channels/conversations", chatUserOnly, wrap((req: any, res: any) => {
     res.json(getChannelConversations(parseLimit(req.query.limit, 200, 500)));
   }));
 
-  app.get("/api/channels/conversations/:id/messages", opsOnly, wrap((req: any, res: any) => {
+  app.get("/api/channels/conversations/:id/messages", chatUserOnly, wrap((req: any, res: any) => {
     res.json(getChannelMessages(req.params.id, parseLimit(req.query.limit, 200, 500), queryString(req.query.updatedSince)));
   }));
 
-  app.get("/api/channels/conversations/:id/automation", opsOnly, wrap((req: any, res: any) => {
+  app.get("/api/channels/conversations/:id/automation", chatUserOnly, wrap((req: any, res: any) => {
     const data = getConversationAutomation(req.params.id);
     if (!data.conversation) return res.status(404).json({ error: 'Conversacion no encontrada' });
     res.json(data);
   }));
 
-  app.patch("/api/agents/conversations/:id/assign", opsOnly, wrap((req: any, res: any) => {
+  app.patch("/api/agents/conversations/:id/assign", chatUserOnly, wrap((req: any, res: any) => {
     const updated = assignConversation(req.params.id, req.body.assignedTo || req.body.assigned_to || null);
     if (!updated) return res.status(404).json({ error: 'Conversacion no encontrada' });
     res.json(updated);
   }));
 
-  app.post("/api/agents/conversations/:id/run", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/agents/conversations/:id/run", chatUserOnly, wrap(async (req: any, res: any) => {
     res.json(await runAgentForConversation(req.params.id) || { ok: true, idle: true });
   }));
 
-  app.get("/api/agents/outbox", opsOnly, wrap((req: any, res: any) => {
+  app.get("/api/agents/outbox", chatUserOnly, wrap((req: any, res: any) => {
     res.json(AgentOutbox.getAll(parseLimit(req.query.limit, 200, 500)));
   }));
 
-  app.post("/api/agents/outbox/:id/approve", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/agents/outbox/:id/approve", chatUserOnly, wrap(async (req: any, res: any) => {
     res.json(await approveAgentOutbox(req.params.id, req.auth, sendChannelMessage));
   }));
 
-  app.post("/api/agents/outbox/:id/reject", opsOnly, wrap((req: any, res: any) => {
+  app.post("/api/agents/outbox/:id/reject", chatUserOnly, wrap((req: any, res: any) => {
     res.json(rejectAgentOutbox(req.params.id, req.auth, req.body?.reason));
   }));
 
-  app.post("/api/channels/send", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/channels/send", chatUserOnly, wrap(async (req: any, res: any) => {
     const { channel, target, message } = req.body;
     if (!channel || !target || !message) return res.status(400).json({ error: 'channel, target y message son requeridos' });
     res.json(await sendChannelMessage(channel, target, message));
   }));
 
   // Mensajes combinados WA + Telegram (para panel unificado)
-  app.get("/api/channels/messages", opsOnly, wrap((req: any, res: any) => {
+  app.get("/api/channels/messages", chatUserOnly, wrap((req: any, res: any) => {
     res.json(getRecentChannelMessages(parseLimit(req.query.limit, 150, 500), queryString(req.query.updatedSince)));
   }));
 
@@ -2466,17 +2707,17 @@ async function startServer() {
     validador: async () => { agentState.validador.lastRun = new Date().toISOString(); },
   };
 
-  app.get("/api/agents/status", opsOnly, wrap((_req: any, res: any) => {
+  app.get("/api/agents/status", chatUserOnly, wrap((_req: any, res: any) => {
     res.json(agentState);
   }));
 
-  app.get("/api/agents/profiles/:id", opsOnly, wrap((req: any, res: any) => {
+  app.get("/api/agents/profiles/:id", chatUserOnly, wrap((req: any, res: any) => {
     const profile = AgentProfiles.getById(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Perfil de agente no encontrado' });
     res.json(profile);
   }));
 
-  app.patch("/api/agents/profiles/:id", opsOnly, wrap((req: any, res: any) => {
+  app.patch("/api/agents/profiles/:id", chatUserOnly, wrap((req: any, res: any) => {
     const profile = AgentProfiles.update(req.params.id, req.body || {});
     if (!profile) return res.status(404).json({ error: 'Perfil de agente no encontrado' });
     AuditLog.insert({
@@ -2490,7 +2731,7 @@ async function startServer() {
     res.json(profile);
   }));
 
-  app.post("/api/agents/:agent/toggle", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/agents/:agent/toggle", chatUserOnly, wrap(async (req: any, res: any) => {
     const { agent } = req.params;
     if (!agentState[agent]) return res.status(404).json({ error: 'Agente no encontrado' });
     const current = agentState[agent].active;
@@ -2510,7 +2751,7 @@ async function startServer() {
     res.json({ agent, active: agentState[agent].active });
   }));
 
-  app.post("/api/agents/:agent/run", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/agents/:agent/run", chatUserOnly, wrap(async (req: any, res: any) => {
     const { agent } = req.params;
     const runner = AGENT_RUNNERS[agent];
     if (!runner) return res.status(404).json({ error: 'Agente no encontrado' });

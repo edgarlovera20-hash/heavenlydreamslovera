@@ -90,9 +90,12 @@ interface AgentStatus {
 interface BotMemory {
   name: string;
   personality: string;
+  humor: string;
+  responseStyle: string;
   selfKnowledge: string;
   knowledgeBase: string;
   learnedNotes: string[];
+  metadata?: Record<string, any>;
 }
 
 const CHANNELS: Array<{
@@ -121,11 +124,14 @@ const CHANNELS: Array<{
 const RECEPTIONIST_PROFILE_ID = 'promoter_receptionist';
 
 const DEFAULT_MEMORY: BotMemory = {
-  name: 'Agente Heavenly',
-  personality: 'Cordial, claro, rapido y profesional. Saluda con confianza, pide datos concretos y no suena como robot generico.',
-  selfKnowledge: 'Soy el agente de Chats de Heavenly Dreams. Puedo saludar clientes, iniciar captura de nuevos clientes, consultar folios SIAC importantes y operar por WhatsApp o Telegram.',
-  knowledgeBase: 'Para nuevo cliente debo pedir nombre, telefono, direccion, plan y documentos. Para folios importantes debo pedir el folio y consultar el estatus.',
+  name: 'ARIUX',
+  personality: 'Cordial, claro, rapido y profesional. Habla como apoyo de campo: directo, atento y sin sonar como robot generico.',
+  humor: 'Ligero y respetuoso; solo usa humor cuando ayuda a bajar tension.',
+  responseStyle: 'Breve, claro, accionable y con siguiente paso concreto.',
+  selfKnowledge: 'Soy ARIUX, el agente de WhatsApp y Telegram para promotores de Heavenly Dreams. Ayudo a consultar datos, iniciar conversaciones y ordenar informacion antes de pasarla al flujo operativo.',
+  knowledgeBase: 'Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible.',
   learnedNotes: [],
+  metadata: { audience: 'promotores', channel: 'whatsapp_telegram' },
 };
 
 function loadBotMemory(): BotMemory {
@@ -133,18 +139,22 @@ function loadBotMemory(): BotMemory {
 }
 
 function normalizeProfile(data: any): BotMemory {
+  const metadata = data?.metadata && typeof data.metadata === 'object' ? data.metadata : {};
   return {
     name: data?.name || DEFAULT_MEMORY.name,
     personality: data?.personality || DEFAULT_MEMORY.personality,
+    humor: data?.humor || metadata.humor || DEFAULT_MEMORY.humor,
+    responseStyle: data?.responseStyle || data?.response_style || metadata.responseStyle || metadata.response_style || DEFAULT_MEMORY.responseStyle,
     selfKnowledge: data?.selfKnowledge || data?.self_knowledge || DEFAULT_MEMORY.selfKnowledge,
     knowledgeBase: data?.knowledgeBase || data?.knowledge_base || DEFAULT_MEMORY.knowledgeBase,
     learnedNotes: Array.isArray(data?.learnedNotes) ? data.learnedNotes : DEFAULT_MEMORY.learnedNotes,
+    metadata,
   };
 }
 
 function buildGreeting(memory: BotMemory) {
   const learned = memory.learnedNotes.slice(0, 2).map(note => `Aprendi: ${note}`).join(' ');
-  return `Hola, soy ${memory.name}, agente virtual de Heavenly Dreams. ${memory.selfKnowledge} Puedo ayudarte a iniciar la captura de un nuevo cliente o consultar folios importantes. ${memory.knowledgeBase} ${learned}`.trim();
+  return `Hola, soy ${memory.name}. ${memory.selfKnowledge} Puedo ayudarte a consultar datos, iniciar el flujo de conversacion y preparar la siguiente accion. ${memory.knowledgeBase} ${learned}`.trim();
 }
 
 function formatTime(timestamp: number) {
@@ -366,10 +376,20 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const saveMemory = async (nextMemory = memory) => {
     setMemorySaving(true);
     try {
+      const payload = {
+        ...nextMemory,
+        metadata: {
+          ...(nextMemory.metadata || {}),
+          audience: 'promotores',
+          channel: 'whatsapp_telegram',
+          humor: nextMemory.humor,
+          responseStyle: nextMemory.responseStyle,
+        },
+      };
       const res = await fetch(`/api/agents/profiles/${RECEPTIONIST_PROFILE_ID}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(nextMemory),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'No se pudo guardar la personalidad.');
@@ -450,10 +470,10 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
         <div className="min-w-0">
           <h1 className="flex items-center gap-3 text-2xl font-black tracking-tight text-white sm:text-3xl">
             <MessageSquare className="h-7 w-7 shrink-0 text-cyan-400" />
-            Chats
+            Chats Promotor
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-400 sm:text-base">
-            Mensajería operativa en vivo para WhatsApp y Telegram.
+            WhatsApp y Telegram para promotores con asistencia de ARIUX.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -530,14 +550,14 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Agente de bienvenida</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">ARIUX · Agente promotor</p>
                     <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${flowReady ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-yellow-400/30 bg-yellow-400/10 text-yellow-200'}`}>
                       {flowReady ? 'Memoria y flujo activos' : 'Configurar flujo'}
                     </span>
                   </div>
                   <h2 className="mt-1 text-2xl font-black text-white">{memory.name}</h2>
                   <p className="mt-2 max-w-4xl text-sm leading-relaxed text-slate-400">
-                    Saluda, se presenta para ayudar, aprende con el tiempo, recuerda instrucciones y desde aqui inicia captura de cliente o consulta folios importantes.
+                    Consulta datos, inicia flujo de conversacion y prepara respuestas para WhatsApp o Telegram.
                   </p>
                 </div>
               </div>
@@ -552,8 +572,8 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <AgentAction icon={UserPlus} title="Iniciar captura" desc="Abrir alta de cliente" onClick={onStartCapture} />
-              <AgentAction icon={FileSearch} title="Consultar folios" desc="Revisar folios importantes" onClick={onOpenFolios} />
+              <AgentAction icon={UserPlus} title="Iniciar flujo" desc="Abrir alta de cliente" onClick={onStartCapture} />
+              <AgentAction icon={FileSearch} title="Consultar datos" desc="Folios y registros SIAC" onClick={onOpenFolios} />
               <AgentToggle
                 icon={ClipboardCheck}
                 title="Captura automatica"
@@ -576,8 +596,8 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
           <div className="rounded-xl border border-purple-400/20 bg-purple-400/5 p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-purple-300">Personalidad y memoria</p>
-                <p className="text-xs text-slate-400">Se guarda y no se cierra al cambiar de seccion.</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-purple-300">Personalidad, humor y respuesta</p>
+                <p className="text-xs text-slate-400">Ajustes de ARIUX para promotores.</p>
               </div>
               <button
                 type="button"
@@ -598,6 +618,8 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
                 className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm font-bold text-white outline-none transition-colors focus:border-purple-400/60"
               />
               <MiniTextArea label="Personalidad" value={memory.personality} onChange={value => setMemory(state => ({ ...state, personality: value }))} />
+              <MiniTextArea label="Humor" value={memory.humor} onChange={value => setMemory(state => ({ ...state, humor: value }))} />
+              <MiniTextArea label="Forma de responder" value={memory.responseStyle} onChange={value => setMemory(state => ({ ...state, responseStyle: value }))} />
               <MiniTextArea label="Autoconocimiento" value={memory.selfKnowledge} onChange={value => setMemory(state => ({ ...state, selfKnowledge: value }))} />
               <MiniTextArea label="Conocimiento base" value={memory.knowledgeBase} onChange={value => setMemory(state => ({ ...state, knowledgeBase: value }))} />
 

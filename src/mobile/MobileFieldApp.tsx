@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { del as idbDel, get as idbGet, set as idbSet } from 'idb-keyval';
-import { Camera, Clock, Crown, DollarSign, Flame, Medal, Shield, Sparkles, Star, Target, TrendingUp, Trophy, Zap } from 'lucide-react';
+import { AlertCircle, Banknote, Calendar, Camera, CheckCircle2, Clock, CreditCard, Crown, DollarSign, Download, FileText, Flame, Medal, Search, Shield, Sparkles, Star, Target, TrendingUp, Trophy, Upload, Users, Zap } from 'lucide-react';
 import { PACKAGE_CATALOG, type ClientType, type PackageCatalogItem, type ProductCategory, type ServiceSegment } from '../configs/package-catalog';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from '../lib/apiClient';
 import Logo from '../components/ui/Logo';
@@ -15,12 +15,19 @@ const DRAFT_KEY = 'hd_mobile_capture_draft_v1';
 const LOCAL_SETTINGS_KEY = 'hd_mobile_settings_v1';
 const OFFLINE_QUEUE_KEY = 'hd_mobile_offline_queue_v1';
 const MODULE_CACHE_PREFIX = 'hd_mobile_module_cache_v1:';
+const PAYROLL_RECEIPTS_KEY = 'hd_payroll_transfer_receipts';
+const PAYROLL_BANK_DATA_KEY = 'hd_payroll_bank_data';
+const PAYROLL_ADVANCES_KEY = 'hd_payroll_advances';
+const PAYROLL_HISTORY_KEY = 'hd_payroll_history';
+const COMPANY_NAME = 'HEAVENLY DREAMS SAS DE CV';
+const COMPANY_ADDRESS = 'Avenida Tlahuac 3632, Interior A301, Colonia Culhuacan CTM Zona VIII, CP 09800, Iztapalapa, Ciudad de Mexico';
 
 type IconName = 'badge' | 'camera' | 'check' | 'chevron-left' | 'chevron-right' | 'clipboard' | 'cloud-off' | 'folder' | 'home' | 'id' | 'loader' | 'logout' | 'map' | 'message' | 'refresh' | 'save' | 'search' | 'send' | 'settings' | 'shield' | 'smartphone' | 'user' | 'users' | 'wallet' | 'wifi' | 'wifi-off';
 type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'perfil' | 'ajustes';
 type DraftSaveState = 'idle' | 'saving' | 'saved';
 type Notice = { kind: 'success' | 'error'; message: string } | null;
 type QueueStatus = 'queued' | 'syncing' | 'failed';
+type PayrollTab = 'seguimiento' | 'comprobantes' | 'bancarios' | 'adelantos' | 'gestion' | 'subirComprobantes' | 'verAdelantos';
 
 type SessionUser = {
   uid: string;
@@ -63,6 +70,45 @@ type CaptureDocument = {
   fileName: string;
   size?: number;
   selectedAt: string;
+};
+
+type PayrollReceipt = {
+  id: string;
+  fileName: string;
+  fileType: string;
+  fileData: string;
+  uploadedAt: string;
+};
+
+type PayrollBankData = {
+  banco: string;
+  titular: string;
+  cuenta: string;
+  clabe: string;
+};
+
+type PayrollAdvance = {
+  id: string;
+  amount: number;
+  reason: string;
+  requestedAt: string;
+  status: 'Pendiente' | 'Aprobado' | 'Rechazado' | 'Pagado';
+};
+
+type PayrollUser = {
+  id: string;
+  name: string;
+};
+
+type PayrollSale = {
+  id: string;
+  folio: string;
+  client: string;
+  packageName: string;
+  status: string;
+  commission: number;
+  date: Date | null;
+  userId: string;
 };
 
 type CaptureDraft = {
@@ -261,6 +307,19 @@ function saveMobileSettings(settings: any) {
   localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(settings));
 }
 
+function readLocalJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLocalJson<T>(key: string, value: T) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
 function normalizePhone(value: string) {
   return value.replace(/\D/g, '').slice(0, 10);
 }
@@ -333,6 +392,82 @@ function salesWithinFilter(sale: any, filter: 'weekly' | 'monthly' | 'all-time')
     return new Date(time).toISOString().slice(0, 7) === now.toISOString().slice(0, 7);
   }
   return Date.now() - time <= 7 * 24 * 60 * 60 * 1000;
+}
+
+function getCurrentISOWeek(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return { year: d.getUTCFullYear(), week };
+}
+
+function getISOWeekRange(year: number, week: number) {
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = jan4.getDay() || 7;
+  const monday = new Date(jan4);
+  monday.setDate(jan4.getDate() - jan4Day + 1 + (week - 1) * 7);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return { start: monday, end: sunday };
+}
+
+function parsePayrollDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [day, month, year] = raw.split('/').map(Number);
+    const parsed = new Date(year, month - 1, day);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function dateInISOWeek(date: Date | null, year: number, week: number) {
+  if (!date) return false;
+  const info = getCurrentISOWeek(date);
+  return info.year === year && info.week === week;
+}
+
+function formatReceiptDate(date: Date) {
+  return date.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).replace(/\./g, '');
+}
+
+function buildPayrollClientName(record: any) {
+  return [
+    record.nombres || record.nombre || record.cliente_nombre || record.cliente,
+    record.apellidoPaterno || record.apellido_paterno,
+    record.apellidoMaterno || record.apellido_materno,
+    record.apellidos,
+  ].filter(Boolean).join(' ').trim() || 'Cliente sin nombre';
+}
+
+function buildPayrollSales(rawSales: any[], year: number, week: number): PayrollSale[] {
+  return (rawSales || [])
+    .map((sale, index) => {
+      const date = parsePayrollDate(sale.fechaSolicitud || sale.fecha_solicitud || sale.fecha_captura || sale.fecha_os_alta || sale.created_at || sale.createdAt);
+      return {
+        id: String(sale.id || sale.folio || sale.folio_siac || `sale-${index}`),
+        folio: String(sale.folioSiac || sale.folio_siac || sale.folio || sale.os_alta || `VT-${index + 1}`),
+        client: buildPayrollClientName(sale),
+        packageName: String(sale.paqueteNombre || sale.packageName || sale.paquete || sale.plan || sale.tipoServicio || sale.tipo_servicio || 'Sin paquete'),
+        status: String(sale.estatus_pisa || sale.estatus_siac || sale.status || sale.status_captura || 'CAPTURADO'),
+        commission: Number(sale.monto_comision || sale.comision || sale.commission || sale.comision_total || 0),
+        date,
+        userId: saleOwnerId(sale),
+      };
+    })
+    .filter((sale) => dateInISOWeek(sale.date, year, week));
 }
 
 function hasDraftData(draft: CaptureDraft) {
@@ -466,10 +601,10 @@ function Field(props: {
   multiline?: boolean;
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
 }) {
-  const base = 'min-h-12 w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 text-[16px] text-slate-50 outline-none transition focus:border-cyan-300/70 focus:bg-black/45 placeholder:text-slate-500';
+  const base = 'hd-cyber-input';
   return (
     <label className="block space-y-2">
-      <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{props.label}</span>
+      <span className="hd-cyber-label pl-1">{props.label}</span>
       {props.multiline ? (
         <textarea
           value={props.value}
@@ -494,11 +629,11 @@ function Field(props: {
 function SelectField(props: { label: string; value: string; onChange: (value: string) => void; options: string[] }) {
   return (
     <label className="block space-y-2">
-      <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{props.label}</span>
+      <span className="hd-cyber-label pl-1">{props.label}</span>
       <select
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
-        className="min-h-12 w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 text-[16px] text-slate-50 outline-none transition focus:border-cyan-300/70"
+        className="hd-cyber-input"
       >
         {props.options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
@@ -508,7 +643,7 @@ function SelectField(props: { label: string; value: string; onChange: (value: st
 
 function Panel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={cx('rounded-[24px] border border-cyan-400/15 bg-[#07111f]/88 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)]', className)}>
+    <section className={cx('hd-cyber-panel', className)}>
       {children}
     </section>
   );
@@ -646,44 +781,46 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
   };
 
   return (
-    <main className="min-h-dvh bg-[#0B1120] px-5 py-8 text-slate-100">
+    <main className="hd-cyber-screen min-h-dvh px-5 py-8">
       <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-cyan-300/45 bg-[#131d2f]/85 shadow-[0_0_24px_rgba(34,211,238,0.22)]">
+          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl border border-cyber-neon/50 bg-cyber-electric/10 text-cyber-neon shadow-[0_0_20px_rgba(0,229,255,0.3)]">
             <Logo className="h-16 w-16" />
           </div>
-          <h1 className="text-center text-3xl font-black uppercase tracking-[0.08em] text-slate-50 drop-shadow-[0_0_12px_rgba(34,211,238,0.18)]">Heavenly Dreams</h1>
-          <p className="mt-3 text-sm font-black uppercase tracking-[0.18em] text-[#22d3ee]">Tu Dream Team comienza aqui</p>
+          <h1 className="text-glow text-center text-3xl font-black uppercase tracking-[0.1em] text-slate-50">Heavenly Dreams</h1>
+          <p className="mt-3 text-sm font-black uppercase tracking-[0.18em] text-cyber-electric/80">Tu Dream Team comienza aqui</p>
           <p className="mt-2 text-sm leading-6 text-slate-300">App version lite para movil</p>
         </div>
-        <form onSubmit={submit} className="space-y-4 rounded-[28px] border border-[#22d3ee]/45 bg-[#131d2f]/85 p-4 shadow-[0_0_26px_rgba(34,211,238,0.14)] backdrop-blur-xl">
+        <form onSubmit={submit} className="glass-panel-neon relative space-y-4 overflow-hidden rounded-3xl p-5 shadow-2xl">
+          <div className="pointer-events-none absolute -left-2 top-10 h-12 w-1 rounded-r-md bg-cyber-neon" />
+          <div className="pointer-events-none absolute -right-2 bottom-10 h-12 w-1 rounded-l-md bg-cyber-electric" />
           <Field label="Usuario" value={username} onChange={setUsername} placeholder="edgar" />
           <div className="space-y-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Contrasena</span>
+            <span className="hd-cyber-label pl-1">Contrasena</span>
             <div className="relative">
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Tu contrasena"
                 type={showPassword ? 'text' : 'password'}
-                className="min-h-12 w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 pr-14 text-[16px] text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-cyan-300/70 focus:bg-black/45"
+                className="hd-cyber-input pr-14"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((current) => !current)}
-                className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-cyan-100/70 transition hover:bg-cyan-300/10 hover:text-cyan-100"
+                className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-cyber-electric/60 transition hover:bg-cyber-neon/10 hover:text-cyber-neon"
                 aria-label={showPassword ? 'Ocultar contrasena' : 'Ver contrasena'}
               >
                 <MobileIcon name={showPassword ? 'shield' : 'search'} className="h-4 w-4" />
               </button>
             </div>
           </div>
-          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-sm text-slate-300">
+          <label className="hd-cyber-card-soft flex items-center gap-3 px-3 py-3 text-sm text-slate-300">
             <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="h-4 w-4 accent-cyan-300" />
             Recordar usuario
           </label>
           {error && <p className="rounded-2xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
-          <button type="submit" disabled={loading} className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.16em] text-slate-950 disabled:cursor-wait disabled:opacity-60">
+          <button type="submit" disabled={loading} className="hd-cyber-primary flex h-13 w-full items-center justify-center gap-2">
             <MobileIcon name={loading ? 'loader' : 'shield'} className={cx('h-4 w-4', loading && 'animate-spin')} />
             Entrar
           </button>
@@ -691,22 +828,22 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
             type="button"
             disabled={!passkeySupported || passkeyLoading}
             onClick={startPasskeyLogin}
-            className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl border border-cyan-300/35 bg-cyan-300/10 font-black uppercase tracking-[0.12em] text-cyan-100 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+            className="hd-cyber-secondary flex h-13 w-full items-center justify-center gap-2 disabled:cursor-not-allowed"
             title={passkeySupported ? 'Entrar con huella digital o passkey' : 'Huella digital/passkey no disponible'}
           >
             <MobileIcon name={passkeyLoading ? 'loader' : 'id'} className={cx('h-4 w-4', passkeyLoading && 'animate-spin')} />
             Huella digital
           </button>
           <div className="flex items-center gap-3 py-1">
-            <span className="h-px flex-1 bg-cyan-300/15" />
-            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100/60">o</span>
-            <span className="h-px flex-1 bg-cyan-300/15" />
+            <span className="h-px flex-1 bg-cyber-electric/20" />
+            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-cyber-electric/60">o</span>
+            <span className="h-px flex-1 bg-cyber-electric/20" />
           </div>
           <button
             type="button"
             disabled={!googleOAuthAvailable || googleLoading}
             onClick={startGoogleLogin}
-            className="flex h-13 w-full items-center justify-center gap-3 rounded-2xl border border-cyan-300/20 bg-white/[0.04] font-black uppercase tracking-[0.12em] text-slate-50 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+            className="hd-cyber-secondary flex h-13 w-full items-center justify-center gap-3 disabled:cursor-not-allowed"
             title={googleOAuthAvailable ? 'Entrar con cuenta Google' : 'Faltan credenciales OAuth de Google en el servidor'}
           >
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-sm font-black text-slate-950">G</span>
@@ -747,6 +884,25 @@ export default function MobileFieldApp() {
   const [documents, setDocuments] = useState<any[]>([]);
   const [followUps, setFollowUps] = useState<any[]>([]);
   const [payroll, setPayroll] = useState<any[]>([]);
+  const [payrollSales, setPayrollSales] = useState<any[]>([]);
+  const [payrollTab, setPayrollTab] = useState<PayrollTab>('seguimiento');
+  const [payrollYear, setPayrollYear] = useState(() => String(getCurrentISOWeek().year));
+  const [payrollWeek, setPayrollWeek] = useState(() => String(getCurrentISOWeek().week));
+  const [payrollUserId, setPayrollUserId] = useState('self');
+  const [payrollPaymentMethod, setPayrollPaymentMethod] = useState('Transferencia bancaria');
+  const [payrollExporting, setPayrollExporting] = useState(false);
+  const [payrollSaving, setPayrollSaving] = useState(false);
+  const [payrollSaved, setPayrollSaved] = useState(false);
+  const [payrollReceipts, setPayrollReceipts] = useState<PayrollReceipt[]>(() => readLocalJson<PayrollReceipt[]>(PAYROLL_RECEIPTS_KEY, []));
+  const [payrollReceiptError, setPayrollReceiptError] = useState('');
+  const [payrollBankData, setPayrollBankData] = useState<PayrollBankData>(() => readLocalJson<PayrollBankData>(PAYROLL_BANK_DATA_KEY, { banco: '', titular: '', cuenta: '', clabe: '' }));
+  const [payrollBankSaved, setPayrollBankSaved] = useState(false);
+  const [payrollAdvances, setPayrollAdvances] = useState<PayrollAdvance[]>(() => readLocalJson<PayrollAdvance[]>(PAYROLL_ADVANCES_KEY, []));
+  const [advanceAmount, setAdvanceAmount] = useState('');
+  const [advanceReason, setAdvanceReason] = useState('');
+  const [advanceMessage, setAdvanceMessage] = useState('');
+  const payrollReceiptRef = useRef<HTMLDivElement | null>(null);
+  const payrollReceiptFileRef = useRef<HTMLInputElement | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [conversations, setConversations] = useState<any[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -858,6 +1014,48 @@ export default function MobileFieldApp() {
       xpNextLevel,
     };
   }, [bootstrap?.recentSales, profileLeaderboardFilter, profileName, profileUid]);
+
+  const canManagePayroll = ['GERENTE', 'SUPERVISOR', 'ADMIN', 'ADMINISTRACION', 'SUPERUSER'].includes(profileRole);
+  const payrollUsers = useMemo<PayrollUser[]>(() => {
+    const map = new Map<string, PayrollUser>();
+    if (profileUid) map.set(profileUid, { id: profileUid, name: profileName });
+    [...payrollSales, ...(bootstrap?.recentSales || [])].forEach((sale) => {
+      const id = saleOwnerId(sale);
+      if (!id || map.has(id)) return;
+      map.set(id, { id, name: saleOwnerName(sale) });
+    });
+    return Array.from(map.values());
+  }, [bootstrap?.recentSales, payrollSales, profileName, profileUid]);
+
+  const payrollResult = useMemo(() => {
+    const year = Number(payrollYear) || getCurrentISOWeek().year;
+    const week = Number(payrollWeek) || getCurrentISOWeek().week;
+    const selectedUserId = payrollUserId === 'self' ? profileUid : payrollUserId;
+    const range = getISOWeekRange(year, week);
+    const rawSales = payrollSales.length > 0 ? payrollSales : (bootstrap?.recentSales || []);
+    const weeklySales = buildPayrollSales(rawSales, year, week)
+      .filter((sale) => {
+        if (payrollUserId === 'all' && canManagePayroll) return true;
+        return !sale.userId || sale.userId === selectedUserId;
+      });
+    const subtotal = weeklySales.reduce((sum, sale) => sum + sale.commission, 0);
+    const userLabel = payrollUserId === 'all' && canManagePayroll
+      ? 'Todos los usuarios'
+      : payrollUsers.find((user) => user.id === selectedUserId)?.name || profileName;
+    return {
+      year,
+      week,
+      userId: selectedUserId,
+      userLabel,
+      sales: weeklySales,
+      subtotal,
+      discounts: 0,
+      total: subtotal,
+      weekStart: range.start,
+      weekEnd: range.end,
+      paymentDate: new Date(),
+    };
+  }, [bootstrap?.recentSales, canManagePayroll, payrollSales, payrollUserId, payrollUsers, payrollWeek, payrollYear, profileName, profileUid]);
 
   const notify = useCallback((kind: 'success' | 'error', message: string) => {
     setNotice({ kind, message });
@@ -1088,7 +1286,10 @@ export default function MobileFieldApp() {
         if (section === 'clientes') setClients(cached.data);
         if (section === 'documentos') setDocuments(cached.data.captures || []);
         if (section === 'seguimiento') setFollowUps(cached.data);
-        if (section === 'nominas') setPayroll(cached.data);
+        if (section === 'nominas') {
+          setPayroll(Array.isArray(cached.data) ? cached.data : cached.data.rows || []);
+          if (!Array.isArray(cached.data)) setPayrollSales(cached.data.sales || []);
+        }
         if (section === 'chats') {
           setConversations(cached.data.conversations || []);
           setMessages(cached.data.messages || cached.data || []);
@@ -1114,9 +1315,12 @@ export default function MobileFieldApp() {
       }
       if (section === 'nominas') {
         const data = await apiJson<any[]>(`/api/mobile/nominas${since}`);
-        const next = since && cached?.data ? mergeById(cached.data, data) : data;
+        const cachedRows = Array.isArray(cached?.data) ? cached?.data : cached?.data?.rows;
+        const next = since && cachedRows ? mergeById(cachedRows, data) : data;
+        const sales = await apiJson<any[]>('/api/ventas').catch(() => bootstrap?.recentSales || []);
         setPayroll(next);
-        await writeModuleCache(section, next);
+        setPayrollSales(sales);
+        await writeModuleCache(section, { rows: next, sales });
       }
       if (section === 'chats') {
         const data = await apiJson<{ conversations: any[]; messages: any[] }>(`/api/mobile/chats${since}`);
@@ -1502,6 +1706,169 @@ export default function MobileFieldApp() {
     notify('success', 'Cache movil actualizado.');
   };
 
+  const persistPayrollReceipts = (next: PayrollReceipt[]) => {
+    setPayrollReceipts(next);
+    writeLocalJson(PAYROLL_RECEIPTS_KEY, next);
+  };
+
+  const handlePayrollReceiptFiles = (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    const allowed = file.type.startsWith('image/') || file.type === 'application/pdf';
+    if (!allowed) {
+      setPayrollReceiptError('Sube una imagen o PDF del comprobante.');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setPayrollReceiptError('El comprobante no debe superar 15 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const nextReceipt: PayrollReceipt = {
+        id: `${Date.now()}-${file.name}`,
+        fileName: file.name,
+        fileType: file.type || 'archivo',
+        fileData: String(reader.result || ''),
+        uploadedAt: new Date().toISOString(),
+      };
+      persistPayrollReceipts([nextReceipt, ...payrollReceipts]);
+      setPayrollReceiptError('');
+      if (payrollReceiptFileRef.current) payrollReceiptFileRef.current.value = '';
+      notify('success', 'Comprobante guardado.');
+    };
+    reader.onerror = () => setPayrollReceiptError('No se pudo leer el comprobante.');
+    reader.readAsDataURL(file);
+  };
+
+  const removePayrollReceipt = (id: string) => {
+    persistPayrollReceipts(payrollReceipts.filter((receipt) => receipt.id !== id));
+  };
+
+  const savePayrollBankData = () => {
+    writeLocalJson(PAYROLL_BANK_DATA_KEY, payrollBankData);
+    setPayrollBankSaved(true);
+    notify('success', 'Datos bancarios guardados.');
+  };
+
+  const submitPayrollAdvance = () => {
+    const amount = Number(advanceAmount);
+    if (!amount || amount <= 0) {
+      setAdvanceMessage('Captura un monto valido.');
+      return;
+    }
+    const next: PayrollAdvance = {
+      id: `${Date.now()}`,
+      amount,
+      reason: advanceReason.trim() || 'Sin motivo capturado',
+      requestedAt: new Date().toISOString(),
+      status: 'Pendiente',
+    };
+    const updated = [next, ...payrollAdvances];
+    setPayrollAdvances(updated);
+    writeLocalJson(PAYROLL_ADVANCES_KEY, updated);
+    setAdvanceAmount('');
+    setAdvanceReason('');
+    setAdvanceMessage('Solicitud de adelanto registrada.');
+  };
+
+  const updatePayrollAdvanceStatus = (id: string, status: PayrollAdvance['status']) => {
+    const updated = payrollAdvances.map((advance) => advance.id === id ? { ...advance, status } : advance);
+    setPayrollAdvances(updated);
+    writeLocalJson(PAYROLL_ADVANCES_KEY, updated);
+  };
+
+  const savePayrollRecord = async () => {
+    setPayrollSaving(true);
+    setPayrollSaved(false);
+    const localEntry = {
+      id: `${Date.now()}-${payrollResult.userLabel}`,
+      year: payrollResult.year,
+      week: payrollResult.week,
+      userId: payrollUserId,
+      userLabel: payrollResult.userLabel,
+      paymentMethod: payrollPaymentMethod,
+      sales: payrollResult.sales,
+      subtotal: payrollResult.subtotal,
+      discounts: payrollResult.discounts,
+      total: payrollResult.total,
+      createdAt: new Date().toISOString(),
+    };
+    const history = readLocalJson<any[]>(PAYROLL_HISTORY_KEY, []);
+    writeLocalJson(PAYROLL_HISTORY_KEY, [localEntry, ...history]);
+    try {
+      if (canManagePayroll) {
+        const data = await apiJson<{ ok: boolean; id: string }>('/api/nominas', {
+          method: 'POST',
+          body: JSON.stringify({
+            asesor_id: payrollUserId === 'all' ? 'all' : payrollResult.userId,
+            periodo: `${payrollResult.year}-S${String(payrollResult.week).padStart(2, '0')}`,
+            ventas_count: payrollResult.sales.length,
+            monto_base: payrollResult.subtotal,
+            comisiones: payrollResult.subtotal,
+            bonos: 0,
+            total: payrollResult.total,
+            status: 'registrada',
+          }),
+        });
+        const row = {
+          id: data.id || localEntry.id,
+          asesor_id: payrollUserId === 'all' ? 'all' : payrollResult.userId,
+          asesor_nombre: payrollResult.userLabel,
+          periodo: `${payrollResult.year}-S${String(payrollResult.week).padStart(2, '0')}`,
+          ventas_count: payrollResult.sales.length,
+          monto_base: payrollResult.subtotal,
+          comisiones: payrollResult.subtotal,
+          bonos: 0,
+          total: payrollResult.total,
+          status: 'registrada',
+          created_at: new Date().toISOString(),
+        };
+        setPayroll((current) => [row, ...current]);
+      }
+      setPayrollSaved(true);
+      notify('success', 'Nomina registrada.');
+    } catch (err: any) {
+      notify('error', err?.message || 'Se guardo localmente, pero no se registro en servidor.');
+    } finally {
+      setPayrollSaving(false);
+    }
+  };
+
+  const updatePayrollStatus = async (row: any, status: string) => {
+    if (!canManagePayroll) return;
+    try {
+      await apiJson(`/api/nominas/${row.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      });
+      setPayroll((current) => current.map((item) => item.id === row.id ? { ...item, status } : item));
+      notify('success', 'Estatus de nomina actualizado.');
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo actualizar nomina.');
+    }
+  };
+
+  const exportPayrollPdf = async () => {
+    if (!payrollReceiptRef.current) return;
+    setPayrollExporting(true);
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
+      const canvas = await html2canvas(payrollReceiptRef.current, { scale: 2, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Nomina_S${payrollResult.week}_${payrollResult.userLabel.replace(/\s+/g, '_')}.pdf`);
+    } finally {
+      setPayrollExporting(false);
+    }
+  };
+
   if (!session?.uid) {
     return (
       <>
@@ -1521,11 +1888,11 @@ export default function MobileFieldApp() {
           <Panel>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-200">Campo</p>
-                <h1 className="mt-1 text-2xl font-black tracking-tight">Hola, {displayName(session)}</h1>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-cyber-electric/80">Campo</p>
+                <h1 className="mt-1 text-2xl font-black tracking-tight text-white">Hola, {displayName(session)}</h1>
                 <p className="mt-1 text-sm text-slate-400">{session.puesto || session.role || 'Asesor'}{session.zona ? ` - ${session.zona}` : ''}</p>
               </div>
-              <button onClick={refreshBootstrap} className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+              <button onClick={refreshBootstrap} className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyber-electric/30 bg-cyber-electric/10 text-cyber-neon transition hover:bg-cyber-neon/10">
                 <MobileIcon name={bootLoading ? 'loader' : 'refresh'} className={cx('h-5 w-5', bootLoading && 'animate-spin')} />
               </button>
             </div>
@@ -1547,11 +1914,11 @@ export default function MobileFieldApp() {
           </Panel>
 
           <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setActive('venta')} className="min-h-20 rounded-[20px] bg-cyan-300 px-3 py-3 text-left text-slate-950">
+            <button onClick={() => setActive('venta')} className="hd-cyber-primary min-h-20 px-3 py-3 text-left">
               <MobileIcon name="clipboard" className="mb-2 h-5 w-5" />
               <span className="block text-xs font-black uppercase tracking-[0.08em]">Nueva venta</span>
             </button>
-            <button onClick={() => setActive('folios')} className="min-h-20 rounded-[20px] border border-white/10 bg-white/[0.04] px-3 py-3 text-left text-slate-100">
+            <button onClick={() => setActive('folios')} className="hd-cyber-secondary min-h-20 px-3 py-3 text-left">
               <MobileIcon name="search" className="mb-2 h-5 w-5" />
               <span className="block text-xs font-black uppercase tracking-[0.08em]">Folios</span>
             </button>
@@ -1578,9 +1945,9 @@ export default function MobileFieldApp() {
                 <button
                   key={module.id}
                   onClick={() => setActive(module.id)}
-                  className="flex items-center gap-3 rounded-[22px] border border-cyan-400/12 bg-[#07111f]/75 p-4 text-left active:scale-[0.99]"
+                  className="hd-cyber-card flex items-center gap-3 p-4 text-left transition active:scale-[0.99]"
                 >
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-100">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyber-electric/20 bg-cyber-electric/10 text-cyber-neon">
                     <MobileIcon name={module.icon} className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -1609,15 +1976,15 @@ export default function MobileFieldApp() {
   const sectionTitle = MODULES.find((module) => module.id === active)?.label || (active === 'perfil' ? 'Mi perfil' : 'Inicio');
 
   return (
-    <div className="min-h-dvh bg-[#061322] pb-24 text-slate-100">
-      <header className="sticky top-0 z-20 border-b border-cyan-400/10 bg-[#061322]/95 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur">
+    <div className="hd-cyber-screen min-h-dvh pb-24">
+      <header className="glass-panel sticky top-0 z-20 border-x-0 border-t-0 border-cyber-electric/30 bg-cyber-black/90 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3">
-          <button onClick={() => active === 'inicio' ? refreshBootstrap() : setActive('inicio')} className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-slate-100">
+          <button onClick={() => active === 'inicio' ? refreshBootstrap() : setActive('inicio')} className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyber-electric/30 bg-white/5 text-cyber-electric transition hover:bg-cyber-neon/10 hover:text-cyber-neon">
             <MobileIcon name={active === 'inicio' ? 'refresh' : 'chevron-left'} className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">HD Campo</p>
-            <h2 className="truncate text-lg font-black">{sectionTitle}</h2>
+            <p className="truncate text-[11px] font-black uppercase tracking-[0.16em] text-cyber-electric/70">HD Campo</p>
+            <h2 className="truncate text-lg font-black text-white">{sectionTitle}</h2>
           </div>
           <StatusPill online={online} />
         </div>
@@ -1627,7 +1994,7 @@ export default function MobileFieldApp() {
         {renderContent()}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-cyan-400/10 bg-[#050b15]/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-cyber-electric/30 bg-cyber-black/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_30px_rgba(3,154,220,0.08)] backdrop-blur-xl">
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
           {PRIMARY_NAV.map((item) => {
             const selected = active === item.id;
@@ -1635,7 +2002,7 @@ export default function MobileFieldApp() {
               <button
                 key={item.id}
                 onClick={() => setActive(item.id)}
-                className={cx('flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl text-[10px] font-black uppercase tracking-[0.08em] transition', selected ? 'bg-cyan-300 text-slate-950' : 'text-slate-400')}
+                className={cx('flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-black uppercase tracking-[0.08em] transition', selected ? 'bg-cyber-electric text-cyber-black shadow-[0_0_18px_rgba(3,154,220,0.45)]' : 'text-cyber-electric/55 hover:bg-cyber-neon/10 hover:text-cyber-neon')}
               >
                 <MobileIcon name={item.icon} className="h-5 w-5" />
                 {item.label}
@@ -2062,26 +2429,321 @@ export default function MobileFieldApp() {
   }
 
   function renderPayroll() {
-    return (
-      <Panel>
-        <ModuleHeader title="Nóminas" loading={moduleLoading} onRefresh={() => loadModule('nominas')} />
-        <div className="space-y-3">
-          {moduleLoading && payroll.length === 0 && <ModuleSkeleton />}
-          {!moduleLoading && payroll.length === 0 && <EmptyState icon="wallet" text="Sin registros de nomina." />}
-          {payroll.map((row) => (
-            <div key={row.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+    const allTabs: Array<{ id: PayrollTab; label: string; icon: React.ElementType; admin?: boolean }> = [
+      { id: 'seguimiento', label: 'Seguimiento', icon: Calendar },
+      { id: 'comprobantes', label: 'Comprobantes', icon: FileText },
+      { id: 'bancarios', label: 'Datos bancarios', icon: CreditCard },
+      { id: 'adelantos', label: 'Adelantos', icon: Banknote },
+      { id: 'gestion', label: 'Gestion', icon: Users, admin: true },
+      { id: 'subirComprobantes', label: 'Subir comprobante', icon: Upload },
+      { id: 'verAdelantos', label: 'Ver adelantos', icon: DollarSign },
+    ];
+    const tabs = allTabs.filter((tab) => canManagePayroll || !tab.admin);
+
+    const persistedPayroll = (
+      <div className="space-y-3">
+        {moduleLoading && payroll.length === 0 && <ModuleSkeleton />}
+        {!moduleLoading && payroll.length === 0 && <EmptyState icon="wallet" text="Sin registros de nomina." />}
+        {payroll.map((row) => (
+          <div key={row.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-black">{row.periodo || row.concepto || 'Nomina'}</p>
+                <p className="mt-1 text-sm text-slate-400">{row.asesor_nombre || row.asesor_id || displayName(session)}</p>
+              </div>
+              <span className="shrink-0 text-lg font-black text-cyan-100">{formatMoney(row.total || row.monto || row.comision || 0)}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-white/[0.06] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+                {row.ventas_count || 0} ventas
+              </span>
+              <span className="rounded-full bg-cyan-300/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-cyan-100">
+                {row.status || 'borrador'}
+              </span>
+              <span className="text-[11px] font-bold text-slate-500">{shortDate(row.created_at)}</span>
+            </div>
+            {canManagePayroll && (
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {['borrador', 'registrada', 'pagada'].map((status) => (
+                  <button key={status} onClick={() => updatePayrollStatus(row, status)} className="min-h-10 rounded-xl border border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-[0.08em] text-slate-200">
+                    {status}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+
+    const receiptPreview = (
+      <div ref={payrollReceiptRef} className="rounded-2xl bg-white p-5 text-slate-950 shadow-2xl">
+        <div className="flex items-center gap-4 border-b-2 border-slate-950 pb-4">
+          <img src="/logo.png" alt="Heavenly Dreams" className="h-16 w-16 rounded-full object-cover" />
+          <div className="min-w-0 flex-1 text-center">
+            <p className="text-lg font-black leading-6">{COMPANY_NAME}</p>
+            <p className="mt-1 text-[10px] leading-4 text-slate-600">{COMPANY_ADDRESS}</p>
+          </div>
+        </div>
+        <div className="my-6 text-center">
+          <p className="text-xl font-black">RECIBO DE PAGO DE COMISIONES</p>
+          <p className="mt-1 text-sm text-slate-600">Semana {payrollResult.week} del Ano {payrollResult.year}</p>
+        </div>
+        <div className="space-y-3 text-sm leading-6">
+          <p>
+            Yo, <strong><u>{payrollResult.userLabel}</u></strong>, recibo el pago de mis comisiones por mis ventas posteadas de la empresa <strong>Heavenly Dreams SAS de CV</strong>.
+          </p>
+          <p>
+            Pago del <strong><u>{formatReceiptDate(payrollResult.weekStart)}</u></strong> al <strong><u>{formatReceiptDate(payrollResult.weekEnd)}</u></strong>, por un total de <strong>{formatMoney(payrollResult.total)}</strong> via <strong><u>{payrollPaymentMethod || '____________________'}</u></strong>.
+          </p>
+        </div>
+        <div className="mt-6 space-y-2">
+          <p className="text-sm font-black">Detalle de ventas posteadas</p>
+          {payrollResult.sales.length === 0 ? (
+            <div className="rounded-xl border border-slate-200 p-5 text-center text-sm text-slate-500">No hay folios posteados en esta semana</div>
+          ) : payrollResult.sales.map((sale) => (
+            <div key={sale.id} className="rounded-xl border border-slate-200 p-3 text-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-black">{row.periodo || row.concepto || 'Nomina'}</p>
-                  <p className="mt-1 text-sm text-slate-400">{row.asesor_nombre || displayName(session)}</p>
+                  <p className="font-mono font-black">{sale.folio}</p>
+                  <p className="mt-1 font-bold">{sale.client}</p>
+                  <p className="mt-1 text-xs text-slate-500">{sale.packageName} - {sale.status}</p>
                 </div>
-                <span className="text-lg font-black text-cyan-100">{formatMoney(row.total || row.monto || row.comision || 0)}</span>
+                <span className="font-black">{formatMoney(sale.commission)}</span>
               </div>
-              <p className="mt-2 text-xs text-slate-500">Status: {row.status || 'borrador'} - {shortDate(row.created_at)}</p>
             </div>
           ))}
         </div>
-      </Panel>
+        <div className="mt-10 grid grid-cols-2 gap-4 text-center text-xs">
+          <div>
+            <div className="mx-auto mb-2 h-px w-28 bg-slate-950" />
+            <p className="font-black">Promotor/Supervisor</p>
+            <p className="mt-1 text-slate-500">{payrollResult.userLabel}</p>
+          </div>
+          <div>
+            <div className="mx-auto mb-2 h-px w-28 bg-slate-950" />
+            <p className="font-black">Gerente</p>
+            <p className="mt-1 text-slate-500">Edgar David Lovera Juarez</p>
+          </div>
+        </div>
+      </div>
+    );
+
+    const workbench = (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-cyan-300/15 bg-white/[0.03] p-3">
+          <div className="mb-3 flex items-start gap-3">
+            <Search className="mt-1 h-5 w-5 text-cyan-100" />
+            <div>
+              <p className="font-black text-slate-50">Busqueda por ano y semana</p>
+              <p className="mt-1 text-xs leading-5 text-slate-400">Busca folios posteados para generar el formato de nomina.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Ano" value={payrollYear} onChange={(value) => { setPayrollYear(value.replace(/\D/g, '').slice(0, 4)); setPayrollSaved(false); }} inputMode="numeric" />
+            <Field label="Semana" value={payrollWeek} onChange={(value) => { setPayrollWeek(value.replace(/\D/g, '').slice(0, 2)); setPayrollSaved(false); }} inputMode="numeric" />
+          </div>
+          <label className="mt-3 block space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Usuario</span>
+            <select value={payrollUserId} onChange={(event) => { setPayrollUserId(event.target.value); setPayrollSaved(false); }} className="min-h-12 w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 text-[16px] text-slate-50 outline-none focus:border-cyan-300/70">
+              {canManagePayroll && <option value="all">Todos los usuarios</option>}
+              <option value="self">{profileName}</option>
+              {payrollUsers.filter((user) => user.id !== profileUid).map((user) => (
+                <option key={user.id} value={user.id}>{user.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <Metric label="Folios" value={payrollResult.sales.length} />
+          <Metric label="Comision" value={formatMoney(payrollResult.subtotal)} />
+          <Metric label="Semana" value={`S${payrollResult.week}`} />
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="font-black text-slate-50">Formato de recibo</p>
+              <p className="mt-1 text-xs text-slate-400">Genera, descarga y registra la nomina.</p>
+            </div>
+            {payrollSaved && <CheckCircle2 className="h-5 w-5 text-emerald-300" />}
+          </div>
+          <Field label="Metodo de pago" value={payrollPaymentMethod} onChange={(value) => { setPayrollPaymentMethod(value); setPayrollSaved(false); }} placeholder="Transferencia bancaria" />
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <button onClick={exportPayrollPdf} disabled={payrollExporting} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-slate-100 disabled:opacity-50">
+              {payrollExporting ? <MobileIcon name="loader" className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              PDF
+            </button>
+            <button onClick={savePayrollRecord} disabled={payrollSaving} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-300 text-sm font-black text-slate-950 disabled:opacity-50">
+              {payrollSaving ? <MobileIcon name="loader" className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Registrar
+            </button>
+          </div>
+          {payrollSaved && <p className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-xs font-bold text-emerald-100">Nomina registrada en historial.</p>}
+        </div>
+        <div className="overflow-x-auto pb-1">
+          <div className="min-w-[360px]">{receiptPreview}</div>
+        </div>
+      </div>
+    );
+
+    const receiptsView = (
+      <div className="space-y-4">
+        <input ref={payrollReceiptFileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={(event) => handlePayrollReceiptFiles(event.target.files)} />
+        <button
+          type="button"
+          onClick={() => payrollReceiptFileRef.current?.click()}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            handlePayrollReceiptFiles(event.dataTransfer.files);
+          }}
+          className={cx('w-full rounded-2xl border-2 border-dashed border-cyan-300/20 bg-white/[0.03] p-6 text-center', payrollTab === 'subirComprobantes' && 'border-cyan-300/60 bg-cyan-300/10')}
+        >
+          <Upload className="mx-auto mb-3 h-9 w-9 text-cyan-100" />
+          <p className="font-black text-slate-50">Subir captura o PDF de transferencia</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">Acepta JPG, PNG o PDF hasta 15 MB.</p>
+        </button>
+        {payrollReceiptError && (
+          <div className="flex items-center gap-2 rounded-2xl border border-rose-300/25 bg-rose-300/10 p-3 text-sm text-rose-100">
+            <AlertCircle className="h-4 w-4" />
+            {payrollReceiptError}
+          </div>
+        )}
+        {payrollReceipts.length === 0 ? <EmptyState icon="folder" text="No hay comprobantes subidos." /> : payrollReceipts.map((receipt) => (
+          <div key={receipt.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="flex items-start gap-3">
+              <FileText className="mt-1 h-5 w-5 shrink-0 text-cyan-100" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-black text-slate-100">{receipt.fileName}</p>
+                <p className="mt-1 text-xs text-slate-500">{new Date(receipt.uploadedAt).toLocaleString('es-MX')} - {receipt.fileType}</p>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <a href={receipt.fileData} download={receipt.fileName} className="flex min-h-10 items-center justify-center gap-2 rounded-xl bg-cyan-300/10 text-xs font-black text-cyan-100">
+                <Download className="h-4 w-4" />
+                Descargar
+              </a>
+              <button onClick={() => removePayrollReceipt(receipt.id)} className="min-h-10 rounded-xl border border-rose-300/20 bg-rose-300/10 text-xs font-black text-rose-100">Quitar</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+
+    const bankView = (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm leading-6 text-cyan-100">
+          Puedes registrar cualquier banco o institucion de pago.
+        </div>
+        <Field label="Banco o institucion" value={payrollBankData.banco} onChange={(value) => { setPayrollBankData((current) => ({ ...current, banco: value })); setPayrollBankSaved(false); }} placeholder="BBVA, Banorte, Santander, Mercado Pago..." />
+        <Field label="Titular" value={payrollBankData.titular} onChange={(value) => { setPayrollBankData((current) => ({ ...current, titular: value })); setPayrollBankSaved(false); }} placeholder="Nombre completo" />
+        <Field label="Cuenta / tarjeta" value={payrollBankData.cuenta} onChange={(value) => { setPayrollBankData((current) => ({ ...current, cuenta: value.replace(/[^\d\s-]/g, '') })); setPayrollBankSaved(false); }} inputMode="numeric" />
+        <Field label="CLABE" value={payrollBankData.clabe} onChange={(value) => { setPayrollBankData((current) => ({ ...current, clabe: value.replace(/\D/g, '').slice(0, 18) })); setPayrollBankSaved(false); }} inputMode="numeric" placeholder="18 digitos" />
+        <button onClick={savePayrollBankData} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black text-slate-950">
+          <CheckCircle2 className="h-4 w-4" />
+          Guardar datos bancarios
+        </button>
+        {payrollBankSaved && <p className="text-sm font-bold text-emerald-200">Datos bancarios guardados.</p>}
+      </div>
+    );
+
+    const advanceForm = (
+      <div className="space-y-4">
+        <Field label="Monto solicitado" value={advanceAmount} onChange={setAdvanceAmount} type="number" inputMode="decimal" placeholder="$0.00" />
+        <Field label="Motivo" value={advanceReason} onChange={setAdvanceReason} placeholder="Razon del adelanto" multiline />
+        <button onClick={submitPayrollAdvance} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black text-slate-950">
+          <Banknote className="h-4 w-4" />
+          Enviar solicitud
+        </button>
+        {advanceMessage && <p className="text-sm font-bold text-cyan-100">{advanceMessage}</p>}
+      </div>
+    );
+
+    const advancesList = (
+      <div className="space-y-3">
+        {payrollAdvances.length === 0 ? <EmptyState icon="wallet" text="No hay adelantos registrados." /> : payrollAdvances.map((advance) => (
+          <div key={advance.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-black text-slate-100">{formatMoney(advance.amount)}</p>
+                <p className="mt-1 text-sm text-slate-400">{advance.reason}</p>
+                <p className="mt-2 text-xs text-slate-500">{shortDate(advance.requestedAt)}</p>
+              </div>
+              <span className="rounded-full bg-amber-300/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-amber-100">{advance.status}</span>
+            </div>
+            {canManagePayroll && (
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {(['Pendiente', 'Aprobado', 'Rechazado', 'Pagado'] as const).map((status) => (
+                  <button key={status} onClick={() => updatePayrollAdvanceStatus(advance.id, status)} className="min-h-9 rounded-xl border border-white/10 bg-white/[0.03] text-[9px] font-black uppercase text-slate-200">
+                    {status}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+
+    return (
+      <div className="space-y-4">
+        <Panel>
+          <ModuleHeader title="Nóminas" loading={moduleLoading} onRefresh={() => loadModule('nominas')} />
+          <div className="grid grid-cols-2 gap-2">
+            <Metric label="Semana" value={`S${payrollResult.week}`} />
+            <Metric label="Comision" value={formatMoney(payrollResult.subtotal)} />
+            <Metric label="Comprobantes" value={payrollReceipts.length} />
+            <Metric label="Adelantos" value={payrollAdvances.length} />
+          </div>
+        </Panel>
+
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const selected = payrollTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setPayrollTab(tab.id)}
+                className={cx('flex min-h-12 shrink-0 items-center gap-2 rounded-2xl border px-4 text-xs font-black uppercase tracking-[0.08em]', selected ? 'border-cyan-300 bg-cyan-300 text-slate-950' : 'border-white/10 bg-white/[0.03] text-slate-300')}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <Panel>
+          {payrollTab === 'seguimiento' && (
+            <div className="space-y-5">
+              {workbench}
+              <div>
+                <h3 className="mb-3 text-sm font-black uppercase tracking-[0.12em] text-slate-400">Historial registrado</h3>
+                {persistedPayroll}
+              </div>
+            </div>
+          )}
+          {payrollTab === 'gestion' && (
+            <div className="space-y-5">
+              {canManagePayroll ? workbench : <EmptyState icon="shield" text="Solo gerencia puede gestionar nominas." />}
+              {canManagePayroll && (
+                <div>
+                  <h3 className="mb-3 text-sm font-black uppercase tracking-[0.12em] text-slate-400">Nominas registradas</h3>
+                  {persistedPayroll}
+                </div>
+              )}
+            </div>
+          )}
+          {payrollTab === 'comprobantes' && receiptsView}
+          {payrollTab === 'subirComprobantes' && receiptsView}
+          {payrollTab === 'bancarios' && bankView}
+          {payrollTab === 'adelantos' && advanceForm}
+          {payrollTab === 'verAdelantos' && advancesList}
+        </Panel>
+      </div>
     );
   }
 
@@ -2415,8 +3077,8 @@ export default function MobileFieldApp() {
 
 function Metric({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</p>
+    <div className="hd-cyber-card-soft px-3 py-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyber-electric/65">{label}</p>
       <p className="mt-1 truncate text-lg font-black text-slate-50">{value}</p>
     </div>
   );
@@ -2424,8 +3086,8 @@ function Metric({ label, value }: { label: string; value: React.ReactNode }) {
 
 function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{label}</p>
+    <div className="hd-cyber-card-soft px-3 py-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyber-electric/65">{label}</p>
       <p className="mt-1 break-words text-sm font-bold text-slate-100">{value}</p>
     </div>
   );
@@ -2434,8 +3096,8 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
 function ModuleHeader({ title, loading, onRefresh }: { title: string; loading: boolean; onRefresh: () => void }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
-      <h3 className="text-xl font-black">{title}</h3>
-      <button onClick={onRefresh} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+      <h3 className="text-xl font-black text-white">{title}</h3>
+      <button onClick={onRefresh} className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyber-electric/30 bg-cyber-electric/10 text-cyber-neon transition hover:bg-cyber-neon/10">
         <MobileIcon name={loading ? 'loader' : 'refresh'} className={cx('h-4 w-4', loading && 'animate-spin')} />
       </button>
     </div>
@@ -2444,8 +3106,8 @@ function ModuleHeader({ title, loading, onRefresh }: { title: string; loading: b
 
 function EmptyState({ icon, text }: { icon: IconName; text: string }) {
   return (
-    <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 text-center">
-      <MobileIcon name={icon} className="h-9 w-9 text-slate-600" />
+    <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-cyber-electric/25 bg-cyber-dark/30 px-4 text-center">
+      <MobileIcon name={icon} className="h-9 w-9 text-cyber-electric/45" />
       <p className="mt-3 text-sm font-bold text-slate-400">{text}</p>
     </div>
   );
@@ -2455,7 +3117,7 @@ function ModuleSkeleton() {
   return (
     <div className="space-y-3" aria-label="Cargando modulo">
       {[0, 1, 2].map((item) => (
-        <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+        <div key={item} className="hd-cyber-card-soft p-3">
           <div className="h-4 w-2/3 animate-pulse rounded bg-white/10" />
           <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-white/10" />
           <div className="mt-4 h-8 animate-pulse rounded-xl bg-white/5" />
@@ -2478,9 +3140,9 @@ function NoticeBanner({ notice }: { notice: Notice }) {
 
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
-    <button onClick={() => onChange(!checked)} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
+    <button onClick={() => onChange(!checked)} className="hd-cyber-card-soft flex w-full items-center justify-between px-4 py-3 text-left">
       <span className="text-sm font-black text-slate-100">{label}</span>
-      <span className={cx('flex h-7 w-12 items-center rounded-full p-1 transition', checked ? 'bg-cyan-300' : 'bg-slate-700')}>
+      <span className={cx('flex h-7 w-12 items-center rounded-full p-1 transition', checked ? 'bg-cyber-electric' : 'bg-slate-700')}>
         <span className={cx('h-5 w-5 rounded-full bg-white transition', checked ? 'translate-x-5' : 'translate-x-0')} />
       </span>
     </button>

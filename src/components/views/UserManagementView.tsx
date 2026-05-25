@@ -34,13 +34,20 @@ export default function UserManagementView() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'active' | 'rejected'>('all');
   const [actionMsg, setActionMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [loadError, setLoadError] = useState('');
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
-      const res = await fetch('/api/users');
-      if (res.ok) setUsers(await res.json());
-    } catch {}
+      const res = await fetch('/api/users', { cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'No se pudieron cargar usuarios.');
+      setUsers(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setUsers([]);
+      setLoadError(err?.message || 'No se pudieron cargar usuarios.');
+    }
     setLoading(false);
   }, []);
 
@@ -120,6 +127,16 @@ export default function UserManagementView() {
       {actionMsg && (
         <div className={`px-4 py-3 rounded-xl border text-sm font-bold ${actionMsg.ok ? 'bg-emerald-400/10 border-emerald-400/30 text-emerald-400' : 'bg-rose-400/10 border-rose-400/30 text-rose-400'}`}>
           {actionMsg.text}
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+        Toda cuenta nueva queda bloqueada como pendiente. Solo gerencia puede aprobarla; mientras no esté aprobada, el usuario no puede iniciar sesión ni usar la app.
+      </div>
+
+      {loadError && (
+        <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm font-bold text-rose-300">
+          {loadError}
         </div>
       )}
 

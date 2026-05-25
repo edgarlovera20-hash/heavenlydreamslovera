@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { infraMode, checkInfraConnections } from './infra';
+import { getOllamaUrl } from './ai-config';
 
 type GateStatus = 'ok' | 'warning' | 'critical';
 
@@ -31,7 +32,8 @@ export function getReadinessGates(): ReadinessGate[] {
   const postgresConfigured = hasEnv('DATABASE_URL');
   const redisConfigured = hasEnv('REDIS_URL');
   const objectStorageConfigured = hasEnv('DOCUMENT_STORAGE_DIR') || (hasEnv('S3_BUCKET') && hasEnv('S3_ENDPOINT'));
-  const ocrConfigured = hasEnv('OLLAMA_URL') || hasEnv('GEMINI_API_KEY');
+  const ollamaUrl = getOllamaUrl();
+  const ocrConfigured = Boolean(ollamaUrl) || hasEnv('GEMINI_API_KEY');
   const visionConfigured = hasEnv('GOOGLE_APPLICATION_CREDENTIALS_JSON') || hasEnv('GOOGLE_APPLICATION_CREDENTIALS');
   const webauthnConfigured = hasEnv('WEBAUTHN_RP_ID') && hasEnv('WEBAUTHN_ORIGIN');
   const twilioConfigured = hasEnv('TWILIO_ACCOUNT_SID') && hasEnv('TWILIO_AUTH_TOKEN') && hasEnv('TWILIO_FROM_NUMBER');
@@ -85,8 +87,8 @@ export function getReadinessGates(): ReadinessGate[] {
       'ocr_providers',
       'OCR multi IA',
       ocrConfigured ? 'ok' : 'warning',
-      ocrConfigured ? 'Hay al menos un proveedor IA OCR configurado.' : 'Solo queda Tesseract/local como fallback.',
-      'Configura Ollama o Gemini.',
+      ocrConfigured ? `Ollama local primario: ${ollamaUrl}.` : 'Solo queda Tesseract/local como fallback.',
+      'Instala Ollama en el servidor o configura Gemini como respaldo.',
     ),
     gate(
       'google_vision',

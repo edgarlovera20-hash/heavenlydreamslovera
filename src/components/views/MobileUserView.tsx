@@ -16,6 +16,7 @@ const ConsultasSeguimiento = lazy(() => import('./ConsultasSeguimiento'));
 const Payroll = lazy(() => import('./Payroll'));
 const Announcements = lazy(() => import('./Announcements'));
 const CustomerSupport = lazy(() => import('./CustomerSupport'));
+const ClientChatCrmView = lazy(() => import('./ClientChatCrmView'));
 const Morosidad = lazy(() => import('./Morosidad'));
 const Settings = lazy(() => import('./Settings'));
 const MyFilesView = lazy(() => import('./MyFilesView'));
@@ -52,6 +53,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
     { id: 'Captura y Validación', label: 'Captura', icon: ClipboardCheck, color: 'green' },
     { id: 'Consulta y Seguimiento', label: 'Consultas', icon: FileSearch, color: 'yellow' },
     { id: 'Chats', label: 'Chats', icon: MessageSquare, color: 'green' },
+    { id: 'Chat para Clientes', label: 'Clientes Chat', icon: MessageSquare, color: 'cyan' },
     { id: 'Seguimiento de Clientes', label: 'Seguimiento', icon: Users, color: 'cyan' },
     { id: 'Nóminas', label: 'Nóminas', icon: Wallet, color: 'purple' },
     { id: 'Anuncios', label: 'Anuncios', icon: Megaphone, color: 'orange' },
@@ -65,6 +67,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
       { id: 'Captura y Validación', label: 'Captura', icon: ClipboardCheck, color: 'green' },
       { id: 'Consulta y Seguimiento', label: 'Consultas', icon: FileSearch, color: 'yellow' },
       { id: 'Chats', label: 'Chats', icon: MessageSquare, color: 'green' },
+      { id: 'Chat para Clientes', label: 'Clientes Chat', icon: MessageSquare, color: 'cyan' },
       { id: 'Seguimiento de Clientes', label: 'Seguimiento', icon: Users, color: 'cyan' },
       { id: 'Nóminas', label: 'Nóminas', icon: Wallet, color: 'purple' },
       { id: 'Soporte a Clientes', label: 'Soporte', icon: Headphones, color: 'cyan' },
@@ -131,6 +134,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
           {activeSection === 'Captura y Validación' && <CaptureValidation />}
           {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
           {activeSection === 'Chats' && <ChatsView />}
+          {activeSection === 'Chat para Clientes' && <ClientChatCrmView />}
           {activeSection === 'Seguimiento de Clientes' && <CustomerFollowUpView />}
           {activeSection === 'Nóminas' && <Payroll />}
           {activeSection === 'Anuncios' && <Announcements />}
@@ -139,7 +143,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
           {activeSection === 'Ajustes' && <Settings />}
           {activeSection === 'Integraciones' && <Integrations />}
         </Suspense>
-        {!['Perfil', 'Documentación', 'Juego', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Nóminas', 'Anuncios', 'Soporte a Clientes', 'Morosidad', 'Ajustes', 'Integraciones'].includes(activeSection) && (
+        {!['Perfil', 'Documentación', 'Juego', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Chat para Clientes', 'Seguimiento de Clientes', 'Nóminas', 'Anuncios', 'Soporte a Clientes', 'Morosidad', 'Ajustes', 'Integraciones'].includes(activeSection) && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-cyber-electric/50">
               <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>

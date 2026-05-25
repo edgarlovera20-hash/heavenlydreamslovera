@@ -1,7 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --color-cyber-electric: var(--theme-electric);
+  --color-cyber-deep: var(--theme-deep);
+  --color-cyber-dark: var(--theme-dark);
+  --color-cyber-black: var(--theme-black);
+  --color-cyber-neon: var(--theme-neon);
+  --color-cyber-matrix: var(--theme-matrix);
 }
 
 @layer base {
@@ -44,6 +51,70 @@
 }
 
 @layer utilities {
+  .glass-panel {
+    @apply border border-cyber-electric/30 bg-cyber-dark/80 shadow-[0_4px_30px_rgba(3,154,220,0.1)] backdrop-blur-xl;
+  }
+
+  .glass-panel-neon {
+    @apply border border-cyber-neon/50 bg-cyber-dark/85 shadow-[0_0_20px_rgba(0,229,255,0.2)] backdrop-blur-xl;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 10px rgba(3,154,220,0.5), 0 0 20px rgba(3,154,220,0.3);
+  }
+
+  .hd-cyber-screen {
+    @apply bg-cyber-black text-[var(--theme-text-main)];
+    background:
+      linear-gradient(180deg, rgba(11, 17, 32, 0.96), rgba(11, 17, 32, 1)),
+      radial-gradient(circle at 50% -10%, rgba(14, 165, 233, 0.12), transparent 36%);
+  }
+
+  .hd-cyber-panel {
+    @apply relative overflow-hidden rounded-3xl border border-cyber-electric/30 bg-cyber-dark/80 p-4 shadow-[0_4px_30px_rgba(3,154,220,0.1)] backdrop-blur-xl;
+  }
+
+  .hd-cyber-panel::before {
+    content: "";
+    @apply pointer-events-none absolute left-0 top-6 h-10 w-1 rounded-r-md bg-cyber-neon/80;
+  }
+
+  .hd-cyber-card {
+    @apply rounded-2xl border border-cyber-electric/20 bg-cyber-dark/55 shadow-[0_10px_30px_rgba(0,0,0,0.22)] backdrop-blur-md;
+  }
+
+  .hd-cyber-card-soft {
+    @apply rounded-2xl border border-white/10 bg-cyber-dark/40 shadow-[0_8px_22px_rgba(0,0,0,0.16)] backdrop-blur-md;
+  }
+
+  .hd-cyber-input {
+    @apply min-h-12 w-full rounded-xl border border-cyber-electric/30 bg-cyber-dark/50 px-4 py-3 text-[16px] text-slate-50 outline-none transition placeholder:text-cyber-electric/35 focus:border-cyber-neon/70 focus:bg-cyber-dark/70 focus:shadow-[0_0_14px_rgba(0,229,255,0.18)];
+  }
+
+  .hd-cyber-primary {
+    @apply rounded-xl bg-cyber-electric font-black uppercase tracking-[0.14em] text-cyber-black shadow-[0_0_20px_rgba(3,154,220,0.38)] transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-60;
+  }
+
+  .hd-cyber-secondary {
+    @apply rounded-xl border border-cyber-electric/30 bg-white/5 font-black uppercase tracking-[0.12em] text-cyber-neon transition hover:bg-cyber-neon/10 active:scale-[0.98] disabled:opacity-45;
+  }
+
+  .hd-cyber-danger {
+    @apply rounded-xl border border-red-500/30 bg-red-900/30 font-black uppercase tracking-[0.12em] text-red-300 transition hover:bg-red-900/50;
+  }
+
+  .hd-cyber-label {
+    @apply text-[10px] font-bold uppercase tracking-widest text-cyber-electric/80;
+  }
+
+  .hd-cyber-tab {
+    @apply rounded-xl border border-cyber-electric/30 bg-white/5 text-cyber-electric transition active:scale-[0.98];
+  }
+
+  .hd-cyber-tab-active {
+    @apply border-cyber-neon bg-cyber-electric text-cyber-black shadow-[0_0_18px_rgba(3,154,220,0.45)];
+  }
+
   .hd-reduce-motion *,
   .hd-reduce-motion *::before,
   .hd-reduce-motion *::after {

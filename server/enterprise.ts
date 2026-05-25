@@ -2,24 +2,26 @@ import { randomUUID } from 'crypto';
 import db, { AiJobs, AuditLog, AutomationRules, Metrics } from './db';
 import { infraMode, queueJob } from './infra';
 import { getReadinessGates } from './readiness';
+import { getOllamaApiKey, getOllamaModel, getOllamaUrl } from './ai-config';
 
 type ProviderName = 'ollama' | 'gemini';
 
 const PROVIDERS: Array<{ name: ProviderName; configured: () => boolean; run: (prompt: string) => Promise<string> }> = [
-  { name: 'ollama', configured: () => !!process.env.OLLAMA_URL, run: callOllama },
+  { name: 'ollama', configured: () => !!getOllamaUrl(), run: callOllama },
   { name: 'gemini', configured: () => !!process.env.GEMINI_API_KEY, run: callGemini },
 ];
 
 async function callOllama(prompt: string) {
-  const baseUrl = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
+  const baseUrl = getOllamaUrl();
+  const apiKey = getOllamaApiKey();
   const res = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      ...(process.env.OLLAMA_API_KEY && { authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }),
+      ...(apiKey && { authorization: `Bearer ${apiKey}` }),
     },
     body: JSON.stringify({
-      model: process.env.OLLAMA_MODEL || 'glm-ocr:latest',
+      model: getOllamaModel(),
       stream: false,
       messages: [{ role: 'user', content: prompt }],
       options: { temperature: 0, num_predict: 1200 },

@@ -8,8 +8,8 @@
  *
  * Variables de entorno:
  *   GEMINI_API_KEY     — clave para Gemini
- *   OLLAMA_URL         — URL del servidor Ollama (ej: http://localhost:11434)
- *   OLLAMA_API_KEY     — opcional, clave de autenticación para Ollama
+ *   OLLAMA_URL         — URL del servidor Ollama (default: http://127.0.0.1:11434)
+ *   OLLAMA_API_KEY     — opcional, solo si usas un proxy autenticado
  *   OLLAMA_MODEL       — modelo local/remoto para OCR visual (default: glm-ocr:latest)
  *   OLLAMA_TIMEOUT_MS  — timeout para OCR Ollama (default: 135000)
  *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'ollama' | 'gemini' | 'tesseract'
@@ -19,16 +19,17 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createHash } from 'node:crypto';
+import { getOllamaApiKey, getOllamaModel, getOllamaUrl, getOllamaUrlSource } from './ai-config';
 import { runTesseractIne, runTesseractComprobante, runTesseractSiac } from './ocr-tesseract';
 
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
-const OLLAMA_URL        = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
-const OLLAMA_API_KEY    = process.env.OLLAMA_API_KEY || '';
+const OLLAMA_URL        = getOllamaUrl();
+const OLLAMA_API_KEY    = getOllamaApiKey();
 const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'ollama').toLowerCase();
 const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'adaptive').toLowerCase();
 
 const GEMINI_MODEL    = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const OLLAMA_MODEL    = process.env.OLLAMA_MODEL || 'glm-ocr:latest';
+const OLLAMA_MODEL    = getOllamaModel();
 
 function parsePositiveIntEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -407,7 +408,7 @@ async function callGemini(prompt: string, base64Images: string[]): Promise<strin
 // ─── PROVIDER 1: Ollama (local/remoto) ──────────────────────────────────────
 
 async function callOllama(prompt: string, base64Images: string[]): Promise<string> {
-  if (!OLLAMA_URL) throw new Error('OLLAMA_URL no configurada');
+  if (!OLLAMA_URL) throw new Error('Ollama local no configurado');
 
   // Ollama espera el base64 PURO (sin prefijo data:image/...;base64,)
   const imageBlocks = base64Images.map(b64 => stripDataUrl(b64));
@@ -456,10 +457,11 @@ async function checkOllamaHealth() {
       reachable: false,
       model: OLLAMA_MODEL,
       url: OLLAMA_URL,
+      source: getOllamaUrlSource(),
       timeoutMs: TIMEOUT_MS_OLLAMA,
       models: [] as string[],
       hasModel: false,
-      error: 'OLLAMA_URL no configurada',
+      error: 'Ollama local no configurado',
     };
   }
 
@@ -482,6 +484,7 @@ async function checkOllamaHealth() {
         reachable: false,
         model: OLLAMA_MODEL,
         url: OLLAMA_URL,
+        source: getOllamaUrlSource(),
         timeoutMs: TIMEOUT_MS_OLLAMA,
         models: [] as string[],
         hasModel: false,
@@ -500,6 +503,7 @@ async function checkOllamaHealth() {
       reachable: true,
       model: OLLAMA_MODEL,
       url: OLLAMA_URL,
+      source: getOllamaUrlSource(),
       timeoutMs: TIMEOUT_MS_OLLAMA,
       models,
       hasModel: models.some(model => modelTagMatches(model, OLLAMA_MODEL)),
@@ -510,6 +514,7 @@ async function checkOllamaHealth() {
       reachable: false,
       model: OLLAMA_MODEL,
       url: OLLAMA_URL,
+      source: getOllamaUrlSource(),
       timeoutMs: TIMEOUT_MS_OLLAMA,
       models: [] as string[],
       hasModel: false,
@@ -639,7 +644,7 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
 
   for (const provider of providerOrder) {
     if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin API key'); continue; }
-    if (provider === 'ollama' && !OLLAMA_URL) { errors.push('ollama: sin URL configurada'); continue; }
+    if (provider === 'ollama' && !OLLAMA_URL) { errors.push('ollama: sin servidor local'); continue; }
 
     try {
       const result = await tryProvider(provider, docType, imgs);
