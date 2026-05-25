@@ -2,8 +2,13 @@ import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { AuditLog, Sessions, Users } from './db';
 
-const ACCESS_TTL_MS = 15 * 60 * 1000;
-const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+function parsePositiveNumberEnv(name: string, fallback: number) {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+
+const ACCESS_TTL_MS = parsePositiveNumberEnv('ACCESS_TOKEN_TTL_MINUTES', 8 * 60) * 60 * 1000;
+const REFRESH_TTL_MS = parsePositiveNumberEnv('REFRESH_TOKEN_TTL_DAYS', 365) * 24 * 60 * 60 * 1000;
 const DEFAULT_JWT_SECRET = 'dev-heavenly-dreams-change-me';
 const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
 const ISSUER = 'heavenly-dreams-crm';
