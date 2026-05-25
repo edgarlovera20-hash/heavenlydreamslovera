@@ -98,6 +98,14 @@ interface BotMemory {
   metadata?: Record<string, any>;
 }
 
+interface AgentFunctionConfig {
+  id: string;
+  emoji: string;
+  title: string;
+  description: string;
+  enabled: boolean;
+}
+
 const CHANNELS: Array<{
   id: ChatChannel;
   label: string;
@@ -123,23 +131,91 @@ const CHANNELS: Array<{
 
 const RECEPTIONIST_PROFILE_ID = 'promoter_receptionist';
 
+const DEFAULT_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
+
+const DEFAULT_AGENT_FUNCTIONS: AgentFunctionConfig[] = [
+  {
+    id: 'consulta_folios',
+    emoji: '🔎',
+    title: 'Consulta de folios',
+    description: 'Pedir folio SIAC, buscar estatus disponible y responder con el siguiente paso.',
+    enabled: true,
+  },
+  {
+    id: 'guardar_expedientes',
+    emoji: '📁',
+    title: 'Guardar expedientes',
+    description: 'Ordenar documentos, imagenes, PDF y datos recibidos antes de pasarlos al flujo operativo.',
+    enabled: true,
+  },
+  {
+    id: 'iniciar_captura',
+    emoji: '📝',
+    title: 'Iniciar flujos de captura',
+    description: 'Recolectar nombre, telefono, direccion, colonia, paquete y documentos para nueva venta.',
+    enabled: true,
+  },
+  {
+    id: 'seguimiento_chat',
+    emoji: '💬',
+    title: 'Atencion por chat',
+    description: 'Responder dudas por WhatsApp o Telegram con tono claro, cordial y accionable.',
+    enabled: true,
+  },
+];
+
+const DEFAULT_METADATA = {
+  audience: 'promotores',
+  channel: 'whatsapp_telegram',
+  defaultMessage: DEFAULT_ARIUX_MESSAGE,
+  functions: DEFAULT_AGENT_FUNCTIONS,
+};
+
 const DEFAULT_MEMORY: BotMemory = {
   name: 'ARIUX',
   personality: 'Cordial, claro, rapido y profesional. Habla como apoyo de campo: directo, atento y sin sonar como robot generico.',
   humor: 'Ligero y respetuoso; solo usa humor cuando ayuda a bajar tension.',
   responseStyle: 'Breve, claro, accionable y con siguiente paso concreto.',
-  selfKnowledge: 'Soy ARIUX, el agente de WhatsApp y Telegram para promotores de Heavenly Dreams. Ayudo a consultar datos, iniciar conversaciones y ordenar informacion antes de pasarla al flujo operativo.',
-  knowledgeBase: 'Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible.',
+  selfKnowledge: DEFAULT_ARIUX_MESSAGE,
+  knowledgeBase: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta y 💬 orientar por WhatsApp o Telegram. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible.',
   learnedNotes: [],
-  metadata: { audience: 'promotores', channel: 'whatsapp_telegram' },
+  metadata: DEFAULT_METADATA,
 };
 
 function loadBotMemory(): BotMemory {
   return DEFAULT_MEMORY;
 }
 
+function normalizeAgentFunctions(value: any): AgentFunctionConfig[] {
+  const raw = Array.isArray(value) ? value : [];
+  const merged = DEFAULT_AGENT_FUNCTIONS.map(defaultFunction => {
+    const saved = raw.find((item: any) => item?.id === defaultFunction.id);
+    return {
+      ...defaultFunction,
+      ...(saved || {}),
+      enabled: saved?.enabled !== false,
+    };
+  });
+  const custom = raw
+    .filter((item: any) => item?.id && !DEFAULT_AGENT_FUNCTIONS.some(defaultFunction => defaultFunction.id === item.id))
+    .map((item: any) => ({
+      id: String(item.id),
+      emoji: String(item.emoji || '✨'),
+      title: String(item.title || 'Funcion personalizada'),
+      description: String(item.description || ''),
+      enabled: item.enabled !== false,
+    }));
+  return [...merged, ...custom];
+}
+
 function normalizeProfile(data: any): BotMemory {
   const metadata = data?.metadata && typeof data.metadata === 'object' ? data.metadata : {};
+  const nextMetadata = {
+    ...DEFAULT_METADATA,
+    ...metadata,
+    defaultMessage: metadata.defaultMessage || DEFAULT_ARIUX_MESSAGE,
+    functions: normalizeAgentFunctions(metadata.functions),
+  };
   return {
     name: data?.name || DEFAULT_MEMORY.name,
     personality: data?.personality || DEFAULT_MEMORY.personality,
@@ -148,13 +224,12 @@ function normalizeProfile(data: any): BotMemory {
     selfKnowledge: data?.selfKnowledge || data?.self_knowledge || DEFAULT_MEMORY.selfKnowledge,
     knowledgeBase: data?.knowledgeBase || data?.knowledge_base || DEFAULT_MEMORY.knowledgeBase,
     learnedNotes: Array.isArray(data?.learnedNotes) ? data.learnedNotes : DEFAULT_MEMORY.learnedNotes,
-    metadata,
+    metadata: nextMetadata,
   };
 }
 
 function buildGreeting(memory: BotMemory) {
-  const learned = memory.learnedNotes.slice(0, 2).map(note => `Aprendi: ${note}`).join(' ');
-  return `Hola, soy ${memory.name}. ${memory.selfKnowledge} Puedo ayudarte a consultar datos, iniciar el flujo de conversacion y preparar la siguiente accion. ${memory.knowledgeBase} ${learned}`.trim();
+  return String(memory.metadata?.defaultMessage || DEFAULT_ARIUX_MESSAGE).trim();
 }
 
 function formatTime(timestamp: number) {
@@ -221,6 +296,71 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const [learningInput, setLearningInput] = useState('');
   const [message, setMessage] = useState(() => buildGreeting(loadBotMemory()));
   const [lastSync, setLastSync] = useState<number | null>(null);
+
+  const agentFunctions = normalizeAgentFunctions(memory.metadata?.functions);
+  const defaultMessage = String(memory.metadata?.defaultMessage || DEFAULT_ARIUX_MESSAGE);
+
+  const updateMemoryMetadata = (metadataPatch: Record<string, any>) => {
+    setMemory(state => ({
+      ...state,
+      metadata: {
+        ...DEFAULT_METADATA,
+        ...(state.metadata || {}),
+        ...metadataPatch,
+      },
+    }));
+  };
+
+  const updateAgentFunction = (id: string, patch: Partial<AgentFunctionConfig>) => {
+    setMemory(state => {
+      const functions = normalizeAgentFunctions(state.metadata?.functions).map(item => (
+        item.id === id ? { ...item, ...patch } : item
+      ));
+      return {
+        ...state,
+        metadata: {
+          ...DEFAULT_METADATA,
+          ...(state.metadata || {}),
+          functions,
+        },
+      };
+    });
+  };
+
+  const addAgentFunction = () => {
+    setMemory(state => {
+      const functions = normalizeAgentFunctions(state.metadata?.functions);
+      const id = `custom_${Date.now()}`;
+      return {
+        ...state,
+        metadata: {
+          ...DEFAULT_METADATA,
+          ...(state.metadata || {}),
+          functions: [
+            ...functions,
+            {
+              id,
+              emoji: '✨',
+              title: 'Nueva funcion',
+              description: 'Describe aqui que puede hacer ARIUX.',
+              enabled: true,
+            },
+          ],
+        },
+      };
+    });
+  };
+
+  const removeAgentFunction = (id: string) => {
+    setMemory(state => ({
+      ...state,
+      metadata: {
+        ...DEFAULT_METADATA,
+        ...(state.metadata || {}),
+        functions: normalizeAgentFunctions(state.metadata?.functions).filter(item => item.id !== id),
+      },
+    }));
+  };
 
   const loadMessages = useCallback(async () => {
     try {
@@ -383,11 +523,14 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
       const payload = {
         ...nextMemory,
         metadata: {
+          ...DEFAULT_METADATA,
           ...(nextMemory.metadata || {}),
           audience: 'promotores',
           channel: 'whatsapp_telegram',
           humor: nextMemory.humor,
           responseStyle: nextMemory.responseStyle,
+          defaultMessage: String(nextMemory.metadata?.defaultMessage || DEFAULT_ARIUX_MESSAGE).trim() || DEFAULT_ARIUX_MESSAGE,
+          functions: normalizeAgentFunctions(nextMemory.metadata?.functions),
         },
       };
       const res = await fetch(`/api/agents/profiles/${RECEPTIONIST_PROFILE_ID}`, {
@@ -626,6 +769,102 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
               <MiniTextArea label="Forma de responder" value={memory.responseStyle} onChange={value => setMemory(state => ({ ...state, responseStyle: value }))} />
               <MiniTextArea label="Autoconocimiento" value={memory.selfKnowledge} onChange={value => setMemory(state => ({ ...state, selfKnowledge: value }))} />
               <MiniTextArea label="Conocimiento base" value={memory.knowledgeBase} onChange={value => setMemory(state => ({ ...state, knowledgeBase: value }))} />
+
+              <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-cyan-200">Mensaje predeterminado</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateMemoryMetadata({ defaultMessage: DEFAULT_ARIUX_MESSAGE });
+                        setMessage(DEFAULT_ARIUX_MESSAGE);
+                      }}
+                      className="rounded-lg border border-cyan-400/25 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-cyan-100 hover:bg-cyan-400/10"
+                    >
+                      Restaurar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMessage(defaultMessage)}
+                      className="rounded-lg border border-cyan-400/25 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-cyan-100 hover:bg-cyan-400/10"
+                    >
+                      Usar ahora
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  value={defaultMessage}
+                  onChange={event => updateMemoryMetadata({ defaultMessage: event.target.value })}
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-white/10 bg-slate-950/80 p-3 text-sm text-white outline-none transition-colors focus:border-cyan-400/60"
+                />
+                <p className="mt-2 text-[10px] text-slate-500">
+                  Este texto se usa como saludo inicial y como respuesta base cuando ARIUX no necesita ejecutar una accion especifica.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-200">Funciones del agente</p>
+                    <p className="text-[10px] text-slate-500">Activa, apaga o cambia lo que ARIUX ofrece en WhatsApp y Telegram.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addAgentFunction}
+                    className="rounded-lg border border-emerald-400/25 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-400/10"
+                  >
+                    Agregar funcion
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {agentFunctions.map(item => (
+                    <div key={item.id} className="grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-black/20 p-3 lg:grid-cols-[56px_minmax(0,1fr)_minmax(0,1.4fr)_auto]">
+                      <input
+                        value={item.emoji}
+                        onChange={event => updateAgentFunction(item.id, { emoji: event.target.value.slice(0, 4) || '✨' })}
+                        aria-label={`Emoji de ${item.title}`}
+                        className="rounded-lg border border-white/10 bg-slate-950/80 px-2 py-2 text-center text-lg text-white outline-none focus:border-emerald-400/60"
+                      />
+                      <input
+                        value={item.title}
+                        onChange={event => updateAgentFunction(item.id, { title: event.target.value })}
+                        aria-label={`Titulo de ${item.title}`}
+                        className="rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-xs font-bold text-white outline-none focus:border-emerald-400/60"
+                      />
+                      <input
+                        value={item.description}
+                        onChange={event => updateAgentFunction(item.id, { description: event.target.value })}
+                        aria-label={`Descripcion de ${item.title}`}
+                        className="rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-400/60"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => updateAgentFunction(item.id, { enabled: !item.enabled })}
+                          className={`rounded-lg border px-3 py-2 text-[9px] font-black uppercase tracking-widest ${
+                            item.enabled
+                              ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+                              : 'border-slate-700 bg-slate-950/80 text-slate-500'
+                          }`}
+                        >
+                          {item.enabled ? 'Activa' : 'Apagada'}
+                        </button>
+                        {!DEFAULT_AGENT_FUNCTIONS.some(defaultItem => defaultItem.id === item.id) && (
+                          <button
+                            type="button"
+                            onClick={() => removeAgentFunction(item.id)}
+                            className="rounded-lg border border-rose-400/25 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-rose-200 hover:bg-rose-400/10"
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Nuevo aprendizaje</label>

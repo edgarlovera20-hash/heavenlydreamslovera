@@ -1609,17 +1609,53 @@ function normalizeAgentProfile(row: any) {
   } : null;
 }
 
+const DEFAULT_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
+const LEGACY_RECEPTIONIST_SELF_KNOWLEDGE = 'Soy ARIUX, el agente de WhatsApp y Telegram para promotores de Heavenly Dreams. Ayudo a consultar datos, iniciar conversaciones y ordenar informacion antes de pasarla al flujo operativo.';
+const LEGACY_RECEPTIONIST_KNOWLEDGE_BASE = 'Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Si falta informacion, hago preguntas cortas y concretas.';
+const DEFAULT_AGENT_FUNCTIONS = [
+  {
+    id: 'consulta_folios',
+    emoji: '🔎',
+    title: 'Consulta de folios',
+    description: 'Pedir folio SIAC, buscar estatus disponible y responder con el siguiente paso.',
+    enabled: true,
+  },
+  {
+    id: 'guardar_expedientes',
+    emoji: '📁',
+    title: 'Guardar expedientes',
+    description: 'Ordenar documentos, imagenes, PDF y datos recibidos antes de pasarlos al flujo operativo.',
+    enabled: true,
+  },
+  {
+    id: 'iniciar_captura',
+    emoji: '📝',
+    title: 'Iniciar flujos de captura',
+    description: 'Recolectar nombre, telefono, direccion, colonia, paquete y documentos para nueva venta.',
+    enabled: true,
+  },
+  {
+    id: 'seguimiento_chat',
+    emoji: '💬',
+    title: 'Atencion por chat',
+    description: 'Responder dudas por WhatsApp o Telegram con tono claro, cordial y accionable.',
+    enabled: true,
+  },
+];
+
 const DEFAULT_RECEPTIONIST_PROFILE = {
   id: 'promoter_receptionist',
   name: 'ARIUX',
   role: 'Agente de promotores',
   personality: 'Cordial, claro, rapido y profesional. Habla como apoyo de campo: directo, atento y sin sonar como robot generico.',
-  self_knowledge: 'Soy ARIUX, el agente de WhatsApp y Telegram para promotores de Heavenly Dreams. Ayudo a consultar datos, iniciar conversaciones y ordenar informacion antes de pasarla al flujo operativo.',
-  knowledge_base: 'Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Si falta informacion, hago preguntas cortas y concretas.',
+  self_knowledge: DEFAULT_ARIUX_MESSAGE,
+  knowledge_base: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta y 💬 orientar por WhatsApp o Telegram. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Si falta informacion, hago preguntas cortas y concretas.',
   learned_notes: JSON.stringify([]),
   metadata: JSON.stringify({
     audience: 'promotores',
     channel: 'whatsapp_telegram',
+    defaultMessage: DEFAULT_ARIUX_MESSAGE,
+    functions: DEFAULT_AGENT_FUNCTIONS,
     humor: 'Ligero y respetuoso; solo usa humor cuando ayuda a bajar tension.',
     responseStyle: 'Responde breve, claro, accionable y con siguiente paso concreto.',
   }),
@@ -1792,6 +1828,32 @@ export const AgentProfiles = {
         },
       });
       row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id) as any;
+    }
+    if (row && id === DEFAULT_RECEPTIONIST_PROFILE.id) {
+      const existing = normalizeAgentProfile(row) as any;
+      const metadata = existing?.metadata || {};
+      const needsDefaultMessage = !metadata.defaultMessage;
+      const needsDefaultFunctions = !Array.isArray(metadata.functions);
+      const needsLegacySelfKnowledge = String(existing?.selfKnowledge || '').trim() === LEGACY_RECEPTIONIST_SELF_KNOWLEDGE;
+      const needsLegacyKnowledgeBase = String(existing?.knowledgeBase || '').trim() === LEGACY_RECEPTIONIST_KNOWLEDGE_BASE;
+      if (needsDefaultMessage || needsDefaultFunctions || needsLegacySelfKnowledge || needsLegacyKnowledgeBase) {
+        AgentProfiles.upsert({
+          id,
+          name: existing?.name || DEFAULT_RECEPTIONIST_PROFILE.name,
+          role: existing?.role || DEFAULT_RECEPTIONIST_PROFILE.role,
+          personality: existing?.personality || DEFAULT_RECEPTIONIST_PROFILE.personality,
+          selfKnowledge: needsLegacySelfKnowledge ? DEFAULT_RECEPTIONIST_PROFILE.self_knowledge : existing?.selfKnowledge,
+          knowledgeBase: needsLegacyKnowledgeBase ? DEFAULT_RECEPTIONIST_PROFILE.knowledge_base : existing?.knowledgeBase,
+          learnedNotes: existing?.learnedNotes || [],
+          metadata: {
+            ...parseJson(DEFAULT_RECEPTIONIST_PROFILE.metadata, {}),
+            ...metadata,
+            defaultMessage: metadata.defaultMessage || DEFAULT_ARIUX_MESSAGE,
+            functions: Array.isArray(metadata.functions) ? metadata.functions : DEFAULT_AGENT_FUNCTIONS,
+          },
+        });
+        row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id) as any;
+      }
     }
     if (row) return normalizeAgentProfile(row);
     if (id === DEFAULT_RECEPTIONIST_PROFILE.id) {

@@ -28,6 +28,7 @@ interface AgentDecision {
 type SendChannelMessage = (channel: string, target: string, message: string) => Promise<any>;
 const INTENTS: Intent[] = ['venta', 'consulta_folio', 'soporte', 'morosidad', 'otro'];
 const PROPOSED_ACTIONS: ProposedAction[] = ['create_sale', 'update_lead', 'schedule_followup', 'escalate_human'];
+const DEFAULT_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
 
 function json(value: any) {
   return JSON.stringify(value ?? {});
@@ -158,8 +159,7 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
     extractedFields: fields,
     proposedReply: (() => {
       const profile = AgentProfiles.getById('promoter_receptionist') as any;
-      const learned = (profile?.learnedNotes || []).slice(0, 2).join(' ');
-      return `Hola, soy ${profile?.name || 'ARIUX'}. ${profile?.selfKnowledge || 'Recibo a los promotores de Heavenly Dreams.'} ${profile?.knowledgeBase || 'Puedo ayudarte con contrataciones, folios y soporte.'} ${learned}`.trim();
+      return defaultProfileReply(profile);
     })(),
     proposedActions: [],
     requiresApproval: true,
@@ -209,6 +209,10 @@ function cleanReply(value: any) {
   return stripVisibleThinking(String(value || '')).replace(/\s+\n/g, '\n').trim().slice(0, 900);
 }
 
+function defaultProfileReply(profile: any) {
+  return String(profile?.metadata?.defaultMessage || DEFAULT_ARIUX_MESSAGE).trim();
+}
+
 function buildQwenDecisionPrompt(conversation: any, message: any, rules: AgentDecision) {
   const profile = AgentProfiles.getById('promoter_receptionist') as any;
   const memory = conversation?.memory || {};
@@ -230,6 +234,8 @@ ${JSON.stringify({
     name: profile?.name || 'ARIUX',
     selfKnowledge: profile?.selfKnowledge || '',
     knowledgeBase: profile?.knowledgeBase || '',
+    defaultMessage: profile?.metadata?.defaultMessage || DEFAULT_ARIUX_MESSAGE,
+    functions: Array.isArray(profile?.metadata?.functions) ? profile.metadata.functions : [],
     learnedNotes: (profile?.learnedNotes || []).slice(0, 6),
   })}
 
