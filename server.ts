@@ -3173,6 +3173,10 @@ async function startServer() {
     let lastApproved: any = null;
     for (const item of replies) {
       try {
+        if (!isOutboxChannelReady(item)) {
+          console.log(`[ARIUX] Respuesta en espera: ${item.channel} aun no esta conectado (${item.target})`);
+          continue;
+        }
         lastApproved = await approveAgentOutbox(item.id, { sub: 'ariux-auto', uid: 'ariux-auto', nombre: 'ARIUX', name: 'ARIUX' }, sendChannelMessage);
         console.log(`[ARIUX] Respuesta automatica enviada por ${item.channel} a ${item.target}`);
       } catch (err: any) {
@@ -3181,6 +3185,71 @@ async function startServer() {
       }
     }
     return lastApproved;
+  }
+
+  function outboxWhatsAppAccount(item: any) {
+    const target = String(item?.target || '');
+    const match = target.match(/^(promotores|clientes):/i);
+    return normalizeWhatsAppAccount(match?.[1] || item?.payload?.account || 'promotores');
+  }
+
+  function isOutboxChannelReady(item: any) {
+    if (item?.channel === 'whatsapp') {
+      return (getWhatsAppStatus(outboxWhatsAppAccount(item)) as any)?.status === 'connected';
+    }
+    if (item?.channel === 'telegram') return getTelegramStatus().status === 'polling';
+    return false;
+  }
+
+  function isRetryableOutboxFailure(item: any) {
+    return item?.status === 'failed' && /no est[aá] conectado|conecta primero|not connected|disconnected/i.test(String(item?.error || ''));
+  }
+
+  async function autoSendPendingAriuxReplies() {
+    const candidates = (AgentOutbox.getAll(250) as any[])
+      .filter(item => item?.type === 'reply' && item?.message)
+      .filter(item => item.status === 'pending_approval' || isRetryableOutboxFailure(item))
+      .filter(isOutboxChannelReady);
+
+    const latest = new Map<string, any>();
+    const duplicates: any[] = [];
+    for (const item of candidates) {
+      const sourceMessageId = item.payload?.sourceMessageId || item.decision_id || item.id;
+      const key = `${item.channel}:${item.target}:${sourceMessageId}:${item.message}`;
+      const current = latest.get(key);
+      if (!current) {
+        latest.set(key, item);
+      } else if (String(item.created_at || '') > String(current.created_at || '')) {
+        duplicates.push(current);
+        latest.set(key, item);
+      } else {
+        duplicates.push(item);
+      }
+    }
+
+    for (const duplicate of duplicates) {
+      if (duplicate.status === 'pending_approval') {
+        AgentOutbox.update(duplicate.id, {
+          status: 'rejected',
+          error: 'Duplicado automatico omitido por ARIUX.',
+          rejected_by: 'ariux-auto',
+          rejected_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    for (const item of latest.values()) {
+      try {
+        if (isRetryableOutboxFailure(item)) {
+          AgentOutbox.update(item.id, { status: 'pending_approval', error: null });
+        }
+        await approveAgentOutbox(item.id, { sub: 'ariux-auto', uid: 'ariux-auto', nombre: 'ARIUX', name: 'ARIUX' }, sendChannelMessage);
+        console.log(`[ARIUX] Respuesta automatica pendiente enviada por ${item.channel} a ${item.target}`);
+      } catch (err: any) {
+        AgentOutbox.update(item.id, { status: 'failed', error: err?.message || String(err) });
+        console.warn('[ARIUX] No se pudo enviar respuesta pendiente:', err?.message || err);
+      }
+    }
   }
 
   // Registrar handler durable en tiempo real para WhatsApp/Baileys y Telegram.
@@ -3211,8 +3280,8 @@ async function startServer() {
   setTelegramMessageHandler(() => {});
 
   const AGENT_RUNNERS: Record<string, () => Promise<void>> = {
-    capturista: runCapturistaAgent,
-    consultor: runConsultorAgent,
+    capturista: async () => { await runCapturistaAgent(); await autoSendPendingAriuxReplies(); },
+    consultor: async () => { await runConsultorAgent(); await autoSendPendingAriuxReplies(); },
     archivero: async () => { agentState.archivero.lastRun = new Date().toISOString(); },
     validador: async () => { agentState.validador.lastRun = new Date().toISOString(); },
   };
@@ -3242,6 +3311,11 @@ async function startServer() {
       persistAgentState();
     });
   }
+  setInterval(() => {
+    autoSendPendingAriuxReplies().catch((err: any) => {
+      console.warn('[ARIUX] Reintento de respuestas pendientes fallo:', err?.message || err);
+    });
+  }, 10_000);
 
   app.get("/api/agents/status", chatUserOnly, wrap((_req: any, res: any) => {
     res.json(agentState);
