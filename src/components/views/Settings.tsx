@@ -3,6 +3,7 @@ import { Users, Bot, Smartphone, Download, Upload, Plus, Edit2, Power, AlertTria
 import { cn } from '../../lib/utils';
 import { sendPushNotification, requestNotificationPermission } from '../../lib/notifications';
 import { AgentDesigner } from './AgentDesigner';
+import UserManagementView from './UserManagementView';
 import { toast } from 'sonner';
 import { ChannelKey as MessagingChannelKey, getChannels, refreshChannels, setChannel } from '../../lib/channels';
 
@@ -559,72 +560,7 @@ function IntegracionesTab() {
 }
 
 function UsuariosTab() {
-  const users = [
-    { id: 1, name: 'Edgar Lovera', email: 'edgar@hdreams.com', role: 'Administrador General', status: 'Activo' },
-    { id: 2, name: 'Laura Martínez', email: 'laura@hdreams.com', role: 'Promotor Ventas', status: 'Activo' },
-    { id: 3, name: 'Carlos Gómez', email: 'carlos@hdreams.com', role: 'Agente Reclutamiento', status: 'Inactivo' },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div className="flex gap-4">
-          <div className="bg-slate-950/80 border border-white/5 rounded-xl px-5 py-3 shadow-inner">
-            <div className="text-[10px] uppercase tracking-wider font-medium text-slate-500 mb-1">Usuarios Registrados</div>
-            <div className="text-2xl font-mono font-bold text-slate-100">24</div>
-          </div>
-          <div className="bg-slate-950/80 border border-white/5 rounded-xl px-5 py-3 shadow-inner">
-            <div className="text-[10px] uppercase tracking-wider font-medium text-slate-500 mb-1">Usuarios Activos</div>
-            <div className="text-2xl font-mono font-bold text-emerald-400">18</div>
-          </div>
-        </div>
-        <button className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20">
-          <Plus className="w-4 h-4" /> Nuevo Usuario
-        </button>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="text-slate-500 border-b border-white/5">
-            <tr>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px]">Nombre</th>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px]">Correo</th>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px]">Rol</th>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px]">Estado</th>
-              <th className="pb-4 font-medium uppercase tracking-wider text-[11px] text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {users.map(user => (
-              <tr key={user.id} className="hover:bg-slate-800/30 transition-colors">
-                <td className="py-4 font-medium text-slate-100">{user.name}</td>
-                <td className="py-4 text-slate-400">{user.email}</td>
-                <td className="py-4 text-slate-400">{user.role}</td>
-                <td className="py-4">
-                  <span className={cn(
-                    "px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider",
-                    user.status === 'Activo' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-slate-500/10 text-slate-400 border border-slate-500/20"
-                  )}>
-                    {user.status}
-                  </span>
-                </td>
-                <td className="py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button className="p-2 text-slate-400 hover:text-blue-400 rounded-lg hover:bg-blue-500/10 transition-colors">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors">
-                      <Power className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  return <UserManagementView />;
 }
 
 function BotTab() {
