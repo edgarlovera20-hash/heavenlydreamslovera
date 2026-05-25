@@ -176,6 +176,14 @@ function isPlausibleOcrPersonName(value?: string) {
   return significant > 0;
 }
 
+function hasSuspiciousOcrNameSet(nombres?: string, apellidoPaterno?: string, apellidoMaterno?: string) {
+  const parts = [nombres, apellidoPaterno, apellidoMaterno]
+    .map(normalizeOcrPersonName)
+    .filter(Boolean);
+  if (parts.length < 3) return false;
+  return new Set(parts).size === 1 || (parts[0].length > 4 && (parts[0] === parts[1] || parts[0] === parts[2]));
+}
+
 function extractCURP(text: string): string {
   const m = text.match(CURP_RE);
   if (m) return m[1];
@@ -374,9 +382,10 @@ export class CRM_AI_Agent {
         const nombres = f.nombres || f.nombre || f.name || '';
         const apPat = f.apellidoPaterno || f.apellido_paterno || f.primerApellido || '';
         const apMat = f.apellidoMaterno || f.apellido_materno || f.segundoApellido || '';
-        if (isPlausibleOcrPersonName(nombres)) result.nombres = normalizeOcrPersonName(nombres);
-        if (isPlausibleOcrPersonName(apPat)) result.apellidoPaterno = normalizeOcrPersonName(apPat);
-        if (isPlausibleOcrPersonName(apMat)) result.apellidoMaterno = normalizeOcrPersonName(apMat);
+        const suspiciousNames = hasSuspiciousOcrNameSet(nombres, apPat, apMat);
+        if (!suspiciousNames && isPlausibleOcrPersonName(nombres)) result.nombres = normalizeOcrPersonName(nombres);
+        if (!suspiciousNames && isPlausibleOcrPersonName(apPat)) result.apellidoPaterno = normalizeOcrPersonName(apPat);
+        if (!suspiciousNames && isPlausibleOcrPersonName(apMat)) result.apellidoMaterno = normalizeOcrPersonName(apMat);
         const curpField = extractCURP(String(f.curp || '').toUpperCase());
         if (curpField) result.curp = curpField;
         if (f.folioIne || f.claveElector) result.folioIne = f.folioIne || f.claveElector;
@@ -416,9 +425,10 @@ export class CRM_AI_Agent {
       const dom = mergeOcr(dom1, dom2);
 
       const result: Partial<OcrResult> = {};
-      if (isPlausibleOcrPersonName(nombres)) result.nombres = normalizeOcrPersonName(nombres);
-      if (isPlausibleOcrPersonName(apellidoPaterno)) result.apellidoPaterno = normalizeOcrPersonName(apellidoPaterno);
-      if (isPlausibleOcrPersonName(apellidoMaterno)) result.apellidoMaterno = normalizeOcrPersonName(apellidoMaterno);
+      const suspiciousNames = hasSuspiciousOcrNameSet(nombres, apellidoPaterno, apellidoMaterno);
+      if (!suspiciousNames && isPlausibleOcrPersonName(nombres)) result.nombres = normalizeOcrPersonName(nombres);
+      if (!suspiciousNames && isPlausibleOcrPersonName(apellidoPaterno)) result.apellidoPaterno = normalizeOcrPersonName(apellidoPaterno);
+      if (!suspiciousNames && isPlausibleOcrPersonName(apellidoMaterno)) result.apellidoMaterno = normalizeOcrPersonName(apellidoMaterno);
       if (curp)              result.curp            = curp;
       if (folioIne)          result.folioIne        = folioIne;
       if (codigoPostal)      result.codigoPostal    = codigoPostal;

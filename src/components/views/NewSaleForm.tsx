@@ -295,6 +295,14 @@ type OcrImagePreparation = {
   dataUrl: string;
   rotated: boolean;
   sharpness: number;
+  rotationReason?: 'photo' | 'document';
+};
+
+type DocumentBounds = {
+  width: number;
+  height: number;
+  areaRatio: number;
+  fillRatio: number;
 };
 
 function estimateImageSharpness(canvas: HTMLCanvasElement): number {
@@ -336,6 +344,99 @@ function estimateImageSharpness(canvas: HTMLCanvasElement): number {
   return sumSq / count - mean * mean;
 }
 
+function detectDocumentBounds(image: HTMLImageElement): DocumentBounds | null {
+  const sampleMaxSide = 420;
+  const ratio = Math.min(1, sampleMaxSide / Math.max(image.width, image.height));
+  const width = Math.max(32, Math.round(image.width * ratio));
+  const height = Math.max(32, Math.round(image.height * ratio));
+  const sample = document.createElement('canvas');
+  sample.width = width;
+  sample.height = height;
+  const ctx = sample.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(image, 0, 0, width, height);
+  const { data } = ctx.getImageData(0, 0, width, height);
+  const paper = new Uint8Array(width * height);
+
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const brightness = r * 0.299 + g * 0.587 + b * 0.114;
+    const saturation = max - min;
+    if (brightness > 188 || (brightness > 145 && saturation < 72) || (brightness > 162 && saturation < 105 && max > 175)) {
+      paper[p] = 1;
+    }
+  }
+
+  const visited = new Uint8Array(width * height);
+  let best: (DocumentBounds & { count: number }) | null = null;
+  const stack: number[] = [];
+  const minArea = Math.max(80, Math.floor(width * height * 0.006));
+
+  for (let start = 0; start < paper.length; start++) {
+    if (!paper[start] || visited[start]) continue;
+    visited[start] = 1;
+    stack.length = 0;
+    stack.push(start);
+    let count = 0;
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+
+    while (stack.length) {
+      const idx = stack.pop()!;
+      const x = idx % width;
+      const y = Math.floor(idx / width);
+      count++;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+
+      const neighbors = [idx - 1, idx + 1, idx - width, idx + width];
+      for (const next of neighbors) {
+        if (next < 0 || next >= paper.length || visited[next] || !paper[next]) continue;
+        const nx = next % width;
+        if ((next === idx - 1 && nx > x) || (next === idx + 1 && nx < x)) continue;
+        visited[next] = 1;
+        stack.push(next);
+      }
+    }
+
+    if (count < minArea) continue;
+    const boxWidth = maxX - minX + 1;
+    const boxHeight = maxY - minY + 1;
+    const boxArea = boxWidth * boxHeight;
+    const fillRatio = count / Math.max(1, boxArea);
+    const areaRatio = boxArea / (width * height);
+    if (fillRatio < 0.12 || areaRatio < 0.012 || areaRatio > 0.72) continue;
+    if (!best || count > best.count) {
+      best = { width: boxWidth, height: boxHeight, areaRatio, fillRatio, count };
+    }
+  }
+
+  if (!best) return null;
+  const { count: _count, ...bounds } = best;
+  return bounds;
+}
+
+function shouldRotateForOcr(image: HTMLImageElement, autoRotateLandscape?: boolean) {
+  if (!autoRotateLandscape) return { rotate: false, reason: undefined as OcrImagePreparation['rotationReason'] };
+  if (image.height > image.width * 1.12) return { rotate: true, reason: 'photo' as const };
+  const bounds = detectDocumentBounds(image);
+  const documentLooksSideways = Boolean(
+    bounds &&
+    bounds.height > bounds.width * 1.18 &&
+    bounds.areaRatio > 0.018 &&
+    image.width >= image.height * 1.02
+  );
+  return { rotate: documentLooksSideways, reason: documentLooksSideways ? 'document' as const : undefined };
+}
+
 async function optimizeImageForOcr(
   file: File,
   options: { autoRotateLandscape?: boolean; rejectBlurry?: boolean } = {}
@@ -351,7 +452,8 @@ async function optimizeImageForOcr(
     img.src = raw;
   });
   const maxSide = 1600;
-  const rotateToLandscape = Boolean(options.autoRotateLandscape && image.height > image.width * 1.12);
+  const rotation = shouldRotateForOcr(image, options.autoRotateLandscape);
+  const rotateToLandscape = rotation.rotate;
   const sourceWidth = rotateToLandscape ? image.height : image.width;
   const sourceHeight = rotateToLandscape ? image.width : image.height;
   const ratio = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
@@ -382,6 +484,7 @@ async function optimizeImageForOcr(
   return {
     dataUrl: canvas.toDataURL('image/jpeg', 0.82),
     rotated: rotateToLandscape,
+    rotationReason: rotation.reason,
     sharpness,
   };
 }
@@ -409,6 +512,67 @@ async function rotateImageDataUrl(dataUrl: string): Promise<string> {
 
 function ocrJobKey(images: string[]) {
   return images.map(img => `${img.length}:${img.slice(0, 48)}:${img.slice(-48)}`).join('|');
+}
+
+function normalizeOcrField(value?: any) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-ZÑ0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasStrongIdentityResult(result?: Partial<CustomerCaptureData> | null) {
+  if (!result) return false;
+  if (result.curp && CURP_RE.test(String(result.curp).toUpperCase())) return true;
+  const names = [result.nombres, result.apellidoPaterno, result.apellidoMaterno]
+    .map(normalizeOcrField)
+    .filter(Boolean);
+  if (names.length < 3) return false;
+  return new Set(names).size >= 2;
+}
+
+async function rotateImagesForOcr(images: string[], turns: number) {
+  let output = [...images];
+  for (let i = 0; i < turns; i++) {
+    output = await Promise.all(output.map(image => rotateImageDataUrl(image)));
+  }
+  return output;
+}
+
+async function analyzeDocumentWithOrientationFallback(
+  imgs: string[],
+  onProgress?: (p: number) => void,
+): Promise<{ result: Partial<CustomerCaptureData> | null; adjusted: boolean }> {
+  const canTryRotations = imgs.some(image => !looksLikePdfDataUrl(image));
+  const attempts = canTryRotations
+    ? [
+        { turns: 0, progress: 18 },
+        { turns: 1, progress: 48 },
+        { turns: 3, progress: 72 },
+        { turns: 2, progress: 88 },
+      ]
+    : [{ turns: 0, progress: 18 }];
+  let best: Partial<CustomerCaptureData> | null = null;
+  let bestScore = 0;
+
+  for (const attempt of attempts) {
+    if (onProgress) onProgress(attempt.progress);
+    const images = attempt.turns ? await rotateImagesForOcr(imgs, attempt.turns) : imgs;
+    const result = await aiAgent.analyzeDocument(images, detectDocumentMime(images), onProgress);
+    const score = result ? Object.values(result).filter(value => String(value || '').trim()).length : 0;
+    if (score > bestScore) {
+      best = result as Partial<CustomerCaptureData> | null;
+      bestScore = score;
+    }
+    if (hasStrongIdentityResult(result as Partial<CustomerCaptureData> | null)) {
+      return { result: result as Partial<CustomerCaptureData>, adjusted: attempt.turns > 0 };
+    }
+  }
+
+  return { result: best, adjusted: false };
 }
 
 const NEW_SALE_DRAFT_PREFIX = 'hd_new_sale_draft_v2';
@@ -915,7 +1079,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     setIsOcrLoading(true);
     setOcrProgress(10);
     try {
-      const result = await aiAgent.analyzeDocument(imgs, detectDocumentMime(imgs), setOcrProgress);
+      const { result, adjusted } = await analyzeDocumentWithOrientationFallback(imgs, setOcrProgress);
       const merged: Record<string, string> = {};
       if (result) {
         for (const [k, v] of Object.entries(result)) {
@@ -925,7 +1089,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       const fields = Object.keys(merged);
       if (fields.length > 0) {
         updateForm(merged);
-        toast.success(`OCR completado: ${fields.length} campo${fields.length !== 1 ? 's' : ''} detectado${fields.length !== 1 ? 's' : ''}. Verifica los datos.`);
+        toast.success(`OCR completado: ${fields.length} campo${fields.length !== 1 ? 's' : ''} detectado${fields.length !== 1 ? 's' : ''}.${adjusted ? ' La imagen se acomodó automáticamente.' : ''} Verifica los datos.`);
       } else {
         toast.info('No se pudieron extraer datos. Completa los campos manualmente.', { duration: 5000 });
       }
@@ -953,7 +1117,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     // Disparamos sin await — corre en background
     (async () => {
       try {
-        const result = await aiAgent.analyzeDocument(imgs, detectDocumentMime(imgs));
+        const { result, adjusted } = await analyzeDocumentWithOrientationFallback(imgs);
         // Smart merge: usamos un setForm con función para acceder al estado MÁS RECIENTE
         // y solo rellenar campos vacíos (no sobrescribir lo que el usuario escribió)
         let filledCount = 0;
@@ -976,8 +1140,8 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
           setOcrBgFieldsCount(filledCount);
           if (filledCount > 0) {
             setOcrBgStatus('success');
-            setOcrBgMessage(`IA completó ${filledCount} campo${filledCount !== 1 ? 's' : ''}`);
-            toast.success(`✨ OCR autocompletó ${filledCount} campo${filledCount !== 1 ? 's' : ''}`, { duration: 4000 });
+            setOcrBgMessage(`IA completó ${filledCount} campo${filledCount !== 1 ? 's' : ''}${adjusted ? ' y acomodó la imagen' : ''}`);
+            toast.success(`✨ OCR autocompletó ${filledCount} campo${filledCount !== 1 ? 's' : ''}${adjusted ? ' y acomodó la foto' : ''}`, { duration: 4000 });
             // Auto-ocultar después de 8s
             setTimeout(() => setOcrBgStatus(s => s === 'success' ? 'idle' : s), 8000);
           } else {
@@ -1156,7 +1320,9 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       }
       const fileKind = file.type === 'application/pdf' ? 'PDF' : 'archivo';
       if (prepared.rotated) {
-        toast.success('La foto venía de lado y se acomodó automáticamente.', { duration: 3500 });
+        toast.success(prepared.rotationReason === 'document'
+          ? 'La INE venía de lado dentro de la foto y se acomodó automáticamente.'
+          : 'La foto venía de lado y se acomodó automáticamente.', { duration: 3500 });
       }
       toast.info(`${fileKind} cargado. Presiona "Iniciar auto escáner" para rellenar los datos.`, { duration: 4500 });
     } catch (err: any) {

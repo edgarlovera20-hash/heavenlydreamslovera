@@ -572,20 +572,112 @@ async function writeModuleCache(section: MobileSection, data: any) {
   await idbSet(`${MODULE_CACHE_PREFIX}${section}`, { data, savedAt: Date.now() });
 }
 
+function detectMobileDocumentBounds(image: HTMLImageElement) {
+  const sampleMaxSide = 420;
+  const ratio = Math.min(1, sampleMaxSide / Math.max(image.width, image.height));
+  const width = Math.max(32, Math.round(image.width * ratio));
+  const height = Math.max(32, Math.round(image.height * ratio));
+  const sample = document.createElement('canvas');
+  sample.width = width;
+  sample.height = height;
+  const ctx = sample.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(image, 0, 0, width, height);
+  const { data } = ctx.getImageData(0, 0, width, height);
+  const paper = new Uint8Array(width * height);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const brightness = r * 0.299 + g * 0.587 + b * 0.114;
+    const saturation = max - min;
+    if (brightness > 188 || (brightness > 145 && saturation < 72) || (brightness > 162 && saturation < 105 && max > 175)) {
+      paper[p] = 1;
+    }
+  }
+
+  const visited = new Uint8Array(width * height);
+  const stack: number[] = [];
+  let best: { width: number; height: number; areaRatio: number; fillRatio: number; count: number } | null = null;
+  const minArea = Math.max(80, Math.floor(width * height * 0.006));
+  for (let start = 0; start < paper.length; start++) {
+    if (!paper[start] || visited[start]) continue;
+    visited[start] = 1;
+    stack.length = 0;
+    stack.push(start);
+    let count = 0;
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+    while (stack.length) {
+      const idx = stack.pop()!;
+      const x = idx % width;
+      const y = Math.floor(idx / width);
+      count++;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      const neighbors = [idx - 1, idx + 1, idx - width, idx + width];
+      for (const next of neighbors) {
+        if (next < 0 || next >= paper.length || visited[next] || !paper[next]) continue;
+        const nx = next % width;
+        if ((next === idx - 1 && nx > x) || (next === idx + 1 && nx < x)) continue;
+        visited[next] = 1;
+        stack.push(next);
+      }
+    }
+    if (count < minArea) continue;
+    const boxWidth = maxX - minX + 1;
+    const boxHeight = maxY - minY + 1;
+    const boxArea = boxWidth * boxHeight;
+    const fillRatio = count / Math.max(1, boxArea);
+    const areaRatio = boxArea / (width * height);
+    if (fillRatio < 0.12 || areaRatio < 0.012 || areaRatio > 0.72) continue;
+    if (!best || count > best.count) best = { width: boxWidth, height: boxHeight, areaRatio, fillRatio, count };
+  }
+  return best;
+}
+
 async function compressImageFile(file: File) {
-  if (!file.type.startsWith('image/') || file.size < 900_000) return file;
+  if (!file.type.startsWith('image/')) return file;
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error('No se pudo optimizar la imagen.'));
     img.src = URL.createObjectURL(file);
   });
+  const bounds = detectMobileDocumentBounds(image);
+  const rotateToLandscape = image.height > image.width * 1.12 || Boolean(
+    bounds &&
+    bounds.height > bounds.width * 1.18 &&
+    bounds.areaRatio > 0.018 &&
+    image.width >= image.height * 1.02
+  );
   const maxSide = 1600;
-  const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
+  const sourceWidth = rotateToLandscape ? image.height : image.width;
+  const sourceHeight = rotateToLandscape ? image.width : image.height;
+  const ratio = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(image.width * ratio));
-  canvas.height = Math.max(1, Math.round(image.height * ratio));
-  canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+  canvas.width = Math.max(1, Math.round(sourceWidth * ratio));
+  canvas.height = Math.max(1, Math.round(sourceHeight * ratio));
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    if (rotateToLandscape) {
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(image, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width);
+    } else {
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    }
+  }
   URL.revokeObjectURL(image.src);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.78));
   if (!blob) return file;

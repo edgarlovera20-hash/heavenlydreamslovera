@@ -260,6 +260,14 @@ function isPlausibleName(value: any) {
   return significant > 0;
 }
 
+function hasSuspiciousNameSet(fields: Record<string, string>) {
+  const parts = [fields.nombres, fields.apellidoPaterno, fields.apellidoMaterno]
+    .map(normalizePersonName)
+    .filter(Boolean);
+  if (parts.length < 3) return false;
+  return new Set(parts).size === 1 || (parts[0].length > 4 && (parts[0] === parts[1] || parts[0] === parts[2]));
+}
+
 function sanitizeFields(docType: OcrDocType, fields: Record<string, string>) {
   const clean: Record<string, string> = {};
   for (const [key, rawValue] of Object.entries(fields || {})) {
@@ -309,6 +317,9 @@ function validateFields(docType: OcrDocType, fields: Record<string, string>): { 
     }
     const hasFullName = Boolean(fields.nombres && fields.apellidoPaterno && fields.apellidoMaterno);
     const hasTrustedId = Boolean(fields.curp || fields.folioIne);
+    if (hasFullName && hasSuspiciousNameSet(fields)) {
+      return { ok: false, reason: 'Nombre OCR repetido o sospechoso' };
+    }
     if (!hasFullName && !hasTrustedId) {
       return { ok: false, reason: 'Sin identidad confiable detectada' };
     }
