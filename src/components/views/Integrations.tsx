@@ -5,9 +5,7 @@ import {
   ExternalLink, CheckCircle2, AlertCircle, 
   Settings, Trash2, Power, RefreshCw
 } from 'lucide-react';
-import { CyberIcon } from '../ui/CyberIcon';
-import { MatrixText } from '../ui/matrix-text';
-import NetworkPattern from '../ui/NetworkPattern';
+import { PremiumBadge, PremiumButton, PremiumCard, SectionHeader } from '../ui/premium';
 
 interface Integration {
   id: string;
@@ -90,31 +88,28 @@ export default function Integrations() {
   });
 
   return (
-    <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
-      <NetworkPattern opacity={0.1} density={40} color="#FFFFFF" className="z-0" />
+    <div className="relative w-full space-y-8 overflow-hidden rounded-[22px] p-1 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="pointer-events-none absolute inset-0 -z-10 rounded-[22px] bg-[radial-gradient(circle_at_18%_8%,rgba(14,165,233,0.16),transparent_28%),radial-gradient(circle_at_82%_0%,rgba(34,211,238,0.08),transparent_26%),linear-gradient(180deg,rgba(8,15,28,0.96),rgba(3,8,16,0.99))]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 rounded-[22px] opacity-[0.16] [background-image:linear-gradient(rgba(125,211,252,0.18)_1px,transparent_1px),linear-gradient(90deg,rgba(125,211,252,0.18)_1px,transparent_1px)] [background-size:42px_42px]" />
+      <div className="pointer-events-none absolute inset-x-8 top-0 -z-10 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent" />
       
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 relative z-10">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <Zap className="text-yellow-400 w-6 h-6 animate-pulse shadow-[0_0_10px_rgba(250,204,21,0.5)]" />
-            <h2 className="text-3xl font-bold tracking-tight text-white uppercase">
-              Centros de <span className="text-cyber-electric">Integración</span>
-            </h2>
-          </div>
-          <p className="text-slate-400 text-sm font-medium uppercase tracking-[0.2em]">
-            Conecta protocolos externos para potenciar el ecosistema Heavenly Dreams
-          </p>
-        </div>
+      <div className="relative z-10 rounded-[20px] border border-cyan-300/10 bg-slate-950/35 p-5 backdrop-blur-sm">
+        <SectionHeader
+          eyebrow="Integraciones"
+          title={<>Centro de <span className="text-cyan-300">protocolos</span></>}
+          description="Conecta servicios externos, agentes y almacenamiento sin saturar la operación del CRM."
+          action={<PremiumBadge tone="cyan" dot>{filteredIntegrations.length} visibles</PremiumBadge>}
+        />
         
-        <div className="flex items-center gap-2 bg-[#0A0D14]/80 p-1.5 rounded-xl border border-slate-800/50">
+        <div className="mt-5 flex w-full flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5 sm:w-fit">
           {['All', 'Connected', 'Communication', 'AI'].map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f as any)}
-              className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              className={`rounded-xl px-4 py-2 text-xs font-semibold transition-all ${
                 filter === f 
-                ? 'bg-cyber-electric text-cyber-black shadow-[0_0_15px_rgba(3,154,220,0.4)]' 
-                : 'text-slate-500 hover:text-white hover:bg-white/5'
+                ? 'bg-cyan-300 text-slate-950' 
+                : 'text-slate-400 hover:bg-white/5 hover:text-white'
               }`}
             >
               {f === 'All' ? 'Todos' : f === 'Connected' ? 'Conectados' : f}
@@ -123,7 +118,7 @@ export default function Integrations() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="relative z-10 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
         {filteredIntegrations.map((integration) => (
           <IntegrationCard 
             key={integration.id} 
@@ -133,30 +128,30 @@ export default function Integrations() {
         ))}
         
         {/* Add New Integration Card */}
-        <button className="flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-slate-800 bg-[#0A0D14]/40 hover:bg-[#0A0D14]/60 hover:border-cyber-electric/50 transition-all group gap-4 min-h-[220px]">
-          <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 group-hover:text-cyber-electric group-hover:border-cyber-electric/50 group-hover:shadow-[0_0_20px_rgba(3,154,220,0.2)] transition-all">
+        <button className="group flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-cyan-300/18 bg-white/[0.025] p-8 transition-all hover:border-cyan-300/45 hover:bg-cyan-300/[0.04]">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-500 transition-all group-hover:border-cyan-300/45 group-hover:text-cyan-300">
             <Plus className="w-8 h-8" />
           </div>
           <div className="text-center">
-            <h3 className="text-white font-bold text-sm uppercase tracking-widest mb-1">Nueva Integración</h3>
-            <p className="text-slate-500 text-[10px] uppercase tracking-wider font-medium">Protocolos Custom / Webhooks</p>
+            <h3 className="mb-1 text-sm font-semibold text-white">Nueva integración</h3>
+            <p className="text-xs font-medium tracking-[0.06em] text-slate-500">Protocolos custom / webhooks</p>
           </div>
         </button>
       </div>
 
       {/* System Logs / Integration Activity */}
-      <div className="bg-[#0A0D14]/60 backdrop-blur-md border border-slate-800/80 rounded-2xl p-6 relative overflow-hidden">
-        <NetworkPattern opacity={0.06} color="#FFFFFF" density={80} className="z-0" />
+      <PremiumCard className="relative z-10 overflow-hidden p-6">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(14,165,233,0.12),transparent_34%)]" />
         <div className="absolute top-0 left-0 w-1 h-full bg-cyber-electric/30"></div>
         <div className="relative z-10 flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-             <div className="w-8 h-8 rounded-lg bg-cyber-electric/10 border border-cyber-electric/30 flex items-center justify-center text-cyber-electric shadow-[0_0_10px_rgba(3,154,220,0.2)]">
+             <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-cyber-electric/25 bg-cyber-electric/10 text-cyber-electric">
                 <RefreshCw className="w-4 h-4 animate-spin-slow" />
              </div>
-             <h3 className="text-sm font-bold text-white uppercase tracking-widest">Registros de Sincronización</h3>
+             <h3 className="text-base font-semibold text-white">Registros de sincronización</h3>
           </div>
           <button className="text-slate-500 hover:text-white transition-colors">
-            <span className="text-[10px] font-bold uppercase tracking-widest">Limpiar Logs</span>
+            <span className="text-xs font-semibold">Limpiar logs</span>
           </button>
         </div>
         
@@ -166,7 +161,7 @@ export default function Integrations() {
           <LogItem title="Slack Webhook" status="SUCCESS" time="Hace 45 min" desc="Notificación de nueva venta enviada al canal #ventas-mexico." />
           <LogItem title="Discord" status="ERROR" time="Hace 1 hora" desc="Fallo en la autenticación del Bearer Token. Reintentando..." isError />
         </div>
-      </div>
+      </PremiumCard>
     </div>
   );
 }
@@ -179,25 +174,25 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
   const isConfiguring = integration.status === 'configuring';
 
   return (
-    <div className={`relative group transition-all duration-300 p-6 rounded-2xl border ${
+    <div className={`relative group overflow-hidden transition-all duration-300 p-6 rounded-2xl border backdrop-blur-sm ${
       isConnected 
-      ? 'bg-[#0a0d14] border-cyber-electric/20 shadow-[0_4px_24px_rgba(0,0,0,0.2)] hover:border-cyber-electric/40' 
-      : 'bg-[#0A0D14]/60 border-slate-800 hover:border-slate-700'
+      ? 'bg-slate-950/78 border-cyber-electric/28 hover:border-cyber-electric/48' 
+      : 'bg-slate-950/48 border-white/10 hover:border-white/18'
     }`}>
       {/* Glow Effect */}
       {isConnected && (
-        <div className="absolute -top-1 -right-1 w-20 h-20 bg-cyber-electric/5 blur-2xl rounded-full group-hover:bg-cyber-electric/10 transition-colors"></div>
+        <div className="absolute -top-10 -right-10 w-28 h-28 bg-cyber-electric/8 blur-3xl rounded-full group-hover:bg-cyber-electric/12 transition-colors"></div>
       )}
 
       <div className="flex justify-between items-start mb-6">
-        <div className={`p-3 rounded-xl bg-[#0A0D14] border flex items-center justify-center shadow-lg ${
+        <div className={`p-3 rounded-xl bg-white/[0.035] border flex items-center justify-center ${
           isConnected ? 'border-cyber-electric/50 text-cyber-electric' : 'border-slate-800 text-slate-500'
         }`}>
           <integration.icon className="w-6 h-6" />
         </div>
         
         <div className="flex flex-col items-end">
-          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md mb-2 ${
+          <span className={`text-[10px] font-semibold px-2 py-1 rounded-md mb-2 ${
             isConnected ? 'bg-cyber-electric/10 text-cyber-electric border border-cyber-electric/20' : 
             isConfiguring ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' :
             'bg-slate-800/50 text-slate-500 border border-slate-700'
@@ -209,19 +204,19 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
       </div>
 
       <div className="mb-6">
-        <h3 className="text-white font-bold text-lg mb-1 group-hover:text-cyber-electric transition-colors">{integration.name}</h3>
+        <h3 className="text-white font-semibold text-lg mb-1 group-hover:text-cyber-electric transition-colors">{integration.name}</h3>
         <p className="text-slate-400 text-xs leading-relaxed line-clamp-2">{integration.description}</p>
       </div>
 
       <div className="flex items-center gap-2 mt-auto">
         {isConnected ? (
           <>
-            <button 
+            <PremiumButton
               onClick={onToggle}
-              className="px-4 py-2 rounded-lg bg-cyber-electric text-cyber-black font-black text-[10px] uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-[0_0_15px_rgba(3,154,220,0.3)]"
+              className="px-4 py-2 text-xs"
             >
               Gestionar
-            </button>
+            </PremiumButton>
             <button className="p-2 rounded-lg bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700 transition-all">
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -230,17 +225,17 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
             </button>
           </>
         ) : isConfiguring ? (
-          <button className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-yellow-500/30 bg-yellow-500/5 text-yellow-500 font-black text-[10px] uppercase tracking-widest hover:bg-yellow-500/10 transition-all">
+          <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-yellow-500/30 bg-yellow-500/5 text-yellow-400 font-semibold text-xs hover:bg-yellow-500/10 transition-all">
             <Settings className="w-3.5 h-3.5 animate-spin-slow" />
-            Completar Setup
+            Completar setup
           </button>
         ) : (
           <button 
             onClick={onToggle}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-slate-800 bg-[#0A0D14] text-slate-300 font-black text-[10px] uppercase tracking-widest hover:border-cyber-electric/50 hover:text-white transition-all group/btn"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 bg-white/[0.025] text-slate-300 font-semibold text-xs hover:border-cyber-electric/50 hover:text-white transition-all group/btn"
           >
             <Power className="w-3.5 h-3.5 group-hover/btn:text-cyber-electric transition-colors" />
-            Conectar Protocolo
+            Conectar protocolo
           </button>
         )}
       </div>
@@ -250,8 +245,8 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
 
 function LogItem({ title, status, time, desc, isError = false }: any) {
   return (
-    <div className={`p-3 rounded-lg border flex flex-col md:flex-row md:items-center justify-between gap-2 group transition-all ${
-      isError ? 'bg-rose-500/5 border-rose-500/20' : 'bg-white/5 border-slate-800/50 hover:border-slate-700'
+    <div className={`p-3 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-2 group transition-all ${
+      isError ? 'bg-rose-500/5 border-rose-500/20' : 'bg-white/[0.035] border-white/8 hover:border-white/16'
     }`}>
       <div className="flex items-center gap-3">
         <div className={`w-2 h-2 rounded-full ${
@@ -260,7 +255,7 @@ function LogItem({ title, status, time, desc, isError = false }: any) {
           'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
         }`}></div>
         <div className="flex flex-col md:flex-row md:items-center md:gap-4">
-          <span className="text-[10px] font-black uppercase text-white tracking-widest min-w-[100px]">{title}</span>
+          <span className="text-[11px] font-semibold text-white tracking-[0.08em] min-w-[100px]">{title}</span>
           <span className="text-[10px] font-medium text-slate-500 line-clamp-1">{desc}</span>
         </div>
       </div>
