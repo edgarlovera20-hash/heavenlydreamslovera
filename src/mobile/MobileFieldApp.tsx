@@ -107,10 +107,13 @@ type PayrollSale = {
   userId: string;
 };
 
+type IdentityDocumentType = 'ine' | 'curp';
+
 type CaptureDraft = {
   nombres: string;
   apellidoPaterno: string;
   apellidoMaterno: string;
+  identityDocumentType: IdentityDocumentType;
   curp: string;
   folioIne: string;
   fechaNacimiento: string;
@@ -191,6 +194,7 @@ const EMPTY_DRAFT: CaptureDraft = {
   nombres: '',
   apellidoPaterno: '',
   apellidoMaterno: '',
+  identityDocumentType: 'ine',
   curp: '',
   folioIne: '',
   fechaNacimiento: '',
@@ -234,7 +238,9 @@ const EMPTY_DRAFT: CaptureDraft = {
   documents: [],
 };
 
-const CAPTURE_STEPS = ['INE/OCR', 'Cliente', 'Domicilio', 'Servicio', 'Paquetes', 'Streaming', 'Video firma', 'Confirmar'];
+const CAPTURE_STEPS = ['Identidad/OCR', 'Cliente', 'Domicilio', 'Servicio', 'Paquetes', 'Streaming', 'Video firma', 'Confirmar'];
+const INE_IDENTITY_DOCUMENTS = ['INE_FRONTAL', 'INE_REVERSO'];
+const CURP_IDENTITY_DOCUMENT = 'CURP';
 
 const STREAMING_ADDONS = [
   { id: 'netflix_basico', provider: 'Netflix', name: 'Basico con anuncios', price: 99 },
@@ -1178,6 +1184,40 @@ export default function MobileFieldApp() {
     setDraft((current) => ({ ...current, ...patch }));
   }, []);
 
+  const selectIdentityDocumentType = useCallback((identityDocumentType: IdentityDocumentType) => {
+    const removeTypes = identityDocumentType === 'ine' ? [CURP_IDENTITY_DOCUMENT] : INE_IDENTITY_DOCUMENTS;
+    setDraft((current) => ({
+      ...current,
+      identityDocumentType,
+      documents: current.documents.filter((doc) => !removeTypes.includes(doc.type)),
+    }));
+    setSelectedFiles((current) => {
+      const next = { ...current };
+      removeTypes.forEach((type) => {
+        delete next[type];
+      });
+      return next;
+    });
+  }, []);
+
+  const hasDraftDocument = useCallback((type: string) => (
+    Boolean(selectedFiles[type]) || draft.documents.some((doc) => doc.type === type)
+  ), [draft.documents, selectedFiles]);
+
+  const identityCaptureError = useCallback(() => {
+    const identityDocumentType = draft.identityDocumentType || 'ine';
+    if (identityDocumentType === 'ine') {
+      if (!hasDraftDocument('INE_FRONTAL') || !hasDraftDocument('INE_REVERSO')) {
+        return 'Sube INE frente y reverso, o cambia la opcion a CURP.';
+      }
+      return '';
+    }
+    if (!hasDraftDocument(CURP_IDENTITY_DOCUMENT) && draft.curp.trim().length !== 18) {
+      return 'Sube el documento CURP o captura una CURP de 18 caracteres para consultarla.';
+    }
+    return '';
+  }, [draft.curp, draft.identityDocumentType, hasDraftDocument]);
+
   const capturePayload = useCallback(() => {
     const phone = normalizePhone(draft.telefono || draft.telefonoTitular);
     const titularPhone = normalizePhone(draft.telefonoTitular || draft.telefono);
@@ -1188,6 +1228,7 @@ export default function MobileFieldApp() {
       apellidoMaterno: draft.apellidoMaterno.trim(),
       apellidos: [draft.apellidoPaterno, draft.apellidoMaterno].filter(Boolean).join(' ').trim(),
       curp: draft.curp.trim().toUpperCase(),
+      identityDocumentType: draft.identityDocumentType || 'ine',
       fechaNacimiento: draft.fechaNacimiento,
       sexo: draft.sexo,
       estadoNacimiento: draft.estadoNacimiento,
@@ -1690,6 +1731,12 @@ export default function MobileFieldApp() {
     const phone = normalizePhone(draft.telefono || draft.telefonoTitular);
     const titularPhone = normalizePhone(draft.telefonoTitular || draft.telefono);
     const referenciaPhone = normalizePhone(draft.telefonoReferencia);
+    const identityError = identityCaptureError();
+    if (identityError) {
+      setDraftStep(0);
+      notify('error', identityError);
+      return;
+    }
     if (!draft.nombres.trim() || phone.length !== 10 || titularPhone.length !== 10 || !draft.calle.trim() || !draft.paqueteNombre) {
       notify('error', 'Nombre, telefono, telefono titular, domicilio y paquete son requeridos.');
       return;
@@ -1806,8 +1853,8 @@ export default function MobileFieldApp() {
   };
 
   const runIneOcr = async () => {
-    const targets = ['INE_FRONTAL', 'INE_REVERSO'].filter((type) => selectedFiles[type]);
-    if (targets.length === 0) {
+    const targets = INE_IDENTITY_DOCUMENTS.filter((type) => selectedFiles[type]);
+    if (targets.length !== INE_IDENTITY_DOCUMENTS.length) {
       notify('error', 'Sube frente y reverso de INE antes de iniciar OCR.');
       return;
     }
@@ -2173,6 +2220,19 @@ export default function MobileFieldApp() {
       );
     };
 
+    const identityDocumentType = draft.identityDocumentType || 'ine';
+    const ineFrontReady = hasDraftDocument('INE_FRONTAL');
+    const ineBackReady = hasDraftDocument('INE_REVERSO');
+    const curpDocumentReady = hasDraftDocument(CURP_IDENTITY_DOCUMENT);
+    const curpTextReady = draft.curp.trim().length === 18;
+    const identityStatus = identityDocumentType === 'ine'
+      ? `${ineFrontReady ? 'Frente listo' : 'Falta frente'} / ${ineBackReady ? 'Reverso listo' : 'falta reverso'}`
+      : curpDocumentReady
+        ? 'Documento CURP listo'
+        : curpTextReady
+          ? 'CURP capturada para consulta'
+          : 'Sube CURP o captura la clave';
+
     return (
       <Panel>
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -2200,17 +2260,58 @@ export default function MobileFieldApp() {
         <div className="space-y-4">
           {draftStep === 0 && (
             <div className="space-y-3">
-              <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3">
-                <p className="text-sm font-black text-cyan-100">Primero sube INE frente y reverso.</p>
-                <p className="mt-1 text-xs leading-5 text-slate-400">El OCR autocompleta nombre, CURP, folio INE y domicilio detectado. Si no hay CURP, puedes consultarla o generarla en el siguiente paso.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { type: 'ine' as const, title: 'INE', subtitle: 'Frente y reverso' },
+                  { type: 'curp' as const, title: 'CURP', subtitle: 'Subir o consultar' },
+                ]).map((option) => {
+                  const isActive = identityDocumentType === option.type;
+                  return (
+                    <button
+                      key={option.type}
+                      type="button"
+                      onClick={() => selectIdentityDocumentType(option.type)}
+                      className={cx(
+                        'rounded-2xl border px-3 py-3 text-left transition',
+                        isActive ? 'border-cyan-300 bg-cyan-300/15 text-cyan-50' : 'border-white/10 bg-white/[0.03] text-slate-300',
+                      )}
+                    >
+                      <span className="block text-sm font-black">{option.title}</span>
+                      <span className={cx('mt-1 block text-[11px] font-semibold', isActive ? 'text-cyan-100' : 'text-slate-500')}>{option.subtitle}</span>
+                    </button>
+                  );
+                })}
               </div>
-              {docRow('INE_FRONTAL', 'INE frontal', 'ine', 'environment')}
-              {docRow('INE_REVERSO', 'INE reverso', 'ine', 'environment')}
-              {docRow('CURP', 'CURP opcional', 'ine')}
-              <button onClick={runIneOcr} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.12em] text-slate-950">
-                <MobileIcon name="search" className="h-4 w-4" />
-                Iniciar OCR INE
-              </button>
+              <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3">
+                <p className="text-sm font-black text-cyan-100">
+                  {identityDocumentType === 'ine' ? 'Identidad por INE.' : 'Identidad por CURP.'}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  {identityDocumentType === 'ine'
+                    ? 'Sube frente y reverso. El OCR autocompleta nombre, CURP, folio INE y domicilio detectado.'
+                    : 'Sube el documento CURP o captura la clave para consultarla antes de confirmar la venta.'}
+                </p>
+                <p className="mt-2 text-[11px] font-black uppercase tracking-[0.12em] text-cyan-100">{identityStatus}</p>
+              </div>
+              {identityDocumentType === 'ine' ? (
+                <>
+                  {docRow('INE_FRONTAL', 'INE frontal', 'ine', 'environment')}
+                  {docRow('INE_REVERSO', 'INE reverso', 'ine', 'environment')}
+                  <button onClick={runIneOcr} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.12em] text-slate-950">
+                    <MobileIcon name="search" className="h-4 w-4" />
+                    Iniciar OCR INE
+                  </button>
+                </>
+              ) : (
+                <>
+                  {docRow(CURP_IDENTITY_DOCUMENT, 'Documento CURP', 'ine', undefined, 'image/*,.pdf')}
+                  <Field label="CURP" value={draft.curp} onChange={(value) => updateDraft({ curp: value.toUpperCase().slice(0, 18) })} placeholder="CURP del cliente" />
+                  <button onClick={validateCurp} disabled={curpLoading || draft.curp.trim().length !== 18} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.12em] text-slate-950 disabled:opacity-45">
+                    <MobileIcon name={curpLoading ? 'loader' : 'id'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
+                    Consultar CURP
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -2410,6 +2511,7 @@ export default function MobileFieldApp() {
           {draftStep === 7 && (
             <div className="space-y-3">
               <SummaryRow label="Cliente" value={fullName(draft) || 'Sin nombre'} />
+              <SummaryRow label="Identidad" value={identityDocumentType === 'ine' ? `INE - ${identityStatus}` : `CURP - ${identityStatus}`} />
               <SummaryRow label="CURP" value={draft.curp || 'Pendiente'} />
               <SummaryRow label="Telefono" value={draft.telefono || 'Pendiente'} />
               <SummaryRow label="Telefono titular" value={draft.telefonoTitular || 'Pendiente'} />
@@ -2418,7 +2520,7 @@ export default function MobileFieldApp() {
               <SummaryRow label="Paquete" value={`${draft.paqueteNombre || 'Pendiente'} - ${formatMoney(draft.rentaMensual || 0)}`} />
               <SummaryRow label="Streaming" value={`${draft.streamingElegido} + ${draft.plataformasAdicionales.length} adicional(es)`} />
               <SummaryRow label="Video firma" value={draft.videoFirmaLocal ? 'Capturada localmente' : 'Pendiente'} />
-              <SummaryRow label="Documentos" value={`${draft.documents.length}/${DOCUMENT_TYPES.length} seleccionados`} />
+              <SummaryRow label="Documentos" value={`${draft.documents.length} seleccionados`} />
               {draftSavedAt && <p className="text-xs text-slate-500">Borrador recuperable: {shortDate(draftSavedAt)}</p>}
               <button onClick={submitCapture} disabled={submittingCapture} className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.14em] text-slate-950 disabled:cursor-wait disabled:opacity-60">
                 <MobileIcon name={submittingCapture ? 'loader' : 'send'} className={cx('h-4 w-4', submittingCapture && 'animate-spin')} />
