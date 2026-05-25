@@ -36,7 +36,10 @@ export function setIncomingMessageHandler(handler: IncomingMessageHandler | null
 
 function fallbackDisplayName(message: NormalizedChannelMessage) {
   if (message.fromName) return message.fromName;
-  return message.externalChatId.replace('@s.whatsapp.net', '').replace('@g.us', '');
+  return message.externalChatId
+    .replace(/^(promotores|clientes):/i, '')
+    .replace('@s.whatsapp.net', '')
+    .replace('@g.us', '');
 }
 
 function initialMemory(message: NormalizedChannelMessage) {
@@ -47,6 +50,7 @@ function initialMemory(message: NormalizedChannelMessage) {
     lastAgent: null,
     nextAction: 'clasificar',
     source: message.channel,
+    account: message.metadata?.account || null,
   };
 }
 

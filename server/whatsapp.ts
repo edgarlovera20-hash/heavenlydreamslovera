@@ -10,6 +10,7 @@ import path from 'node:path';
 import { ingestChannelMessage, recordOutgoingChannelMessage, upsertChannelAccount } from './messaging';
 
 type Status = 'disconnected' | 'qr' | 'authenticating' | 'connected';
+export type WhatsAppAccount = 'promotores' | 'clientes';
 
 export interface WaMessage {
   id: string;
@@ -20,63 +21,154 @@ export interface WaMessage {
   timestamp: number;
   isGroup: boolean;
   channel: 'whatsapp';
+  account: WhatsAppAccount;
   direction?: 'incoming' | 'outgoing';
 }
 
 type WaMessageHandler = (msg: WaMessage) => Promise<void> | void;
 
-let socket: any = null;
-let initPromise: Promise<void> | null = null;
-let currentQR: string | null = null;
-let status: Status = 'disconnected';
-let lastError: string | null = null;
-let messageHandler: WaMessageHandler | null = null;
-let reconnectAttempts = 0;
-let restartTimer: ReturnType<typeof setTimeout> | null = null;
-let suppressReconnect = false;
+type WaRuntime = {
+  account: WhatsAppAccount;
+  label: string;
+  externalId: string;
+  authPath: string;
+  socket: any;
+  initPromise: Promise<void> | null;
+  currentQR: string | null;
+  status: Status;
+  lastError: string | null;
+  messageHandler: WaMessageHandler | null;
+  reconnectAttempts: number;
+  restartTimer: ReturnType<typeof setTimeout> | null;
+  suppressReconnect: boolean;
+  messageBuffer: WaMessage[];
+};
 
-const messageBuffer: WaMessage[] = [];
 const MAX_MESSAGES = 200;
 const AUTH_BASE_PATH = path.resolve(process.cwd(), '.baileys_auth');
-const AUTH_DATA_PATH = path.resolve(AUTH_BASE_PATH, process.env.WHATSAPP_CLIENT_ID || 'heavenly-dreams-main');
+const ACCOUNT_LABELS: Record<WhatsAppAccount, string> = {
+  promotores: 'WhatsApp Promotores',
+  clientes: 'WhatsApp Clientes',
+};
+const ACCOUNT_ENV_IDS: Record<WhatsAppAccount, string> = {
+  promotores: process.env.WHATSAPP_PROMOTORES_CLIENT_ID || process.env.WHATSAPP_CLIENT_ID || 'heavenly-dreams-promotores',
+  clientes: process.env.WHATSAPP_CLIENTES_CLIENT_ID || 'heavenly-dreams-clientes',
+};
 
-export function getRecentMessages(limit = 50): WaMessage[] {
-  return messageBuffer.slice(-limit);
-}
-
-export function getWhatsAppStatus() {
+function makeRuntime(account: WhatsAppAccount): WaRuntime {
+  const externalId = ACCOUNT_ENV_IDS[account];
   return {
-    status,
-    error: lastError,
-    engine: 'baileys',
-    sessionPath: AUTH_DATA_PATH,
-    reconnecting: Boolean(restartTimer),
+    account,
+    label: ACCOUNT_LABELS[account],
+    externalId,
+    authPath: path.resolve(AUTH_BASE_PATH, externalId),
+    socket: null,
+    initPromise: null,
+    currentQR: null,
+    status: 'disconnected',
+    lastError: null,
+    messageHandler: null,
+    reconnectAttempts: 0,
+    restartTimer: null,
+    suppressReconnect: false,
+    messageBuffer: [],
   };
 }
 
-function persistStatus(nextStatus = status) {
+const runtimes: Record<WhatsAppAccount, WaRuntime> = {
+  promotores: makeRuntime('promotores'),
+  clientes: makeRuntime('clientes'),
+};
+
+export function normalizeWhatsAppAccount(value?: any): WhatsAppAccount {
+  const raw = String(value || '').trim().toLowerCase();
+  if (['cliente', 'clientes', 'client', 'clients', 'customer', 'customers'].includes(raw)) return 'clientes';
+  return 'promotores';
+}
+
+function runtimeFor(account?: any) {
+  return runtimes[normalizeWhatsAppAccount(account)];
+}
+
+function storageChatId(account: WhatsAppAccount, jid: string) {
+  return `${account}:${jid}`;
+}
+
+function parseTarget(value: string, fallbackAccount: WhatsAppAccount) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^(promotores|clientes):(.+)$/i);
+  return {
+    account: match ? normalizeWhatsAppAccount(match[1]) : fallbackAccount,
+    target: match ? match[2] : raw,
+  };
+}
+
+export function getRecentMessages(limit = 50, account?: WhatsAppAccount): WaMessage[] {
+  if (account) return runtimeFor(account).messageBuffer.slice(-limit);
+  return Object.values(runtimes)
+    .flatMap(runtime => runtime.messageBuffer)
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(-limit);
+}
+
+export function getWhatsAppStatus(account?: WhatsAppAccount) {
+  if (account) return publicStatus(runtimeFor(account));
+  return {
+    promotores: publicStatus(runtimes.promotores),
+    clientes: publicStatus(runtimes.clientes),
+  };
+}
+
+function publicStatus(runtime: WaRuntime) {
+  return {
+    account: runtime.account,
+    label: runtime.label,
+    status: runtime.status,
+    error: runtime.lastError,
+    engine: 'baileys',
+    sessionPath: runtime.authPath,
+    externalId: runtime.externalId,
+    reconnecting: Boolean(runtime.restartTimer),
+  };
+}
+
+function persistStatus(runtime: WaRuntime, nextStatus = runtime.status) {
   upsertChannelAccount({
     channel: 'whatsapp',
-    label: 'WhatsApp Baileys',
-    externalId: process.env.WHATSAPP_CLIENT_ID || 'heavenly-dreams-main',
+    label: runtime.label,
+    externalId: runtime.externalId,
     status: nextStatus,
-    metadata: { engine: 'baileys', sessionPath: AUTH_DATA_PATH, error: lastError },
+    metadata: {
+      account: runtime.account,
+      engine: 'baileys',
+      sessionPath: runtime.authPath,
+      error: runtime.lastError,
+    },
   });
 }
 
-export function getWhatsAppQR() {
-  return currentQR;
+export function getWhatsAppQR(account?: WhatsAppAccount) {
+  return runtimeFor(account).currentQR;
 }
 
-export function setWhatsAppMessageHandler(handler: WaMessageHandler | null) {
-  messageHandler = handler;
+export function setWhatsAppMessageHandler(handler: WaMessageHandler | null, account?: WhatsAppAccount) {
+  if (account) {
+    runtimeFor(account).messageHandler = handler;
+    return;
+  }
+  runtimes.promotores.messageHandler = handler;
+}
+
+export function setWhatsAppClientesMessageHandler(handler: WaMessageHandler | null) {
+  runtimes.clientes.messageHandler = handler;
 }
 
 function normalizePhoneOrJid(value: string) {
   const raw = String(value || '').trim();
   if (!raw) throw new Error('Número de WhatsApp vacío.');
-  if (raw.includes('@')) return raw;
-  const cleaned = raw.replace(/\D/g, '');
+  const parsed = parseTarget(raw, 'promotores');
+  if (parsed.target.includes('@')) return parsed.target;
+  const cleaned = parsed.target.replace(/\D/g, '');
   if (cleaned.length < 10) throw new Error('Captura un número de WhatsApp con lada.');
   return `${cleaned}@s.whatsapp.net`;
 }
@@ -102,21 +194,21 @@ function normalizeTimestamp(value: any) {
   return Date.now();
 }
 
-function pushMessage(entry: WaMessage) {
+function pushMessage(runtime: WaRuntime, entry: WaMessage) {
   if (!entry.body) return;
-  if (messageBuffer.some(m => m.id === entry.id)) return;
-  messageBuffer.push(entry);
-  if (messageBuffer.length > MAX_MESSAGES) messageBuffer.shift();
+  if (runtime.messageBuffer.some(m => m.id === entry.id)) return;
+  runtime.messageBuffer.push(entry);
+  if (runtime.messageBuffer.length > MAX_MESSAGES) runtime.messageBuffer.shift();
 }
 
-async function closeCurrentSocket() {
-  if (restartTimer) {
-    clearTimeout(restartTimer);
-    restartTimer = null;
+async function closeCurrentSocket(runtime: WaRuntime) {
+  if (runtime.restartTimer) {
+    clearTimeout(runtime.restartTimer);
+    runtime.restartTimer = null;
   }
-  if (!socket) return;
-  const previous = socket;
-  socket = null;
+  if (!runtime.socket) return;
+  const previous = runtime.socket;
+  runtime.socket = null;
   try {
     previous.ev?.removeAllListeners?.();
     previous.end?.(undefined);
@@ -125,13 +217,13 @@ async function closeCurrentSocket() {
   }
 }
 
-async function clearAuthState(reason: string) {
+async function clearAuthState(runtime: WaRuntime, reason: string) {
   const base = `${AUTH_BASE_PATH}${path.sep}`;
-  if (!AUTH_DATA_PATH.startsWith(base)) {
+  if (!runtime.authPath.startsWith(base)) {
     throw new Error('Ruta de sesión WhatsApp inválida.');
   }
-  await fs.rm(AUTH_DATA_PATH, { recursive: true, force: true });
-  console.log(`[WA:Baileys] Sesión local limpiada: ${reason}`);
+  await fs.rm(runtime.authPath, { recursive: true, force: true });
+  console.log(`[WA:${runtime.account}] Sesión local limpiada: ${reason}`);
 }
 
 function shouldClearSession(code: number | undefined) {
@@ -147,100 +239,100 @@ function shouldReconnect(code: number | undefined) {
   ].includes(code as DisconnectReason);
 }
 
-function scheduleRestart(reason: string) {
-  if (suppressReconnect || restartTimer) return;
-  status = 'authenticating';
-  currentQR = null;
-  lastError = null;
-  restartTimer = setTimeout(async () => {
-    restartTimer = null;
+function scheduleRestart(runtime: WaRuntime, reason: string) {
+  if (runtime.suppressReconnect || runtime.restartTimer) return;
+  runtime.status = 'authenticating';
+  runtime.currentQR = null;
+  runtime.lastError = null;
+  runtime.restartTimer = setTimeout(async () => {
+    runtime.restartTimer = null;
     try {
-      console.log(`[WA:Baileys] Reiniciando socket: ${reason}`);
-      await initWhatsApp();
+      console.log(`[WA:${runtime.account}] Reiniciando socket: ${reason}`);
+      await initWhatsApp(runtime.account);
     } catch (err) {
-      status = 'disconnected';
-      lastError = err instanceof Error ? err.message : 'No se pudo reiniciar WhatsApp.';
+      runtime.status = 'disconnected';
+      runtime.lastError = err instanceof Error ? err.message : 'No se pudo reiniciar WhatsApp.';
     }
   }, 900);
 }
 
-async function startBaileysSocket() {
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DATA_PATH);
+async function startBaileysSocket(runtime: WaRuntime) {
+  const { state, saveCreds } = await useMultiFileAuthState(runtime.authPath);
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined as any }));
   const nextSocket = makeWASocket({
     auth: state,
-    browser: ['Heavenly Dreams CRM', 'Chrome', '1.0.0'],
+    browser: [runtime.label, 'Chrome', '1.0.0'],
     logger: Pino({ level: 'silent' }),
     printQRInTerminal: false,
     version,
   });
 
-  socket = nextSocket;
-  status = 'authenticating';
-  lastError = null;
-  currentQR = null;
-  persistStatus();
+  runtime.socket = nextSocket;
+  runtime.status = 'authenticating';
+  runtime.lastError = null;
+  runtime.currentQR = null;
+  persistStatus(runtime);
 
   nextSocket.ev.on('creds.update', saveCreds);
 
   nextSocket.ev.on('connection.update', async (update: any) => {
     if (update.qr) {
-      currentQR = await qrcode.toDataURL(update.qr);
-      status = 'qr';
-      lastError = null;
-      persistStatus();
-      console.log('[WA:Baileys] QR generado, escanea con tu teléfono');
+      runtime.currentQR = await qrcode.toDataURL(update.qr);
+      runtime.status = 'qr';
+      runtime.lastError = null;
+      persistStatus(runtime);
+      console.log(`[WA:${runtime.account}] QR generado, escanea con tu teléfono`);
     }
 
     if (update.connection === 'connecting') {
-      status = currentQR ? 'qr' : 'authenticating';
-      persistStatus();
+      runtime.status = runtime.currentQR ? 'qr' : 'authenticating';
+      persistStatus(runtime);
     }
 
     if (update.connection === 'open') {
-      status = 'connected';
-      currentQR = null;
-      lastError = null;
-      reconnectAttempts = 0;
-      persistStatus();
-      console.log('[WA:Baileys] Conectado y listo para asistentes');
+      runtime.status = 'connected';
+      runtime.currentQR = null;
+      runtime.lastError = null;
+      runtime.reconnectAttempts = 0;
+      persistStatus(runtime);
+      console.log(`[WA:${runtime.account}] Conectado y listo`);
     }
 
     if (update.connection === 'close') {
       const code = update.lastDisconnect?.error?.output?.statusCode;
       const resetSession = shouldClearSession(code);
       const reconnectable = shouldReconnect(code) || resetSession;
-      currentQR = null;
-      socket = null;
-      console.log('[WA:Baileys] Desconectado:', code || update.lastDisconnect?.error?.message || 'sin código');
+      runtime.currentQR = null;
+      runtime.socket = null;
+      console.log(`[WA:${runtime.account}] Desconectado:`, code || update.lastDisconnect?.error?.message || 'sin código');
 
-      if (suppressReconnect) {
-        status = 'disconnected';
-        lastError = null;
-        reconnectAttempts = 0;
-        persistStatus();
+      if (runtime.suppressReconnect) {
+        runtime.status = 'disconnected';
+        runtime.lastError = null;
+        runtime.reconnectAttempts = 0;
+        persistStatus(runtime);
         return;
       }
 
       if (resetSession) {
         try {
-          await clearAuthState(`codigo ${code}`);
+          await clearAuthState(runtime, `codigo ${code}`);
         } catch (err) {
-          console.warn('[WA:Baileys] No se pudo limpiar la sesión local:', err);
+          console.warn(`[WA:${runtime.account}] No se pudo limpiar la sesión local:`, err);
         }
       }
 
-      if (reconnectable && reconnectAttempts < 5) {
-        reconnectAttempts += 1;
-        scheduleRestart(resetSession ? 'credenciales anteriores inválidas' : `codigo ${code}`);
+      if (reconnectable && runtime.reconnectAttempts < 5) {
+        runtime.reconnectAttempts += 1;
+        scheduleRestart(runtime, resetSession ? 'credenciales anteriores inválidas' : `codigo ${code}`);
         return;
       }
 
-      status = 'disconnected';
-      lastError = resetSession
+      runtime.status = 'disconnected';
+      runtime.lastError = resetSession
         ? 'Sesión cerrada. Presiona Regenerar QR para vincular WhatsApp de nuevo.'
         : 'WhatsApp se desconectó. Presiona vincular para reintentar.';
-      persistStatus();
+      persistStatus(runtime);
     }
   });
 
@@ -251,6 +343,7 @@ async function startBaileysSocket() {
       const body = extractBody(msg);
       if (!body) continue;
       const remoteJid = msg.key.remoteJid || '';
+      const storedChatId = storageChatId(runtime.account, remoteJid);
       const entry: WaMessage = {
         id: msg.key.id || `${remoteJid}-${Date.now()}`,
         from: remoteJid,
@@ -259,104 +352,119 @@ async function startBaileysSocket() {
         timestamp: normalizeTimestamp(msg.messageTimestamp),
         isGroup: remoteJid.endsWith('@g.us'),
         channel: 'whatsapp',
+        account: runtime.account,
         direction: 'incoming',
       };
-      pushMessage(entry);
+      pushMessage(runtime, entry);
       await ingestChannelMessage({
-        id: `whatsapp:${entry.id}`,
+        id: `whatsapp:${runtime.account}:${entry.id}`,
         channel: 'whatsapp',
-        externalChatId: entry.from,
+        externalChatId: storedChatId,
         direction: 'incoming',
         body: entry.body,
         fromName: entry.fromName,
         timestamp: entry.timestamp,
         isGroup: entry.isGroup,
-        metadata: { rawId: entry.id },
+        metadata: { rawId: entry.id, account: runtime.account, jid: entry.from },
       });
-      if (messageHandler) {
+      if (runtime.messageHandler) {
         try {
-          await messageHandler(entry);
+          await runtime.messageHandler(entry);
         } catch (err) {
-          console.warn('[WA:Baileys] Error en asistente WhatsApp:', err);
+          console.warn(`[WA:${runtime.account}] Error en asistente WhatsApp:`, err);
         }
       }
     }
   });
 }
 
-export async function initWhatsApp(): Promise<void> {
-  suppressReconnect = false;
-  if (socket && (status === 'connected' || status === 'qr' || status === 'authenticating')) {
-    return initPromise || Promise.resolve();
+export async function initWhatsApp(account?: WhatsAppAccount): Promise<void> {
+  const runtime = runtimeFor(account);
+  runtime.suppressReconnect = false;
+  if (runtime.socket && (runtime.status === 'connected' || runtime.status === 'qr' || runtime.status === 'authenticating')) {
+    return runtime.initPromise || Promise.resolve();
   }
-  if (initPromise) return initPromise;
+  if (runtime.initPromise) return runtime.initPromise;
 
-  initPromise = (async () => {
-    await closeCurrentSocket();
-    status = 'authenticating';
-    currentQR = null;
-    lastError = null;
-    await startBaileysSocket();
+  runtime.initPromise = (async () => {
+    await closeCurrentSocket(runtime);
+    runtime.status = 'authenticating';
+    runtime.currentQR = null;
+    runtime.lastError = null;
+    await startBaileysSocket(runtime);
   })().catch((err: Error) => {
-    status = 'disconnected';
-    currentQR = null;
-    lastError = err?.message || 'No se pudo iniciar WhatsApp con Baileys.';
-    persistStatus();
-    console.error('[WA:Baileys] Error inicializando:', err);
+    runtime.status = 'disconnected';
+    runtime.currentQR = null;
+    runtime.lastError = err?.message || 'No se pudo iniciar WhatsApp con Baileys.';
+    persistStatus(runtime);
+    console.error(`[WA:${runtime.account}] Error inicializando:`, err);
   }).finally(() => {
-    initPromise = null;
+    runtime.initPromise = null;
   });
 
-  return initPromise;
+  return runtime.initPromise;
 }
 
-export async function sendWhatsAppMessage(phone: string, message: string) {
-  if (!socket || status !== 'connected') {
-    throw new Error('WhatsApp no está conectado. Conecta primero escaneando el QR.');
+export async function sendWhatsAppMessage(phone: string, message: string, account: WhatsAppAccount = 'promotores') {
+  const parsed = parseTarget(phone, account);
+  const runtime = runtimeFor(parsed.account);
+  if (!runtime.socket || runtime.status !== 'connected') {
+    throw new Error(`${runtime.label} no está conectado. Conecta primero escaneando el QR.`);
   }
-  const jid = normalizePhoneOrJid(phone);
+  const jid = normalizePhoneOrJid(parsed.target);
   const body = String(message || '').trim();
-  const result = await socket.sendMessage(jid, { text: body });
-  pushMessage({
-    id: result?.key?.id || `sent-${jid}-${Date.now()}`,
+  const result = await runtime.socket.sendMessage(jid, { text: body });
+  const messageId = result?.key?.id || `sent-${jid}-${Date.now()}`;
+  pushMessage(runtime, {
+    id: messageId,
     from: 'crm',
-    fromName: 'Heavenly Dreams CRM',
+    fromName: runtime.label,
     to: jid,
     body,
     timestamp: Date.now(),
     isGroup: jid.endsWith('@g.us'),
     channel: 'whatsapp',
+    account: runtime.account,
     direction: 'outgoing',
   });
   await recordOutgoingChannelMessage({
-    id: `whatsapp:${result?.key?.id || `sent-${jid}-${Date.now()}`}`,
+    id: `whatsapp:${runtime.account}:${messageId}`,
     channel: 'whatsapp',
-    externalChatId: jid,
+    externalChatId: storageChatId(runtime.account, jid),
     direction: 'outgoing',
     body,
-    fromName: 'Heavenly Dreams CRM',
+    fromName: runtime.label,
     toId: jid,
     timestamp: Date.now(),
     isGroup: jid.endsWith('@g.us'),
-    metadata: { engine: 'baileys' },
+    metadata: { engine: 'baileys', account: runtime.account, jid },
   });
-  return { ok: true, id: result?.key?.id };
+  return { ok: true, id: result?.key?.id, account: runtime.account };
 }
 
-export async function logoutWhatsApp() {
-  suppressReconnect = true;
-  if (socket) {
+export function sendWhatsAppClientMessage(phone: string, message: string) {
+  return sendWhatsAppMessage(phone, message, 'clientes');
+}
+
+export function sendWhatsAppPromoterMessage(phone: string, message: string) {
+  return sendWhatsAppMessage(phone, message, 'promotores');
+}
+
+export async function logoutWhatsApp(account?: WhatsAppAccount) {
+  const runtime = runtimeFor(account);
+  runtime.suppressReconnect = true;
+  if (runtime.socket) {
     try {
-      await socket.logout();
+      await runtime.socket.logout();
     } catch {
       // The session may already be invalid. We still reset local runtime state.
     }
   }
-  await closeCurrentSocket();
-  await clearAuthState('logout manual').catch(() => {});
-  currentQR = null;
-  status = 'disconnected';
-  lastError = null;
-  reconnectAttempts = 0;
-  persistStatus();
+  await closeCurrentSocket(runtime);
+  await clearAuthState(runtime, 'logout manual').catch(() => {});
+  runtime.currentQR = null;
+  runtime.status = 'disconnected';
+  runtime.lastError = null;
+  runtime.reconnectAttempts = 0;
+  persistStatus(runtime);
 }

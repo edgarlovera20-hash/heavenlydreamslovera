@@ -745,8 +745,11 @@ interface ChannelState {
   connectedAt?: string; // ISO date
 }
 
-const DEFAULT_CHANNELS: { whatsapp: ChannelState; telegram: ChannelState } = {
-  whatsapp: { connected: false },
+type ChannelKey = 'whatsappPromotores' | 'whatsappClientes' | 'telegram';
+
+const DEFAULT_CHANNELS: Record<ChannelKey, ChannelState> = {
+  whatsappPromotores: { connected: false },
+  whatsappClientes: { connected: false },
   telegram: { connected: false },
 };
 
@@ -763,15 +766,15 @@ function CanalesTab() {
     return DEFAULT_CHANNELS;
   });
 
-  const [connectModal, setConnectModal] = useState<'whatsapp' | 'telegram' | null>(null);
+  const [connectModal, setConnectModal] = useState<ChannelKey | null>(null);
 
   const persist = (next: typeof channels) => {
     setChannels(next);
     localStorage.setItem('adhdreams_channels_v2', JSON.stringify(next));
   };
 
-  const handleWhatsAppConnected = (phone: string) => {
-    persist({ ...channels, whatsapp: { connected: true, identifier: phone, connectedAt: new Date().toISOString() } });
+  const handleWhatsAppConnected = (which: 'whatsappPromotores' | 'whatsappClientes', phone: string) => {
+    persist({ ...channels, [which]: { connected: true, identifier: phone, connectedAt: new Date().toISOString() } });
     setConnectModal(null);
   };
 
@@ -780,12 +783,15 @@ function CanalesTab() {
     setConnectModal(null);
   };
 
-  const disconnect = (which: 'whatsapp' | 'telegram') => {
-    if (!confirm(`¿Desconectar la cuenta de ${which === 'whatsapp' ? 'WhatsApp' : 'Telegram'}? El agente IA dejará de atender los mensajes entrantes.`)) return;
-    const endpoint = which === 'telegram' ? '/api/telegram/stop' : '/api/whatsapp/logout';
-    fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).catch(() => {});
+  const disconnect = (which: ChannelKey) => {
+    const isTelegram = which === 'telegram';
+    const label = which === 'whatsappPromotores' ? 'WhatsApp Promotores' : which === 'whatsappClientes' ? 'WhatsApp Clientes' : 'Telegram';
+    if (!confirm(`¿Desconectar la cuenta de ${label}? El agente IA dejará de atender los mensajes entrantes de esa cuenta.`)) return;
+    const endpoint = isTelegram ? '/api/telegram/stop' : '/api/whatsapp/logout';
+    const body = isTelegram ? {} : { account: which === 'whatsappClientes' ? 'clientes' : 'promotores' };
+    fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
     persist({ ...channels, [which]: { connected: false } });
-    toast.success(`${which === 'whatsapp' ? 'WhatsApp' : 'Telegram'} desconectado.`);
+    toast.success(`${label} desconectado.`);
   };
 
   // Gate de acceso
@@ -814,21 +820,36 @@ function CanalesTab() {
         <div className="flex-1">
           <h3 className="text-lg font-bold text-slate-100 mb-0.5">Cuentas de mensajería</h3>
           <p className="text-xs text-slate-400 leading-relaxed">
-            El <b className="text-slate-200">Agente IA</b> recibe automáticamente los mensajes que entren por estas cuentas — captura datos, los enruta y notifica a supervisores y vendedores. Solo hay <b className="text-slate-200">una cuenta de cada plataforma</b>.
+            El <b className="text-slate-200">Agente IA</b> recibe automáticamente los mensajes que entren por estas cuentas. Usa un número para <b className="text-slate-200">promotores</b> y otro número independiente para <b className="text-slate-200">clientes</b>.
           </p>
         </div>
       </div>
 
-      {/* Las 2 tarjetas grandes — WhatsApp + Telegram */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {/* Cuentas separadas — WhatsApp promotores, WhatsApp clientes y Telegram */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         <ChannelCard
           platform="whatsapp"
-          state={channels.whatsapp}
-          onConnect={() => setConnectModal('whatsapp')}
-          onDisconnect={() => disconnect('whatsapp')}
+          title="WhatsApp Promotores"
+          subtitle="ARIUX promotores"
+          description="Número exclusivo para promotores: consultas de folio, captura de datos y flujo operativo."
+          state={channels.whatsappPromotores}
+          onConnect={() => setConnectModal('whatsappPromotores')}
+          onDisconnect={() => disconnect('whatsappPromotores')}
+        />
+        <ChannelCard
+          platform="whatsapp"
+          title="WhatsApp Clientes"
+          subtitle="ARIUX Clientes"
+          description="Número exclusivo para clientes: bienvenida, dudas, domiciliación, soporte y morosidad."
+          state={channels.whatsappClientes}
+          onConnect={() => setConnectModal('whatsappClientes')}
+          onDisconnect={() => disconnect('whatsappClientes')}
         />
         <ChannelCard
           platform="telegram"
+          title="Telegram"
+          subtitle="Bot operativo"
+          description="Conecta un bot creado en @BotFather usando su token de acceso."
           state={channels.telegram}
           onConnect={() => setConnectModal('telegram')}
           onDisconnect={() => disconnect('telegram')}
@@ -844,21 +865,23 @@ function CanalesTab() {
           <div className="flex-1">
             <h4 className="text-sm font-bold text-slate-100 mb-1">Agente IA — Atención automática</h4>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Cuando una cuenta está conectada, el agente lee los mensajes entrantes, los clasifica (venta, soporte, morosidad, reclutamiento) y distribuye la información al equipo adecuado.
-              Los <b className="text-slate-200">supervisores y vendedores no necesitan iniciar sesión</b> en WhatsApp ni Telegram — todo llega a su panel.
+              WhatsApp Promotores alimenta el flujo de promotores. WhatsApp Clientes alimenta el CRM de clientes y campañas. Telegram permanece como canal operativo adicional.
             </p>
             <div className="flex flex-wrap gap-2 mt-3">
-              <StatusPill label="WhatsApp" connected={channels.whatsapp.connected} accent="emerald" />
+              <StatusPill label="WA Promotores" connected={channels.whatsappPromotores.connected} accent="emerald" />
+              <StatusPill label="WA Clientes" connected={channels.whatsappClientes.connected} accent="emerald" />
               <StatusPill label="Telegram" connected={channels.telegram.connected} accent="sky" />
             </div>
           </div>
         </div>
       </div>
 
-      {connectModal === 'whatsapp' && (
+      {(connectModal === 'whatsappPromotores' || connectModal === 'whatsappClientes') && (
         <WhatsAppQrModal
+          account={connectModal === 'whatsappClientes' ? 'clientes' : 'promotores'}
+          title={connectModal === 'whatsappClientes' ? 'Vincular WhatsApp Clientes' : 'Vincular WhatsApp Promotores'}
           onClose={() => setConnectModal(null)}
-          onConnected={handleWhatsAppConnected}
+          onConnected={(phone) => handleWhatsAppConnected(connectModal as 'whatsappPromotores' | 'whatsappClientes', phone)}
         />
       )}
       {connectModal === 'telegram' && (
@@ -876,22 +899,24 @@ function CanalesTab() {
 // ───────────────────────────────────────
 function ChannelCard({
   platform,
+  title,
+  subtitle,
+  description,
   state,
   onConnect,
   onDisconnect,
 }: {
   platform: 'whatsapp' | 'telegram';
+  title: string;
+  subtitle: string;
+  description: string;
   state: ChannelState;
   onConnect: () => void;
   onDisconnect: () => void;
 }) {
   const isWA = platform === 'whatsapp';
   const accent = isWA ? 'emerald' : 'sky';
-  const label = isWA ? 'WhatsApp' : 'Telegram';
   const Icon = isWA ? MessageCircle : Send;
-  const description = isWA
-    ? 'Vincula tu número escaneando un código QR (igual que WhatsApp Web).'
-    : 'Conecta un bot creado en @BotFather usando su token de acceso.';
 
   const connectedAtFmt = state.connectedAt
     ? new Date(state.connectedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -929,8 +954,8 @@ function ChannelCard({
             <Icon className={cn('w-6 h-6', isWA ? 'text-emerald-400' : 'text-sky-400')} />
           </div>
           <div>
-            <h4 className="text-base font-bold text-slate-100">{label}</h4>
-            <p className="text-[11px] text-slate-500">Atendido por Agente IA</p>
+            <h4 className="text-base font-bold text-slate-100">{title}</h4>
+            <p className="text-[11px] text-slate-500">{subtitle}</p>
           </div>
         </div>
         <span
@@ -1064,7 +1089,17 @@ function ImportExportTab() {
 // ──────────────────────────────────────────────────────────
 // WhatsApp QR Modal — usa Baileys en el servidor para vincular por QR.
 // ──────────────────────────────────────────────────────────
-function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConnected: (phone: string) => void; }) {
+function WhatsAppQrModal({
+  account,
+  title,
+  onClose,
+  onConnected,
+}: {
+  account: 'promotores' | 'clientes';
+  title: string;
+  onClose: () => void;
+  onConnected: (phone: string) => void;
+}) {
   const [qr, setQr] = useState<string | null>(null);
   const [status, setStatus] = useState<'disconnected' | 'qr' | 'authenticating' | 'connected'>('disconnected');
   const [error, setError] = useState<string | null>(null);
@@ -1076,7 +1111,11 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
     setQr(null);
     setStatus('authenticating');
     try {
-      const r = await fetch('/api/whatsapp/init', { method: 'POST' });
+      const r = await fetch('/api/whatsapp/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account }),
+      });
       if (!r.ok) throw new Error('No se pudo iniciar WhatsApp en el servidor.');
     } catch (e: any) {
       setError(e.message);
@@ -1095,7 +1134,7 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
     const poll = setInterval(async () => {
       if (cancelled) return;
       try {
-        const res = await fetch('/api/whatsapp/qr');
+        const res = await fetch(`/api/whatsapp/qr?account=${account}`);
         const data = await res.json();
         if (cancelled) return;
         if (data.qr) {
@@ -1110,8 +1149,8 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
           setError(null);
         }
         if (data.status?.status === 'connected') {
-          toast.success('WhatsApp conectado correctamente con Baileys.');
-          setTimeout(() => onConnected('WhatsApp Baileys'), 600);
+          toast.success(`${title.replace('Vincular ', '')} conectado correctamente.`);
+          setTimeout(() => onConnected(title.replace('Vincular ', '')), 600);
           clearInterval(poll);
         }
       } catch {
@@ -1120,12 +1159,12 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
     }, 2000);
 
     return () => { cancelled = true; clearInterval(poll); };
-  }, [onConnected]);
+  }, [account, onConnected, title]);
 
   const canRetry = status === 'disconnected' && !initializing;
 
   return (
-    <ModalShell title="Vincular WhatsApp" accent="emerald" icon={<MessageCircle className="w-5 h-5 text-emerald-400" />} onClose={onClose}>
+    <ModalShell title={title} accent="emerald" icon={<MessageCircle className="w-5 h-5 text-emerald-400" />} onClose={onClose}>
       <ol className="text-xs text-slate-400 space-y-1.5 mb-4 list-decimal list-inside">
         <li>Abre <b className="text-slate-200">WhatsApp</b> en tu teléfono.</li>
         <li>Toca <b className="text-slate-200">Menú</b> (⋮) o <b className="text-slate-200">Ajustes</b> y selecciona <b className="text-slate-200">Dispositivos vinculados</b>.</li>
@@ -1168,6 +1207,7 @@ function WhatsAppQrModal({ onClose, onConnected }: { onClose: () => void; onConn
 
       <div className="mt-3 text-xs text-slate-500 text-center">
         Estado: <span className="text-slate-300 font-mono">{status}</span> · Motor: <span className="text-emerald-300 font-mono">Baileys</span>
+        <span className="block mt-1">Cuenta: <span className="text-slate-300 font-mono">{account}</span></span>
       </div>
     </ModalShell>
   );

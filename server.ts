@@ -5,7 +5,18 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { createApp } from "./server/app";
 import { hasPagingQuery, parseLimit, parseOffset, queryString, wrap } from "./server/http";
-import { initWhatsApp, getWhatsAppStatus, getWhatsAppQR, sendWhatsAppMessage, logoutWhatsApp, getRecentMessages, setWhatsAppMessageHandler, type WaMessage } from "./server/whatsapp";
+import {
+  initWhatsApp,
+  getWhatsAppStatus,
+  getWhatsAppQR,
+  sendWhatsAppMessage,
+  sendWhatsAppClientMessage,
+  logoutWhatsApp,
+  getRecentMessages,
+  setWhatsAppMessageHandler,
+  normalizeWhatsAppAccount,
+  type WaMessage,
+} from "./server/whatsapp";
 import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
 import { runIneOcr, runComprobanteOcr, runSiacOcr, checkOcrStatus } from "./server/ocr-service";
 import db, {
@@ -616,7 +627,7 @@ async function startServer() {
   async function sendClientChatMessage(client: any, type: string, message: string) {
     const phone = clientChatPhone(client);
     if (phone.length !== 10) throw new Error('Cliente sin WhatsApp valido de 10 digitos');
-    const result = await sendWhatsAppMessage(phone, message);
+    const result = await sendWhatsAppClientMessage(phone, message);
     markClientChatContact(client, type, message);
     return result;
   }
@@ -1309,7 +1320,9 @@ async function startServer() {
         aprobaciones: pendingOutbox.length,
       },
       channels: {
-        whatsapp: getWhatsAppStatus(),
+        whatsapp: getWhatsAppStatus('promotores'),
+        whatsappPromotores: getWhatsAppStatus('promotores'),
+        whatsappClientes: getWhatsAppStatus('clientes'),
         telegram: getTelegramStatus(),
       },
       recentSales: sales.slice(0, 8),
@@ -1703,7 +1716,7 @@ async function startServer() {
       agent: {
         name: 'ARIUX Clientes',
         active: clientChatAgentEnabled(),
-        channel: 'whatsapp',
+        channel: 'whatsapp_clientes',
       },
       analytics,
       clients,
@@ -2436,26 +2449,45 @@ async function startServer() {
   }));
 
   // ── WHATSAPP ───────────────────────────────────────────────
-  app.get("/api/whatsapp/status", chatUserOnly, (req: any, res) => {
-    const status = getWhatsAppStatus();
-    if (req.auth?.role === 'GERENTE') return res.json(status);
-    const { sessionPath: _sessionPath, ...safeStatus } = status as any;
-    res.json(safeStatus);
-  });
-  app.get("/api/whatsapp/qr", opsOnly, (req, res) => res.json({ qr: getWhatsAppQR(), status: getWhatsAppStatus() }));
+  function whatsappAccountFromReq(req: any) {
+    return normalizeWhatsAppAccount(req.params?.account || req.query?.account || req.body?.account);
+  }
 
-  app.post("/api/whatsapp/init", opsOnly, wrap(async (_req: any, res: any) => {
-    await initWhatsApp(); res.json({ ok: true });
+  const safeWhatsAppStatus = (status: any, role?: string) => {
+    if (role === 'GERENTE' || role === 'SUPERUSER' || role === 'ADMIN') return status;
+    if (status?.promotores || status?.clientes) {
+      return Object.fromEntries(Object.entries(status).map(([key, value]: any) => {
+        const { sessionPath: _sessionPath, ...safe } = value || {};
+        return [key, safe];
+      }));
+    }
+    const { sessionPath: _sessionPath, ...safeStatus } = status as any;
+    return safeStatus;
+  };
+
+  app.get("/api/whatsapp/status", chatUserOnly, (req: any, res) => {
+    const account = req.query?.account ? whatsappAccountFromReq(req) : undefined;
+    res.json(safeWhatsAppStatus(getWhatsAppStatus(account), req.auth?.role));
+  });
+  app.get("/api/whatsapp/qr", opsOnly, (req: any, res) => {
+    const account = whatsappAccountFromReq(req);
+    res.json({ account, qr: getWhatsAppQR(account), status: getWhatsAppStatus(account) });
+  });
+
+  app.post("/api/whatsapp/init", opsOnly, wrap(async (req: any, res: any) => {
+    const account = whatsappAccountFromReq(req);
+    await initWhatsApp(account); res.json({ ok: true, account });
   }));
 
   app.post("/api/whatsapp/send", chatUserOnly, wrap(async (req: any, res: any) => {
     const { phone, message } = req.body;
     if (!phone || !message) return res.status(400).json({ error: 'phone y message son requeridos' });
-    res.json(await sendWhatsAppMessage(phone, message));
+    res.json(await sendWhatsAppMessage(phone, message, whatsappAccountFromReq(req)));
   }));
 
-  app.post("/api/whatsapp/logout", opsOnly, wrap(async (_req: any, res: any) => {
-    await logoutWhatsApp(); res.json({ ok: true });
+  app.post("/api/whatsapp/logout", opsOnly, wrap(async (req: any, res: any) => {
+    const account = whatsappAccountFromReq(req);
+    await logoutWhatsApp(account); res.json({ ok: true, account });
   }));
 
   // Mensajes recibidos (para panel admin/gerente)
@@ -2544,8 +2576,9 @@ async function startServer() {
   }));
 
   app.post("/api/channels/send", chatUserOnly, wrap(async (req: any, res: any) => {
-    const { channel, target, message } = req.body;
+    const { channel, target, message, account } = req.body;
     if (!channel || !target || !message) return res.status(400).json({ error: 'channel, target y message son requeridos' });
+    if (channel === 'whatsapp') return res.json(await sendWhatsAppMessage(target, message, normalizeWhatsAppAccount(account)));
     res.json(await sendChannelMessage(channel, target, message));
   }));
 
@@ -2593,12 +2626,12 @@ async function startServer() {
     return text.match(re)?.[1]?.trim() || null;
   };
 
-  type AnyChannelMsg = { id: string; from: string; fromName: string; body: string; timestamp: number; channel: string; chatId?: number };
+  type AnyChannelMsg = { id: string; from: string; fromName: string; body: string; timestamp: number; channel: string; chatId?: number; account?: string };
 
   async function replyToMsg(msg: AnyChannelMsg, text: string) {
     try {
       if (msg.channel === 'whatsapp') {
-        await sendWhatsAppMessage(msg.from, text);
+        await sendWhatsAppMessage(msg.from, text, normalizeWhatsAppAccount(msg.account));
       } else if (msg.channel === 'telegram' && (msg as TgMessage).chatId) {
         await sendTelegramMessage((msg as TgMessage).chatId, text);
       }
@@ -2684,6 +2717,7 @@ async function startServer() {
 
   // Registrar handler durable en tiempo real para WhatsApp/Baileys y Telegram.
   setIncomingMessageHandler(async ({ conversation, message }) => {
+    if (conversation?.channel === 'whatsapp' && String(conversation.external_chat_id || '').startsWith('clientes:')) return;
     if (!agentState.capturista.active && !agentState.consultor.active) return;
     const result: any = await runAgentForMessage(conversation, message);
     if (!result || result.duplicate) return;
