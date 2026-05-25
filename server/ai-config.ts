@@ -1,5 +1,6 @@
 export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
-export const DEFAULT_OLLAMA_MODEL = 'glm-ocr:latest';
+export const DEFAULT_OLLAMA_OCR_MODEL = 'glm-ocr:latest';
+export const DEFAULT_OLLAMA_CHAT_MODEL = 'qwen3:4b';
 
 function cleanBaseUrl(value: string) {
   return String(value || '').trim().replace(/\/+$/, '');
@@ -9,8 +10,16 @@ export function getOllamaUrl() {
   return cleanBaseUrl(process.env.OLLAMA_URL || DEFAULT_OLLAMA_URL);
 }
 
+export function getOllamaOcrModel() {
+  return String(process.env.OLLAMA_OCR_MODEL || process.env.OCR_OLLAMA_MODEL || process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_OCR_MODEL).trim();
+}
+
+export function getOllamaChatModel() {
+  return String(process.env.OLLAMA_CHAT_MODEL || process.env.QWEN_MODEL || process.env.AI_MODEL || DEFAULT_OLLAMA_CHAT_MODEL).trim();
+}
+
 export function getOllamaModel() {
-  return String(process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL).trim();
+  return getOllamaOcrModel();
 }
 
 export function getOllamaApiKey() {

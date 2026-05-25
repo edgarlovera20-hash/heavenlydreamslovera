@@ -11,6 +11,7 @@ import {
   SiacRecords,
   Ventas,
 } from './db';
+import { runAiWithFallback } from './enterprise';
 
 type Intent = 'venta' | 'consulta_folio' | 'soporte' | 'morosidad' | 'otro';
 type ProposedAction = 'create_sale' | 'update_lead' | 'schedule_followup' | 'escalate_human';
@@ -25,6 +26,8 @@ interface AgentDecision {
 }
 
 type SendChannelMessage = (channel: string, target: string, message: string) => Promise<any>;
+const INTENTS: Intent[] = ['venta', 'consulta_folio', 'soporte', 'morosidad', 'otro'];
+const PROPOSED_ACTIONS: ProposedAction[] = ['create_sale', 'update_lead', 'schedule_followup', 'escalate_human'];
 
 function json(value: any) {
   return JSON.stringify(value ?? {});
@@ -109,7 +112,7 @@ function buildFolioReply(text: string) {
   };
 }
 
-function decide(conversation: any, message: any): AgentDecision {
+function decideWithRules(conversation: any, message: any): AgentDecision {
   const text = String(message.body || '');
   const { intent, confidence } = classifyIntent(text);
   const fields = extractFields(text, conversation);
@@ -161,6 +164,172 @@ function decide(conversation: any, message: any): AgentDecision {
     proposedActions: [],
     requiresApproval: true,
   };
+}
+
+function stripVisibleThinking(value: string) {
+  return String(value || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^\s*\/?no_think\s*/i, '')
+    .trim();
+}
+
+function parseModelJson(output: string) {
+  const clean = stripVisibleThinking(output);
+  const match = clean.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+function clampConfidence(value: any, fallback: number) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0.05, Math.min(0.99, numeric > 1 ? numeric / 100 : numeric));
+}
+
+function normalizeIntent(value: any, fallback: Intent): Intent {
+  const intent = String(value || '').trim().toLowerCase() as Intent;
+  return INTENTS.includes(intent) ? intent : fallback;
+}
+
+function normalizeActions(value: any): ProposedAction[] {
+  const raw = Array.isArray(value) ? value : [];
+  return raw
+    .map((item) => String(item || '').trim().toLowerCase() as ProposedAction)
+    .filter((item, index, list) => PROPOSED_ACTIONS.includes(item) && list.indexOf(item) === index);
+}
+
+function cleanReply(value: any) {
+  return stripVisibleThinking(String(value || '')).replace(/\s+\n/g, '\n').trim().slice(0, 900);
+}
+
+function buildQwenDecisionPrompt(conversation: any, message: any, rules: AgentDecision) {
+  const profile = AgentProfiles.getById('promoter_receptionist') as any;
+  const memory = conversation?.memory || {};
+  return `/no_think
+Analiza el mensaje entrante para Heavenly Dreams CRM.
+
+Reglas:
+- Responde SOLO JSON valido, sin markdown y sin explicaciones.
+- No inventes folios, telefonos, nombres, paquetes ni direcciones.
+- Todas las acciones requieren aprobacion humana aunque el JSON diga lo contrario.
+- Si el cliente pide estatus/folio/SIAC, usa intent "consulta_folio".
+- Si quiere contratar, instalar, cotizar o pasar datos de venta, usa intent "venta".
+- Si habla de falla o queja, usa intent "soporte".
+- Si habla de adeudo/pago/promesa de pago, usa intent "morosidad".
+- proposedActions solo puede usar: create_sale, update_lead, schedule_followup, escalate_human.
+
+Perfil del agente:
+${JSON.stringify({
+    name: profile?.name || 'ARIUX',
+    selfKnowledge: profile?.selfKnowledge || '',
+    knowledgeBase: profile?.knowledgeBase || '',
+    learnedNotes: (profile?.learnedNotes || []).slice(0, 6),
+  })}
+
+Memoria de conversacion:
+${JSON.stringify(memory)}
+
+Decision heuristica inicial:
+${JSON.stringify({
+    intent: rules.intent,
+    confidence: rules.confidence,
+    extractedFields: rules.extractedFields,
+    proposedReply: rules.proposedReply,
+    proposedActions: rules.proposedActions,
+  })}
+
+Mensaje:
+${String(message.body || '').slice(0, 2500)}
+
+Devuelve exactamente:
+{
+  "intent": "venta|consulta_folio|soporte|morosidad|otro",
+  "confidence": 0.0,
+  "extractedFields": {
+    "nombre": "",
+    "telefono": "",
+    "direccion": "",
+    "colonia": "",
+    "paquete": "",
+    "zona": "",
+    "folio": ""
+  },
+  "proposedReply": "respuesta breve en espanol para proponer al humano",
+  "proposedActions": []
+}`;
+}
+
+function decisionFromModel(rules: AgentDecision, modelPayload: any, ai: { provider?: string; model?: string; errors?: string[] }, message: any): AgentDecision {
+  const intent = normalizeIntent(modelPayload?.intent, rules.intent);
+  const modelFields = typeof modelPayload?.extractedFields === 'object' && modelPayload.extractedFields
+    ? modelPayload.extractedFields
+    : typeof modelPayload?.fields === 'object' && modelPayload.fields
+      ? modelPayload.fields
+      : {};
+  const extractedFields: Record<string, any> = {
+    ...rules.extractedFields,
+    ...Object.fromEntries(Object.entries(modelFields).filter(([, value]) => value != null && String(value).trim() !== '')),
+    _ai: { provider: ai.provider || 'ollama', model: ai.model || 'qwen3', mode: 'qwen3' },
+  };
+
+  if (intent === 'consulta_folio') {
+    const folio = extractedFields.folio || String(message.body || '').match(/\b([A-Z0-9]{5,}|\d{5,})\b/i)?.[1] || '';
+    const { reply, fields } = buildFolioReply(folio ? `folio ${folio}` : String(message.body || ''));
+    return {
+      intent,
+      confidence: clampConfidence(modelPayload?.confidence, Math.max(rules.confidence, 0.88)),
+      extractedFields: { ...extractedFields, ...fields },
+      proposedReply: reply,
+      proposedActions: fields.found ? [] : ['escalate_human'],
+      requiresApproval: true,
+    };
+  }
+
+  if (intent === 'venta') {
+    const missing = requiredMissing(extractedFields);
+    extractedFields.missing = missing;
+    const actions = normalizeActions(modelPayload?.proposedActions);
+    return {
+      intent,
+      confidence: clampConfidence(modelPayload?.confidence, rules.confidence),
+      extractedFields,
+      proposedReply: cleanReply(modelPayload?.proposedReply) || buildSalesReply(extractedFields, missing),
+      proposedActions: actions.length ? actions : (missing.length ? ['update_lead'] : ['create_sale', 'schedule_followup']),
+      requiresApproval: true,
+    };
+  }
+
+  const actions = normalizeActions(modelPayload?.proposedActions);
+  return {
+    intent,
+    confidence: clampConfidence(modelPayload?.confidence, rules.confidence),
+    extractedFields,
+    proposedReply: cleanReply(modelPayload?.proposedReply) || rules.proposedReply,
+    proposedActions: actions.length ? actions : (intent === 'soporte' || intent === 'morosidad' ? ['escalate_human'] : []),
+    requiresApproval: true,
+  };
+}
+
+async function decide(conversation: any, message: any): Promise<AgentDecision> {
+  const rules = decideWithRules(conversation, message);
+  try {
+    const ai = await runAiWithFallback(buildQwenDecisionPrompt(conversation, message, rules));
+    const parsed = parseModelJson(ai.output);
+    if (!parsed) throw new Error('Qwen no devolvio JSON valido');
+    return decisionFromModel(rules, parsed, ai, message);
+  } catch (err: any) {
+    return {
+      ...rules,
+      extractedFields: {
+        ...rules.extractedFields,
+        _ai: { provider: 'rules-fallback', error: err?.message || String(err) },
+      },
+    };
+  }
 }
 
 function nextStatus(decision: AgentDecision) {
@@ -263,7 +432,7 @@ export async function runAgentForMessage(conversation: any, message: any) {
   const existing = AgentDecisions.getByMessage(message.id);
   if (existing) return { decision: existing, duplicate: true };
 
-  const decision = decide(conversation, message);
+  const decision = await decide(conversation, message);
   const decisionId = randomUUID();
   AgentDecisions.create({
     id: decisionId,

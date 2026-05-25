@@ -19,7 +19,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createHash } from 'node:crypto';
-import { getOllamaApiKey, getOllamaModel, getOllamaUrl, getOllamaUrlSource } from './ai-config';
+import { getOllamaApiKey, getOllamaOcrModel, getOllamaUrl, getOllamaUrlSource } from './ai-config';
 import { runTesseractIne, runTesseractComprobante, runTesseractSiac, shutdownTesseract } from './ocr-tesseract';
 
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
@@ -29,7 +29,7 @@ const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'ollama').toLowerCase();
 const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'adaptive').toLowerCase();
 
 const GEMINI_MODEL    = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const OLLAMA_MODEL    = getOllamaModel();
+const OLLAMA_MODEL    = getOllamaOcrModel();
 
 function parseTimeoutEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);

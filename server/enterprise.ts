@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import db, { AiJobs, AuditLog, AutomationRules, Metrics } from './db';
 import { infraMode, queueJob } from './infra';
 import { getReadinessGates } from './readiness';
-import { getOllamaApiKey, getOllamaModel, getOllamaUrl } from './ai-config';
+import { getOllamaApiKey, getOllamaChatModel, getOllamaOcrModel, getOllamaUrl } from './ai-config';
 
 type ProviderName = 'ollama' | 'gemini';
 
@@ -11,9 +11,17 @@ const PROVIDERS: Array<{ name: ProviderName; configured: () => boolean; run: (pr
   { name: 'gemini', configured: () => !!process.env.GEMINI_API_KEY, run: callGemini },
 ];
 
+function stripVisibleThinking(value: string) {
+  return String(value || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^\s*\/?no_think\s*/i, '')
+    .trim();
+}
+
 async function callOllama(prompt: string) {
   const baseUrl = getOllamaUrl();
   const apiKey = getOllamaApiKey();
+  const model = getOllamaChatModel();
   const res = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: {
@@ -21,15 +29,21 @@ async function callOllama(prompt: string) {
       ...(apiKey && { authorization: `Bearer ${apiKey}` }),
     },
     body: JSON.stringify({
-      model: getOllamaModel(),
+      model,
       stream: false,
-      messages: [{ role: 'user', content: prompt }],
-      options: { temperature: 0, num_predict: 1200 },
+      messages: [
+        {
+          role: 'system',
+          content: 'Eres Qwen 3 operando Heavenly Dreams CRM. Responde en espanol, sin razonamiento visible, sin etiquetas <think>, y entrega solo lo que se pide.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      options: { temperature: 0.2, num_predict: 1200, num_ctx: 8192 },
     }),
   });
   if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const data = await res.json() as any;
-  return data?.message?.content || data?.response || '';
+  return stripVisibleThinking(data?.message?.content || data?.response || '');
 }
 
 async function callGemini(prompt: string) {
@@ -53,9 +67,14 @@ export async function runAiWithFallback(prompt: string) {
       continue;
     }
     try {
-      const output = await provider.run(prompt);
+      const output = stripVisibleThinking(await provider.run(prompt));
       if (!output.trim()) throw new Error('respuesta vacía');
-      return { provider: provider.name, output, errors };
+      return {
+        provider: provider.name,
+        model: provider.name === 'ollama' ? getOllamaChatModel() : process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        output,
+        errors,
+      };
     } catch (err: any) {
       errors.push(`${provider.name}: ${err.message}`);
     }
@@ -146,7 +165,17 @@ export function fireAutomationRules(event: string, payload: any, actor: any) {
 }
 
 export function enterpriseHealth() {
-  const ai = Object.fromEntries(PROVIDERS.map(p => [p.name, { configured: p.configured() }]));
+  const ai = {
+    ollama: {
+      configured: !!getOllamaUrl(),
+      chatModel: getOllamaChatModel(),
+      ocrModel: getOllamaOcrModel(),
+    },
+    gemini: {
+      configured: !!process.env.GEMINI_API_KEY,
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    },
+  };
   const infra = infraMode();
   const readiness = getReadinessGates();
   return {
