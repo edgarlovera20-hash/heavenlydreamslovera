@@ -266,7 +266,8 @@ export async function importMorososSource(input: SourceInput = {}) {
     const celular = digits10(headerValue(row, ['Celular', 'Celular 1']));
     const correo = headerValue(row, ['Correo']);
     const saldo = Number(String(headerValue(row, ['Saldo Total']) || '0').replace(/[^0-9.-]/g, '')) || 0;
-    const clienteId = `MOR-CLI-${folio}`;
+    const existingClient = (db as any).prepare('SELECT id FROM clientes_crm WHERE folio=?').get(folio) as any;
+    const clienteId = existingClient?.id || `MOR-CLI-${folio}`;
     const metadata = {
       paquete: headerValue(row, ['Paq Ofic C', 'Paquete']),
       promotor: headerValue(row, ['Promotor']),
