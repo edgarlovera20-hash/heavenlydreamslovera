@@ -743,7 +743,7 @@ function Panel({ children, className = '' }: { children: React.ReactNode; classN
 
 function StatusPill({ online }: { online: boolean }) {
   return (
-    <div className={cx('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.12em]', online ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/30 bg-amber-400/10 text-amber-200')}>
+    <div className={cx('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.06em]', online ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/30 bg-amber-400/10 text-amber-200')}>
       <MobileIcon name={online ? 'wifi' : 'wifi-off'} className="h-3.5 w-3.5" />
       {online ? 'En linea' : 'Offline'}
     </div>
@@ -876,16 +876,15 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
     <main className="hd-cyber-screen min-h-dvh px-5 py-8">
       <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl border border-cyber-neon/50 bg-cyber-electric/10 text-cyber-neon shadow-[0_0_20px_rgba(0,229,255,0.3)]">
+          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl border border-cyber-neon/40 bg-cyber-electric/10 text-cyber-neon">
             <Logo className="h-16 w-16" />
           </div>
-          <h1 className="text-glow text-center text-3xl font-black uppercase tracking-[0.1em] text-slate-50">Heavenly Dreams</h1>
-          <p className="mt-3 text-sm font-black uppercase tracking-[0.18em] text-cyber-electric/80">Tu Dream Team comienza aqui</p>
-          <p className="mt-2 text-sm leading-6 text-slate-300">App version lite para movil</p>
+          <h1 className="text-center text-3xl font-semibold tracking-[0.08em] text-slate-50">Heavenly Dreams</h1>
+          <p className="mt-3 text-sm font-semibold tracking-[0.08em] text-cyber-electric/80">Tu Dream Team comienza aqui</p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">App version campo para movil</p>
         </div>
-        <form onSubmit={submit} className="glass-panel-neon relative space-y-4 overflow-hidden rounded-3xl p-5 shadow-2xl">
+        <form onSubmit={submit} className="glass-panel-neon relative space-y-4 overflow-hidden rounded-3xl p-5">
           <div className="pointer-events-none absolute -left-2 top-10 h-12 w-1 rounded-r-md bg-cyber-neon" />
-          <div className="pointer-events-none absolute -right-2 bottom-10 h-12 w-1 rounded-l-md bg-cyber-electric" />
           <Field label="Usuario" value={username} onChange={setUsername} placeholder="edgar" />
           <div className="space-y-2">
             <span className="hd-cyber-label pl-1">Contrasena</span>
@@ -928,7 +927,7 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
           </button>
           <div className="flex items-center gap-3 py-1">
             <span className="h-px flex-1 bg-cyber-electric/20" />
-            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-cyber-electric/60">o</span>
+            <span className="text-[10px] font-semibold tracking-[0.08em] text-cyber-electric/60">o</span>
             <span className="h-px flex-1 bg-cyber-electric/20" />
           </div>
           <button
@@ -2078,14 +2077,14 @@ export default function MobileFieldApp() {
 
   return (
     <div className="hd-cyber-screen min-h-dvh pb-24">
-      <header className="glass-panel sticky top-0 z-20 border-x-0 border-t-0 border-cyber-electric/30 bg-cyber-black/90 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-xl">
+      <header className="glass-panel sticky top-0 z-20 border-x-0 border-t-0 border-cyber-electric/20 bg-cyber-black/90 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3">
-          <button onClick={() => active === 'inicio' ? refreshBootstrap() : setActive('inicio')} className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyber-electric/30 bg-white/5 text-cyber-electric transition hover:bg-cyber-neon/10 hover:text-cyber-neon">
+          <button onClick={() => active === 'inicio' ? refreshBootstrap() : setActive('inicio')} className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyber-electric/25 bg-white/5 text-cyber-electric transition hover:bg-cyber-neon/10 hover:text-cyber-neon">
             <MobileIcon name={active === 'inicio' ? 'refresh' : 'chevron-left'} className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-black uppercase tracking-[0.16em] text-cyber-electric/70">HD Campo</p>
-            <h2 className="truncate text-lg font-black text-white">{sectionTitle}</h2>
+            <p className="truncate text-[11px] font-semibold tracking-[0.08em] text-cyber-electric/70">HD Campo</p>
+            <h2 className="truncate text-lg font-semibold text-white">{sectionTitle}</h2>
           </div>
           <StatusPill online={online} />
         </div>
@@ -2095,7 +2094,7 @@ export default function MobileFieldApp() {
         {renderContent()}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-cyber-electric/30 bg-cyber-black/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_30px_rgba(3,154,220,0.08)] backdrop-blur-xl">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-cyber-electric/20 bg-cyber-black/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_30px_rgba(3,154,220,0.08)] backdrop-blur-xl">
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
           {PRIMARY_NAV.map((item) => {
             const selected = active === item.id;
@@ -2103,7 +2102,7 @@ export default function MobileFieldApp() {
               <button
                 key={item.id}
                 onClick={() => setActive(item.id)}
-                className={cx('flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-black uppercase tracking-[0.08em] transition', selected ? 'bg-cyber-electric text-cyber-black shadow-[0_0_18px_rgba(3,154,220,0.45)]' : 'text-cyber-electric/55 hover:bg-cyber-neon/10 hover:text-cyber-neon')}
+                className={cx('flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold tracking-[0.04em] transition', selected ? 'bg-cyber-electric text-cyber-black' : 'text-cyber-electric/55 hover:bg-cyber-neon/10 hover:text-cyber-neon')}
               >
                 <MobileIcon name={item.icon} className="h-5 w-5" />
                 {item.label}

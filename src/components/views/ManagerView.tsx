@@ -12,6 +12,7 @@ import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
 import { OfflineBanner } from '../ui/OfflineBanner';
 import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
+import { PremiumBadge, PremiumCard, PremiumKpiCard, SectionHeader } from '../ui/premium';
 
 const Settings = lazy(() => import('./Settings'));
 const Payroll = lazy(() => import('./Payroll'));
@@ -57,7 +58,7 @@ const SectionLoader = () => (
 function NavGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-4">
-      <p className="px-4 py-2 text-[9px] font-bold uppercase tracking-widest text-slate-500">{label}</p>
+      <p className="px-4 py-2 text-[11px] font-semibold tracking-[0.08em] text-slate-500">{label}</p>
       <div className="space-y-1">{children}</div>
     </div>
   );
@@ -156,29 +157,29 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const notificationCount = pendingSales + pendingUsers;
 
   return (
-    <div className="flex h-[100dvh] w-full text-white relative z-10 overflow-hidden">
+    <div className="hd-screen flex h-[100dvh] w-full text-white relative z-10 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 bg-cyber-black/60 backdrop-blur-sm border-r border-slate-800/80 hidden md:flex flex-col relative z-20">
+      <aside className="w-72 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col relative z-20">
         
-        <div className="h-28 flex flex-col items-center justify-center px-6 relative overflow-hidden border-b border-yellow-400/10 gap-3 z-10">
+        <div className="h-28 flex flex-col items-center justify-center px-6 relative overflow-hidden border-b border-white/5 gap-3 z-10">
           <Logo className="w-12 h-12 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] hover:scale-110 transition-transform duration-500" />
           <div className="text-center">
-            <h1 className="text-sm font-black text-white tracking-[0.15em] leading-none uppercase">Heavenly Dreams</h1>
-            <p className="text-[7px] text-yellow-400 tracking-[0.2em] font-bold mt-1 uppercase leading-tight drop-shadow-[0_0_5px_rgba(250,204,21,0.5)]">
+            <h1 className="text-sm font-semibold text-white tracking-[0.08em] leading-none">Heavenly Dreams</h1>
+            <p className="text-[10px] text-cyan-300/70 tracking-[0.08em] font-semibold mt-1 leading-tight">
               TU DREAM TEAM COMIENZA AQUI
             </p>
           </div>
         </div>
 
         <div className="p-3 border-b border-white/5 space-y-2 relative z-10">
-          <div className="flex items-center justify-between bg-[#0a0d14] border border-slate-800 rounded-xl p-3">
+          <div className="flex items-center justify-between hd-card p-3">
              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#0A0D14] border border-yellow-400/50 flex items-center justify-center text-xs font-bold text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.3)]">
+                <div className="w-9 h-9 rounded-xl bg-amber-400/10 border border-amber-300/25 flex items-center justify-center text-xs font-bold text-amber-300">
                    <Crown className="w-4 h-4" />
                 </div>
                 <div>
                    <p className="text-xs font-bold text-white truncate max-w-[120px]" title={userName}>{userName}</p>
-                   <p className="text-[9px] text-yellow-400 tracking-widest uppercase font-bold drop-shadow-[0_0_5px_rgba(250,204,21,0.5)]">{userRoleLabel}</p>
+                   <p className="text-[11px] text-amber-300/80 tracking-[0.08em] font-semibold">{userRoleLabel}</p>
                 </div>
              </div>
              <div className="flex items-center gap-2">
@@ -293,7 +294,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
           {/* Subtle Top Nav */}
-          <div className="pt-6 px-8 flex items-center gap-2 mb-2 w-full">
+          <div className="pt-5 px-8 flex items-center gap-2 mb-2 w-full">
              <button
                onClick={() => activeSection !== 'Dashboard' ? setActiveSection('Dashboard') : null}
                className="text-slate-500 hover:text-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded p-1"
@@ -311,91 +312,80 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           <div className="flex-1 overflow-y-auto px-8 pb-8 custom-scrollbar">
           {activeSection === 'Dashboard' && (
             <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <div className="flex items-center justify-between mb-8">
-                  <div>
-                     <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-                        <Crown className="text-yellow-400 w-8 h-8 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" />
-                        <span className="text-white">{userName}</span> <span className="text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">CRM</span>
-                     </h2>
-                     <p className="text-slate-500 text-xs mt-1.5 uppercase tracking-widest font-semibold">Panel de control · <ClockText /></p>
-                  </div>
-                  <div className="px-3 py-1.5 border border-[#10b981]/30 bg-[#10b981]/5 flex items-center gap-2 rounded-full">
-                     <div className="w-2 h-2 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
-                     <span className="text-[#10b981] text-xs font-bold uppercase tracking-widest">Sistema Activo</span>
-                  </div>
-               </div>
+               <SectionHeader
+                 eyebrow={`Panel de control · ${new Date().toLocaleDateString('es-MX')}`}
+                 title={<><span>{userName}</span> <span className="text-cyan-300">CRM</span></>}
+                 description={<>Vista ejecutiva de capturas, validaciones, canales y tareas operativas. Hora del sistema: <ClockText />.</>}
+                 action={<PremiumBadge tone="emerald" dot>Sistema activo</PremiumBadge>}
+               />
 
               {/* KPI Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 hover-group">
-                <KpiCard
+                <PremiumKpiCard
                   title="VENTAS HOY"
                   value={todaySales.toString()}
-                  trend="CAPTURAS DEL DÍA"
-                  trendUp={true}
+                  detail="Capturas del dia"
                   icon={TrendingUp}
-                  color="cyan"
+                  tone="cyan"
                 />
-                <KpiCard
+                <PremiumKpiCard
                   title="VENTAS TOTALES"
                   value={saleCount.toString()}
-                  trend={`${approvedSales} APROBADAS`}
-                  trendUp={true}
+                  detail={`${approvedSales} aprobadas`}
                   icon={Activity}
-                  color="purple"
+                  tone="purple"
                 />
-                <KpiCard
+                <PremiumKpiCard
                   title="PENDIENTES"
                   value={pendingSales.toString()}
-                  trend="POR VALIDAR"
-                  trendUp={false}
+                  detail="Por validar"
                   icon={ClipboardCheck}
-                  color="green"
+                  tone="emerald"
                 />
-                <KpiCard
+                <PremiumKpiCard
                   title="INGRESO MES"
                   value={`$${monthRevenue.toLocaleString('es-MX')}`}
-                  trend="RENTA MENSUAL"
-                  trendUp={true}
+                  detail="Renta mensual"
                   icon={DollarSign}
-                  color="cyan"
+                  tone="blue"
                 />
               </div>
 
               {/* Secondary Stats Row */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-[#0a0d14] border border-slate-800/80 rounded-[14px] p-5">
+                <PremiumCard className="p-5">
                   <div className="flex items-center gap-3 mb-2">
                     <Users className="w-5 h-5 text-blue-400" />
-                    <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest">Personal Registrado</h4>
+                    <h4 className="text-slate-400 text-xs font-semibold">Personal registrado</h4>
                   </div>
                   <p className="text-3xl font-semibold text-white">{userCount}</p>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-2">Asesores + Supervisores</p>
-                </div>
-                <div className="bg-[#0a0d14] border border-slate-800/80 rounded-[14px] p-5">
+                  <p className="text-xs text-slate-500 mt-2">Asesores + supervisores</p>
+                </PremiumCard>
+                <PremiumCard className="p-5">
                   <div className="flex items-center gap-3 mb-2">
                     <ArrowUpRight className="w-5 h-5 text-emerald-400" />
-                    <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest">Tasa de Aprobación</h4>
+                    <h4 className="text-slate-400 text-xs font-semibold">Tasa de aprobación</h4>
                   </div>
                   <p className="text-3xl font-semibold text-white">
                     {saleCount > 0 ? `${Math.round((approvedSales / saleCount) * 100)}%` : '—'}
                   </p>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-2">{approvedSales}/{saleCount} ventas</p>
-                </div>
-                <div className="bg-[#0a0d14] border border-slate-800/80 rounded-[14px] p-5">
+                  <p className="text-xs text-slate-500 mt-2">{approvedSales}/{saleCount} ventas</p>
+                </PremiumCard>
+                <PremiumCard className="p-5">
                   <div className="flex items-center gap-3 mb-2">
                     <ArrowDownRight className="w-5 h-5 text-rose-400" />
-                    <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest">Rechazos</h4>
+                    <h4 className="text-slate-400 text-xs font-semibold">Rechazos</h4>
                   </div>
                   <p className="text-3xl font-semibold text-white">{rejectedSales}</p>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-2">No procedieron</p>
-                </div>
+                  <p className="text-xs text-slate-500 mt-2">No procedieron</p>
+                </PremiumCard>
               </div>
 
               {/* Quick Actions */}
-              <div className="bg-[#0a0d14] border border-slate-800/80 rounded-[14px] p-6">
+              <PremiumCard className="p-6">
                 <div className="flex items-center gap-2 mb-5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#0ea5e9] shadow-[0_0_8px_rgba(14,165,233,0.8)]"></div>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Accesos Rápidos</h3>
+                  <div className="w-1.5 h-1.5 rounded-full bg-cyan-300"></div>
+                  <h3 className="text-sm font-semibold text-slate-300">Accesos rápidos</h3>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <QuickAction icon={ClipboardCheck} label="Nueva Captura" color="green" onClick={() => setActiveSection('Captura y Validación')} />
@@ -411,17 +401,17 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                     <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
                   </>}
                 </div>
-              </div>
+              </PremiumCard>
 
               {/* ── SYNC RELAYS: Canal Status + Mensajes Recientes ── */}
               {['GERENTE', 'SUPERVISOR'].includes(role) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* WhatsApp panel */}
-                  <div className="bg-[#0a0d14] border border-slate-800/80 rounded-[14px] p-5 space-y-4">
+                  <PremiumCard className="p-5 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${waStatus === 'connected' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : waStatus === 'qr' ? 'bg-yellow-400 animate-pulse' : 'bg-slate-600'}`} />
-                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">WhatsApp</h4>
+                        <h4 className="text-sm font-semibold text-slate-200">WhatsApp</h4>
                         <span className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full ${
                           waStatus === 'connected' ? 'bg-emerald-400/10 text-emerald-400' :
                           waStatus === 'qr' ? 'bg-yellow-400/10 text-yellow-400' :
@@ -464,18 +454,18 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                     </div>
                     <button
                       onClick={() => setActiveSection('Hub de Agentes')}
-                      className="w-full text-[9px] text-emerald-400 border border-emerald-400/20 rounded-lg py-1.5 hover:bg-emerald-400/5 transition-colors font-bold uppercase tracking-widest"
+                      className="w-full text-xs text-emerald-300 border border-emerald-400/20 rounded-lg py-2 hover:bg-emerald-400/5 transition-colors font-semibold"
                     >
                       Ver en Hub de Agentes
                     </button>
-                  </div>
+                  </PremiumCard>
 
                   {/* Telegram panel */}
-                  <div className="bg-[#0a0d14] border border-slate-800/80 rounded-[14px] p-5 space-y-4">
+                  <PremiumCard className="p-5 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${tgStatus === 'polling' ? 'bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]' : tgStatus === 'error' ? 'bg-rose-400' : 'bg-slate-600'}`} />
-                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Telegram</h4>
+                        <h4 className="text-sm font-semibold text-slate-200">Telegram</h4>
                         <span className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full ${
                           tgStatus === 'polling' ? 'bg-blue-400/10 text-blue-400' :
                           tgStatus === 'error'   ? 'bg-rose-400/10 text-rose-400' :
@@ -499,7 +489,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                         </div>
                       </>
                     )}
-                  </div>
+                  </PremiumCard>
                 </div>
               )}
             </div>
@@ -580,10 +570,10 @@ function QuickAction({ icon: Icon, label, color, onClick }: { icon: any; label: 
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border bg-[#0A0D14]/60 transition-all hover:-translate-y-0.5 ${colors[color] || colors.cyan}`}
+      className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border bg-white/[0.035] transition-all hover:-translate-y-0.5 ${colors[color] || colors.cyan}`}
     >
       <Icon className="w-6 h-6" />
-      <span className="text-[10px] font-bold uppercase tracking-widest">{label}</span>
+      <span className="text-xs font-semibold">{label}</span>
     </button>
   );
 }
@@ -591,7 +581,7 @@ function QuickAction({ icon: Icon, label, color, onClick }: { icon: any; label: 
 // Subcomponents
 function NavItem({ icon: Icon, label, color, active = false, onClick, badge }: { icon: any, label: string, color: string, active?: boolean, onClick?: () => void, badge?: number }) {
   const getColorClasses = () => {
-    if (color === 'cyan') return active ? 'text-[#0ea5e9] bg-[#0ea5e9]/10 border-[#0ea5e9]/30 shadow-[inset_0_0_12px_rgba(14,165,233,0.1)]' : 'text-slate-400 hover:text-[#0ea5e9] hover:bg-[#0ea5e9]/5';
+    if (color === 'cyan') return active ? 'text-cyan-200 bg-cyan-400/10 border-cyan-300/25' : 'text-slate-400 hover:text-cyan-200 hover:bg-cyan-300/5';
     if (color === 'blue') return active ? 'text-blue-400 bg-blue-400/10 border-blue-400/30' : 'text-slate-400 hover:text-blue-400 hover:bg-blue-400/5';
     if (color === 'purple') return active ? 'text-purple-400 bg-purple-400/10 border-purple-400/30' : 'text-slate-400 hover:text-purple-400 hover:bg-purple-400/5';
     if (color === 'green') return active ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' : 'text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/5';
@@ -605,10 +595,10 @@ function NavItem({ icon: Icon, label, color, active = false, onClick, badge }: {
   return (
     <button 
       onClick={onClick} 
-      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all relative overflow-hidden group border border-transparent ${colorClasses}`}
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all relative overflow-hidden group border border-transparent ${colorClasses}`}
     >
       <Icon className={`w-4 h-4 transition-transform group-hover:scale-110`} />
-      <span className="text-[12px] font-bold uppercase tracking-widest flex-1">{label}</span>
+      <span className="text-[13px] font-semibold flex-1">{label}</span>
       {badge !== undefined && badge > 0 && (
         <span className="min-w-[18px] h-[18px] px-1 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-black">
           {badge > 99 ? '99+' : badge}
@@ -622,7 +612,7 @@ function NavItem({ icon: Icon, label, color, active = false, onClick, badge }: {
           color === 'green' ? 'bg-emerald-400' :
           color === 'yellow' ? 'bg-yellow-400' :
           color === 'red' ? 'bg-rose-400' : 'bg-white'
-        } shadow-[0_0_8px_currentColor]`}></div>
+        }`}></div>
       )}
     </button>
   );

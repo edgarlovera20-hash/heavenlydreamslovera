@@ -21,7 +21,7 @@ export function MatrixInput({ className, value, onChange, type = "text", ...prop
         value={value}
         onChange={onChange}
         className={cn(
-          "w-full bg-cyber-dark/40 border border-cyber-electric/30 rounded-xl px-4 py-3 text-white placeholder:text-cyber-electric/50 focus:outline-none focus:ring-2 focus:ring-cyber-neon/50 transition-all font-medium font-mono tracking-widest",
+          "hd-input",
           className
         )}
         placeholder={props.placeholder}
