@@ -132,7 +132,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       if (!OPS_ROLES.includes(role)) return;
       try {
         const [ws, tgs, msgs, conversations, outbox] = await Promise.all([
-          fetch('/api/whatsapp/status').then(r => r.ok ? r.json() : null),
+          fetch('/api/whatsapp/status?account=promotores').then(r => r.ok ? r.json() : null),
           fetch('/api/telegram/status').then(r => r.ok ? r.json() : null),
           fetch('/api/channels/messages').then(r => r.ok ? r.json() : []),
           fetch('/api/channels/conversations').then(r => r.ok ? r.json() : []),

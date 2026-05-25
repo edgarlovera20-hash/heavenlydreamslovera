@@ -3833,6 +3833,29 @@ async function startServer() {
       .catch(e => console.warn('[TG] Error auto-reconectando:', e.message));
   }
 
+  const restoreWhatsAppAccounts = () => {
+    const accounts = new Set<ReturnType<typeof normalizeWhatsAppAccount>>();
+    for (const row of getChannelAccounts() as any[]) {
+      if (row?.channel !== 'whatsapp') continue;
+      if (String(row.status || '').toLowerCase() === 'disconnected') continue;
+      const metadata = parseMetadata(row.metadata);
+      const key = String(metadata.key || '').toLowerCase();
+      const audience = String(metadata.audience || '').toLowerCase();
+      const account = normalizeWhatsAppAccount(
+        metadata.account ||
+        (key === 'whatsappclientes' || audience === 'clientes' ? 'clientes' : 'promotores')
+      );
+      accounts.add(account);
+    }
+
+    for (const account of accounts) {
+      initWhatsApp(account)
+        .then(() => console.log(`[WA:${account}] Auto-restauracion iniciada desde cuenta vinculada.`))
+        .catch((err: any) => console.warn(`[WA:${account}] No se pudo auto-restaurar:`, err?.message || err));
+    }
+  };
+  restoreWhatsAppAccounts();
+
   const onListening = () => {
     console.log(`[DB] Base de datos: data/heavenlydreams.db`);
     console.log(`[SIAC] Registros en DB: ${SiacRecords.count()}`);

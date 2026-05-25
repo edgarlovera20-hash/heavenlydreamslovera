@@ -221,7 +221,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const loadMessages = useCallback(async () => {
     try {
       const [waStatusRes, tgStatusRes, messagesRes, agentsRes] = await Promise.all([
-        fetch('/api/whatsapp/status'),
+        fetch('/api/whatsapp/status?account=promotores'),
         fetch('/api/telegram/status'),
         fetch('/api/channels/messages'),
         fetch('/api/agents/status').catch(() => null),
@@ -335,7 +335,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
     try {
       const endpoint = activeChannel === 'whatsapp' ? '/api/whatsapp/send' : '/api/telegram/send';
       const body = activeChannel === 'whatsapp'
-        ? { phone: trimmedTarget, message: trimmedMessage }
+        ? { phone: trimmedTarget, message: trimmedMessage, account: 'promotores' }
         : { chatId: trimmedTarget, message: trimmedMessage };
 
       const res = await fetch(endpoint, {
