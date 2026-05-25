@@ -198,6 +198,10 @@ function isReady(channel: ChatChannel, status?: string) {
   return channel === 'whatsapp' ? status === 'connected' : status === 'polling';
 }
 
+function normalizeWhatsAppStatus(data: any): ChannelStatus {
+  return data?.status ? data : data?.promotores || data?.clientes || {};
+}
+
 export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture, onOpenFolios }: ChatsViewProps) {
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('whatsapp');
   const [messages, setMessages] = useState<ChannelMessage[]>([]);
@@ -221,18 +225,18 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const loadMessages = useCallback(async () => {
     try {
       const [waStatusRes, tgStatusRes, messagesRes, agentsRes] = await Promise.all([
-        fetch('/api/whatsapp/status?account=promotores'),
-        fetch('/api/telegram/status'),
-        fetch('/api/channels/messages'),
-        fetch('/api/agents/status').catch(() => null),
+        fetch('/api/whatsapp/status?account=promotores', { cache: 'no-store' }),
+        fetch('/api/telegram/status', { cache: 'no-store' }),
+        fetch('/api/channels/messages', { cache: 'no-store' }),
+        fetch('/api/agents/status', { cache: 'no-store' }).catch(() => null),
       ]);
       const [conversationsRes, outboxRes] = await Promise.all([
-        fetch('/api/channels/conversations').catch(() => null),
-        fetch('/api/agents/outbox').catch(() => null),
+        fetch('/api/channels/conversations', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/agents/outbox', { cache: 'no-store' }).catch(() => null),
       ]);
-      const profileRes = await fetch(`/api/agents/profiles/${RECEPTIONIST_PROFILE_ID}`).catch(() => null);
+      const profileRes = await fetch(`/api/agents/profiles/${RECEPTIONIST_PROFILE_ID}`, { cache: 'no-store' }).catch(() => null);
 
-      if (waStatusRes.ok) setWhatsAppStatus(await waStatusRes.json());
+      if (waStatusRes.ok) setWhatsAppStatus(normalizeWhatsAppStatus(await waStatusRes.json()));
       if (tgStatusRes.ok) setTelegramStatus(await tgStatusRes.json());
       if (agentsRes?.ok) setAgents(await agentsRes.json());
       if (conversationsRes?.ok) setConversations(await conversationsRes.json());

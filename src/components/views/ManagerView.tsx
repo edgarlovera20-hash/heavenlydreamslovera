@@ -89,6 +89,10 @@ interface ManagerViewProps {
   onToggleTheme?: () => void;
 }
 
+function normalizeWhatsAppStatus(data: any) {
+  return data?.status ? data : data?.promotores || data?.clientes || {};
+}
+
 export default function ManagerView({ role, onBack, currentUser, isLightMode, onToggleTheme }: ManagerViewProps) {
   const [activeSection, setActiveSection] = useState(OPS_ROLES.includes(role) ? 'Dashboard' : 'Perfil');
   const [showAgentDesigner, setShowAgentDesigner] = useState(false);
@@ -132,13 +136,13 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       if (!OPS_ROLES.includes(role)) return;
       try {
         const [ws, tgs, msgs, conversations, outbox] = await Promise.all([
-          fetch('/api/whatsapp/status?account=promotores').then(r => r.ok ? r.json() : null),
-          fetch('/api/telegram/status').then(r => r.ok ? r.json() : null),
-          fetch('/api/channels/messages').then(r => r.ok ? r.json() : []),
-          fetch('/api/channels/conversations').then(r => r.ok ? r.json() : []),
-          fetch('/api/agents/outbox').then(r => r.ok ? r.json() : []),
+          fetch('/api/whatsapp/status?account=promotores', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
+          fetch('/api/telegram/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
+          fetch('/api/channels/messages', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch('/api/channels/conversations', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch('/api/agents/outbox', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
         ]);
-        if (ws) setWaStatus(ws.status);
+        if (ws) setWaStatus(normalizeWhatsAppStatus(ws).status || 'disconnected');
         if (tgs) setTgStatus(tgs.status);
         setRecentMessages((msgs as any[]).slice(0, 5));
         setChannelSummary({

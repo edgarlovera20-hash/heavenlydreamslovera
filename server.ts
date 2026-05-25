@@ -3121,19 +3121,21 @@ async function startServer() {
 
   async function autoSendAriuxReplies(result: any) {
     const replies = (result?.outbox || []).filter((item: any) => item?.type === 'reply' && item?.message);
+    let lastApproved: any = null;
     for (const item of replies) {
       try {
-        await approveAgentOutbox(item.id, { sub: 'ariux-auto', uid: 'ariux-auto', nombre: 'ARIUX', name: 'ARIUX' }, sendChannelMessage);
+        lastApproved = await approveAgentOutbox(item.id, { sub: 'ariux-auto', uid: 'ariux-auto', nombre: 'ARIUX', name: 'ARIUX' }, sendChannelMessage);
+        console.log(`[ARIUX] Respuesta automatica enviada por ${item.channel} a ${item.target}`);
       } catch (err: any) {
         AgentOutbox.update(item.id, { status: 'failed', error: err?.message || String(err) });
         throw err;
       }
     }
+    return lastApproved;
   }
 
   // Registrar handler durable en tiempo real para WhatsApp/Baileys y Telegram.
   setIncomingMessageHandler(async ({ conversation, message }) => {
-    if (conversation?.channel === 'whatsapp' && String(conversation.external_chat_id || '').startsWith('clientes:')) return;
     const result: any = await runAgentForMessage(conversation, message);
     if (!result || result.duplicate) return;
     await autoSendAriuxReplies(result);
