@@ -339,6 +339,20 @@ function generateCurpFromPersonalData(input: any) {
   return `${paterno[0] || 'X'}${firstInternalVowel(paterno)}${materno[0] || 'X'}${nombres[0] || 'X'}${yy}${mm}${dd}${sexo}${estado}${firstInternalConsonant(paterno)}${firstInternalConsonant(materno)}${firstInternalConsonant(nombres)}00`;
 }
 
+function buildCurpOfficialClipboard(payload: any, curpDraft = '') {
+  return [
+    'Consulta oficial CURP gob.mx',
+    curpDraft ? `CURP capturada/sugerida: ${curpDraft}` : '',
+    `Nombre(s): ${payload.nombres || ''}`,
+    `Apellido paterno: ${payload.apellidoPaterno || ''}`,
+    `Apellido materno: ${payload.apellidoMaterno || ''}`,
+    `Fecha de nacimiento: ${payload.fechaNacimiento || ''}`,
+    `Sexo: ${payload.sexo || ''}`,
+    `Estado de nacimiento: ${CURP_STATES[payload.estadoNacimiento] || payload.estadoNacimiento || ''}`,
+    'Despues de consultar, descarga el PDF oficial y adjuntalo en Heavenly Dreams.',
+  ].filter(Boolean).join('\n');
+}
+
 async function checkGobMxCurpPortal() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
@@ -993,7 +1007,7 @@ async function startServer() {
       status: official ? normalized.status : 'VALIDADA_FORMATO_LOCAL',
       message: official
         ? 'CURP consultada con proveedor externo configurado.'
-        : 'CURP validada localmente. Configura CURP_API_URL para consulta externa.',
+        : 'CURP validada por formato local. Para expediente oficial descarga y adjunta el PDF desde gob.mx.',
       providerError: providerError || undefined,
     });
   }));
@@ -1006,12 +1020,13 @@ async function startServer() {
       fechaNacimiento: String(req.body?.fechaNacimiento || '').trim(),
       sexo: String(req.body?.sexo || '').trim().toUpperCase().slice(0, 1),
       estadoNacimiento: String(req.body?.estadoNacimiento || '').trim().toUpperCase(),
+      curp: normalizeCurp(req.body?.curp),
     };
-    const curp = generateCurpFromPersonalData(payload);
-    if (!curp) {
+    const curpDraft = CURP_RE.test(payload.curp) ? payload.curp : generateCurpFromPersonalData(payload);
+    if (!curpDraft) {
       return res.status(400).json({
         ok: false,
-        error: 'Datos incompletos para generar CURP. Revisa nombre, apellido paterno, fecha, sexo y estado.',
+        error: 'Datos incompletos para preparar la consulta oficial. Revisa nombre, apellido paterno, fecha, sexo y estado.',
       });
     }
 
@@ -1020,28 +1035,31 @@ async function startServer() {
       req,
       'curp.gobmx_agent',
       'curp',
-      curp,
-      portal.challengeDetected ? 'gob.mx requiere validacion anti-automatizacion' : 'gob.mx consultado por agente',
-      { ...payload, portal }
+      curpDraft,
+      portal.challengeDetected ? 'gob.mx requiere validacion humana antes de descargar PDF oficial' : 'gob.mx listo para consulta oficial asistida',
+      { ...payload, curpDraft, portal }
     );
 
     res.json({
       ok: true,
-      curp,
+      curp: CURP_RE.test(payload.curp) ? payload.curp : undefined,
+      curpDraft,
       nombres: payload.nombres,
       apellidoPaterno: payload.apellidoPaterno,
       apellidoMaterno: payload.apellidoMaterno,
       sexo: payload.sexo === 'M' ? 'Mujer' : 'Hombre',
       fechaNacimiento: payload.fechaNacimiento,
       entidadNacimiento: CURP_STATES[payload.estadoNacimiento] || payload.estadoNacimiento,
-      status: portal.ok ? 'GOBMX_AGENT_READY' : 'GOBMX_AGENT_ASSISTED',
+      status: 'GOBMX_PDF_OFICIAL_REQUERIDO',
       source: 'gobmx-agent',
       official: false,
       gobMxUrl: portal.url,
       challengeDetected: portal.challengeDetected,
+      requiresManualDownload: true,
+      clipboardText: buildCurpOfficialClipboard(payload, curpDraft),
       message: portal.challengeDetected
-        ? 'El portal gob.mx activo validacion anti-automatizacion. Se agrego la CURP generada con los datos capturados; abre gob.mx para confirmar o descargar.'
-        : 'El agente consulto gob.mx y agrego la CURP generada con los datos capturados.',
+        ? 'gob.mx activo una validacion humana. Abre el portal oficial, consulta con los datos capturados, descarga el PDF oficial y adjuntalo en la app.'
+        : 'Portal oficial disponible. Consulta en gob.mx, descarga el PDF oficial y adjuntalo en la app.',
       providerError: portal.error || undefined,
     });
   }));

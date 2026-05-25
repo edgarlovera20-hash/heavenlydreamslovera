@@ -37,6 +37,9 @@ interface CustomerCaptureData {
   fechaNacimiento?: string;
   sexo?: 'H' | 'M';
   estadoNacimiento?: string;
+  curpPdfOfficial?: boolean;
+  curpPdfFileName?: string;
+  curpPdfAttachedAt?: string;
   
   telefonoTitular: string;
   telefonoReferencia?: string;
@@ -591,8 +594,12 @@ type CurpLookupResult = {
   source?: string;
   official?: boolean;
   pdfUrl?: string;
+  pdfFileName?: string;
   gobMxUrl?: string;
   challengeDetected?: boolean;
+  requiresManualDownload?: boolean;
+  clipboardText?: string;
+  curpDraft?: string;
   message?: string;
   providerError?: string;
 };
@@ -770,6 +777,10 @@ function isDraftWorthSaving(form: Partial<CustomerCaptureData>) {
 
 function looksLikePdfDataUrl(value?: string) {
   return Boolean(value?.startsWith('data:application/pdf'));
+}
+
+function base64FromDataUrl(value: string) {
+  return String(value || '').replace(/^data:[^;]+;base64,/, '');
 }
 
 function detectDocumentMime(images: string[]) {
@@ -1069,6 +1080,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
 
   const frenteInputRef = useRef<HTMLInputElement>(null);
   const reversoInputRef = useRef<HTMLInputElement>(null);
+  const curpOfficialPdfInputRef = useRef<HTMLInputElement>(null);
 
   // Núcleo del OCR — recibe lista de imágenes (base64) y autorellena.
   // Envía TODAS las imágenes en UNA sola llamada al backend — el modelo combina
@@ -1331,6 +1343,47 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     event.target.value = '';
   };
 
+  const handleOfficialCurpPdfSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      if (!isPdf) {
+        toast.error('Adjunta el PDF oficial descargado desde gob.mx.');
+        return;
+      }
+      if (file.size > 15 * 1024 * 1024) {
+        toast.error('El PDF oficial CURP no debe exceder 15 MB.');
+        return;
+      }
+      const dataUrl = await readFileAsDataUrl(file);
+      const curpFromName = file.name.toUpperCase().match(/[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d/)?.[0];
+      updateForm({
+        curpDoc: dataUrl,
+        curp: CURP_RE.test(form.curp || '') ? form.curp : curpFromName || form.curp,
+        curpPdfOfficial: true,
+        curpPdfFileName: file.name,
+        curpPdfAttachedAt: new Date().toISOString(),
+      });
+      setCurpLookupError('');
+      setCurpLookupResult(prev => ({
+        ...(prev || {}),
+        ok: true,
+        curp: curpFromName || form.curp || prev?.curp,
+        official: true,
+        source: 'gobmx-pdf',
+        status: 'PDF_OFICIAL_ADJUNTO',
+        pdfFileName: file.name,
+        message: 'PDF oficial de gob.mx adjuntado al expediente. Se guardara como documento CURP al registrar la venta.',
+      }));
+      toast.success('PDF oficial CURP adjuntado.');
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo adjuntar el PDF oficial CURP.');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
   // Botón manual — re-escanea TODAS las imágenes subidas (frente + reverso o curp).
   const handleScan = async () => {
     const imgs: string[] = [];
@@ -1422,7 +1475,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       if (!res.ok) throw new Error(data.error || 'No se pudo consultar la CURP.');
       setCurpLookupResult(data);
       mergeCurpResultIntoForm(data);
-      toast.success(data.official ? 'CURP consultada con proveedor externo.' : 'CURP validada en modo local. PDF listo para descargar.');
+      toast.success(data.official ? 'CURP consultada con proveedor externo.' : 'CURP validada por formato. Para expediente usa el PDF oficial gob.mx.');
     } catch (err: any) {
       const message = err?.message || 'No se pudo consultar la CURP.';
       setCurpLookupError(message);
@@ -1440,6 +1493,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       fechaNacimiento: form.fechaNacimiento || '',
       sexo: form.sexo || '',
       estadoNacimiento: form.estadoNacimiento || '',
+      curp: form.curp || '',
     };
     const missing = [
       ['nombres', 'nombre'],
@@ -1455,6 +1509,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
 
     setCurpAgentLoading(true);
     setCurpLookupError('');
+    const officialWindow = window.open('https://www.gob.mx/curp/', '_blank', 'noopener,noreferrer');
     try {
       const res = await fetch('/api/curp/gobmx-agent', {
         method: 'POST',
@@ -1462,39 +1517,31 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.curp) throw new Error(data.error || 'No se pudo ejecutar el agente gob.mx.');
-      updateForm({ curp: normalizeCurpInput(data.curp) });
+      if (!res.ok) throw new Error(data.error || 'No se pudo ejecutar el agente gob.mx.');
+      if (data.gobMxUrl && officialWindow) {
+        officialWindow.location.href = data.gobMxUrl;
+      }
+      if (data.clipboardText && navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(data.clipboardText).catch(() => undefined);
+      }
+      if (data.official && data.curp) {
+        updateForm({ curp: normalizeCurpInput(data.curp) });
+      }
       setCurpLookupResult(data);
-      if (data.challengeDetected) {
-        toast.success('Agente gob.mx agregó la CURP. El portal oficial requiere validación manual para confirmar/descargar.');
-      } else {
-        toast.success('Agente gob.mx agregó la CURP al formulario.');
-      }
+      toast.success(data.official
+        ? 'CURP oficial recibida.'
+        : 'Portal gob.mx abierto. Consulta, descarga el PDF oficial y adjuntalo aqui.');
     } catch (err: any) {
-      const fallback = generateCurpFromForm(form);
-      if (fallback) {
-        updateForm({ curp: fallback });
-        setCurpLookupResult({
-          ok: true,
-          curp: fallback,
-          nombres: form.nombres,
-          apellidoPaterno: form.apellidoPaterno,
-          apellidoMaterno: form.apellidoMaterno,
-          sexo: form.sexo === 'M' ? 'Mujer' : 'Hombre',
-          fechaNacimiento: form.fechaNacimiento,
-          entidadNacimiento: CURP_STATE_OPTIONS.find(s => s.code === form.estadoNacimiento)?.name || form.estadoNacimiento,
-          status: 'GENERADA_LOCAL',
-          official: false,
-          source: 'local-fallback',
-          gobMxUrl: 'https://www.gob.mx/curp/',
-          message: err?.message || 'Agente gob.mx no disponible; se generó localmente.',
-        });
-        toast.success('CURP agregada en modo local. Verifica en gob.mx cuando el portal lo permita.');
-      } else {
-        const message = err?.message || 'No se pudo generar la CURP.';
-        setCurpLookupError(message);
-        toast.error(message);
-      }
+      const message = err?.message || 'No se pudo preparar la consulta oficial CURP.';
+      setCurpLookupError(message);
+      setCurpLookupResult({
+        ok: false,
+        gobMxUrl: 'https://www.gob.mx/curp/',
+        official: false,
+        requiresManualDownload: true,
+        message,
+      });
+      toast.error(message);
     } finally {
       setCurpAgentLoading(false);
     }
@@ -1584,10 +1631,6 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
 
   const downloadCurpPdf = async () => {
     const curp = normalizeCurpInput(curpLookupResult?.curp || form.curp);
-    if (!CURP_RE.test(curp)) {
-      toast.error('Consulta o escribe una CURP válida antes de descargar.');
-      return;
-    }
     if (curpLookupResult?.pdfUrl) {
       const link = document.createElement('a');
       link.href = curpLookupResult.pdfUrl;
@@ -1597,29 +1640,37 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       link.click();
       return;
     }
-    const { default: jsPDF } = await import('jspdf');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const fullName = [
-      curpLookupResult?.nombres || form.nombres,
-      curpLookupResult?.apellidoPaterno || form.apellidoPaterno,
-      curpLookupResult?.apellidoMaterno || form.apellidoMaterno,
-    ].filter(Boolean).join(' ').trim() || 'Sin nombre capturado';
+    if (looksLikePdfDataUrl(form.curpDoc)) {
+      const link = document.createElement('a');
+      link.href = form.curpDoc!;
+      link.download = form.curpPdfFileName || `CURP_${curp || 'OFICIAL'}.pdf`;
+      link.click();
+      return;
+    }
+    toast.error('Primero descarga el PDF oficial desde gob.mx y adjuntalo en la app.');
+    window.open('https://www.gob.mx/curp/', '_blank', 'noopener,noreferrer');
+  };
 
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(16);
-    pdf.text('Consulta CURP - Heavenly Dreams CRM', 18, 24);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(11);
-    pdf.text(`CURP: ${curp}`, 18, 42);
-    pdf.text(`Nombre: ${fullName}`, 18, 52);
-    pdf.text(`Sexo: ${curpLookupResult?.sexo || 'No disponible'}`, 18, 62);
-    pdf.text(`Fecha de nacimiento: ${curpLookupResult?.fechaNacimiento || 'No disponible'}`, 18, 72);
-    pdf.text(`Entidad: ${curpLookupResult?.entidadNacimiento || 'No disponible'}`, 18, 82);
-    pdf.text(`Estatus: ${curpLookupResult?.status || 'VALIDADA_FORMATO_LOCAL'}`, 18, 92);
-    pdf.text(`Fuente: ${curpLookupResult?.official ? 'Proveedor externo configurado' : 'Validacion local del CRM'}`, 18, 102);
-    pdf.setFontSize(9);
-    pdf.text('Este PDF fue generado desde el modulo de captura para adjuntarse al expediente interno.', 18, 122, { maxWidth: 170 });
-    pdf.save(`CURP_${curp}.pdf`);
+  const uploadCurpOfficialPdfToServer = async (savedSale: any) => {
+    if (!looksLikePdfDataUrl(form.curpDoc)) return;
+    const captureId = savedSale?.id || savedSale?.venta_id || null;
+    if (!captureId) return;
+    const curp = normalizeCurpInput(form.curp);
+    const res = await fetch('/api/document-files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        captureId,
+        saleId: savedSale?.id || null,
+        docType: 'CURP',
+        fileName: form.curpPdfFileName || `CURP_${curp || captureId}.pdf`,
+        mimeType: 'application/pdf',
+        contentBase64: base64FromDataUrl(form.curpDoc!),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'No se pudo guardar el PDF oficial CURP.');
+    return data.file;
   };
 
 const exportToPDF = async () => {
@@ -1730,6 +1781,12 @@ const exportToPDF = async () => {
         throw new Error(err.error || err.message || `Error al guardar en el servidor (${apiRes.status})`);
       }
       const savedSale = await apiRes.json().catch(() => null);
+      try {
+        const curpFile = await uploadCurpOfficialPdfToServer(savedSale);
+        if (curpFile) toast.success('PDF oficial CURP guardado en el expediente.');
+      } catch (uploadErr: any) {
+        toast.warning(uploadErr?.message || 'La venta se guardó, pero el PDF oficial CURP no se adjuntó.');
+      }
       
       // 3. Export PDF
       await exportToPDF();
@@ -1955,6 +2012,7 @@ const exportToPDF = async () => {
               <input type="file" id="frente-cam" onChange={handleFileSelect(docType === 'ine' ? 'frente' : 'curp')} accept="image/*" capture="environment" className="hidden" />
               <input type="file" ref={reversoInputRef} onChange={handleFileSelect('reverso')} accept="image/*,application/pdf" className="hidden" />
               <input type="file" id="reverso-cam" onChange={handleFileSelect('reverso')} accept="image/*" capture="environment" className="hidden" />
+              <input type="file" ref={curpOfficialPdfInputRef} onChange={handleOfficialCurpPdfSelect} accept="application/pdf,.pdf" className="hidden" />
 
               {/* Zonas de carga con preview */}
               <div className={cn('grid gap-4', docType === 'ine' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1')}>
@@ -2090,7 +2148,7 @@ const exportToPDF = async () => {
                         Consulta y generación CURP
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
-                        Captura nombre, apellidos, fecha, sexo y estado de nacimiento para generar la CURP y descargar el PDF.
+                        Captura los datos, abre el portal oficial, descarga el PDF real de gob.mx y adjuntalo al expediente.
                       </p>
                     </div>
 
@@ -2131,7 +2189,7 @@ const exportToPDF = async () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-2">
                       <button
                         type="button"
                         onClick={handleGobMxCurpAgent}
@@ -2139,7 +2197,15 @@ const exportToPDF = async () => {
                         className="rounded-xl bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 text-slate-950 px-4 py-2.5 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"
                       >
                         {curpAgentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
-                        Agente gob.mx
+                        Abrir gob.mx
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => curpOfficialPdfInputRef.current?.click()}
+                        className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 px-4 py-2.5 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Subir PDF oficial
                       </button>
                       <button
                         type="button"
@@ -2163,12 +2229,12 @@ const exportToPDF = async () => {
                             status: 'GENERADA_LOCAL',
                             official: false,
                           });
-                          toast.success('CURP generada localmente.');
+                          toast.success('Borrador CURP generado. Confirmalo con el PDF oficial gob.mx.');
                         }}
-                        className="rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-4 py-2.5 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                        className="rounded-xl border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200 px-4 py-2.5 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2"
                       >
                         <Sparkles className="w-4 h-4" />
-                        Generar
+                        Borrador
                       </button>
                       <button
                         type="button"
@@ -2195,7 +2261,7 @@ const exportToPDF = async () => {
                         className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 text-emerald-200 px-4 py-2.5 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2"
                       >
                         <Download className="w-4 h-4" />
-                        PDF
+                        PDF oficial
                       </button>
                     </div>
                     {(curpLookupResult?.gobMxUrl || curpLookupResult?.challengeDetected) && (
@@ -2219,9 +2285,12 @@ const exportToPDF = async () => {
                       )}>
                         {curpLookupError || (
                           <>
-                            <span className="font-bold">{curpLookupResult?.curp}</span>
+                            <span className="font-bold">{curpLookupResult?.curp || curpLookupResult?.curpDraft || form.curp || 'Consulta oficial preparada'}</span>
                             <span className="text-slate-300"> · {curpLookupResult?.status || 'VALIDADA'}</span>
-                            <span className="text-slate-400"> · {curpLookupResult?.official ? 'Proveedor externo' : 'Modo local'}</span>
+                            <span className="text-slate-400"> · {curpLookupResult?.official ? 'PDF oficial adjunto' : curpLookupResult?.requiresManualDownload ? 'Pendiente PDF oficial' : 'No oficial'}</span>
+                            {curpLookupResult?.pdfFileName && (
+                              <span className="block text-emerald-100 mt-1">Archivo: {curpLookupResult.pdfFileName}</span>
+                            )}
                             {curpLookupResult?.message && (
                               <span className="block text-cyan-100 mt-1">{curpLookupResult.message}</span>
                             )}
