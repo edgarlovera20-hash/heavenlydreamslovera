@@ -4,14 +4,17 @@ import {
   Banknote,
   BarChart3,
   Bot,
+  CalendarDays,
   CheckCircle2,
   FileCheck2,
   FileText,
   Landmark,
   Loader2,
+  Plus,
   ReceiptText,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   Upload,
   Wallet,
 } from 'lucide-react';
@@ -49,7 +52,21 @@ type Summary = {
   alerts: any[];
   insights: string[];
   cycles: Cycle[];
+  fixedExpenses?: FixedExpense[];
+  fixedExpenseTotals?: { total: number; month: number; count: number };
   predictions: any[];
+};
+
+type FixedExpense = {
+  id: string;
+  fecha?: string;
+  fecha_fin?: string;
+  movement_date?: string;
+  concepto?: string;
+  description?: string;
+  cantidad?: number;
+  amount?: number;
+  status?: string;
 };
 
 const emptySummary: Summary = {
@@ -58,6 +75,8 @@ const emptySummary: Summary = {
   alerts: [],
   insights: [],
   cycles: [],
+  fixedExpenses: [],
+  fixedExpenseTotals: { total: 0, month: 0, count: 0 },
   predictions: [],
 };
 
@@ -80,9 +99,19 @@ function pct(value: any) {
 
 function shortDate(value?: string) {
   if (!value) return 'N/D';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
   return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function dateInputValue(date = new Date()) {
+  const local = new Date(date);
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+  return local.toISOString().slice(0, 10);
 }
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -135,9 +164,17 @@ export default function FinancesEnterpriseView() {
     totalPagoPromotor: '',
     totalFacturar: '',
   });
+  const [fixedExpense, setFixedExpense] = useState({
+    fecha: dateInputValue(),
+    fecha_fin: '',
+    concepto: '',
+    cantidad: '',
+  });
 
   const kpis = summary.kpis || {};
   const cycles = summary.cycles || [];
+  const fixedExpenses = summary.fixedExpenses || [];
+  const fixedExpenseTotals = summary.fixedExpenseTotals || { total: 0, month: 0, count: 0 };
   const criticalAlerts = (summary.alerts || []).filter(alert => alert.severity === 'critical');
   const latestCycle = cycles[0];
 
@@ -206,6 +243,41 @@ export default function FinancesEnterpriseView() {
       await load();
     } catch (err: any) {
       notify(false, err?.message || 'No se pudo crear el ciclo.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const createFixedExpense = async () => {
+    if (!fixedExpense.fecha || !fixedExpense.concepto.trim() || !fixedExpense.cantidad) {
+      return notify(false, 'Captura fecha, concepto y cantidad del gasto fijo.');
+    }
+    setBusy('fixed-expense');
+    try {
+      await apiJson('/api/finance-enterprise/fixed-expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fixedExpense),
+      });
+      notify(true, 'Gasto fijo registrado.');
+      setFixedExpense(current => ({ ...current, concepto: '', cantidad: '' }));
+      await load();
+    } catch (err: any) {
+      notify(false, err?.message || 'No se pudo registrar el gasto fijo.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const deleteFixedExpense = async (expenseId: string) => {
+    if (!window.confirm('¿Eliminar este gasto fijo?')) return;
+    setBusy(`fixed-delete-${expenseId}`);
+    try {
+      await apiJson(`/api/finance-enterprise/fixed-expenses/${expenseId}`, { method: 'DELETE' });
+      notify(true, 'Gasto fijo eliminado.');
+      await load();
+    } catch (err: any) {
+      notify(false, err?.message || 'No se pudo eliminar el gasto fijo.');
     } finally {
       setBusy('');
     }
@@ -310,10 +382,11 @@ export default function FinancesEnterpriseView() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
         <PremiumKpiCard title="FACTURACIÓN SEMANAL" value={money(kpis.facturacionSemanal)} detail="Semana ISO actual" icon={ReceiptText} tone="cyan" />
         <PremiumKpiCard title="FACTURACIÓN MENSUAL" value={money(kpis.facturacionMensual)} detail={`Crecimiento ${pct(kpis.crecimientoMensual)}`} icon={BarChart3} tone="blue" />
         <PremiumKpiCard title="DEPÓSITOS" value={money(kpis.totalDepositos)} detail="Tesorería conciliada" icon={Landmark} tone="emerald" />
+        <PremiumKpiCard title="GASTOS FIJOS" value={money(kpis.gastosFijosMes)} detail={`${fixedExpenseTotals.count} registrados`} icon={Banknote} tone="amber" />
         <PremiumKpiCard title="UTILIDAD NETA" value={money(kpis.utilidadNeta)} detail={`Margen ${pct(kpis.margenOperativo)}`} icon={Wallet} tone={Number(kpis.utilidadNeta || 0) >= 0 ? 'emerald' : 'rose'} />
       </div>
 
@@ -332,11 +405,12 @@ export default function FinancesEnterpriseView() {
             </label>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-5">
+          <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-6">
             <SmallKpi label="Promotores" value={money(kpis.totalPromotores)} />
             <SmallKpi label="Gerentes" value={money(kpis.totalGerentes)} />
             <SmallKpi label="IVA acumulado" value={money(kpis.ivaAcumulado)} />
             <SmallKpi label="Flujo semanal" value={money(kpis.flujoSemanal)} />
+            <SmallKpi label="Gastos fijos mes" value={money(kpis.gastosFijosMes)} />
             <SmallKpi label="Egresos/Ingresos" value={pct(kpis.egresosVsIngresos)} />
           </div>
         </PremiumCard>
@@ -407,6 +481,76 @@ export default function FinancesEnterpriseView() {
           </div>
         </PremiumCard>
       </div>
+
+      <PremiumCard className="overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">Egresos recurrentes</p>
+            <h2 className="text-xl font-black text-white">Gastos fijos</h2>
+            <p className="mt-1 text-sm text-slate-400">Registra renta, administración, servicios y pagos quincenales para que entren a la utilidad real.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-right sm:grid-cols-3">
+            <SmallKpi label="Mes actual" value={money(fixedExpenseTotals.month)} />
+            <SmallKpi label="Histórico" value={money(fixedExpenseTotals.total)} />
+            <SmallKpi label="Registros" value={fixedExpenseTotals.count || 0} />
+          </div>
+        </div>
+
+        <div className="grid gap-3 border-b border-white/10 p-5 lg:grid-cols-[0.8fr_0.8fr_1.6fr_0.8fr_auto] lg:items-end">
+          <FinanceInput type="date" label="Fecha" value={fixedExpense.fecha} onChange={v => setFixedExpense({ ...fixedExpense, fecha: v })} />
+          <FinanceInput type="date" label="Hasta" value={fixedExpense.fecha_fin} onChange={v => setFixedExpense({ ...fixedExpense, fecha_fin: v })} />
+          <FinanceInput label="Concepto" value={fixedExpense.concepto} onChange={v => setFixedExpense({ ...fixedExpense, concepto: v })} placeholder="Renta oficina" />
+          <FinanceInput label="Cantidad" value={fixedExpense.cantidad} onChange={v => setFixedExpense({ ...fixedExpense, cantidad: v })} placeholder="4000 + 4000" />
+          <PremiumButton className="h-[42px] whitespace-nowrap" onClick={createFixedExpense} disabled={busy === 'fixed-expense'}>
+            {busy === 'fixed-expense' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Guardar gasto
+          </PremiumButton>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-[900px] w-full text-left text-sm">
+            <thead className="border-b border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Fecha</th>
+                <th className="px-4 py-3">Hasta</th>
+                <th className="px-4 py-3">Concepto</th>
+                <th className="px-4 py-3">Cantidad</th>
+                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {fixedExpenses.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                    <CalendarDays className="mx-auto mb-2 h-5 w-5 text-amber-300" />
+                    Sin gastos fijos registrados.
+                  </td>
+                </tr>
+              ) : fixedExpenses.map(expense => (
+                <tr key={expense.id} className="hover:bg-white/[0.025]">
+                  <td className="px-4 py-4 font-bold text-slate-200">{shortDate(expense.fecha || expense.movement_date)}</td>
+                  <td className="px-4 py-4 text-slate-400">{expense.fecha_fin ? shortDate(expense.fecha_fin) : '--'}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-black text-white">{expense.concepto || expense.description}</p>
+                    <p className="mt-1 text-xs text-slate-500">Gasto fijo operativo</p>
+                  </td>
+                  <td className="px-4 py-4 font-black text-amber-100">{money(expense.cantidad ?? expense.amount)}</td>
+                  <td className="px-4 py-4"><PremiumBadge tone="amber" dot>{expense.status || 'registrado'}</PremiumBadge></td>
+                  <td className="px-4 py-4 text-right">
+                    <button
+                      onClick={() => deleteFixedExpense(expense.id)}
+                      disabled={busy === `fixed-delete-${expense.id}`}
+                      className="inline-flex items-center justify-center rounded-xl border border-rose-300/25 bg-rose-400/10 px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-rose-100 disabled:opacity-40"
+                    >
+                      {busy === `fixed-delete-${expense.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </PremiumCard>
 
       <PremiumCard className="overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
@@ -510,12 +654,28 @@ function StateChip({ label, value, tone }: { label: string; value: number; tone:
   );
 }
 
-function FinanceInput({ label, value, onChange, wide = false }: { label: string; value: string; onChange: (value: string) => void; wide?: boolean }) {
+function FinanceInput({
+  label,
+  value,
+  onChange,
+  wide = false,
+  type = 'text',
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  wide?: boolean;
+  type?: React.HTMLInputTypeAttribute;
+  placeholder?: string;
+}) {
   return (
     <label className={wide ? 'col-span-2' : ''}>
       <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-cyan-300">{label}</span>
       <input
+        type={type}
         value={value}
+        placeholder={placeholder}
         onChange={event => onChange(event.target.value)}
         className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm font-bold text-white outline-none transition focus:border-cyan-300/50"
       />

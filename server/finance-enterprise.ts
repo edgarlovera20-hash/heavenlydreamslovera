@@ -48,6 +48,13 @@ function numberValue(value: any) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function amountExpressionValue(value: any) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const raw = String(value ?? '').trim();
+  if (!raw.includes('+')) return numberValue(raw);
+  return raw.split('+').reduce((sum, part) => sum + numberValue(part), 0);
+}
+
 function deburr(value: string) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -247,6 +254,28 @@ function calculateCycleFinance(cycle: any) {
   return { revenue, expenses, utilidad, margin, manualExpenses };
 }
 
+function normalizeFixedExpense(row: any) {
+  const metadata = parseJson(row?.metadata, {});
+  return {
+    ...row,
+    fecha: row?.movement_date || row?.fecha || null,
+    fecha_fin: metadata.fecha_fin || metadata.fechaFin || null,
+    concepto: row?.description || '',
+    cantidad: Number(row?.amount || 0),
+    metadata,
+  };
+}
+
+function fixedExpenseSummary(limit = 500) {
+  const rows = (FinancialMovements.getFixedExpenses(limit) as any[]).map(normalizeFixedExpense);
+  const month = new Date().toISOString().slice(0, 7);
+  const total = rows.reduce((sum, row) => sum + Number(row.amount || row.cantidad || 0), 0);
+  const monthTotal = rows
+    .filter(row => String(row.fecha || '').startsWith(month))
+    .reduce((sum, row) => sum + Number(row.amount || row.cantidad || 0), 0);
+  return { rows, total, monthTotal };
+}
+
 function upsertAlert(cycle: any, type: string, severity: string, title: string, message: string, amount?: number, metadata: any = {}) {
   FinancialAlerts.upsert({
     cycle_id: cycle?.id || null,
@@ -358,8 +387,9 @@ function buildSummary() {
   const sum = (rows: any[], key: string) => rows.reduce((acc, row) => acc + Number(row[key] || 0), 0);
   const allRevenue = sum(cycles, 'total_facturar');
   const allDeposits = sum(cycles, 'monto_depositado');
-  const allExpenses = cycles.reduce((acc, cycle) => acc + calculateCycleFinance(cycle).expenses, 0);
-  const netProfit = cycles.reduce((acc, cycle) => acc + calculateCycleFinance(cycle).utilidad, 0);
+  const fixedExpenses = fixedExpenseSummary(500);
+  const allExpenses = cycles.reduce((acc, cycle) => acc + calculateCycleFinance(cycle).expenses, 0) + fixedExpenses.total;
+  const netProfit = cycles.reduce((acc, cycle) => acc + calculateCycleFinance(cycle).utilidad, 0) - fixedExpenses.total;
   const prevMonthBilling = sum(prevMonthCycles, 'total_facturar');
   const monthBilling = sum(monthCycles, 'total_facturar');
 
@@ -371,6 +401,8 @@ function buildSummary() {
       totalPromotores: sum(cycles, 'total_pago_promotor'),
       totalGerentes: sum(cycles, 'total_pago_gerente'),
       ivaAcumulado: sum(cycles, 'iva'),
+      gastosFijosMes: fixedExpenses.monthTotal,
+      gastosFijosTotal: fixedExpenses.total,
       utilidadNeta: netProfit,
       margenOperativo: allRevenue > 0 ? (netProfit / allRevenue) * 100 : 0,
       flujoSemanal: weekCycles.reduce((acc, cycle) => acc + calculateCycleFinance(cycle).utilidad, 0),
@@ -386,6 +418,12 @@ function buildSummary() {
     alerts,
     insights: buildInsights(cycles),
     cycles: cycles.slice(0, 20).map(enrichCycle),
+    fixedExpenses: fixedExpenses.rows.slice(0, 120),
+    fixedExpenseTotals: {
+      total: fixedExpenses.total,
+      month: fixedExpenses.monthTotal,
+      count: fixedExpenses.rows.length,
+    },
     predictions: FinancialPredictions.getRecent(8),
   };
 }
@@ -587,6 +625,62 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     const cycle = body.cycle_id || body.cycleId ? WeeklyFinancialCycles.getById(body.cycle_id || body.cycleId) : null;
     if (cycle) analyzeCycle(cycle);
     audit(body.cycle_id || body.cycleId || null, 'CREATE_MOVEMENT', req, body.description || 'Movimiento financiero', body);
+    res.json({ ok: true, summary: buildSummary() });
+  }));
+
+  app.get('/api/finance-enterprise/fixed-expenses', gerenteOnly, wrap((req: any, res: any) => {
+    const limit = parseLimit(req.query.limit, 200, 500);
+    const fixed = fixedExpenseSummary(limit);
+    res.json({
+      items: fixed.rows,
+      totals: {
+        total: fixed.total,
+        month: fixed.monthTotal,
+        count: fixed.rows.length,
+      },
+    });
+  }));
+
+  app.post('/api/finance-enterprise/fixed-expenses', gerenteOnly, wrap((req: any, res: any) => {
+    const body = req.body || {};
+    const fecha = String(body.fecha || body.movement_date || '').trim();
+    const concepto = String(body.concepto || body.description || '').trim();
+    const cantidad = amountExpressionValue(body.cantidad ?? body.amount);
+    if (!fecha) return res.status(400).json({ error: 'Fecha requerida' });
+    if (!concepto) return res.status(400).json({ error: 'Concepto requerido' });
+    if (cantidad <= 0) return res.status(400).json({ error: 'Cantidad requerida' });
+
+    const id = randomUUID();
+    FinancialMovements.create({
+      id,
+      cycle_id: null,
+      type: 'fixed_expense',
+      category: 'gasto_fijo',
+      description: concepto,
+      amount: cantidad,
+      direction: 'egreso',
+      movement_date: fecha,
+      source: 'fixed_expense',
+      status: body.status || 'registrado',
+      metadata: {
+        fecha_fin: body.fecha_fin || body.fechaFin || null,
+        cantidad_original: body.cantidad ?? body.amount ?? null,
+        notas: body.notas || body.notes || null,
+        source: 'finance_enterprise_fixed_expenses',
+      },
+    });
+    const expense = normalizeFixedExpense(FinancialMovements.getById(id));
+    audit(null, 'CREATE_FIXED_EXPENSE', req, `Gasto fijo: ${concepto}`, expense);
+    recordEvent('finance.fixed_expense.created', { id, concepto, cantidad }, req.auth);
+    res.json({ ok: true, expense, summary: buildSummary() });
+  }));
+
+  app.delete('/api/finance-enterprise/fixed-expenses/:id', gerenteOnly, wrap((req: any, res: any) => {
+    const expense = FinancialMovements.getById(req.params.id) as any;
+    if (!expense || expense.source !== 'fixed_expense') return res.status(404).json({ error: 'Gasto fijo no encontrado' });
+    FinancialMovements.delete(expense.id);
+    audit(null, 'DELETE_FIXED_EXPENSE', req, `Gasto fijo eliminado: ${expense.description || expense.id}`, normalizeFixedExpense(expense));
+    recordEvent('finance.fixed_expense.deleted', { id: expense.id }, req.auth);
     res.json({ ok: true, summary: buildSummary() });
   }));
 

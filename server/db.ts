@@ -1274,7 +1274,14 @@ export const WeeklyFinancialCycles = {
 
 export const FinancialMovements = {
   getAll: (limit = 300) => db.prepare('SELECT * FROM financial_movements ORDER BY movement_date DESC, created_at DESC LIMIT ?').all(limit),
+  getById: (id: string) => db.prepare('SELECT * FROM financial_movements WHERE id=?').get(id),
   getByCycle: (cycleId: string) => db.prepare('SELECT * FROM financial_movements WHERE cycle_id=? ORDER BY movement_date DESC, created_at DESC').all(cycleId),
+  getFixedExpenses: (limit = 300) => db.prepare(`
+    SELECT * FROM financial_movements
+    WHERE source='fixed_expense' AND direction='egreso'
+    ORDER BY movement_date DESC, created_at DESC
+    LIMIT ?
+  `).all(limit),
   create: (data: any) => db.prepare(`
     INSERT INTO financial_movements (id,cycle_id,type,category,description,amount,direction,movement_date,source,status,metadata)
     VALUES (@id,@cycle_id,@type,@category,@description,@amount,@direction,@movement_date,@source,@status,@metadata)
@@ -1291,6 +1298,7 @@ export const FinancialMovements = {
     status: data.status || 'registrado',
     metadata: typeof data.metadata === 'string' ? data.metadata : JSON.stringify(data.metadata || {}),
   }),
+  delete: (id: string) => db.prepare('DELETE FROM financial_movements WHERE id=?').run(id),
   deleteByCycleSource: (cycleId: string, source: string) => db.prepare('DELETE FROM financial_movements WHERE cycle_id=? AND source=?').run(cycleId, source),
 };
 
