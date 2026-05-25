@@ -41,6 +41,42 @@ function recordMetric(name: string, tags: any = {}) {
   } catch {}
 }
 
+function cleanPersonName(value: any) {
+  const name = String(value || '')
+    .replace(/@s\.whatsapp\.net|@g\.us/gi, '')
+    .replace(/^(promotores|clientes):/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return name && /[a-záéíóúñ]/i.test(name) ? name : null;
+}
+
+function promoterFirstName(conversation: any) {
+  const memory = conversation?.memory || {};
+  const promoter = memory.promoter || {};
+  const source = cleanPersonName(promoter.firstName)
+    || cleanPersonName(promoter.fullName)
+    || cleanPersonName(conversation?.display_name);
+  return source?.split(/\s+/)[0] || null;
+}
+
+function personalizeReply(reply: any, conversation: any) {
+  const text = String(reply || '').trim();
+  const firstName = promoterFirstName(conversation);
+  if (!text || !firstName) return text;
+  const escaped = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`^(hola[, ]+)?${escaped}\\b`, 'i').test(text)) return text;
+  if (/^hola,\s*/i.test(text)) return text.replace(/^hola,\s*/i, `Hola, ${firstName}, `);
+  if (/^hola\s+/i.test(text)) return text.replace(/^hola\s+/i, `Hola ${firstName}, `);
+  return `${firstName}, ${text}`;
+}
+
+function personalizeDecision(conversation: any, decision: AgentDecision): AgentDecision {
+  return {
+    ...decision,
+    proposedReply: decision.proposedReply ? personalizeReply(decision.proposedReply, conversation) : decision.proposedReply,
+  };
+}
+
 function normalizePhone(text: any) {
   const digits = String(text || '').replace(/\D/g, '');
   if (digits.length >= 10) return digits.slice(-10);
@@ -170,40 +206,40 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
 
   if (intent === 'venta') {
     const missing = requiredMissing(fields);
-    return {
+    return personalizeDecision(conversation, {
       intent,
       confidence,
       extractedFields: { ...fields, missing },
       proposedReply: buildSalesReply(fields, missing),
       proposedActions: missing.length ? ['update_lead'] : ['create_sale', 'schedule_followup'],
       requiresApproval: true,
-    };
+    });
   }
 
   if (intent === 'consulta_folio') {
     const { reply, fields: folioFields } = buildFolioReply(text);
-    return {
+    return personalizeDecision(conversation, {
       intent,
       confidence,
       extractedFields: { ...fields, ...folioFields },
       proposedReply: reply,
       proposedActions: folioFields.found ? [] : ['escalate_human'],
       requiresApproval: true,
-    };
+    });
   }
 
   if (intent === 'soporte' || intent === 'morosidad') {
-    return {
+    return personalizeDecision(conversation, {
       intent,
       confidence,
       extractedFields: fields,
       proposedReply: 'Recibimos tu mensaje. Un asesor revisara tu caso y te dara seguimiento.',
       proposedActions: ['escalate_human'],
       requiresApproval: true,
-    };
+    });
   }
 
-  return {
+  return personalizeDecision(conversation, {
     intent,
     confidence,
     extractedFields: fields,
@@ -213,7 +249,7 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
     })(),
     proposedActions: [],
     requiresApproval: true,
-  };
+  });
 }
 
 function stripVisibleThinking(value: string) {
@@ -287,6 +323,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 function buildQwenDecisionPrompt(conversation: any, message: any, rules: AgentDecision) {
   const profile = AgentProfiles.getById('promoter_receptionist') as any;
   const memory = conversation?.memory || {};
+  const promoter = memory.promoter || {};
   return `/no_think
 Analiza el mensaje entrante para Heavenly Dreams CRM.
 
@@ -294,6 +331,7 @@ Reglas:
 - Responde SOLO JSON valido, sin markdown y sin explicaciones.
 - ARIUX debe responder ante cualquier mensaje entrante, aunque sea corto, raro o incompleto.
 - Tono: social, profesional, rapido, con humor ligero cuando ayude. Usa 1 a 3 emojis utiles, sin saturar.
+- Si hay nombre del promotor registrado, hablale por su nombre de forma natural y personalizada.
 - Siempre termina con una pregunta o siguiente paso concreto cuando falte contexto.
 - No inventes folios, telefonos, nombres, paquetes ni direcciones.
 - Todas las acciones requieren aprobacion humana aunque el JSON diga lo contrario.
@@ -320,6 +358,9 @@ ${JSON.stringify({
 
 Memoria de conversacion:
 ${JSON.stringify(memory)}
+
+Promotor registrado:
+${JSON.stringify(promoter)}
 
 Decision heuristica inicial:
 ${JSON.stringify({
@@ -354,7 +395,7 @@ Devuelve exactamente:
 }`;
 }
 
-function decisionFromModel(rules: AgentDecision, modelPayload: any, ai: { provider?: string; model?: string; errors?: string[] }, message: any): AgentDecision {
+function decisionFromModel(conversation: any, rules: AgentDecision, modelPayload: any, ai: { provider?: string; model?: string; errors?: string[] }, message: any): AgentDecision {
   const intent = normalizeIntent(modelPayload?.intent, rules.intent);
   const modelFields = typeof modelPayload?.extractedFields === 'object' && modelPayload.extractedFields
     ? modelPayload.extractedFields
@@ -370,39 +411,39 @@ function decisionFromModel(rules: AgentDecision, modelPayload: any, ai: { provid
   if (intent === 'consulta_folio') {
     const folio = extractedFields.folio || String(message.body || '').match(/\b([A-Z0-9]{5,}|\d{5,})\b/i)?.[1] || '';
     const { reply, fields } = buildFolioReply(folio ? `folio ${folio}` : String(message.body || ''));
-    return {
+    return personalizeDecision(conversation, {
       intent,
       confidence: clampConfidence(modelPayload?.confidence, Math.max(rules.confidence, 0.88)),
       extractedFields: { ...extractedFields, ...fields },
       proposedReply: reply,
       proposedActions: fields.found ? [] : ['escalate_human'],
       requiresApproval: true,
-    };
+    });
   }
 
   if (intent === 'venta') {
     const missing = requiredMissing(extractedFields);
     extractedFields.missing = missing;
     const actions = normalizeActions(modelPayload?.proposedActions);
-    return {
+    return personalizeDecision(conversation, {
       intent,
       confidence: clampConfidence(modelPayload?.confidence, rules.confidence),
       extractedFields,
       proposedReply: cleanReply(modelPayload?.proposedReply) || buildSalesReply(extractedFields, missing),
       proposedActions: actions.length ? actions : (missing.length ? ['update_lead'] : ['create_sale', 'schedule_followup']),
       requiresApproval: true,
-    };
+    });
   }
 
   const actions = normalizeActions(modelPayload?.proposedActions);
-  return {
+  return personalizeDecision(conversation, {
     intent,
     confidence: clampConfidence(modelPayload?.confidence, rules.confidence),
     extractedFields,
     proposedReply: cleanReply(modelPayload?.proposedReply) || rules.proposedReply,
     proposedActions: actions.length ? actions : (intent === 'soporte' || intent === 'morosidad' ? ['escalate_human'] : []),
     requiresApproval: true,
-  };
+  });
 }
 
 async function decide(conversation: any, message: any): Promise<AgentDecision> {
@@ -415,7 +456,7 @@ async function decide(conversation: any, message: any): Promise<AgentDecision> {
     const ai = await withTimeout(runAiWithFallback(buildQwenDecisionPrompt(conversation, message, rules)), AI_DECISION_TIMEOUT_MS, 'Qwen decision');
     const parsed = parseModelJson(ai.output);
     if (!parsed) throw new Error('Qwen no devolvio JSON valido');
-    return decisionFromModel(rules, parsed, ai, message);
+    return decisionFromModel(conversation, rules, parsed, ai, message);
   } catch (err: any) {
     return {
       ...rules,

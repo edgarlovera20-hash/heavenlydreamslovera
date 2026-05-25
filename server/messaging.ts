@@ -42,15 +42,59 @@ function fallbackDisplayName(message: NormalizedChannelMessage) {
     .replace('@g.us', '');
 }
 
-function initialMemory(message: NormalizedChannelMessage) {
+function cleanDisplayName(value: any) {
+  const name = String(value || '')
+    .replace(/@s\.whatsapp\.net|@g\.us/gi, '')
+    .replace(/^(promotores|clientes):/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return name || null;
+}
+
+function firstNameFromDisplayName(value: any) {
+  const name = cleanDisplayName(value);
+  if (!name || !/[a-záéíóúñ]/i.test(name)) return null;
+  const token = name.split(/\s+/).find(part => /[a-záéíóúñ]/i.test(part));
+  return token || null;
+}
+
+function buildConversationMemory(
+  previous: any,
+  message: NormalizedChannelMessage,
+  displayName: string,
+  timestamp: number,
+) {
+  const memory = previous && typeof previous === 'object' ? previous : {};
+  const previousPromoter = memory.promoter && typeof memory.promoter === 'object' ? memory.promoter : {};
+  const nowIso = new Date(timestamp).toISOString();
+  const account = String(message.metadata?.account || previousPromoter.account || memory.account || '').trim() || null;
+  const incomingName = message.direction === 'incoming' ? cleanDisplayName(message.fromName || displayName) : null;
+  const fullName = incomingName || previousPromoter.fullName || cleanDisplayName(displayName);
+  const firstName = firstNameFromDisplayName(fullName) || previousPromoter.firstName || null;
+
   return {
-    summary: '',
-    knownFields: {},
-    stage: 'nuevo',
-    lastAgent: null,
-    nextAction: 'clasificar',
+    ...memory,
+    summary: memory.summary || '',
+    knownFields: memory.knownFields || {},
+    stage: memory.stage || 'nuevo',
+    lastAgent: memory.lastAgent || null,
+    nextAction: memory.nextAction || 'clasificar',
     source: message.channel,
-    account: message.metadata?.account || null,
+    account,
+    promoter: {
+      ...previousPromoter,
+      channel: message.channel,
+      account,
+      externalChatId: message.externalChatId,
+      displayName: cleanDisplayName(displayName),
+      fullName,
+      firstName,
+      isGroup: Boolean(message.isGroup),
+      firstSeenAt: previousPromoter.firstSeenAt || nowIso,
+      lastSeenAt: message.direction === 'incoming' ? nowIso : (previousPromoter.lastSeenAt || nowIso),
+      lastOutboundAt: message.direction === 'outgoing' ? nowIso : (previousPromoter.lastOutboundAt || null),
+      messageCount: Number(previousPromoter.messageCount || 0) + (message.direction === 'incoming' ? 1 : 0),
+    },
   };
 }
 
@@ -76,12 +120,16 @@ export async function ingestChannelMessage(input: NormalizedChannelMessage) {
   if (!body) return { conversation: null, message: null, created: false };
 
   const timestamp = Number(input.timestamp || Date.now());
+  const existing = ChannelConversations.getByChannelChat(input.channel, input.externalChatId);
+  const displayName = cleanDisplayName(input.direction === 'incoming' ? fallbackDisplayName(input) : existing?.display_name)
+    || cleanDisplayName(fallbackDisplayName(input))
+    || input.externalChatId;
   const conversation = ChannelConversations.upsert({
     channel: input.channel,
     external_chat_id: input.externalChatId,
-    display_name: fallbackDisplayName(input),
+    display_name: input.direction === 'incoming' || !existing ? displayName : null,
     status: input.direction === 'incoming' ? 'nuevo' : undefined,
-    memory: initialMemory(input),
+    memory: buildConversationMemory(existing?.memory, input, displayName, timestamp),
     last_message_at: timestamp,
   });
 
