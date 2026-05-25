@@ -6,7 +6,6 @@ import {
   Calendar, CalendarDays, CalendarClock, ShieldCheck,
   ShieldAlert, Sparkles, Home,
 } from 'lucide-react';
-import { set, get } from 'idb-keyval';
 import { auth } from '../../lib/firebase';
 import { aiAgent } from '../../services/aiAgent';
 import {
@@ -17,6 +16,7 @@ import {
 } from '../../services/googleDriveFolders';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
+import { UsersAPI, VentasAPI } from '../../services/db';
 
 // ──────────────────────────────────────────────
 // TYPES
@@ -199,13 +199,6 @@ function folderSecondary(s: Sale): string {
   return 'Sin folio SIAC';
 }
 
-function persistSales(updater: (sales: Sale[]) => Sale[]): Sale[] {
-  const sales: Sale[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-  const next = updater(sales);
-  localStorage.setItem('adhdreams_sales', JSON.stringify(next));
-  return next;
-}
-
 // ──────────────────────────────────────────────
 // AI MANIPULATION HEURISTIC
 // ──────────────────────────────────────────────
@@ -281,23 +274,6 @@ async function hashFile(file: File): Promise<string> {
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function dataUrlExtension(dataUrl: string, fallback: string) {
-  const mime = dataUrl.match(/^data:([^;]+);base64,/)?.[1] || '';
-  const extByMime: Record<string, string> = {
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/webp': 'webp',
-    'application/pdf': 'pdf',
-    'video/mp4': 'mp4',
-    'video/webm': 'webm',
-    'audio/mpeg': 'mp3',
-    'audio/mp4': 'm4a',
-    'audio/webm': 'webm',
-    'audio/wav': 'wav',
-  };
-  return extByMime[mime] || fallback;
-}
-
 function safeFileName(value: string) {
   return value.replace(/[\\/:*?"<>|#{}%~&]/g, ' ').replace(/\s+/g, ' ').trim() || 'documento';
 }
@@ -316,6 +292,7 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
   const [driveFolderInput, setDriveFolderInput] = useState('');
   const [driveBusy, setDriveBusy] = useState<'import' | 'export' | null>(null);
   const [driveLastUrl, setDriveLastUrl] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetRef = useRef<{ saleId: string; docId: string; type: DocType } | null>(null);
@@ -326,17 +303,18 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
 
   // ──────────── DATA LOAD ────────────
   useEffect(() => {
-    const load = () => {
+    const load = async () => {
       try {
-        const allSales: Sale[] = JSON.parse(localStorage.getItem('adhdreams_sales') || '[]');
-        const allUsers: any[] = JSON.parse(localStorage.getItem('adhdreams_users') || '[]');
+        const [allSales, allUsers] = await Promise.all([VentasAPI.getAll(), UsersAPI.getAll()]);
         const usersMap: Record<string, any> = {};
-        allUsers.forEach(u => { if (u.uid) usersMap[u.uid] = u; });
+        (Array.isArray(allUsers) ? allUsers : []).forEach((u: any) => { if (u.uid) usersMap[u.uid] = u; });
         setUsers(usersMap);
-        const visible = canSeeAll ? allSales : allSales.filter(s => s.asesorId === myUid);
+        const visible = canSeeAll ? allSales : (Array.isArray(allSales) ? allSales : []).filter((s: any) => s.asesorId === myUid);
         setSales(visible);
-      } catch {
+        setLoadError('');
+      } catch (err) {
         setSales([]);
+        setLoadError(err instanceof Error ? err.message : 'Backend no disponible');
       }
     };
     load();
@@ -432,36 +410,25 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
         return;
       }
 
-      // Save base64 in IndexedDB for large media support
-      await set(`file_${target.saleId}_${target.docId}`, base64);
-
-      try {
-        const uploadRes = await fetch('/api/document-files', {
-          method: 'POST',
-          body: JSON.stringify({
-            saleId: target.saleId,
-            captureId: target.saleId,
-            docType: toServerDocType(target.docId),
-            fileName: file.name,
-            mimeType: file.type || 'application/octet-stream',
-            contentBase64: base64,
-          }),
-        });
-        if (uploadRes.ok) {
-          const uploaded = await uploadRes.json();
-          validation.backendFileId = uploaded.file?.id;
-          validation.downloadUrl = uploaded.file?.id ? `/api/document-files/${uploaded.file.id}/download` : undefined;
-        }
-      } catch {
-        // El IndexedDB local mantiene respaldo offline si el backend no está disponible.
+      const uploadRes = await fetch('/api/document-files', {
+        method: 'POST',
+        body: JSON.stringify({
+          saleId: target.saleId,
+          captureId: target.saleId,
+          docType: toServerDocType(target.docId),
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          contentBase64: base64,
+        }),
+      });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudo guardar el documento en el servidor.');
       }
-
-      // Persistir solo bandera en localStorage
-      persistSales(prev => prev.map(s => {
-        if (s.id !== target.saleId) return s;
-        const validations = { ...(s.docValidations || {}), [target.docId]: validation };
-        return { ...s, [target.docId]: true, docValidations: validations };
-      }));
+      const uploaded = await uploadRes.json();
+      validation.backendFileId = uploaded.file?.id;
+      validation.downloadUrl = uploaded.file?.id ? `/api/document-files/${uploaded.file.id}/download` : undefined;
+      await VentasAPI.update(target.saleId, { metadata: { docValidations: { [target.docId]: validation }, [target.docId]: true } });
 
       // Refrescar memoria local
       setSales(prev => prev.map(s => {
@@ -531,19 +498,17 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     setDriveBusy('import');
     try {
       const result = await importExpedientesFromDrive(driveFolderInput);
-      const next = persistSales(prev => {
-        const byId = new Map<string, Sale>();
-        prev.forEach(sale => {
-          if (sale.id) byId.set(sale.id, sale);
-        });
-        result.sales.forEach((sale: any) => {
-          const id = sale.id || sale.folio || crypto.randomUUID();
-          const normalized = { ...sale, id, fechaSolicitud: sale.fechaSolicitud || new Date().toISOString().slice(0, 10) } as Sale;
-          byId.set(id, { ...(byId.get(id) || {}), ...normalized });
-        });
-        return Array.from(byId.values());
-      });
-      setSales(canSeeAll ? next : next.filter(s => s.asesorId === myUid));
+      for (const sale of result.sales as any[]) {
+        await VentasAPI.create({
+          folio: sale.folio || sale.id,
+          nombres: sale.nombres,
+          telefono: sale.telefonoTitular,
+          fecha_solicitud: sale.fechaSolicitud || new Date().toISOString(),
+          metadata: sale,
+        }).catch(() => {});
+      }
+      const next = await VentasAPI.getAll();
+      setSales(canSeeAll ? next : next.filter((s: any) => s.asesorId === myUid));
       await auditDriveOperation('import', { sourceFolderId: result.sourceFolderId, salesImported: result.sales.length, importedAt: result.importedAt });
       toast.success(`Importados ${result.sales.length} expedientes desde Google Drive.`);
     } catch (err: any) {
@@ -714,6 +679,11 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
           icon={<FolderOpen className="w-7 h-7 text-blue-400" />}
         />
         <DriveFoldersPanel />
+        {loadError && (
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            No se pudieron cargar expedientes reales del servidor: {loadError}
+          </div>
+        )}
         {years.length === 0 ? (
           <EmptyState msg="Cada venta que registres aparecerá agrupada por año, mes y día." />
         ) : (
@@ -840,20 +810,21 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     try {
       const sale = sales.find(s => s.id === saleId);
       const backendUrl = sale?.docValidations?.[docId]?.downloadUrl;
-      if (backendUrl) {
-        const a = document.createElement('a');
-        a.href = backendUrl;
-        a.download = `${name}_${saleId}`;
-        a.click();
-        return;
+      let downloadUrl = backendUrl;
+      if (!downloadUrl) {
+        const res = await fetch(`/api/document-files?capture_id=${encodeURIComponent(saleId)}`);
+        if (res.ok) {
+          const files = await res.json();
+          const found = (Array.isArray(files) ? files : []).find((file: any) => file.tipo_documento === toServerDocType(docId));
+          downloadUrl = found?.downloadUrl || found?.archivo_url || (found?.id ? `/api/document-files/${found.id}/download` : '');
+        }
       }
-      const base64 = await get(`file_${saleId}_${docId}`);
-      if (!base64) {
-        toast.error('El archivo no se encontró en la base de datos local.');
+      if (!downloadUrl) {
+        toast.error('El archivo no se encontró en el servidor.');
         return;
       }
       const a = document.createElement('a');
-      a.href = base64;
+      a.href = downloadUrl;
       a.download = `${name}_${saleId}`;
       a.click();
     } catch {
@@ -884,11 +855,14 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
         generado: new Date().toISOString(),
       }, null, 2));
 
+      const filesRes = await fetch(`/api/document-files?capture_id=${encodeURIComponent(sale.id)}`);
+      const files = filesRes.ok ? await filesRes.json() : [];
       for (const doc of docs) {
-        const base64 = await get(`file_${sale.id}_${doc.id}`);
-        if (!base64 || typeof base64 !== 'string') continue;
-        const blob = await fetch(base64).then(r => r.blob());
-        const ext = dataUrlExtension(base64, doc.type === 'video' ? 'mp4' : doc.type === 'audio' ? 'mp3' : doc.type === 'pdf' ? 'pdf' : 'jpg');
+        const found = (Array.isArray(files) ? files : []).find((file: any) => file.tipo_documento === toServerDocType(doc.id));
+        const downloadUrl = found?.downloadUrl || found?.archivo_url || (found?.id ? `/api/document-files/${found.id}/download` : '');
+        if (!downloadUrl) continue;
+        const blob = await fetch(downloadUrl).then(r => r.blob());
+        const ext = found?.mime_type?.split('/')[1] || (doc.type === 'video' ? 'mp4' : doc.type === 'audio' ? 'mp3' : doc.type === 'pdf' ? 'pdf' : 'jpg');
         zip.file(`${safeFileName(doc.name)}.${ext}`, blob);
       }
 

@@ -1,5 +1,3 @@
-import { get } from 'idb-keyval';
-
 declare global {
   interface Window {
     google?: any;
@@ -218,21 +216,17 @@ async function uploadJson(token: string, parentId: string, name: string, payload
   }, new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
 }
 
-function dataUrlToBlob(dataUrl: string) {
-  const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
-  if (!match) return new Blob([dataUrl], { type: 'text/plain' });
-  const mime = match[1] || 'application/octet-stream';
-  const isBase64 = Boolean(match[2]);
-  const raw = isBase64 ? atob(match[3]) : decodeURIComponent(match[3]);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
-  return new Blob([bytes], { type: mime });
-}
-
 async function uploadDocument(token: string, saleFolderId: string, sale: SaleLike, docKey: string) {
-  const fileData = await get(`file_${sale.id}_${docKey}`);
-  if (typeof fileData !== 'string' || !fileData) return false;
-  const blob = dataUrlToBlob(fileData);
+  const res = await fetch(`/api/document-files?capture_id=${encodeURIComponent(sale.id || '')}`);
+  if (!res.ok) return false;
+  const files = await res.json();
+  const found = (Array.isArray(files) ? files : []).find((file: any) => {
+    const type = String(file.tipo_documento || file.docType || '').toUpperCase();
+    return type.includes(docKey.toUpperCase()) || type === docKey.toUpperCase();
+  });
+  const downloadUrl = found?.downloadUrl || found?.archivo_url || (found?.id ? `/api/document-files/${found.id}/download` : '');
+  if (!downloadUrl) return false;
+  const blob = await fetch(downloadUrl).then((response) => response.blob());
   const ext = MIME_EXT[blob.type] || 'bin';
   await uploadMultipart(token, {
     name: `${sanitizeName(DOC_LABELS[docKey] || docKey)}.${ext}`,

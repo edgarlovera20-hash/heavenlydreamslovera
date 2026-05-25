@@ -69,7 +69,7 @@ export default function App() {
       const av = localStorage.getItem(`hd_avatar_${session.uid}`);
       if (av) setAvatarUrl(av);
     } else {
-      try { localStorage.removeItem('hd_remember'); localStorage.removeItem('adhdreams_remember'); } catch {}
+      try { localStorage.removeItem('hd_remember'); } catch {}
       const rem = loadRememberedUsername();
       if (rem) { setUsername(rem.username); setRememberMe(true); }
     }

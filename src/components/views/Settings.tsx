@@ -4,6 +4,7 @@ import { cn } from '../../lib/utils';
 import { sendPushNotification, requestNotificationPermission } from '../../lib/notifications';
 import { AgentDesigner } from './AgentDesigner';
 import { toast } from 'sonner';
+import { ChannelKey as MessagingChannelKey, getChannels, refreshChannels, setChannel } from '../../lib/channels';
 
 type Tab = 'usuarios' | 'bot' | 'canales' | 'import_export' | 'integraciones' | 'notificaciones';
 
@@ -759,27 +760,45 @@ function CanalesTab() {
   const isAuthorized = role === 'GERENTE' || role === 'ADMINISTRACION' || role === 'ADMIN';
 
   const [channels, setChannels] = useState<typeof DEFAULT_CHANNELS>(() => {
-    const saved = localStorage.getItem('adhdreams_channels_v2');
-    if (saved) {
-      try { return { ...DEFAULT_CHANNELS, ...JSON.parse(saved) }; } catch {}
-    }
     return DEFAULT_CHANNELS;
   });
 
   const [connectModal, setConnectModal] = useState<ChannelKey | null>(null);
 
-  const persist = (next: typeof channels) => {
-    setChannels(next);
-    localStorage.setItem('adhdreams_channels_v2', JSON.stringify(next));
+  const messagingKey = (key: ChannelKey): MessagingChannelKey => {
+    if (key === 'whatsappClientes') return 'whatsappClientes';
+    if (key === 'telegram') return 'telegramVendedores';
+    return 'whatsappVendedores';
   };
 
+  const loadChannels = async () => {
+    const linked = await refreshChannels().catch(() => getChannels());
+    setChannels({
+      whatsappPromotores: linked.whatsappVendedores
+        ? { connected: true, identifier: linked.whatsappVendedores.identifier, connectedAt: linked.whatsappVendedores.linkedAt }
+        : { connected: false },
+      whatsappClientes: linked.whatsappClientes
+        ? { connected: true, identifier: linked.whatsappClientes.identifier, connectedAt: linked.whatsappClientes.linkedAt }
+        : { connected: false },
+      telegram: linked.telegramVendedores
+        ? { connected: true, identifier: linked.telegramVendedores.identifier, connectedAt: linked.telegramVendedores.linkedAt }
+        : { connected: false },
+    });
+  };
+
+  useEffect(() => { void loadChannels(); }, []);
+
   const handleWhatsAppConnected = (which: 'whatsappPromotores' | 'whatsappClientes', phone: string) => {
-    persist({ ...channels, [which]: { connected: true, identifier: phone, connectedAt: new Date().toISOString() } });
+    const linkedAt = new Date().toISOString();
+    setChannel(messagingKey(which), { alias: which === 'whatsappClientes' ? 'WhatsApp Clientes' : 'WhatsApp Promotores', identifier: phone, linkedAt });
+    setChannels({ ...channels, [which]: { connected: true, identifier: phone, connectedAt: linkedAt } });
     setConnectModal(null);
   };
 
   const handleTelegramConnected = (botUsername: string) => {
-    persist({ ...channels, telegram: { connected: true, identifier: `@${botUsername}`, connectedAt: new Date().toISOString() } });
+    const linkedAt = new Date().toISOString();
+    setChannel('telegramVendedores', { alias: 'Telegram Vendedores', identifier: `@${botUsername}`, linkedAt });
+    setChannels({ ...channels, telegram: { connected: true, identifier: `@${botUsername}`, connectedAt: linkedAt } });
     setConnectModal(null);
   };
 
@@ -790,7 +809,8 @@ function CanalesTab() {
     const endpoint = isTelegram ? '/api/telegram/stop' : '/api/whatsapp/logout';
     const body = isTelegram ? {} : { account: which === 'whatsappClientes' ? 'clientes' : 'promotores' };
     fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
-    persist({ ...channels, [which]: { connected: false } });
+    setChannel(messagingKey(which), null);
+    setChannels({ ...channels, [which]: { connected: false } });
     toast.success(`${label} desconectado.`);
   };
 

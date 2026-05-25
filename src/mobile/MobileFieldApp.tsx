@@ -15,10 +15,6 @@ const DRAFT_KEY = 'hd_mobile_capture_draft_v1';
 const LOCAL_SETTINGS_KEY = 'hd_mobile_settings_v1';
 const OFFLINE_QUEUE_KEY = 'hd_mobile_offline_queue_v1';
 const MODULE_CACHE_PREFIX = 'hd_mobile_module_cache_v1:';
-const PAYROLL_RECEIPTS_KEY = 'hd_payroll_transfer_receipts';
-const PAYROLL_BANK_DATA_KEY = 'hd_payroll_bank_data';
-const PAYROLL_ADVANCES_KEY = 'hd_payroll_advances';
-const PAYROLL_HISTORY_KEY = 'hd_payroll_history';
 const COMPANY_NAME = 'HEAVENLY DREAMS SAS DE CV';
 const COMPANY_ADDRESS = 'Avenida Tlahuac 3632, Interior A301, Colonia Culhuacan CTM Zona VIII, CP 09800, Iztapalapa, Ciudad de Mexico';
 
@@ -989,11 +985,11 @@ export default function MobileFieldApp() {
   const [payrollExporting, setPayrollExporting] = useState(false);
   const [payrollSaving, setPayrollSaving] = useState(false);
   const [payrollSaved, setPayrollSaved] = useState(false);
-  const [payrollReceipts, setPayrollReceipts] = useState<PayrollReceipt[]>(() => readLocalJson<PayrollReceipt[]>(PAYROLL_RECEIPTS_KEY, []));
+  const [payrollReceipts, setPayrollReceipts] = useState<PayrollReceipt[]>([]);
   const [payrollReceiptError, setPayrollReceiptError] = useState('');
-  const [payrollBankData, setPayrollBankData] = useState<PayrollBankData>(() => readLocalJson<PayrollBankData>(PAYROLL_BANK_DATA_KEY, { banco: '', titular: '', cuenta: '', clabe: '' }));
+  const [payrollBankData, setPayrollBankData] = useState<PayrollBankData>({ banco: '', titular: '', cuenta: '', clabe: '' });
   const [payrollBankSaved, setPayrollBankSaved] = useState(false);
-  const [payrollAdvances, setPayrollAdvances] = useState<PayrollAdvance[]>(() => readLocalJson<PayrollAdvance[]>(PAYROLL_ADVANCES_KEY, []));
+  const [payrollAdvances, setPayrollAdvances] = useState<PayrollAdvance[]>([]);
   const [advanceAmount, setAdvanceAmount] = useState('');
   const [advanceReason, setAdvanceReason] = useState('');
   const [advanceMessage, setAdvanceMessage] = useState('');
@@ -1167,7 +1163,7 @@ export default function MobileFieldApp() {
       setProfileAvatar(imageUrl);
       if (profileUid) {
         try {
-          localStorage.setItem(`adhdreams_avatar_${profileUid}`, imageUrl);
+          localStorage.setItem(`hd_avatar_${profileUid}`, imageUrl);
         } catch {
           notify('error', 'No se pudo guardar el avatar localmente.');
         }
@@ -1302,7 +1298,7 @@ export default function MobileFieldApp() {
       return;
     }
     try {
-      setProfileAvatar(localStorage.getItem(`adhdreams_avatar_${profileUid}`));
+      setProfileAvatar(localStorage.getItem(`hd_avatar_${profileUid}`));
     } catch {
       setProfileAvatar(null);
     }
@@ -1851,7 +1847,6 @@ export default function MobileFieldApp() {
 
   const persistPayrollReceipts = (next: PayrollReceipt[]) => {
     setPayrollReceipts(next);
-    writeLocalJson(PAYROLL_RECEIPTS_KEY, next);
   };
 
   const handlePayrollReceiptFiles = (files: FileList | null) => {
@@ -1889,9 +1884,8 @@ export default function MobileFieldApp() {
   };
 
   const savePayrollBankData = () => {
-    writeLocalJson(PAYROLL_BANK_DATA_KEY, payrollBankData);
     setPayrollBankSaved(true);
-    notify('success', 'Datos bancarios guardados.');
+    notify('success', 'Datos bancarios capturados para esta sesion.');
   };
 
   const submitPayrollAdvance = () => {
@@ -1909,7 +1903,6 @@ export default function MobileFieldApp() {
     };
     const updated = [next, ...payrollAdvances];
     setPayrollAdvances(updated);
-    writeLocalJson(PAYROLL_ADVANCES_KEY, updated);
     setAdvanceAmount('');
     setAdvanceReason('');
     setAdvanceMessage('Solicitud de adelanto registrada.');
@@ -1918,27 +1911,11 @@ export default function MobileFieldApp() {
   const updatePayrollAdvanceStatus = (id: string, status: PayrollAdvance['status']) => {
     const updated = payrollAdvances.map((advance) => advance.id === id ? { ...advance, status } : advance);
     setPayrollAdvances(updated);
-    writeLocalJson(PAYROLL_ADVANCES_KEY, updated);
   };
 
   const savePayrollRecord = async () => {
     setPayrollSaving(true);
     setPayrollSaved(false);
-    const localEntry = {
-      id: `${Date.now()}-${payrollResult.userLabel}`,
-      year: payrollResult.year,
-      week: payrollResult.week,
-      userId: payrollUserId,
-      userLabel: payrollResult.userLabel,
-      paymentMethod: payrollPaymentMethod,
-      sales: payrollResult.sales,
-      subtotal: payrollResult.subtotal,
-      discounts: payrollResult.discounts,
-      total: payrollResult.total,
-      createdAt: new Date().toISOString(),
-    };
-    const history = readLocalJson<any[]>(PAYROLL_HISTORY_KEY, []);
-    writeLocalJson(PAYROLL_HISTORY_KEY, [localEntry, ...history]);
     try {
       if (canManagePayroll) {
         const data = await apiJson<{ ok: boolean; id: string }>('/api/nominas', {
@@ -1955,7 +1932,7 @@ export default function MobileFieldApp() {
           }),
         });
         const row = {
-          id: data.id || localEntry.id,
+          id: data.id || `${Date.now()}-${payrollResult.userLabel}`,
           asesor_id: payrollUserId === 'all' ? 'all' : payrollResult.userId,
           asesor_nombre: payrollResult.userLabel,
           periodo: `${payrollResult.year}-S${String(payrollResult.week).padStart(2, '0')}`,
@@ -1972,7 +1949,7 @@ export default function MobileFieldApp() {
       setPayrollSaved(true);
       notify('success', 'Nomina registrada.');
     } catch (err: any) {
-      notify('error', err?.message || 'Se guardo localmente, pero no se registro en servidor.');
+      notify('error', err?.message || 'No se registro la nomina en servidor.');
     } finally {
       setPayrollSaving(false);
     }

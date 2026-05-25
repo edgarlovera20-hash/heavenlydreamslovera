@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Shield, Search, Download, RefreshCw, Filter } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { getAuditLog, ACTION_LABELS, AuditAction, AuditEntry } from '../../lib/auditLog';
+import { fetchAuditLog, ACTION_LABELS, AuditAction, AuditEntry } from '../../lib/auditLog';
 import { exportToCSV } from '../../lib/exportUtils';
 
 const ACTION_COLOR: Record<string, string> = {
@@ -26,12 +26,19 @@ const ACTION_COLOR: Record<string, string> = {
 const PAGE_SIZE = 50;
 
 export default function AuditLogView() {
-  const [entries, setEntries] = useState<AuditEntry[]>(() => getAuditLog());
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [filterAction, setFilterAction] = useState('');
   const [page, setPage] = useState(0);
 
-  const refresh = () => { setEntries(getAuditLog()); setPage(0); };
+  const refresh = () => {
+    fetchAuditLog(500)
+      .then((rows) => { setEntries(rows); setLoadError(''); setPage(0); })
+      .catch((err) => { setEntries([]); setLoadError(err instanceof Error ? err.message : 'Backend no disponible'); });
+  };
+
+  useEffect(refresh, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -76,6 +83,12 @@ export default function AuditLogView() {
           </button>
         </div>
       </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          No se pudo cargar la auditoría real del servidor: {loadError}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">

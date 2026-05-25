@@ -76,9 +76,6 @@ type PayrollQueryResult = {
   paymentDate: Date;
 };
 
-const PAYROLL_RECEIPTS_KEY = 'hd_payroll_transfer_receipts';
-const PAYROLL_BANK_DATA_KEY = 'hd_payroll_bank_data';
-const PAYROLL_ADVANCES_KEY = 'hd_payroll_advances';
 const COMPANY_NAME = 'HEAVENLY DREAMS SAS DE CV';
 const COMPANY_ADDRESS = 'Avenida Tláhuac 3632, Interior A301, Colonia Culhuacán CTM Zona VIII, Código Postal 09800, Iztapalapa, Ciudad de México';
 
@@ -89,10 +86,6 @@ function readJson<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-function writeJson<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value));
 }
 
 function getCurrentUser(): PayrollUser {
@@ -584,12 +577,11 @@ PayrollReceiptPreview.displayName = 'PayrollReceiptPreview';
 
 function ComprobantesTab({ focusUpload = false }: { focusUpload?: boolean }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [receipts, setReceipts] = useState<PayrollReceipt[]>(() => readJson<PayrollReceipt[]>(PAYROLL_RECEIPTS_KEY, []));
+  const [receipts, setReceipts] = useState<PayrollReceipt[]>([]);
   const [uploadError, setUploadError] = useState('');
 
   const persistReceipts = (next: PayrollReceipt[]) => {
     setReceipts(next);
-    writeJson(PAYROLL_RECEIPTS_KEY, next);
   };
 
   const handleFiles = (files: FileList | null) => {
@@ -700,12 +692,12 @@ function ComprobantesTab({ focusUpload = false }: { focusUpload?: boolean }) {
 }
 
 function BancariosTab() {
-  const [bankData, setBankData] = useState<BankData>(() => readJson<BankData>(PAYROLL_BANK_DATA_KEY, {
+  const [bankData, setBankData] = useState<BankData>({
     banco: '',
     titular: '',
     cuenta: '',
     clabe: '',
-  }));
+  });
   const [saved, setSaved] = useState(false);
 
   const updateBankData = (patch: Partial<BankData>) => {
@@ -714,7 +706,6 @@ function BancariosTab() {
   };
 
   const saveBankData = () => {
-    writeJson(PAYROLL_BANK_DATA_KEY, bankData);
     setSaved(true);
   };
 
@@ -773,7 +764,7 @@ function BancariosTab() {
       >
         Guardar datos bancarios
       </button>
-      {saved && <p className="text-emerald-400 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Datos bancarios guardados.</p>}
+      {saved && <p className="text-emerald-400 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Datos bancarios capturados para esta sesión.</p>}
     </div>
   );
 }
@@ -781,7 +772,7 @@ function BancariosTab() {
 function AdelantosTab() {
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
-  const [advances, setAdvances] = useState<PayrollAdvance[]>(() => readJson<PayrollAdvance[]>(PAYROLL_ADVANCES_KEY, []));
+  const [advances, setAdvances] = useState<PayrollAdvance[]>([]);
   const [message, setMessage] = useState('');
 
   const submitAdvance = () => {
@@ -799,7 +790,6 @@ function AdelantosTab() {
     };
     const updated = [next, ...advances];
     setAdvances(updated);
-    writeJson(PAYROLL_ADVANCES_KEY, updated);
     setAmount('');
     setReason('');
     setMessage('Solicitud de adelanto registrada.');
@@ -844,7 +834,7 @@ function AdelantosTab() {
 }
 
 function VerAdelantosTab() {
-  const advances = readJson<PayrollAdvance[]>(PAYROLL_ADVANCES_KEY, []);
+  const advances: PayrollAdvance[] = [];
 
   return (
     <div className="bg-slate-900/90 backdrop-blur-md border border-white/5 rounded-2xl p-6 shadow-xl space-y-5">

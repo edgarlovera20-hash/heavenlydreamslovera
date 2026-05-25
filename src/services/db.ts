@@ -174,25 +174,5 @@ export const ChannelsAPI = {
 
 // ── Migración desde localStorage ────────────────────────────
 export async function migrateLocalStorageToDb() {
-  const MIGRATION_KEY = 'hd_db_migrated_v1';
-  if (localStorage.getItem(MIGRATION_KEY)) return;
-
-  const migrations: Array<{ key: string; lsKey: string }> = [];
-
-  for (const { key, lsKey } of migrations) {
-    try {
-      const raw = localStorage.getItem(lsKey);
-      if (!raw) continue;
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0) {
-        await api('POST', '/api/migrate', { key, data });
-        console.log(`[DB] Migrado ${lsKey}: ${data.length} registros`);
-      }
-    } catch (e) {
-      console.warn(`[DB] Error migrando ${lsKey}:`, e);
-    }
-  }
-
-  localStorage.setItem(MIGRATION_KEY, '1');
-  console.log('[DB] Migración desde localStorage completada');
+  return { ok: true, migrated: 0 };
 }

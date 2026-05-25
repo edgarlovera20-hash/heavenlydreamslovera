@@ -57,9 +57,9 @@ const sourceFiles = tracked.filter(file =>
   !file.startsWith('package-lock') &&
   !file.startsWith('node_modules/'));
 const forbiddenLiterals = [
-  'Elovera1964',
+  'Elovera' + '1964',
   'admin123',
-  'adhdreams_telegram_bots',
+  'adh' + 'dreams_telegram_bots',
 ];
 for (const file of sourceFiles) {
   if (!existsSync(join(root, file))) continue;
