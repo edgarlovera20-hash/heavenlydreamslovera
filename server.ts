@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import { createServer as createHttpServer } from "http";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { randomUUID } from "crypto";
@@ -58,6 +59,16 @@ import {
 import { getEnterpriseReadiness } from "./server/readiness";
 import { readStoredDocument, storeDocument } from "./server/document-storage";
 import { buildValidationTwiML, createTwilioCall, twilioConfigured } from "./server/twilio";
+import {
+  attachOpenAIRealtimeStream,
+  buildOpenAIRealtimeTwiML,
+  buildValidationCallPayload,
+  getDefaultVoiceProvider,
+  listVoiceProviderStatus,
+  normalizeProviderStartResult,
+  startValidationCallWithProvider,
+  syncValidationWithProvider,
+} from "./server/voice-providers";
 import { oauthCallback, oauthStart, oauthStatus } from "./server/oauth";
 import { createTelmexAutomationJob, getTelmexJob, listTelmexJobs, updateTelmexAutomationJob } from "./server/telmex-automation";
 import {
@@ -547,6 +558,95 @@ async function startServer() {
 
   function clientChatAgentEnabled() {
     return Settings.get('client_chat_agent_enabled') === true;
+  }
+
+  function validationAutoEnabled() {
+    const saved = Settings.get('validation_calls_auto_enabled');
+    if (saved !== null) return saved === true;
+    return String(process.env.VALIDATION_CALLS_AUTO_ENABLED || 'false').toLowerCase() === 'true';
+  }
+
+  function configuredVoiceProvider() {
+    return Settings.get('voice_provider_default') || getDefaultVoiceProvider();
+  }
+
+  function saleClientName(sale: any) {
+    return [sale?.nombres, sale?.apellidos].filter(Boolean).join(' ').trim() || sale?.cliente_nombre || 'Cliente';
+  }
+
+  function validationMissingFields(sale: any) {
+    const meta = parseMetadata(sale?.metadata);
+    const required = [
+      ['titular', saleClientName(sale) && saleClientName(sale) !== 'Cliente'],
+      ['telefono', normalizePhone10(sale?.telefono || meta.telefonoTitular).length === 10],
+      ['tipo_servicio', Boolean(sale?.tipo_servicio || meta.tipoServicio)],
+      ['paquete', Boolean(sale?.plan || meta.paqueteNombre)],
+      ['renta_mensual', Number(sale?.renta_mensual || meta.rentaMensual || 0) > 0],
+      ['domicilio', Boolean(sale?.direccion || meta.calle)],
+      ['correo', Boolean(meta.correo)],
+    ];
+    const serviceText = [sale?.tipo_servicio, sale?.tipo_cliente, meta.tipoServicio, meta.tipoCliente].join(' ').toLowerCase();
+    if (/porta|portabil/.test(serviceText)) {
+      required.push(['numero_a_portar', normalizePhone10(meta.numeroAPortar || meta.numero_a_portar).length === 10]);
+    }
+    return required.filter(([, ok]) => !ok).map(([field]) => field as string);
+  }
+
+  function createValidationForSale(sale: any, req: any, extra: Record<string, any> = {}) {
+    const meta = parseMetadata(sale?.metadata);
+    const missing = validationMissingFields(sale);
+    const validation = {
+      id: randomUUID(),
+      sale_id: sale.id,
+      client_name: saleClientName(sale),
+      client_phone: normalizePhone10(sale?.telefono || meta.telefonoTitular || ''),
+      status: missing.length ? 'PENDIENTE_DATOS' : 'PENDIENTE',
+      notas: missing.length ? `Faltan datos para llamar: ${missing.join(', ')}` : null,
+      review_status: 'pending',
+      attempts: 0,
+      sale_snapshot_json: JSON.stringify({ ...sale, metadata: meta }),
+      ...extra,
+    };
+    ValidationRequests.create(validation);
+    return ValidationRequests.getById(validation.id) as any;
+  }
+
+  async function startValidationCallForRequest(validationId: string, provider?: string | null) {
+    const validation = ValidationRequests.getById(validationId) as any;
+    if (!validation) throw new Error('Solicitud de validacion no encontrada');
+    const sale = validation.sale_id ? Ventas.getById(validation.sale_id) as any : null;
+    const missing = sale ? validationMissingFields(sale) : [];
+    if (missing.length) {
+      ValidationRequests.update(validationId, {
+        status: 'PENDIENTE_DATOS',
+        last_error: `Faltan datos para llamar: ${missing.join(', ')}`,
+        notas: `Faltan datos para llamar: ${missing.join(', ')}`,
+      });
+      return ValidationRequests.getById(validationId) as any;
+    }
+    const attempts = Number(validation.attempts || 0) + 1;
+    const fallbacks = String(process.env.VOICE_PROVIDER_FALLBACKS || 'twilio-basic')
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean) as any[];
+    const { result, payload } = await startValidationCallWithProvider(validation, sale, provider || configuredVoiceProvider(), provider ? [] : fallbacks);
+    ValidationRequests.update(validationId, normalizeProviderStartResult(result, attempts, payload));
+    return ValidationRequests.getById(validationId) as any;
+  }
+
+  async function maybeAutoStartValidation(sale: any, req: any) {
+    const validation = createValidationForSale(sale, req);
+    if (!validationAutoEnabled() || validation.status === 'PENDIENTE_DATOS') return validation;
+    try {
+      return await startValidationCallForRequest(validation.id);
+    } catch (err: any) {
+      ValidationRequests.update(validation.id, {
+        status: 'ERROR',
+        last_error: err?.message || String(err),
+        attempts: Number(validation.attempts || 0) + 1,
+      });
+      return ValidationRequests.getById(validation.id) as any;
+    }
   }
 
   function clientChatMeta(client: any) {
@@ -1351,7 +1451,7 @@ async function startServer() {
     });
   }));
 
-  app.post("/api/mobile/capturas", authOnly, wrap((req: any, res: any) => {
+  app.post("/api/mobile/capturas", authOnly, wrap(async (req: any, res: any) => {
     const body = req.body || {};
     const nombres = String(body.nombres || '').trim();
     const apellidoPaterno = String(body.apellidoPaterno || body.apellido_paterno || '').trim();
@@ -1418,7 +1518,9 @@ async function startServer() {
       console.warn('[mobile/capturas] No se pudo sincronizar tablas operativas:', syncErr);
     }
     AuditLog.insert({ accion: 'CREATE_MOBILE_VENTA', entidad: 'ventas', entidad_id: data.id, user_id: data.asesor_id, user_nombre: data.asesor_nombre, detalle: data.folio });
-    res.json(Ventas.getById(data.id));
+    const savedSale = Ventas.getById(data.id) as any;
+    const validation = await maybeAutoStartValidation(savedSale, req);
+    res.json({ ...savedSale, validation });
   }));
 
   app.get("/api/mobile/clientes", authOnly, wrap((req: any, res: any) => {
@@ -1468,7 +1570,7 @@ async function startServer() {
     res.json(asesor_id ? Ventas.getByAsesor(asesor_id as string) : Ventas.getAll());
   }));
 
-  app.post("/api/ventas", authOnly, wrap((req: any, res: any) => {
+  app.post("/api/ventas", authOnly, wrap(async (req: any, res: any) => {
     const auth = req.auth;
     const data = {
       id: randomUUID(),
@@ -1503,7 +1605,9 @@ async function startServer() {
       console.warn('[capturas] No se pudo sincronizar tablas operativas:', syncErr);
     }
     AuditLog.insert({ accion: 'CREATE_VENTA', entidad: 'ventas', entidad_id: data.id, user_id: data.asesor_id, user_nombre: data.asesor_nombre, detalle: data.folio });
-    res.json(Ventas.getById(data.id));
+    const savedSale = Ventas.getById(data.id) as any;
+    const validation = await maybeAutoStartValidation(savedSale, req);
+    res.json({ ...savedSale, validation });
   }));
 
   const updateVenta = wrap((req: any, res: any) => {
@@ -2104,17 +2208,110 @@ async function startServer() {
   }));
 
   // ── VALIDACIONES ───────────────────────────────────────────
+  app.get("/api/voice-providers/status", opsOnly, wrap((_req: any, res: any) => {
+    res.json({
+      defaultProvider: configuredVoiceProvider(),
+      fallbacks: String(process.env.VOICE_PROVIDER_FALLBACKS || 'twilio-basic').split(',').map(item => item.trim()).filter(Boolean),
+      autoEnabled: validationAutoEnabled(),
+      providers: listVoiceProviderStatus(),
+    });
+  }));
+
+  app.put("/api/voice-providers/config", managerOnly, wrap((req: any, res: any) => {
+    const provider = String(req.body?.defaultProvider || '').trim();
+    const validProviders = new Set(listVoiceProviderStatus().map(item => item.id));
+    if (provider && !validProviders.has(provider as any)) return res.status(400).json({ error: 'Proveedor invalido' });
+    if (provider) Settings.set('voice_provider_default', provider);
+    if (typeof req.body?.autoEnabled === 'boolean') Settings.set('validation_calls_auto_enabled', req.body.autoEnabled);
+    res.json({
+      ok: true,
+      defaultProvider: configuredVoiceProvider(),
+      autoEnabled: validationAutoEnabled(),
+      providers: listVoiceProviderStatus(),
+    });
+  }));
+
   app.get("/api/validations", opsOnly, wrap((_req: any, res: any) => res.json(ValidationRequests.getAll())));
 
   app.post("/api/validations", authOnly, wrap((req: any, res: any) => {
-    const data = { id: randomUUID(), status: 'pendiente', notas: null, ...req.body };
+    const sale = req.body?.sale_id ? Ventas.getById(req.body.sale_id) as any : null;
+    if (sale) {
+      const validation = createValidationForSale(sale, req, req.body || {});
+      return res.json({ ok: true, id: validation.id, validation });
+    }
+    const data = { id: randomUUID(), status: 'PENDIENTE', notas: null, review_status: 'pending', attempts: 0, ...req.body };
     ValidationRequests.create(data);
-    res.json({ ok: true, id: data.id });
+    res.json({ ok: true, id: data.id, validation: ValidationRequests.getById(data.id) });
+  }));
+
+  app.post("/api/validations/:id/call", opsOnly, wrap(async (req: any, res: any) => {
+    const validation = await startValidationCallForRequest(req.params.id, req.body?.provider || null);
+    logSystem(req, 'VALIDATION_CALL_STARTED', 'validation_requests', req.params.id, validation.provider || null, {
+      provider: validation.provider,
+      callSid: validation.call_sid,
+      conversationId: validation.conversation_id,
+    });
+    recordMetric('validation.call.started', 1, { provider: validation.provider || 'unknown' });
+    res.json({ ok: true, validation });
+  }));
+
+  app.post("/api/validations/:id/retry", opsOnly, wrap(async (req: any, res: any) => {
+    const validation = await startValidationCallForRequest(req.params.id, req.body?.provider || null);
+    logSystem(req, 'VALIDATION_CALL_RETRY', 'validation_requests', req.params.id, validation.provider || null, {
+      attempts: validation.attempts,
+      provider: validation.provider,
+    });
+    res.json({ ok: true, validation });
+  }));
+
+  app.post("/api/validations/:id/sync", opsOnly, wrap(async (req: any, res: any) => {
+    const current = ValidationRequests.getById(req.params.id) as any;
+    if (!current) return res.status(404).json({ error: 'Validacion no encontrada' });
+    const result = await syncValidationWithProvider(current);
+    ValidationRequests.update(req.params.id, {
+      call_status: result.status,
+      proposed_result: result.proposedResult,
+      summary: result.summary || null,
+      transcript_json: result.transcript ? JSON.stringify(result.transcript) : current.transcript_json || null,
+      provider_payload_json: JSON.stringify({ previous: parseMetadata(current.provider_payload_json), sync: result.raw || result }),
+      status: result.status === 'failed' ? 'ERROR' : result.proposedResult ? 'ESPERANDO_REVISION' : current.status,
+    });
+    res.json({ ok: true, validation: ValidationRequests.getById(req.params.id) });
+  }));
+
+  app.post("/api/validations/:id/approve", opsOnly, wrap((req: any, res: any) => {
+    const current = ValidationRequests.getById(req.params.id) as any;
+    if (!current) return res.status(404).json({ error: 'Validacion no encontrada' });
+    ValidationRequests.update(req.params.id, {
+      status: 'VALIDADO',
+      resultado: 'validada',
+      review_status: 'approved',
+      reviewed_by: req.auth?.sub || null,
+      reviewed_at: new Date().toISOString(),
+      notas: req.body?.notes || current.notas || null,
+    });
+    if (current.sale_id) Ventas.update(current.sale_id, { status: 'validada', notas: req.body?.notes || current.summary || current.notas || null });
+    res.json({ ok: true, validation: ValidationRequests.getById(req.params.id), sale: current.sale_id ? Ventas.getById(current.sale_id) : null });
+  }));
+
+  app.post("/api/validations/:id/reject", opsOnly, wrap((req: any, res: any) => {
+    const current = ValidationRequests.getById(req.params.id) as any;
+    if (!current) return res.status(404).json({ error: 'Validacion no encontrada' });
+    ValidationRequests.update(req.params.id, {
+      status: 'RECHAZADO',
+      resultado: 'rechazada',
+      review_status: 'rejected',
+      reviewed_by: req.auth?.sub || null,
+      reviewed_at: new Date().toISOString(),
+      notas: req.body?.notes || current.notas || null,
+    });
+    if (current.sale_id) Ventas.update(current.sale_id, { status: 'rechazada_validacion', notas: req.body?.notes || current.summary || current.notas || null });
+    res.json({ ok: true, validation: ValidationRequests.getById(req.params.id), sale: current.sale_id ? Ventas.getById(current.sale_id) : null });
   }));
 
   app.put("/api/validations/:id", opsOnly, wrap((req: any, res: any) => {
     ValidationRequests.update(req.params.id, req.body);
-    res.json({ ok: true });
+    res.json({ ok: true, validation: ValidationRequests.getById(req.params.id) });
   }));
 
   // ── REFERIDOS ──────────────────────────────────────────────
@@ -2626,6 +2823,16 @@ async function startServer() {
   app.get("/api/twilio/voice-agent", wrap((req: any, res: any) => {
     res.setHeader('Content-Type', 'text/xml; charset=utf-8');
     res.send(buildValidationTwiML(String(req.query.message || '')));
+  }));
+
+  app.post("/api/voice-providers/openai-realtime/twiml", wrap((req: any, res: any) => {
+    res.setHeader('Content-Type', 'text/xml; charset=utf-8');
+    res.send(buildOpenAIRealtimeTwiML(String(req.query.validationId || req.body?.validationId || ''), String(req.query.message || req.body?.message || '')));
+  }));
+
+  app.get("/api/voice-providers/openai-realtime/twiml", wrap((req: any, res: any) => {
+    res.setHeader('Content-Type', 'text/xml; charset=utf-8');
+    res.send(buildOpenAIRealtimeTwiML(String(req.query.validationId || ''), String(req.query.message || '')));
   }));
 
   // ── AGENTES AUTÓNOMOS ─────────────────────────────────────
@@ -3361,8 +3568,10 @@ async function startServer() {
     console.log(`[SIAC] Registros en DB: ${SiacRecords.count()}`);
     console.log(`Server running on http://${HOST || 'localhost'}:${PORT}`);
   };
-  if (HOST) app.listen(PORT, HOST, onListening);
-  else app.listen(PORT, onListening);
+  const server = createHttpServer(app);
+  attachOpenAIRealtimeStream(server);
+  if (HOST) server.listen(PORT, HOST, onListening);
+  else server.listen(PORT, onListening);
 }
 
 startServer();

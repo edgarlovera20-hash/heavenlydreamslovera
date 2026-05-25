@@ -1,5 +1,5 @@
 export type ValidationMode = 'AI' | 'ADMIN';
-export type AIProvider = 'bland' | 'retell';
+export type AIProvider = 'elevenlabs' | 'openai-realtime' | 'twilio-basic' | 'bland' | 'retell';
 
 export interface ValidationConfig {
   mode: ValidationMode;
@@ -47,7 +47,7 @@ export const DEFAULT_SCRIPT = [
 
 export const DEFAULT_CONFIG: ValidationConfig = {
   mode: 'ADMIN',
-  aiProvider: 'bland',
+  aiProvider: 'elevenlabs',
   blandApiKey: '',
   retellApiKey: '',
   retellAgentId: '',
@@ -153,6 +153,51 @@ export async function requestValidation(
   requestedByName: string,
 ): Promise<ValidationRequest> {
   const cfg = getValidationConfig();
+  try {
+    const createRes = await fetch('/api/validations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sale_id: sale.id,
+        client_name: [sale.nombres, sale.apellidoPaterno].filter(Boolean).join(' ') || 'Cliente',
+        client_phone: sale.telefonoTitular || '',
+        status: 'PENDIENTE',
+        notas: `Solicitado por ${requestedByName || requestedBy}`,
+      }),
+    });
+    const created = await createRes.json();
+    if (!createRes.ok) throw new Error(created.error || 'No se pudo crear la validacion');
+    let validation = created.validation || created;
+    if (cfg.mode === 'AI' && created.id) {
+      const callRes = await fetch(`/api/validations/${created.id}/call`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: ['elevenlabs', 'openai-realtime', 'twilio-basic'].includes(cfg.aiProvider) ? cfg.aiProvider : undefined }),
+      });
+      const called = await callRes.json();
+      if (!callRes.ok) throw new Error(called.error || 'No se pudo iniciar la llamada');
+      validation = called.validation || validation;
+    }
+    return {
+      id: validation.id,
+      saleId: validation.sale_id || sale.id,
+      folio: sale.folio || sale.id,
+      clientName: validation.client_name || [sale.nombres, sale.apellidoPaterno].filter(Boolean).join(' ') || 'Cliente',
+      clientPhone: validation.client_phone || sale.telefonoTitular || '',
+      paquete: sale.paqueteNombre || '—',
+      precio: sale.rentaMensual || 0,
+      requestedBy,
+      requestedByName,
+      requestedAt: validation.created_at || new Date().toISOString(),
+      status: validation.status === 'EN_LLAMADA' ? 'EN_LLAMADA' : validation.status === 'ERROR' ? 'ERROR' : 'PENDIENTE',
+      mode: cfg.mode,
+      callId: validation.provider_call_id || validation.call_sid || undefined,
+      callStatusDetail: validation.last_error || validation.call_status || undefined,
+    };
+  } catch (backendError) {
+    console.warn('[validationService] Backend validation unavailable, using local fallback:', backendError);
+  }
+
   const req: ValidationRequest = {
     id: `val-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     saleId: sale.id,

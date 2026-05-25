@@ -696,6 +696,27 @@ try {
   ensureColumn('sessions', 'webauthn_enrollment_required', 'INTEGER NOT NULL DEFAULT 0');
 } catch (e) { console.warn('[DB] Migracion sessions omitida:', e); }
 
+try {
+  [
+    { name: 'provider', def: 'TEXT' },
+    { name: 'provider_call_id', def: 'TEXT' },
+    { name: 'conversation_id', def: 'TEXT' },
+    { name: 'call_sid', def: 'TEXT' },
+    { name: 'attempts', def: 'INTEGER NOT NULL DEFAULT 0' },
+    { name: 'call_status', def: 'TEXT' },
+    { name: 'proposed_result', def: 'TEXT' },
+    { name: 'summary', def: 'TEXT' },
+    { name: 'transcript_json', def: 'TEXT' },
+    { name: 'provider_payload_json', def: 'TEXT' },
+    { name: 'sale_snapshot_json', def: 'TEXT' },
+    { name: 'last_error', def: 'TEXT' },
+    { name: 'review_status', def: "TEXT NOT NULL DEFAULT 'pending'" },
+    { name: 'script_type', def: 'TEXT' },
+    { name: 'reviewed_by', def: 'TEXT' },
+    { name: 'reviewed_at', def: 'TEXT' },
+  ].forEach((col) => ensureColumn('validation_requests', col.name, col.def));
+} catch (e) { console.warn('[DB] Migracion validation_requests omitida:', e); }
+
 // ─── INDEXES ──────────────────────────────────────────────────────────────────
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ventas_asesor    ON ventas (asesor_id);
@@ -1039,12 +1060,26 @@ export const Territories = {
 
 export const ValidationRequests = {
   getAll: () => db.prepare('SELECT * FROM validation_requests ORDER BY created_at DESC').all(),
-  create: (data: any) => db.prepare(`
-    INSERT INTO validation_requests (id,sale_id,client_name,client_phone,status,notas)
-    VALUES (@id,@sale_id,@client_name,@client_phone,@status,@notas)
-  `).run(data),
+  getById: (id: string) => db.prepare('SELECT * FROM validation_requests WHERE id=?').get(id),
+  getBySaleId: (saleId: string) => db.prepare('SELECT * FROM validation_requests WHERE sale_id=? ORDER BY created_at DESC').all(saleId),
+  create: (data: any) => {
+    const allowed = [
+      'id', 'sale_id', 'client_name', 'client_phone', 'status', 'resultado', 'notas',
+      'provider', 'provider_call_id', 'conversation_id', 'call_sid', 'attempts',
+      'call_status', 'proposed_result', 'summary', 'transcript_json', 'provider_payload_json',
+      'sale_snapshot_json', 'last_error', 'review_status', 'script_type', 'reviewed_by', 'reviewed_at',
+    ];
+    const values = Object.fromEntries(allowed.map((key) => [key, data[key] ?? null]));
+    values.status = values.status || 'pendiente';
+    values.attempts = Number(values.attempts || 0);
+    values.review_status = values.review_status || 'pending';
+    const columns = allowed.filter((key) => values[key] !== undefined);
+    const params = columns.map((key) => `@${key}`).join(',');
+    return db.prepare(`INSERT INTO validation_requests (${columns.join(',')}) VALUES (${params})`).run(values);
+  },
   update: (id: string, data: any) => {
-    const fields = Object.keys(data).map(k => `${k}=@${k}`).join(',');
+    const fields = Object.keys(data).filter(k => k !== 'id').map(k => `${k}=@${k}`).join(',');
+    if (!fields) return { changes: 0 };
     return db.prepare(`UPDATE validation_requests SET ${fields},updated_at=datetime('now') WHERE id=@id`).run({ ...data, id });
   },
 };

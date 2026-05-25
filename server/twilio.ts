@@ -32,7 +32,7 @@ export function buildValidationTwiML(message: string) {
 </Response>`;
 }
 
-export async function createTwilioCall(to: string, message: string) {
+export async function createTwilioCall(to: string, message: string, options: { url?: string } = {}) {
   const accountSid = requiredEnv('TWILIO_ACCOUNT_SID');
   const authToken = requiredEnv('TWILIO_AUTH_TOKEN');
   const from = requiredEnv('TWILIO_FROM_NUMBER');
@@ -43,7 +43,7 @@ export async function createTwilioCall(to: string, message: string) {
   const params = new URLSearchParams({
     To: to,
     From: from,
-    Url: `${webhookBaseUrl.replace(/\/$/, '')}/api/twilio/voice-agent?message=${encodeURIComponent(message)}`,
+    Url: options.url || `${webhookBaseUrl.replace(/\/$/, '')}/api/twilio/voice-agent?message=${encodeURIComponent(message)}`,
     MachineDetection: 'Enable',
   });
 
