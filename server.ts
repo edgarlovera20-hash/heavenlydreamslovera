@@ -5,7 +5,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { randomUUID } from "crypto";
 import { createApp } from "./server/app";
-import { hasPagingQuery, parseLimit, parseOffset, queryString, wrap } from "./server/http";
+import { createHttpError, hasPagingQuery, parseLimit, parseOffset, queryString, wrap } from "./server/http";
 import {
   initWhatsApp,
   getWhatsAppStatus,
@@ -3545,6 +3545,30 @@ async function startServer() {
     return String(value || '').match(/^data:([^;]+);base64,/i)?.[1]?.toLowerCase() || '';
   }
 
+  async function normalizeImageForServerOcr(value: string) {
+    const match = String(value || '').match(/^data:(image\/[^;]+);base64,([\s\S]+)$/i);
+    if (!match) {
+      throw createHttpError(415, 'OCR requiere imagen en formato base64 con prefijo data:image.', 'OCR_UNSUPPORTED_FORMAT');
+    }
+
+    try {
+      const buffer = Buffer.from(match[2], 'base64');
+      const { default: sharp } = await import('sharp');
+      const normalized = await sharp(buffer, { failOn: 'error', limitInputPixels: 60_000_000 })
+        .rotate()
+        .resize({ width: 2200, height: 2200, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 90 })
+        .toBuffer();
+      return `data:image/jpeg;base64,${normalized.toString('base64')}`;
+    } catch {
+      throw createHttpError(
+        415,
+        'La imagen no se pudo leer para OCR. Usa foto JPG, PNG o WEBP; si viene de iPhone en HEIC, vuelve a subirla desde la app movil para convertirla.',
+        'OCR_INVALID_IMAGE'
+      );
+    }
+  }
+
   async function runOcrEndpoint(req: any, res: any, docType: 'ine' | 'siac' | 'comprobante', runner: (imgs: string[]) => Promise<any>) {
     const { image, images } = req.body;
     const imgs = Array.isArray(images) ? images.filter(Boolean) : (image ? [image] : []);
@@ -3569,9 +3593,10 @@ async function startServer() {
         error: `Formato de imagen no compatible para OCR: ${mime}. Usa JPG, PNG o WEBP; HEIC debe convertirse a JPG desde la app movil.`,
       });
     }
+    const normalizedImgs = await Promise.all(imgs.map(normalizeImageForServerOcr));
     const startedAt = Date.now();
     try {
-      const result = await runner(imgs);
+      const result = await runner(normalizedImgs);
       const totalDurationMs = Date.now() - startedAt;
       const fieldsCount = result.fieldsCount ?? countOcrFields(result.fields);
       const payload = {
@@ -3585,11 +3610,11 @@ async function startServer() {
         providerOrder: result.providerOrder,
         attempts: result.attempts || [],
         fieldsCount,
-        images: imgs.length,
+        images: normalizedImgs.length,
         manualRequired: Boolean(result.manualRequired),
         warning: result.warning,
       };
-      console.log(`[OCR-${docType}]`, result.provider, result.model, `${result.durationMs}ms`, `total=${totalDurationMs}ms`, `${imgs.length}img`, JSON.stringify(result.fields));
+      console.log(`[OCR-${docType}]`, result.provider, result.model, `${result.durationMs}ms`, `total=${totalDurationMs}ms`, `${normalizedImgs.length}img`, JSON.stringify(result.fields));
       recordOcrTelemetry(req, 'completed', docType, payload);
       res.json({
         text: result.text,
@@ -3608,7 +3633,7 @@ async function startServer() {
         warning: result.warning,
       });
     } catch (err: any) {
-      recordOcrTelemetry(req, 'failed', docType, { error: err?.message || String(err), images: imgs.length });
+      recordOcrTelemetry(req, 'failed', docType, { error: err?.message || String(err), images: normalizedImgs.length });
       throw err;
     }
   }
