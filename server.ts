@@ -16,6 +16,7 @@ import {
   getRecentMessages,
   setWhatsAppMessageHandler,
   normalizeWhatsAppAccount,
+  hasWhatsAppCredentials,
   type WaMessage,
 } from "./server/whatsapp";
 import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
@@ -2800,6 +2801,35 @@ async function startServer() {
     return normalizeWhatsAppAccount(req.params?.account || req.query?.account || req.body?.account);
   }
 
+  function whatsappAccountFromRow(row: any) {
+    const metadata = parseMetadata(row?.metadata);
+    const key = String(metadata.key || '').toLowerCase();
+    const audience = String(metadata.audience || '').toLowerCase();
+    return normalizeWhatsAppAccount(
+      metadata.account ||
+      (key === 'whatsappclientes' || audience === 'clientes' ? 'clientes' : 'promotores')
+    );
+  }
+
+  function withLiveChannelAccountStatus(row: any) {
+    if (row?.channel !== 'whatsapp') return row;
+    const account = whatsappAccountFromRow(row);
+    const live = getWhatsAppStatus(account) as any;
+    const metadata = parseMetadata(row.metadata);
+    return {
+      ...row,
+      status: live.status || row.status,
+      metadata: JSON.stringify({
+        ...metadata,
+        account,
+        liveStatus: live.status || row.status,
+        credentialsPresent: live.credentialsPresent === true,
+        engine: live.engine || metadata.engine,
+        error: live.error || null,
+      }),
+    };
+  }
+
   const safeWhatsAppStatus = (status: any, role?: string) => {
     if (role === 'GERENTE' || role === 'ADMINISTRACION' || role === 'SUPERUSER' || role === 'ADMIN') return status;
     if (status?.promotores || status?.clientes) {
@@ -2883,7 +2913,7 @@ async function startServer() {
   }
 
   app.get("/api/channels/accounts", opsOnly, wrap((_req: any, res: any) => {
-    res.json(getChannelAccounts());
+    res.json((getChannelAccounts() as any[]).map(withLiveChannelAccountStatus));
   }));
 
   app.post("/api/channels/accounts", opsOnly, wrap((req: any, res: any) => {
@@ -3851,6 +3881,10 @@ async function startServer() {
     }
 
     for (const account of accounts) {
+      if (!hasWhatsAppCredentials(account)) {
+        console.warn(`[WA:${account}] No hay credenciales locales; se requiere vincular QR desde Ajustes.`);
+        continue;
+      }
       initWhatsApp(account)
         .then(() => console.log(`[WA:${account}] Auto-restauracion iniciada desde cuenta vinculada.`))
         .catch((err: any) => console.warn(`[WA:${account}] No se pudo auto-restaurar:`, err?.message || err));

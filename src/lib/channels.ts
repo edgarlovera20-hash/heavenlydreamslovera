@@ -46,6 +46,8 @@ function keyFromAccount(row: any): ChannelKey | null {
   const metadata = (() => {
     try { return typeof row?.metadata === 'string' ? JSON.parse(row.metadata) : row?.metadata || {}; } catch { return {}; }
   })();
+  if (metadata.account === 'promotores') return 'whatsappVendedores';
+  if (metadata.account === 'clientes') return 'whatsappClientes';
   if (metadata.key === 'whatsappVendedores' || metadata.audience === 'vendedores' && row.channel === 'whatsapp') return 'whatsappVendedores';
   if (metadata.key === 'whatsappClientes' || metadata.audience === 'clientes' && row.channel === 'whatsapp') return 'whatsappClientes';
   if (metadata.key === 'telegramVendedores' || row.channel === 'telegram') return 'telegramVendedores';
@@ -54,7 +56,10 @@ function keyFromAccount(row: any): ChannelKey | null {
 
 function accountToLink(row: any): [ChannelKey, ChannelLink] | null {
   const key = keyFromAccount(row);
-  if (!key || row?.status === 'disconnected') return null;
+  const status = String(row?.status || '').toLowerCase();
+  if (!key) return null;
+  if (CHANNEL_META[key].network === 'whatsapp' && status !== 'connected') return null;
+  if (CHANNEL_META[key].network === 'telegram' && !['connected', 'polling'].includes(status)) return null;
   return [key, {
     alias: row.label || CHANNEL_META[key].label,
     identifier: row.external_id || row.externalId || '',

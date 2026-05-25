@@ -680,6 +680,9 @@ interface ChannelState {
   connected: boolean;
   identifier?: string; // teléfono (+52…) o @username del bot
   connectedAt?: string; // ISO date
+  status?: string;
+  error?: string | null;
+  credentialsPresent?: boolean;
 }
 
 type ChannelKey = 'whatsappPromotores' | 'whatsappClientes' | 'telegram';
@@ -707,18 +710,33 @@ function CanalesTab() {
     return 'whatsappVendedores';
   };
 
+  const buildWhatsAppState = (link: any, live: any): ChannelState => ({
+    connected: live?.status === 'connected',
+    identifier: link?.identifier || live?.externalId || '',
+    connectedAt: link?.linkedAt,
+    status: live?.status || 'disconnected',
+    error: live?.error || null,
+    credentialsPresent: live?.credentialsPresent === true,
+  });
+
   const loadChannels = async () => {
     const linked = await refreshChannels().catch(() => getChannels());
+    const [whatsAppStatus, telegramStatus] = await Promise.all([
+      fetch('/api/whatsapp/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/telegram/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]);
     setChannels({
-      whatsappPromotores: linked.whatsappVendedores
-        ? { connected: true, identifier: linked.whatsappVendedores.identifier, connectedAt: linked.whatsappVendedores.linkedAt }
-        : { connected: false },
-      whatsappClientes: linked.whatsappClientes
-        ? { connected: true, identifier: linked.whatsappClientes.identifier, connectedAt: linked.whatsappClientes.linkedAt }
-        : { connected: false },
+      whatsappPromotores: buildWhatsAppState(linked.whatsappVendedores, whatsAppStatus?.promotores),
+      whatsappClientes: buildWhatsAppState(linked.whatsappClientes, whatsAppStatus?.clientes),
       telegram: linked.telegramVendedores
-        ? { connected: true, identifier: linked.telegramVendedores.identifier, connectedAt: linked.telegramVendedores.linkedAt }
-        : { connected: false },
+        ? {
+            connected: telegramStatus?.status ? telegramStatus.status === 'polling' : true,
+            identifier: linked.telegramVendedores.identifier || (telegramStatus?.botName ? `@${telegramStatus.botName}` : ''),
+            connectedAt: linked.telegramVendedores.linkedAt,
+            status: telegramStatus?.status || 'polling',
+            error: telegramStatus?.error || null,
+          }
+        : { connected: telegramStatus?.status === 'polling', identifier: telegramStatus?.botName ? `@${telegramStatus.botName}` : '', status: telegramStatus?.status || 'disconnected', error: telegramStatus?.error || null },
     });
   };
 
@@ -873,6 +891,16 @@ function ChannelCard({
   const isWA = platform === 'whatsapp';
   const accent = isWA ? 'emerald' : 'sky';
   const Icon = isWA ? MessageCircle : Send;
+  const waitingQr = isWA && state.status === 'qr';
+  const authenticating = isWA && state.status === 'authenticating';
+  const statusLabel = state.connected ? 'Activa' : waitingQr ? 'Esperando QR' : authenticating ? 'Autenticando' : 'Sin conectar';
+  const statusClasses = state.connected
+    ? isWA
+      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+      : 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+    : waitingQr || authenticating
+      ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30'
+      : 'bg-slate-800 text-slate-400 border-white/5';
 
   const connectedAtFmt = state.connectedAt
     ? new Date(state.connectedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -917,18 +945,18 @@ function ChannelCard({
         <span
           className={cn(
             'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1.5',
-            state.connected
-              ? `bg-${accent}-500/15 text-${accent}-400 border-${accent}-500/30`
-              : 'bg-slate-800 text-slate-400 border-white/5',
+            statusClasses,
           )}
         >
           <span
             className={cn(
               'w-1.5 h-1.5 rounded-full',
-              state.connected ? (isWA ? 'bg-emerald-400 animate-pulse' : 'bg-sky-400 animate-pulse') : 'bg-slate-500',
+              state.connected
+                ? (isWA ? 'bg-emerald-400 animate-pulse' : 'bg-sky-400 animate-pulse')
+                : waitingQr || authenticating ? 'bg-yellow-300 animate-pulse' : 'bg-slate-500',
             )}
           />
-          {state.connected ? 'Activa' : 'Sin conectar'}
+          {statusLabel}
         </span>
       </div>
 
@@ -966,7 +994,13 @@ function ChannelCard({
         </div>
       ) : (
         <div className="relative">
-          <p className="text-xs text-slate-400 leading-relaxed mb-4">{description}</p>
+          <p className="text-xs text-slate-400 leading-relaxed mb-4">
+            {waitingQr
+              ? 'Hay una sesión esperando escaneo. Abre el QR para terminar la vinculación.'
+              : state.error
+                ? state.error
+                : description}
+          </p>
           <button
             onClick={onConnect}
             className={cn(
@@ -976,7 +1010,7 @@ function ChannelCard({
                 : 'bg-sky-600 hover:bg-sky-500 shadow-sky-500/20',
             )}
           >
-            {isWA ? <><QrCode className="w-4 h-4" /> Vincular con QR</> : <><Send className="w-4 h-4" /> Conectar bot</>}
+            {isWA ? <><QrCode className="w-4 h-4" /> {waitingQr ? 'Escanear QR' : 'Vincular con QR'}</> : <><Send className="w-4 h-4" /> Conectar bot</>}
           </button>
         </div>
       )}

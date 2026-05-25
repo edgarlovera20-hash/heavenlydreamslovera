@@ -134,6 +134,10 @@ export function getWhatsAppStatus(account?: WhatsAppAccount) {
   };
 }
 
+export function hasWhatsAppCredentials(account?: WhatsAppAccount) {
+  return hasStoredCredentials(runtimeFor(account).externalId);
+}
+
 function publicStatus(runtime: WaRuntime) {
   return {
     account: runtime.account,
@@ -144,6 +148,7 @@ function publicStatus(runtime: WaRuntime) {
     sessionPath: runtime.authPath,
     externalId: runtime.externalId,
     reconnecting: Boolean(runtime.restartTimer),
+    credentialsPresent: hasStoredCredentials(runtime.externalId),
   };
 }
 
