@@ -30,6 +30,7 @@ type SendChannelMessage = (channel: string, target: string, message: string) => 
 const INTENTS: Intent[] = ['venta', 'consulta_folio', 'soporte', 'morosidad', 'busqueda_web', 'otro'];
 const PROPOSED_ACTIONS: ProposedAction[] = ['create_sale', 'update_lead', 'schedule_followup', 'escalate_human'];
 const DEFAULT_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
+const PROMOTER_NAME_QUESTION = 'Por cierto, ¿cómo te llamas? Así te guardo en mi memoria y te atiendo por tu nombre en WhatsApp o Telegram. 🙌';
 const AI_DECISION_TIMEOUT_MS = Math.max(3000, Number(process.env.AGENT_AI_TIMEOUT_MS || 45000));
 
 function json(value: any) {
@@ -54,27 +55,53 @@ function cleanPersonName(value: any) {
 function promoterFirstName(conversation: any) {
   const memory = conversation?.memory || {};
   const promoter = memory.promoter || {};
-  const source = cleanPersonName(promoter.firstName)
-    || cleanPersonName(promoter.fullName)
-    || cleanPersonName(conversation?.display_name);
+  const source = promoter.nameConfirmed
+    ? cleanPersonName(promoter.firstName) || cleanPersonName(promoter.fullName)
+    : null;
   return source?.split(/\s+/)[0] || null;
 }
 
-function personalizeReply(reply: any, conversation: any) {
+function firstNameForDecision(conversation: any, decision: AgentDecision) {
+  return cleanPersonName(decision.extractedFields?.promoterFirstName)
+    || cleanPersonName(decision.extractedFields?.promoterName)?.split(/\s+/)[0]
+    || promoterFirstName(conversation);
+}
+
+function shouldAskPromoterName(conversation: any, decision: AgentDecision) {
+  const memory = conversation?.memory || {};
+  const promoter = memory.promoter || {};
+  if (promoter.nameConfirmed || decision.extractedFields?.promoterNameConfirmed) return false;
+  if (promoter.nameRequestedAt || decision.extractedFields?._nameRequestSent) return false;
+  if (promoter.isGroup || conversation?.is_group) return false;
+  return true;
+}
+
+function appendPromoterNameQuestion(reply: string) {
+  if (/c[oó]mo te llamas|tu nombre|me dices tu nombre/i.test(reply)) return reply;
+  return `${reply}\n\n${PROMOTER_NAME_QUESTION}`.trim();
+}
+
+function personalizeReply(reply: any, firstName?: string | null) {
   const text = String(reply || '').trim();
-  const firstName = promoterFirstName(conversation);
   if (!text || !firstName) return text;
   const escaped = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (new RegExp(`^(hola[, ]+)?${escaped}\\b`, 'i').test(text)) return text;
+  if (new RegExp(`\\b${escaped}\\b`, 'i').test(text.slice(0, 140))) return text;
   if (/^hola,\s*/i.test(text)) return text.replace(/^hola,\s*/i, `Hola, ${firstName}, `);
   if (/^hola\s+/i.test(text)) return text.replace(/^hola\s+/i, `Hola ${firstName}, `);
   return `${firstName}, ${text}`;
 }
 
 function personalizeDecision(conversation: any, decision: AgentDecision): AgentDecision {
+  const firstName = firstNameForDecision(conversation, decision);
+  const askName = shouldAskPromoterName(conversation, decision);
+  const reply = decision.proposedReply ? personalizeReply(decision.proposedReply, firstName) : decision.proposedReply;
   return {
     ...decision,
-    proposedReply: decision.proposedReply ? personalizeReply(decision.proposedReply, conversation) : decision.proposedReply,
+    extractedFields: askName
+      ? { ...decision.extractedFields, _nameRequestSent: true }
+      : decision.extractedFields,
+    proposedReply: askName && reply ? appendPromoterNameQuestion(reply) : reply,
   };
 }
 
@@ -127,6 +154,60 @@ function extractFolioCandidate(text: string) {
 
 function isMediaSignal(text: string) {
   return /^\[(sticker|imagen|documento|audio|video|contacto|ubicacion|mensaje recibido sin texto)/i.test(String(text || '').trim());
+}
+
+function removeAccents(value: string) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function cleanPotentialPromoterName(value: any) {
+  const cleaned = String(value || '')
+    .replace(/[^\p{L}\s'.-]/gu, ' ')
+    .replace(/\b(?:asesor|promotor|supervisor|administrador|admin|gerente|vendedor|soy|me|llamo|nombre|es)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return null;
+  const tokens = cleaned.split(/\s+/).filter(Boolean).slice(0, 4);
+  if (!tokens.length || tokens.length > 4) return null;
+  const normalized = removeAccents(tokens.join(' ')).toLowerCase();
+  if (/\b(folio|consulta|estatus|siac|cliente|telefono|whatsapp|paquete|direccion|captura|expediente|internet|hola|buenas|gracias)\b/i.test(normalized)) return null;
+  if (tokens.some(token => token.length < 2 && tokens.length === 1)) return null;
+  return tokens.map(token => token.charAt(0).toUpperCase() + token.slice(1)).join(' ');
+}
+
+function extractPromoterName(text: string, conversation: any) {
+  const body = String(text || '').trim();
+  if (!body || isMediaSignal(body) || extractEmail(body)) return null;
+
+  const explicitPatterns = [
+    /\b(?:me llamo|mi nombre es|soy|aqui\s+(?:es|anda)|aquí\s+(?:es|anda))\s+([\p{L}][\p{L}\s'.-]{1,80})/iu,
+    /\bnombre\s*[:\-]\s*([\p{L}][\p{L}\s'.-]{1,80})/iu,
+  ];
+  for (const pattern of explicitPatterns) {
+    const candidate = cleanPotentialPromoterName(body.match(pattern)?.[1]);
+    if (candidate) {
+      const firstName = candidate.split(/\s+/)[0];
+      return { fullName: candidate, firstName, source: 'self_reported' };
+    }
+  }
+
+  const memory = conversation?.memory || {};
+  const promoter = memory.promoter || {};
+  const normalized = removeAccents(body).toLowerCase();
+  const wasAsked = Boolean(promoter.nameRequestedAt);
+  const looksLikePlainName = /^[\p{L}\s'.-]{2,70}$/u.test(body)
+    && !isSimpleGreeting(body)
+    && !/\b(quiero|necesito|consulta|consultar|folio|estatus|siac|captura|cliente|paquete|direccion|telefono|gracias|ok|vale)\b/i.test(normalized);
+
+  if (wasAsked && looksLikePlainName) {
+    const candidate = cleanPotentialPromoterName(body);
+    if (candidate) {
+      const firstName = candidate.split(/\s+/)[0];
+      return { fullName: candidate, firstName, source: 'name_reply' };
+    }
+  }
+
+  return null;
 }
 
 function buildAutonomousReply(text: string, profile: any) {
@@ -237,8 +318,30 @@ function buildFolioReply(text: string) {
 
 function decideWithRules(conversation: any, message: any): AgentDecision {
   const text = String(message.body || '');
-  const { intent, confidence } = classifyIntent(text);
-  const fields = extractFields(text, conversation);
+  const promoterName = extractPromoterName(text, conversation);
+  const classified = classifyIntent(text);
+  const intent = promoterName?.source === 'name_reply' ? 'otro' : classified.intent;
+  const confidence = promoterName?.source === 'name_reply' ? 0.96 : classified.confidence;
+  const fields = {
+    ...extractFields(text, conversation),
+    ...(promoterName ? {
+      promoterName: promoterName.fullName,
+      promoterFirstName: promoterName.firstName,
+      promoterNameConfirmed: true,
+      promoterNameSource: promoterName.source,
+    } : {}),
+  };
+
+  if (promoterName && intent === 'otro') {
+    return personalizeDecision(conversation, {
+      intent: 'otro',
+      confidence: 0.96,
+      extractedFields: fields,
+      proposedReply: `Perfecto, ${promoterName.firstName} 🙌. Ya te guardé en mi memoria para hablarte por tu nombre. Puedo ayudarte con 🔎 consulta de folios, 📁 guardar expedientes o 📝 iniciar captura. ¿Qué hacemos primero?`,
+      proposedActions: [],
+      requiresApproval: true,
+    });
+  }
 
   if (intent === 'venta') {
     const missing = requiredMissing(fields);
@@ -368,6 +471,8 @@ Reglas:
 - ARIUX debe responder ante cualquier mensaje entrante, aunque sea corto, raro o incompleto.
 - Tono: social, profesional, rapido, con humor ligero cuando ayude. Usa 1 a 3 emojis utiles, sin saturar.
 - Si hay nombre del promotor registrado, hablale por su nombre de forma natural y personalizada.
+- Si no hay nombre confirmado del promotor, pide su nombre una sola vez para guardarlo en memoria y personalizar la charla.
+- Si el promotor dice "me llamo", "soy" o responde solo con su nombre, confirma que lo guardaste y usalo desde ese momento.
 - Siempre termina con una pregunta o siguiente paso concreto cuando falte contexto.
 - No inventes folios, telefonos, nombres, paquetes ni direcciones.
 - Todas las acciones requieren aprobacion humana aunque el JSON diga lo contrario.
@@ -548,14 +653,42 @@ function nextStatus(decision: AgentDecision) {
 
 function mergeMemory(conversation: any, decision: AgentDecision) {
   const previous = conversation?.memory || {};
-  const transientFields = new Set(['missing', '_ai', '_web', 'sources']);
+  const transientFields = new Set([
+    'missing',
+    '_ai',
+    '_web',
+    'sources',
+    '_nameRequestSent',
+    'promoterName',
+    'promoterFirstName',
+    'promoterNameConfirmed',
+    'promoterNameSource',
+  ]);
   const knownFields = {
     ...(previous.knownFields || {}),
     ...Object.fromEntries(Object.entries(decision.extractedFields).filter(([key]) => !transientFields.has(key))),
   };
+  const previousPromoter = previous.promoter && typeof previous.promoter === 'object' ? previous.promoter : {};
+  const promoterName = cleanPersonName(decision.extractedFields?.promoterName);
+  const promoterFirst = cleanPersonName(decision.extractedFields?.promoterFirstName)
+    || promoterName?.split(/\s+/)[0]
+    || previousPromoter.firstName
+    || null;
+  const nowIso = new Date().toISOString();
   return {
     ...previous,
     knownFields,
+    promoter: {
+      ...previousPromoter,
+      ...(decision.extractedFields?._nameRequestSent && !previousPromoter.nameRequestedAt ? { nameRequestedAt: nowIso } : {}),
+      ...(promoterName ? {
+        fullName: promoterName,
+        firstName: promoterFirst,
+        nameConfirmed: true,
+        nameSource: decision.extractedFields?.promoterNameSource || 'self_reported',
+        nameConfirmedAt: nowIso,
+      } : {}),
+    },
     summary: decision.intent === 'venta'
       ? `Cliente interesado en venta. Datos conocidos: ${Object.keys(knownFields).join(', ') || 'sin datos completos'}.`
       : `Ultima intencion detectada: ${decision.intent}.`,
