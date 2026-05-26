@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
-  BarChart3, Users, DollarSign, Activity, Bell, Search,
+  BarChart3, Users, Activity, Bell, Search,
   LogOut, TrendingUp, ArrowUpRight, ArrowDownRight,
   LayoutDashboard, Settings as SettingsIcon, PieChart, ChevronLeft, ChevronRight,
   User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, ImagePlus, Gamepad2, FolderOpen,
@@ -106,7 +106,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [approvedSales, setApprovedSales] = useState(0);
   const [rejectedSales, setRejectedSales] = useState(0);
   const [todaySales, setTodaySales] = useState(0);
-  const [monthRevenue, setMonthRevenue] = useState(0);
   const [waStatus, setWaStatus] = useState<'disconnected'|'qr'|'authenticating'|'connected'>('disconnected');
   const [tgStatus, setTgStatus] = useState<'disconnected'|'polling'|'error'>('disconnected');
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
@@ -126,7 +125,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       setApprovedSales(data.approvedSales || 0);
       setRejectedSales(data.rejectedSales || 0);
       setTodaySales(data.todaySales || 0);
-      setMonthRevenue(data.monthRevenue || 0);
     } catch { /* silencioso - puede estar offline */ }
   };
 
@@ -345,7 +343,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                />
 
               {/* KPI Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 hover-group">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 hover-group">
                 <PremiumKpiCard
                   title="VENTAS HOY"
                   value={todaySales.toString()}
@@ -366,13 +364,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   detail="Por validar"
                   icon={ClipboardCheck}
                   tone="emerald"
-                />
-                <PremiumKpiCard
-                  title="INGRESO MES"
-                  value={`$${monthRevenue.toLocaleString('es-MX')}`}
-                  detail="Renta mensual"
-                  icon={DollarSign}
-                  tone="blue"
                 />
               </div>
 
