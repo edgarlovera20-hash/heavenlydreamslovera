@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import {
   Bot, Zap, Archive, Search, Phone, Play, Square, RefreshCw,
   Activity, MessageSquare, Plus, User, Info,
-  Key, CheckCircle2, XCircle, Loader2,
+  Key, CheckCircle2, XCircle, Loader2, Globe2,
 } from 'lucide-react';
 
 const NewSaleForm = lazy(() => import('./NewSaleForm'));
@@ -17,6 +17,7 @@ interface AgentState {
   capturista: AgentStatus;
   archivero: AgentStatus;
   consultor: AgentStatus;
+  telmex: AgentStatus;
   validador: AgentStatus;
 }
 interface ChannelMsg {
@@ -79,6 +80,15 @@ const AGENT_META = [
     hint: 'El usuario envía:\n"folio 123456" o "consulta 123456"\ny el bot responde el estatus.',
   },
   {
+    id: 'telmex',
+    name: 'Agente Telmex Hogar',
+    desc: 'Consulta la pagina oficial de Telmex Hogar para paquetes Infinitum, precios, promociones y datos de contratacion.',
+    icon: Globe2,
+    color: 'cyan',
+    channels: ['WhatsApp', 'Telegram', 'Web Telmex'],
+    hint: 'Ejemplos:\n"paquetes Telmex 500 megas"\n"promociones Telmex hogar"\n"telefono para contratar Telmex"',
+  },
+  {
     id: 'validador',
     name: 'Agente Validador',
     desc: 'Realiza llamadas de validación autónomas vía Twilio para confirmar ventas.',
@@ -94,6 +104,7 @@ const C: Record<string, { bg: string; border: string; text: string; glow: string
   blue:    { bg: 'bg-blue-400/10',    border: 'border-blue-400/30',    text: 'text-blue-400',    glow: 'shadow-[0_0_12px_rgba(96,165,250,0.25)]',  dot: 'bg-blue-400' },
   purple:  { bg: 'bg-purple-400/10',  border: 'border-purple-400/30',  text: 'text-purple-400',  glow: 'shadow-[0_0_12px_rgba(192,132,252,0.25)]', dot: 'bg-purple-400' },
   yellow:  { bg: 'bg-yellow-400/10',  border: 'border-yellow-400/30',  text: 'text-yellow-400',  glow: 'shadow-[0_0_12px_rgba(250,204,21,0.25)]',  dot: 'bg-yellow-400' },
+  cyan:    { bg: 'bg-cyan-400/10',    border: 'border-cyan-400/30',    text: 'text-cyan-300',    glow: 'shadow-[0_0_12px_rgba(34,211,238,0.25)]',   dot: 'bg-cyan-400' },
 };
 
 function timeAgo(iso: string | null) {
@@ -248,7 +259,7 @@ export default function AgentHubView() {
             Hub de Agentes Autónomos
           </h1>
           <p className="text-slate-500 text-xs mt-1 uppercase tracking-widest">
-            3 canales · WhatsApp Baileys · Telegram · App
+            5 agentes operativos · WhatsApp Baileys · Telegram · App · Web Telmex
           </p>
         </div>
         <button onClick={loadAll} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-all text-xs font-bold uppercase tracking-widest">

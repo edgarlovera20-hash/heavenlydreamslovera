@@ -1,4 +1,5 @@
 import { runAiWithFallback } from './enterprise';
+import { answerTelmexQuestion, shouldUseTelmexInfo } from './telmex-info-agent';
 
 export interface WebSearchResult {
   title: string;
@@ -24,6 +25,7 @@ export function shouldUseWebSearch(text: string) {
   const body = normalizeText(text);
   if (!body || body.length < 6) return false;
   const raw = String(text || '').trim();
+  if (shouldUseTelmexInfo(text)) return true;
   if (/^\[(sticker|imagen|documento|audio|video|contacto|ubicacion|mensaje recibido sin texto)/i.test(raw)) return false;
   if (/^[a-z0-9-]{5,}$/i.test(raw) && /\d/.test(raw)) return false;
   const isLocalFolio = /\b(folio|siac|estatus)\b/.test(body) && /\b[a-z0-9-]*\d[a-z0-9-]{4,}\b/i.test(text);
@@ -213,6 +215,10 @@ function withSources(reply: string, sources: WebSearchResult[]) {
 }
 
 export async function answerWebQuestion(text: string, context: { promoterName?: string | null } = {}): Promise<WebAnswer> {
+  if (shouldUseTelmexInfo(text)) {
+    return answerTelmexQuestion(text);
+  }
+
   const query = extractWebQuery(text);
   const sources = await webSearch(query, 5);
   if (!sources.length) {

@@ -19,6 +19,7 @@ import {
   Settings,
   Sparkles,
   UserPlus,
+  Globe2,
   WifiOff,
   Zap,
   type LucideIcon,
@@ -162,6 +163,13 @@ const DEFAULT_AGENT_FUNCTIONS: AgentFunctionConfig[] = [
     description: 'Responder dudas por WhatsApp o Telegram con tono claro, cordial y accionable.',
     enabled: true,
   },
+  {
+    id: 'info_telmex',
+    emoji: '🌐',
+    title: 'Info Telmex Hogar',
+    description: 'Consultar paquetes, precios, promociones y contratacion desde la fuente oficial de Telmex Hogar.',
+    enabled: true,
+  },
 ];
 
 const DEFAULT_METADATA = {
@@ -177,7 +185,7 @@ const DEFAULT_MEMORY: BotMemory = {
   humor: 'Ligero y respetuoso; solo usa humor cuando ayuda a bajar tension.',
   responseStyle: 'Breve, claro, accionable y con siguiente paso concreto.',
   selfKnowledge: DEFAULT_ARIUX_MESSAGE,
-  knowledgeBase: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta y 💬 orientar por WhatsApp o Telegram. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible.',
+  knowledgeBase: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta, 💬 orientar por WhatsApp o Telegram y 🌐 consultar informacion oficial de Telmex Hogar. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Para Telmex puedo responder paquetes, precios, promociones y datos de contratacion desde fuente oficial.',
   learnedNotes: [],
   metadata: DEFAULT_METADATA,
 };
@@ -515,7 +523,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
       };
   const ConnectorIcon = connectorAction.icon;
   const activeStats = channelStats[activeChannel];
-  const flowReady = Boolean(agents.capturista?.active && agents.consultor?.active);
+  const flowReady = Boolean(agents.capturista?.active && agents.consultor?.active && agents.telmex?.active);
 
   const saveMemory = async (nextMemory = memory) => {
     setMemorySaving(true);
@@ -566,7 +574,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
     void saveMemory(nextMemory);
   };
 
-  const toggleAgent = async (agent: 'capturista' | 'consultor') => {
+  const toggleAgent = async (agent: 'capturista' | 'consultor' | 'telmex') => {
     setAgentBusy(state => ({ ...state, [agent]: true }));
     try {
       const res = await fetch(`/api/agents/${agent}/toggle`, { method: 'POST' });
@@ -575,7 +583,13 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
         throw new Error(data.error || 'No se pudo actualizar el agente.');
       }
       await loadMessages();
-      toast.success(agent === 'capturista' ? 'Agente capturista actualizado.' : 'Agente consultor de folios actualizado.');
+      toast.success(
+        agent === 'capturista'
+          ? 'Agente capturista actualizado.'
+          : agent === 'consultor'
+            ? 'Agente consultor de folios actualizado.'
+            : 'Agente Telmex Hogar actualizado.',
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo actualizar el agente.');
     } finally {
@@ -718,7 +732,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
               <AgentAction icon={UserPlus} title="Iniciar flujo" desc="Abrir alta de cliente" onClick={onStartCapture} />
               <AgentAction icon={FileSearch} title="Consultar datos" desc="Folios y registros SIAC" onClick={onOpenFolios} />
               <AgentToggle
@@ -736,6 +750,14 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
                 active={Boolean(agents.consultor?.active)}
                 loading={agentBusy.consultor}
                 onClick={() => toggleAgent('consultor')}
+              />
+              <AgentToggle
+                icon={Globe2}
+                title="Info Telmex"
+                desc="Paquetes, precios y promos"
+                active={Boolean(agents.telmex?.active)}
+                loading={agentBusy.telmex}
+                onClick={() => toggleAgent('telmex')}
               />
             </div>
           </div>

@@ -90,6 +90,7 @@ import {
   runAgentForMessage,
 } from "./server/agent-orchestrator";
 import { registerFinanceEnterpriseRoutes } from "./server/finance-enterprise";
+import { answerTelmexQuestion, shouldUseTelmexInfo } from "./server/telmex-info-agent";
 
 // ── CSV helpers ────────────────────────────────────────────────
 function toCsv(rows: any[]): string {
@@ -3150,11 +3151,12 @@ async function startServer() {
     capturista:  { active: false, lastRun: null, processed: 0, errors: 0 },
     archivero:   { active: false, lastRun: null, processed: 0, errors: 0 },
     consultor:   { active: false, lastRun: null, processed: 0, errors: 0 },
+    telmex:      { active: false, lastRun: null, processed: 0, errors: 0 },
     validador:   { active: false, lastRun: null, processed: 0, errors: 0 },
   };
 
   const agentTimers: Record<string, ReturnType<typeof setInterval> | null> = {
-    capturista: null, archivero: null, consultor: null, validador: null,
+    capturista: null, archivero: null, consultor: null, telmex: null, validador: null,
   };
 
   const AGENT_STATE_SETTINGS_KEY = 'agent_runtime_state_v1';
@@ -3286,6 +3288,26 @@ async function startServer() {
     agentState.consultor.lastRun = new Date().toISOString();
   }
 
+  // Agente Telmex: consulta paquetes, promociones y contacto desde fuente oficial Telmex Hogar.
+  async function runTelmexAgent() {
+    const conversations = getChannelConversations(80).filter((conversation: any) => (
+      conversation.intent === 'busqueda_web' || shouldUseTelmexInfo(conversation.last_body || '')
+    ));
+    for (const conversation of conversations) {
+      try {
+        const result: any = await runAgentForConversation(conversation.id);
+        if (result && !result.duplicate && !result.idle) {
+          await autoSendAriuxReplies(result);
+          agentState.telmex.processed++;
+        }
+      } catch (err: any) {
+        agentState.telmex.errors++;
+        console.warn('[ARIUX] Agente Telmex no pudo procesar conversacion:', err?.message || err);
+      }
+    }
+    agentState.telmex.lastRun = new Date().toISOString();
+  }
+
   async function autoSendAriuxReplies(result: any) {
     const replies = (result?.outbox || []).filter((item: any) => item?.type === 'reply' && item?.message);
     let lastApproved: any = null;
@@ -3383,6 +3405,9 @@ async function startServer() {
       } else if (intent === 'consulta_folio') {
         agentState.consultor.processed++;
         agentState.consultor.lastRun = new Date().toISOString();
+      } else if (intent === 'busqueda_web' && shouldUseTelmexInfo(result.decision?.proposedReply || message.body || '')) {
+        agentState.telmex.processed++;
+        agentState.telmex.lastRun = new Date().toISOString();
       } else {
         agentState.capturista.lastRun = new Date().toISOString();
       }
@@ -3400,6 +3425,7 @@ async function startServer() {
   const AGENT_RUNNERS: Record<string, () => Promise<void>> = {
     capturista: async () => { await runCapturistaAgent(); await autoSendPendingAriuxReplies(); },
     consultor: async () => { await runConsultorAgent(); await autoSendPendingAriuxReplies(); },
+    telmex: async () => { await runTelmexAgent(); await autoSendPendingAriuxReplies(); },
     archivero: async () => { agentState.archivero.lastRun = new Date().toISOString(); },
     validador: async () => { agentState.validador.lastRun = new Date().toISOString(); },
   };
@@ -3437,6 +3463,14 @@ async function startServer() {
 
   app.get("/api/agents/status", chatUserOnly, wrap((_req: any, res: any) => {
     res.json(agentState);
+  }));
+
+  app.post("/api/agents/telmex/query", chatUserOnly, wrap(async (req: any, res: any) => {
+    const question = String(req.body?.question || req.body?.query || '').trim();
+    if (!question) return res.status(400).json({ error: 'question requerido' });
+    const answer = await answerTelmexQuestion(question);
+    recordMetric('agent.telmex.query', 1, { live: answer.info.live ? '1' : '0' });
+    res.json(answer);
   }));
 
   app.get("/api/agents/profiles/:id", chatUserOnly, wrap((req: any, res: any) => {

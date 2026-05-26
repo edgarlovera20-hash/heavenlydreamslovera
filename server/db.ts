@@ -1641,6 +1641,13 @@ const DEFAULT_AGENT_FUNCTIONS = [
     description: 'Responder dudas por WhatsApp o Telegram con tono claro, cordial y accionable.',
     enabled: true,
   },
+  {
+    id: 'info_telmex',
+    emoji: '🌐',
+    title: 'Info Telmex Hogar',
+    description: 'Consultar paquetes, precios, promociones y contratacion desde la fuente oficial de Telmex Hogar.',
+    enabled: true,
+  },
 ];
 
 const DEFAULT_RECEPTIONIST_PROFILE = {
@@ -1649,7 +1656,7 @@ const DEFAULT_RECEPTIONIST_PROFILE = {
   role: 'Agente de promotores',
   personality: 'Cordial, claro, rapido y profesional. Habla como apoyo de campo: directo, atento y sin sonar como robot generico.',
   self_knowledge: DEFAULT_ARIUX_MESSAGE,
-  knowledge_base: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta y 💬 orientar por WhatsApp o Telegram. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Si falta informacion, hago preguntas cortas y concretas.',
+  knowledge_base: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta, 💬 orientar por WhatsApp o Telegram y 🌐 consultar informacion oficial de Telmex Hogar. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Para Telmex puedo responder paquetes, precios, promociones y contratacion desde fuente oficial. Si falta informacion, hago preguntas cortas y concretas.',
   learned_notes: JSON.stringify([]),
   metadata: JSON.stringify({
     audience: 'promotores',
@@ -1832,24 +1839,33 @@ export const AgentProfiles = {
     if (row && id === DEFAULT_RECEPTIONIST_PROFILE.id) {
       const existing = normalizeAgentProfile(row) as any;
       const metadata = existing?.metadata || {};
+      const currentFunctions = Array.isArray(metadata.functions) ? metadata.functions : [];
+      const missingDefaultFunctions = DEFAULT_AGENT_FUNCTIONS.filter(defaultItem => (
+        !currentFunctions.some((item: any) => item?.id === defaultItem.id)
+      ));
       const needsDefaultMessage = !metadata.defaultMessage;
-      const needsDefaultFunctions = !Array.isArray(metadata.functions);
+      const needsDefaultFunctions = !Array.isArray(metadata.functions) || missingDefaultFunctions.length > 0;
       const needsLegacySelfKnowledge = String(existing?.selfKnowledge || '').trim() === LEGACY_RECEPTIONIST_SELF_KNOWLEDGE;
       const needsLegacyKnowledgeBase = String(existing?.knowledgeBase || '').trim() === LEGACY_RECEPTIONIST_KNOWLEDGE_BASE;
-      if (needsDefaultMessage || needsDefaultFunctions || needsLegacySelfKnowledge || needsLegacyKnowledgeBase) {
+      const needsTelmexKnowledge = !/telmex/i.test(String(existing?.knowledgeBase || ''));
+      if (needsDefaultMessage || needsDefaultFunctions || needsLegacySelfKnowledge || needsLegacyKnowledgeBase || needsTelmexKnowledge) {
         AgentProfiles.upsert({
           id,
           name: existing?.name || DEFAULT_RECEPTIONIST_PROFILE.name,
           role: existing?.role || DEFAULT_RECEPTIONIST_PROFILE.role,
           personality: existing?.personality || DEFAULT_RECEPTIONIST_PROFILE.personality,
           selfKnowledge: needsLegacySelfKnowledge ? DEFAULT_RECEPTIONIST_PROFILE.self_knowledge : existing?.selfKnowledge,
-          knowledgeBase: needsLegacyKnowledgeBase ? DEFAULT_RECEPTIONIST_PROFILE.knowledge_base : existing?.knowledgeBase,
+          knowledgeBase: needsLegacyKnowledgeBase
+            ? DEFAULT_RECEPTIONIST_PROFILE.knowledge_base
+            : needsTelmexKnowledge
+              ? `${existing?.knowledgeBase || DEFAULT_RECEPTIONIST_PROFILE.knowledge_base} Tambien puedo consultar informacion oficial de Telmex Hogar: paquetes, precios, promociones y contratacion.`
+              : existing?.knowledgeBase,
           learnedNotes: existing?.learnedNotes || [],
           metadata: {
             ...parseJson(DEFAULT_RECEPTIONIST_PROFILE.metadata, {}),
             ...metadata,
             defaultMessage: metadata.defaultMessage || DEFAULT_ARIUX_MESSAGE,
-            functions: Array.isArray(metadata.functions) ? metadata.functions : DEFAULT_AGENT_FUNCTIONS,
+            functions: Array.isArray(metadata.functions) ? [...metadata.functions, ...missingDefaultFunctions] : DEFAULT_AGENT_FUNCTIONS,
           },
         });
         row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id) as any;
