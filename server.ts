@@ -152,6 +152,7 @@ const DOCUMENT_TYPES = [
   'SOLICITUD_FIRMADA',
   'VIDEO_FIRMA',
   'AUDIO_LLAMADA',
+  'EVIDENCIA_MULTIMEDIA',
   'PAGARE',
   'CONTRATO',
   'FOTO_CASA',
@@ -888,6 +889,7 @@ async function startServer() {
       { type: 'SOLICITUD_FIRMADA', value: meta.contratoFirmado || meta.solicitudFirmada || meta.contratoPdf, name: 'Solicitud firmada' },
       { type: 'VIDEO_FIRMA', value: meta.videofirma, name: 'Video firma' },
       { type: 'AUDIO_LLAMADA', value: meta.audioLlamada, name: 'Audio llamada validacion' },
+      { type: 'EVIDENCIA_MULTIMEDIA', value: meta.evidenciaMultimedia, name: 'Evidencia multimedia' },
       { type: 'UBICACION_GPS', value: meta.coordenadas || sale.coordenadas, name: 'Ubicacion GPS' },
     ];
     const missingDocs = docMap.filter(doc => !doc.value).map(doc => doc.type);

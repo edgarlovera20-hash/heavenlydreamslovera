@@ -17,6 +17,16 @@ const OFFLINE_QUEUE_KEY = 'hd_mobile_offline_queue_v1';
 const MODULE_CACHE_PREFIX = 'hd_mobile_module_cache_v1:';
 const COMPANY_NAME = 'HEAVENLY DREAMS SAS DE CV';
 const COMPANY_ADDRESS = 'Avenida Tlahuac 3632, Interior A301, Colonia Culhuacan CTM Zona VIII, CP 09800, Iztapalapa, Ciudad de Mexico';
+const IMAGE_PDF_ACCEPT = 'image/*,application/pdf,.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif';
+const AUDIO_ACCEPT = 'audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.amr,.3gp';
+const VIDEO_ACCEPT = 'video/*,.mp4,.mov,.webm,.3gp,.mkv,.avi,.mpeg,.mpg,.wmv';
+const EXPEDIENTE_ACCEPT = `${IMAGE_PDF_ACCEPT},${AUDIO_ACCEPT},${VIDEO_ACCEPT}`;
+const SUPPORTED_FILE_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'bmp', 'tif', 'tiff', 'avif',
+  'pdf',
+  'mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'amr',
+  'mp4', 'mov', 'webm', '3gp', 'mkv', 'avi', 'mpeg', 'mpg', 'wmv',
+]);
 
 type IconName = 'badge' | 'camera' | 'check' | 'chevron-left' | 'chevron-right' | 'clipboard' | 'cloud-off' | 'folder' | 'home' | 'id' | 'loader' | 'logout' | 'map' | 'message' | 'phone' | 'refresh' | 'save' | 'search' | 'send' | 'settings' | 'shield' | 'smartphone' | 'user' | 'users' | 'wallet' | 'wifi' | 'wifi-off';
 type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'usuarios' | 'aprobaciones' | 'perfil' | 'ajustes';
@@ -629,6 +639,14 @@ async function fileToBase64(file: File) {
     reader.readAsDataURL(file);
   });
   return dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+}
+
+function isSupportedExpedienteFile(file: File) {
+  const mime = String(file.type || '').toLowerCase();
+  if (mime.startsWith('image/') || mime.startsWith('audio/') || mime.startsWith('video/')) return true;
+  if (mime === 'application/pdf') return true;
+  const ext = file.name.toLowerCase().split('.').pop() || '';
+  return SUPPORTED_FILE_EXTENSIONS.has(ext);
 }
 
 function newQueueId() {
@@ -2043,6 +2061,10 @@ export default function MobileFieldApp() {
   };
 
   const handleDocumentSelected = async (type: string, file: File | null) => {
+    if (file && !isSupportedExpedienteFile(file)) {
+      notify('error', 'Formato no soportado. Sube imagen, PDF, audio o video.');
+      return;
+    }
     const prepared = file ? await compressImageFile(file).catch(() => file) : null;
     setSelectedFiles((current) => ({ ...current, [type]: prepared }));
     if (!file) return;
@@ -2752,7 +2774,7 @@ export default function MobileFieldApp() {
       label: string,
       mode: 'ine' | 'comprobante' | 'siac',
       capture?: 'environment',
-      accept = 'image/*,.pdf',
+      accept = IMAGE_PDF_ACCEPT,
       ocrEnabled = true,
     ) => {
       const selected = draft.documents.find((item) => item.type === type);
@@ -2868,7 +2890,7 @@ export default function MobileFieldApp() {
                 </>
               ) : (
                 <>
-                  {docRow(CURP_IDENTITY_DOCUMENT, 'Documento CURP', 'ine', undefined, 'image/*,.pdf')}
+                  {docRow(CURP_IDENTITY_DOCUMENT, 'Documento CURP', 'ine', undefined, IMAGE_PDF_ACCEPT)}
                   <Field label="CURP (opcional)" value={draft.curp} onChange={(value) => updateDraft({ curp: value.toUpperCase().slice(0, 18), curpAgentRequestedAt: '', curpAgentDraft: '', curpAgentMessage: '' })} placeholder="Solo si ya la trae el cliente" />
                   <div className="grid grid-cols-2 gap-3">
                     <button onClick={validateCurp} disabled={curpLoading || !curpTextReady} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.08em] text-slate-950 disabled:opacity-45">
@@ -3087,7 +3109,7 @@ export default function MobileFieldApp() {
             <div className="space-y-3">
               <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
                 <p className="text-sm font-black text-cyan-100">Video firma, expediente y validacion</p>
-                <p className="mt-1 text-xs leading-5 text-slate-300">Captura la firma, genera el PDF con QR, adjunta video o audio de llamada y pide validacion desde este mismo paso.</p>
+                <p className="mt-1 text-xs leading-5 text-slate-300">Captura la firma, genera el PDF con QR, adjunta imagenes, PDF, audio o video y pide validacion desde este mismo paso.</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white p-2">
                 <canvas
@@ -3128,8 +3150,9 @@ export default function MobileFieldApp() {
                   Expediente guardado para validacion: {draft.validationRequestId ? `validacion ${draft.validationRequestId.slice(0, 8)}` : 'pendiente en mesa'}.
                 </div>
               )}
-              {docRow('VIDEO_FIRMA', 'Subir video firma', 'ine', undefined, 'video/*', false)}
-              {docRow('AUDIO_LLAMADA', 'Subir audio de llamada', 'ine', undefined, 'audio/*', false)}
+              {docRow('VIDEO_FIRMA', 'Subir video firma', 'ine', undefined, VIDEO_ACCEPT, false)}
+              {docRow('AUDIO_LLAMADA', 'Subir audio de llamada', 'ine', undefined, AUDIO_ACCEPT, false)}
+              {docRow('EVIDENCIA_MULTIMEDIA', 'Evidencia adicional', 'ine', undefined, EXPEDIENTE_ACCEPT, false)}
             </div>
           )}
 

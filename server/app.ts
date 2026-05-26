@@ -11,7 +11,7 @@ export function createApp() {
     res.set('Expires', '0');
     next();
   });
-  app.use(express.json({ limit: '20mb' }));
+  app.use(express.json({ limit: process.env.API_JSON_LIMIT || '350mb' }));
   app.use(requestLogger);
   return app;
 }

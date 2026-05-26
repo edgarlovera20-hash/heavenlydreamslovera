@@ -18,10 +18,22 @@ import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import { UsersAPI, VentasAPI } from '../../services/db';
 
+const IMAGE_ACCEPT = 'image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.tif,.tiff,.avif';
+const PDF_ACCEPT = 'application/pdf,.pdf';
+const AUDIO_ACCEPT = 'audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.amr,.3gp';
+const VIDEO_ACCEPT = 'video/*,.mp4,.mov,.webm,.3gp,.mkv,.avi,.mpeg,.mpg,.wmv';
+const MEDIA_ACCEPT = `${IMAGE_ACCEPT},${PDF_ACCEPT},${AUDIO_ACCEPT},${VIDEO_ACCEPT}`;
+const SUPPORTED_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'bmp', 'tif', 'tiff', 'avif',
+  'pdf',
+  'mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'amr',
+  'mp4', 'mov', 'webm', '3gp', 'mkv', 'avi', 'mpeg', 'mpg', 'wmv',
+]);
+
 // ──────────────────────────────────────────────
 // TYPES
 // ──────────────────────────────────────────────
-type DocType = 'image' | 'pdf' | 'video' | 'audio' | 'imageOrPdf';
+type DocType = 'image' | 'pdf' | 'video' | 'audio' | 'imageOrPdf' | 'media';
 
 interface DocumentDef {
   id: keyof Sale;
@@ -58,6 +70,7 @@ interface Sale {
   solicitudFirmada?: string;
   videofirma?: string;
   audioLlamada?: string;
+  evidenciaMultimedia?: string;
   capturaSiac?: string;
   numeroAPortar?: string;
   docValidations?: Record<string, DocValidation>;
@@ -100,6 +113,7 @@ const DOC_DEFS: DocumentDef[] = [
   { id: 'contratoFirmado', name: 'Solicitud firmada', type: 'imageOrPdf' },
   { id: 'videofirma', name: 'Video de video firma', type: 'video' },
   { id: 'audioLlamada', name: 'Audio de llamada de validación', type: 'audio' },
+  { id: 'evidenciaMultimedia', name: 'Evidencia adicional (imagen, PDF, audio o video)', type: 'media', optional: true },
   {
     id: 'solicitudFirmada',
     name: 'Solicitud firmada adicional',
@@ -184,6 +198,23 @@ function fullName(s: Sale): string {
   return n || 'Cliente sin nombre';
 }
 
+function fileKind(file: File) {
+  const mime = String(file.type || '').toLowerCase();
+  const ext = file.name.toLowerCase().split('.').pop() || '';
+  if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'bmp', 'tif', 'tiff', 'avif'].includes(ext)) return 'image';
+  if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
+  if (mime.startsWith('audio/') || ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'amr'].includes(ext)) return 'audio';
+  if (mime.startsWith('video/') || ['mp4', 'mov', 'webm', '3gp', 'mkv', 'avi', 'mpeg', 'mpg', 'wmv'].includes(ext)) return 'video';
+  return SUPPORTED_EXTENSIONS.has(ext) ? 'media' : 'unknown';
+}
+
+function fileMatchesDocType(file: File, type: DocType) {
+  const kind = fileKind(file);
+  if (type === 'media') return kind !== 'unknown';
+  if (type === 'imageOrPdf') return kind === 'image' || kind === 'pdf';
+  return kind === type;
+}
+
 // Nombre de la carpeta:
 //  - Sin captura SIAC: nombre del cliente
 //  - Con captura SIAC: "SIAC <folio> · <Nombre>"
@@ -216,7 +247,7 @@ async function analyzeManipulation(
   if (file.size < 800) {
     return { ...baseValidation, isManipulated: true, confidence: 0.92, reason: 'El archivo es demasiado pequeño para ser un documento original.' };
   }
-  if (file.size > 50_000_000) {
+  if ((type === 'image' || type === 'imageOrPdf' || type === 'pdf') && file.size > 50_000_000) {
     return { ...baseValidation, isManipulated: true, confidence: 0.7, reason: 'El archivo supera el tamaño esperado, podría estar manipulado.' };
   }
 
@@ -247,7 +278,14 @@ async function analyzeManipulation(
     }
   }
 
-  return { ...baseValidation, isManipulated: false, confidence: 0.5 };
+  return {
+    ...baseValidation,
+    isManipulated: false,
+    confidence: type === 'audio' || type === 'video' || type === 'media' ? 0.6 : 0.5,
+    reason: type === 'audio' || type === 'video' || type === 'media'
+      ? 'Archivo multimedia guardado con huella SHA para revision humana.'
+      : undefined,
+  };
 }
 
 function toServerDocType(docId: string) {
@@ -264,6 +302,7 @@ function toServerDocType(docId: string) {
     solicitudFirmada: 'SOLICITUD_FIRMADA',
     videofirma: 'VIDEO_FIRMA',
     audioLlamada: 'AUDIO_LLAMADA',
+    evidenciaMultimedia: 'EVIDENCIA_MULTIMEDIA',
   };
   return map[docId] || docId.toUpperCase();
 }
@@ -353,11 +392,12 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
   const triggerUpload = (saleId: string, docId: string, type: DocType) => {
     uploadTargetRef.current = { saleId, docId, type };
     if (fileInputRef.current) {
-      const accept = type === 'image' ? 'image/*'
-        : type === 'imageOrPdf' ? 'image/*,application/pdf'
-        : type === 'pdf' ? 'application/pdf'
-        : type === 'video' ? 'video/*'
-        : type === 'audio' ? 'audio/*'
+      const accept = type === 'image' ? IMAGE_ACCEPT
+        : type === 'imageOrPdf' ? `${IMAGE_ACCEPT},${PDF_ACCEPT}`
+        : type === 'pdf' ? PDF_ACCEPT
+        : type === 'video' ? VIDEO_ACCEPT
+        : type === 'audio' ? AUDIO_ACCEPT
+        : type === 'media' ? MEDIA_ACCEPT
         : '*/*';
       fileInputRef.current.accept = accept;
       fileInputRef.current.click();
@@ -372,14 +412,8 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
     setUploadError(null);
 
     // Validar tipo
-    const okType =
-      (target.type === 'image' && file.type.startsWith('image/')) ||
-      (target.type === 'imageOrPdf' && (file.type.startsWith('image/') || file.type === 'application/pdf')) ||
-      (target.type === 'pdf' && file.type === 'application/pdf') ||
-      (target.type === 'video' && file.type.startsWith('video/')) ||
-      (target.type === 'audio' && file.type.startsWith('audio/'));
-    if (!okType) {
-      setUploadError(`El archivo no coincide con el tipo requerido (${target.type}).`);
+    if (!fileMatchesDocType(file, target.type)) {
+      setUploadError('El archivo no coincide con el tipo requerido. Se aceptan imagenes, PDF, audio y video segun la fila.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -412,6 +446,7 @@ export default function MyFilesView({ onBack }: { onBack: () => void }) {
 
       const uploadRes = await fetch('/api/document-files', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           saleId: target.saleId,
           captureId: target.saleId,
@@ -1179,6 +1214,7 @@ function DocCard({
     if (doc.type === 'image') return <FileImage className="w-5 h-5" />;
     if (doc.type === 'video') return <FileVideo className="w-5 h-5" />;
     if (doc.type === 'audio') return <FileAudio className="w-5 h-5" />;
+    if (doc.type === 'media') return <FileText className="w-5 h-5" />;
     return <FileText className="w-5 h-5" />;
   };
 
