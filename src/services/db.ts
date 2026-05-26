@@ -81,6 +81,7 @@ export const SiacAPI = {
   importCsv: (replace = false) => api('POST', `/api/siac/import${replace ? '?replace=1' : ''}`),
   importSource: (replace = true) => api('POST', '/api/siac/import-source', { replace }),
   importFile: (fileName: string, contentBase64: string, replace = true) => api('POST', '/api/siac/import-file', { fileName, contentBase64, replace }),
+  importGoogleDrive: (input: string, replace = true) => api('POST', '/api/siac/import-google-drive', { input, replace }),
   deleteAll: () => api('DELETE', '/api/siac'),
 };
 

@@ -490,6 +490,96 @@ function emptyRowForHeaders(dataset: string) {
   return Object.fromEntries(headers.map(header => [header, '']));
 }
 
+function parseGoogleDriveSource(value: string) {
+  const input = String(value || '').trim();
+  if (!input) throw new Error('Pega el enlace o ID de Google Drive.');
+  if (/\/folders\//i.test(input)) {
+    const folderId = input.match(/\/folders\/([a-zA-Z0-9_-]+)/)?.[1] || '';
+    return { kind: 'folder' as const, id: folderId };
+  }
+  const sheetId = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/i)?.[1];
+  if (sheetId) return { kind: 'sheet' as const, id: sheetId };
+  const fileId = input.match(/\/file\/d\/([a-zA-Z0-9_-]+)/i)?.[1]
+    || input.match(/[?&]id=([a-zA-Z0-9_-]+)/)?.[1]
+    || (/^[a-zA-Z0-9_-]{12,}$/.test(input) ? input : '');
+  if (!fileId) throw new Error('No pude detectar el ID del archivo o Google Sheet.');
+  return { kind: 'file' as const, id: fileId };
+}
+
+function fileNameFromDisposition(disposition: string | null, fallback: string) {
+  if (!disposition) return fallback;
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try { return decodeURIComponent(encoded.replace(/^"+|"+$/g, '')); } catch {}
+  }
+  const plain = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+  return plain ? plain.trim() : fallback;
+}
+
+function looksLikeHtml(buffer: Buffer, contentType: string | null) {
+  if (String(contentType || '').toLowerCase().includes('text/html')) return true;
+  const prefix = buffer.subarray(0, 500).toString('utf8').toLowerCase();
+  return prefix.includes('<!doctype html') || prefix.includes('<html');
+}
+
+async function fetchPublicDriveBuffer(url: string, fallbackName: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+  try {
+    const response = await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'HeavenlyDreamsCRM/1.0',
+        Accept: 'text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream,*/*',
+      },
+    });
+    if (!response.ok) throw new Error(`Google Drive respondió ${response.status}`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (looksLikeHtml(buffer, response.headers.get('content-type'))) {
+      throw new Error('Google Drive no permitió descargar el archivo. Compártelo como "cualquier persona con el enlace puede ver" o configura OAuth de Drive.');
+    }
+    return {
+      buffer,
+      fileName: fileNameFromDisposition(response.headers.get('content-disposition'), fallbackName),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function downloadPublicSiacFromGoogleDrive(input: string) {
+  const source = parseGoogleDriveSource(input);
+  if (source.kind === 'folder') {
+    throw new Error('La importación de carpetas requiere OAuth de Google Drive; pega un archivo/Sheet público o configura VITE_GOOGLE_DRIVE_CLIENT_ID.');
+  }
+
+  if (source.kind === 'sheet') {
+    const url = `https://docs.google.com/spreadsheets/d/${source.id}/export?format=csv&gid=0`;
+    return {
+      ...(await fetchPublicDriveBuffer(url, 'SIAC-PPIES-google-sheet.csv')),
+      fileId: source.id,
+      sourceUrl: url,
+    };
+  }
+
+  const urls = [
+    `https://docs.google.com/spreadsheets/d/${source.id}/export?format=csv&gid=0`,
+    `https://drive.google.com/uc?export=download&id=${source.id}`,
+    `https://drive.usercontent.google.com/download?id=${source.id}&export=download&confirm=t`,
+  ];
+  let lastError: any = null;
+  for (const url of urls) {
+    try {
+      const downloaded = await fetchPublicDriveBuffer(url, 'SIAC-PPIES-google-drive.csv');
+      return { ...downloaded, fileId: source.id, sourceUrl: url };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('No se pudo descargar el archivo de Google Drive.');
+}
+
 async function startServer() {
   const app = createApp();
   const PORT = Number(process.env.PORT || 3000);
@@ -2220,6 +2310,29 @@ async function startServer() {
       detalle: `imported:${result.imported};skipped:${result.skipped};source:${result.source}`,
     });
     res.json({ ok: true, ...result });
+  }));
+
+  app.post("/api/siac/import-google-drive", managerOnly, wrap(async (req: any, res: any) => {
+    const input = String(req.body?.input || req.body?.url || '').trim();
+    if (!input) return res.status(400).json({ error: 'input requerido' });
+    const downloaded = await downloadPublicSiacFromGoogleDrive(input);
+    const result = await importSiacSource({
+      buffer: downloaded.buffer,
+      fileName: downloaded.fileName,
+      replace: req.body?.replace === true,
+    });
+    Settings.set('siac_primary_source_fingerprint', result.fingerprint);
+    Settings.set('siac_primary_importer_version', SIAC_IMPORTER_VERSION);
+    Settings.set('siac_primary_drive_source', downloaded.sourceUrl);
+    AuditLog.insert({
+      accion: 'IMPORT_SIAC_GOOGLE_DRIVE',
+      entidad: 'siac_records',
+      entidad_id: null,
+      user_id: req.auth?.sub || null,
+      user_nombre: null,
+      detalle: `imported:${result.imported};skipped:${result.skipped};file:${downloaded.fileName};drive:${downloaded.fileId}`,
+    });
+    res.json({ ok: true, ...result, fileName: downloaded.fileName, fileId: downloaded.fileId });
   }));
 
   // Reimportar CSV

@@ -194,10 +194,6 @@ export default function SIACView() {
   };
 
   const handleDriveImport = async () => {
-    if (!isGoogleDriveConfigured()) {
-      toast.error('Falta configurar VITE_GOOGLE_DRIVE_CLIENT_ID para activar Google Drive.');
-      return;
-    }
     if (!driveInput.trim()) {
       toast.error('Pega el enlace o ID del archivo, Google Sheet o carpeta de Drive.');
       return;
@@ -205,13 +201,18 @@ export default function SIACView() {
     setDriveLoading(true);
     setLoading(true);
     try {
-      const source = await downloadSiacSourceFromDrive(driveInput);
-      const result = await SiacAPI.importFile(source.fileName, source.contentBase64, true);
+      const result = isGoogleDriveConfigured()
+        ? await (async () => {
+            const source = await downloadSiacSourceFromDrive(driveInput);
+            const imported = await SiacAPI.importFile(source.fileName, source.contentBase64, true);
+            return { ...imported, fileName: source.fileName, fileId: source.fileId };
+          })()
+        : await SiacAPI.importGoogleDrive(driveInput, true);
       await loadServerRecords();
       setPage(0);
       toast.success(`${result.imported} registros SIAC importados desde Google Drive.`);
       logAudit('EXPORTACION', auth.currentUser?.uid || '', auth.currentUser?.displayName || '',
-        { details: `SIAC importado desde Drive: ${source.fileName} (${source.fileId})` });
+        { details: `SIAC importado desde Drive: ${result.fileName || 'archivo Drive'} (${result.fileId || 'sin-id'})` });
     } catch (err: any) {
       toast.error(err?.message || 'No se pudo importar SIAC desde Google Drive.');
     } finally {
@@ -290,7 +291,7 @@ export default function SIACView() {
           <div className="flex-1">
             <p className="text-[11px] font-black uppercase tracking-[0.14em] text-cyan-300">Google Drive · SIAC PPIES</p>
             <p className="mt-1 text-xs text-slate-400">
-              Pega el enlace/ID de un CSV, Excel, Google Sheet o carpeta. Si es carpeta, se toma el archivo SIAC/PPIES más reciente.
+              Pega el enlace/ID de un CSV, Excel o Google Sheet. Con OAuth activo tambien acepta carpetas y toma el SIAC/PPIES mas reciente.
             </p>
             <input
               value={driveInput}
