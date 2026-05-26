@@ -2209,6 +2209,8 @@ async function startServer() {
       fileName: req.body?.fileName || 'siac.xlsx',
       replace: req.body?.replace === true,
     });
+    Settings.set('siac_primary_source_fingerprint', result.fingerprint);
+    Settings.set('siac_primary_importer_version', SIAC_IMPORTER_VERSION);
     AuditLog.insert({
       accion: 'IMPORT_SIAC_FILE',
       entidad: 'siac_records',

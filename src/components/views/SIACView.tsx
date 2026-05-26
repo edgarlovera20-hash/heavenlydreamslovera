@@ -9,6 +9,7 @@ import { exportToCSV } from '../../lib/exportUtils';
 import { logAudit } from '../../lib/auditLog';
 import { auth } from '../../lib/firebase';
 import { SiacAPI } from '../../services/db';
+import { downloadSiacSourceFromDrive, isGoogleDriveConfigured } from '../../services/googleDriveFolders';
 import { toast } from 'sonner';
 
 const STATUS_CFG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -96,6 +97,8 @@ export default function SIACView() {
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [driveInput, setDriveInput] = useState('');
+  const [driveLoading, setDriveLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadServerRecords = async (showToast = false) => {
@@ -176,18 +179,9 @@ export default function SIACView() {
     if (!file) return;
     setLoading(true);
     try {
-      if (/\.xlsx?$/i.test(file.name)) {
-        const result = await SiacAPI.importFile(file.name, await fileToBase64(file), true);
-        await loadServerRecords();
-        toast.success(`${result.imported} registros SIAC importados desde Excel.`);
-      } else {
-        const text = await file.text();
-        const parsed = parseSIACCsv(text);
-        if (parsed.length === 0) { toast.error('No se encontraron registros válidos en el CSV.'); return; }
-        await uploadSIACRecords(parsed);
-        setRecords(parsed);
-        toast.success(`${parsed.length} registros SIAC importados y guardados en la base de datos.`);
-      }
+      const result = await SiacAPI.importFile(file.name, await fileToBase64(file), true);
+      await loadServerRecords();
+      toast.success(`${result.imported} registros SIAC importados desde ${file.name}.`);
       setPage(0);
       logAudit('EXPORTACION', auth.currentUser?.uid || '', auth.currentUser?.displayName || '',
         { details: `SIAC importado: ${file.name}` });
@@ -196,6 +190,33 @@ export default function SIACView() {
     } finally {
       setLoading(false);
       e.target.value = '';
+    }
+  };
+
+  const handleDriveImport = async () => {
+    if (!isGoogleDriveConfigured()) {
+      toast.error('Falta configurar VITE_GOOGLE_DRIVE_CLIENT_ID para activar Google Drive.');
+      return;
+    }
+    if (!driveInput.trim()) {
+      toast.error('Pega el enlace o ID del archivo, Google Sheet o carpeta de Drive.');
+      return;
+    }
+    setDriveLoading(true);
+    setLoading(true);
+    try {
+      const source = await downloadSiacSourceFromDrive(driveInput);
+      const result = await SiacAPI.importFile(source.fileName, source.contentBase64, true);
+      await loadServerRecords();
+      setPage(0);
+      toast.success(`${result.imported} registros SIAC importados desde Google Drive.`);
+      logAudit('EXPORTACION', auth.currentUser?.uid || '', auth.currentUser?.displayName || '',
+        { details: `SIAC importado desde Drive: ${source.fileName} (${source.fileId})` });
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo importar SIAC desde Google Drive.');
+    } finally {
+      setDriveLoading(false);
+      setLoading(false);
     }
   };
 
@@ -260,6 +281,31 @@ export default function SIACView() {
           <button onClick={handleExport} disabled={filtered.length === 0}
             className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl text-xs font-bold hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
             <Download className="w-3.5 h-3.5" /> Exportar ({filtered.length})
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="flex-1">
+            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-cyan-300">Google Drive · SIAC PPIES</p>
+            <p className="mt-1 text-xs text-slate-400">
+              Pega el enlace/ID de un CSV, Excel, Google Sheet o carpeta. Si es carpeta, se toma el archivo SIAC/PPIES más reciente.
+            </p>
+            <input
+              value={driveInput}
+              onChange={(event) => setDriveInput(event.target.value)}
+              placeholder="https://drive.google.com/file/d/... o carpeta de Drive"
+              className="mt-3 w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-400/30"
+            />
+          </div>
+          <button
+            onClick={handleDriveImport}
+            disabled={loading || driveLoading || !driveInput.trim()}
+            className="flex items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 text-xs font-bold text-cyan-200 transition-colors hover:bg-cyan-500/20 disabled:opacity-50"
+          >
+            {driveLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+            Importar desde Drive
           </button>
         </div>
       </div>

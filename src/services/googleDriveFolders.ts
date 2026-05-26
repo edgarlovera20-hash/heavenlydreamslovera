@@ -11,6 +11,7 @@ type DriveFile = {
   name: string;
   mimeType?: string;
   webViewLink?: string;
+  modifiedTime?: string;
 };
 
 export type DriveExportResult = {
@@ -33,6 +34,7 @@ const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const ROOT_MANIFEST = 'heavenly-dreams-expedientes.json';
 const SALE_MANIFEST = 'manifest.json';
+const SHEETS_MIME = 'application/vnd.google-apps.spreadsheet';
 
 const DOC_LABELS: Record<string, string> = {
   ineFrente: 'INE Frente',
@@ -123,6 +125,17 @@ export function parseDriveFolderId(value: string) {
   if (!clean) return '';
   const folderMatch = clean.match(/\/folders\/([a-zA-Z0-9_-]+)/);
   if (folderMatch?.[1]) return folderMatch[1];
+  const idMatch = clean.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch?.[1]) return idMatch[1];
+  if (/^[a-zA-Z0-9_-]{12,}$/.test(clean)) return clean;
+  return '';
+}
+
+export function parseDriveFileId(value: string) {
+  const clean = value.trim();
+  if (!clean) return '';
+  const fileMatch = clean.match(/\/(?:file|spreadsheets)\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileMatch?.[1]) return fileMatch[1];
   const idMatch = clean.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (idMatch?.[1]) return idMatch[1];
   if (/^[a-zA-Z0-9_-]{12,}$/.test(clean)) return clean;
@@ -239,11 +252,18 @@ async function uploadDocument(token: string, saleFolderId: string, sale: SaleLik
 async function listDriveChildren(token: string, folderId: string): Promise<DriveFile[]> {
   const params = new URLSearchParams({
     q: `'${folderId.replace(/'/g, "\\'")}' in parents and trashed=false`,
-    fields: 'files(id,name,mimeType,webViewLink)',
+    fields: 'files(id,name,mimeType,webViewLink,modifiedTime)',
     pageSize: '1000',
   });
   const data = await driveFetch<{ files: DriveFile[] }>(token, `${DRIVE_API}/files?${params}`);
   return data.files || [];
+}
+
+async function getDriveFile(token: string, fileId: string) {
+  const params = new URLSearchParams({
+    fields: 'id,name,mimeType,webViewLink,modifiedTime',
+  });
+  return driveFetch<DriveFile>(token, `${DRIVE_API}/files/${fileId}?${params}`);
 }
 
 async function downloadText(token: string, fileId: string) {
@@ -252,6 +272,94 @@ async function downloadText(token: string, fileId: string) {
   });
   if (!res.ok) throw new Error(await res.text());
   return res.text();
+}
+
+function bufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function isSiacSourceFile(file: DriveFile) {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith('.csv') ||
+    name.endsWith('.xlsx') ||
+    name.endsWith('.xlsm') ||
+    file.mimeType === SHEETS_MIME
+  );
+}
+
+function scoreSiacSource(file: DriveFile) {
+  const name = file.name.toLowerCase();
+  let score = 0;
+  if (name.includes('siac')) score += 10;
+  if (name.includes('ppies')) score += 6;
+  if (name.endsWith('.csv')) score += 4;
+  if (name.endsWith('.xlsx') || name.endsWith('.xlsm')) score += 3;
+  if (file.mimeType === SHEETS_MIME) score += 2;
+  return score;
+}
+
+function chooseSiacSourceFile(files: DriveFile[]) {
+  return files
+    .filter(isSiacSourceFile)
+    .sort((a, b) => {
+      const scoreDiff = scoreSiacSource(b) - scoreSiacSource(a);
+      if (scoreDiff) return scoreDiff;
+      return String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || ''));
+    })[0] || null;
+}
+
+async function downloadDriveBinary(token: string, file: DriveFile) {
+  const url = file.mimeType === SHEETS_MIME
+    ? `${DRIVE_API}/files/${file.id}/export?mimeType=${encodeURIComponent('text/csv')}`
+    : `${DRIVE_API}/files/${file.id}?alt=media`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const fileName = file.mimeType === SHEETS_MIME && !/\.csv$/i.test(file.name)
+    ? `${file.name}.csv`
+    : file.name;
+  return {
+    fileName,
+    contentBase64: bufferToBase64(await res.arrayBuffer()),
+    fileId: file.id,
+    webViewLink: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
+  };
+}
+
+export async function downloadSiacSourceFromDrive(input: string) {
+  const isFolderLink = /\/folders\//.test(input);
+  const folderId = isFolderLink ? parseDriveFolderId(input) : '';
+  const fileId = folderId ? '' : parseDriveFileId(input);
+  if (!folderId && !fileId) {
+    throw new Error('Pega el enlace o ID del archivo SIAC, Google Sheet o carpeta de Drive.');
+  }
+
+  const token = await requestAccessToken();
+  const file = folderId
+    ? chooseSiacSourceFile(await listDriveChildren(token, folderId))
+    : await getDriveFile(token, fileId);
+
+  if (file?.mimeType === DRIVE_FOLDER_MIME) {
+    const child = chooseSiacSourceFile(await listDriveChildren(token, file.id));
+    if (!child) throw new Error('No encontré un CSV, XLSX o Google Sheet SIAC dentro de esa carpeta.');
+    return downloadDriveBinary(token, child);
+  }
+
+  if (!file) {
+    throw new Error('No encontré un CSV, XLSX o Google Sheet SIAC dentro de esa carpeta.');
+  }
+  if (!isSiacSourceFile(file)) {
+    throw new Error(`El archivo "${file.name}" no parece ser CSV, Excel o Google Sheet.`);
+  }
+  return downloadDriveBinary(token, file);
 }
 
 export async function exportExpedientesToDrive(sales: SaleLike[], folderInput = ''): Promise<DriveExportResult> {
