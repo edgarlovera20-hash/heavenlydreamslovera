@@ -15,18 +15,20 @@
  *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'ollama' | 'gemini' | 'tesseract'
  *   OCR_STRATEGY       — 'adaptive' | 'quality' | 'fast' | 'local'
  *   OCR_ORDER_INE      — opcional, orden por documento: "ollama,gemini,tesseract"
+ *   OCR_IMAGE_MAX_SIDE — tamaño máximo recomendado por server.ts antes de llamar proveedores
+ *   OCR_CACHE_TTL_MS   — cache anti-repetición de resultados OCR
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createHash } from 'node:crypto';
 import { getOllamaApiKey, getOllamaOcrModel, getOllamaUrl, getOllamaUrlSource } from './ai-config';
-import { runTesseractIne, runTesseractComprobante, runTesseractSiac, shutdownTesseract } from './ocr-tesseract';
+import { runTesseractIne, runTesseractComprobante, runTesseractSiac, shutdownTesseract, parseOcrText } from './ocr-tesseract';
 
 const GEMINI_API_KEY   = process.env.GEMINI_API_KEY || '';
 const OLLAMA_URL        = getOllamaUrl();
 const OLLAMA_API_KEY    = getOllamaApiKey();
-const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'ollama').toLowerCase();
-const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'adaptive').toLowerCase();
+const OCR_PRIMARY       = (process.env.OCR_PRIMARY || '').toLowerCase();
+const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'fast').toLowerCase();
 
 const GEMINI_MODEL    = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const OLLAMA_MODEL    = getOllamaOcrModel();
@@ -45,9 +47,11 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
 const TIMEOUT_MS_LLM       = parseTimeoutEnv('OCR_LLM_TIMEOUT_MS', 45_000);  // 0 desactiva timeout
 const TIMEOUT_MS_OLLAMA    = parseTimeoutEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM > 0 ? TIMEOUT_MS_LLM * 3 : 0);
 const TIMEOUT_MS_TESSERACT = parseTimeoutEnv('OCR_TESSERACT_TIMEOUT_MS', 30_000);
-const MAX_OUTPUT_TOKENS    = parsePositiveIntEnv('OCR_MAX_OUTPUT_TOKENS', 1200);
-const CACHE_TTL_MS         = 10 * 60 * 1000;
-const CACHE_MAX_ENTRIES    = 100;
+const MAX_OUTPUT_TOKENS    = parsePositiveIntEnv('OCR_MAX_OUTPUT_TOKENS', 900);
+const OLLAMA_NUM_CTX       = parsePositiveIntEnv('OCR_OLLAMA_NUM_CTX', 4096);
+const OLLAMA_KEEP_ALIVE    = process.env.OLLAMA_KEEP_ALIVE || '30m';
+const CACHE_TTL_MS         = parsePositiveIntEnv('OCR_CACHE_TTL_MS', 60 * 60 * 1000);
+const CACHE_MAX_ENTRIES    = parsePositiveIntEnv('OCR_CACHE_MAX_ENTRIES', 250);
 
 const VALID_PROVIDER_NAMES = ['ollama', 'gemini', 'tesseract'] as const;
 
@@ -73,6 +77,7 @@ export interface OcrResult {
 type CachedOcrResult = OcrResult & { cached?: boolean };
 
 const ocrCache = new Map<string, { expiresAt: number; result: OcrResult }>();
+const inflightOcr = new Map<string, Promise<CachedOcrResult>>();
 
 // ─── PROMPTS (compartidos entre Ollama y Gemini) ─────────────────────────────
 
@@ -109,6 +114,9 @@ Respond ONLY with this exact JSON (no markdown, no commentary):
   "apellidoMaterno": "",
   "curp": "",
   "folioIne": "",
+  "fechaNacimiento": "",
+  "sexo": "",
+  "estadoNacimiento": "",
   "calle": "",
   "numeroExterior": "",
   "numeroInterior": "",
@@ -315,6 +323,71 @@ function hasSuspiciousNameSet(fields: Record<string, string>) {
   return new Set(parts).size === 1 || (parts[0].length > 4 && (parts[0] === parts[1] || parts[0] === parts[2]));
 }
 
+const CURP_STATE_CODES: Record<string, string> = {
+  AS: 'AGUASCALIENTES',
+  BC: 'BAJA CALIFORNIA',
+  BS: 'BAJA CALIFORNIA SUR',
+  CC: 'CAMPECHE',
+  CL: 'COAHUILA',
+  CM: 'COLIMA',
+  CS: 'CHIAPAS',
+  CH: 'CHIHUAHUA',
+  DF: 'CIUDAD DE MEXICO',
+  DG: 'DURANGO',
+  GT: 'GUANAJUATO',
+  GR: 'GUERRERO',
+  HG: 'HIDALGO',
+  JC: 'JALISCO',
+  MC: 'ESTADO DE MEXICO',
+  MN: 'MICHOACAN',
+  MS: 'MORELOS',
+  NT: 'NAYARIT',
+  NL: 'NUEVO LEON',
+  OC: 'OAXACA',
+  PL: 'PUEBLA',
+  QT: 'QUERETARO',
+  QR: 'QUINTANA ROO',
+  SP: 'SAN LUIS POTOSI',
+  SL: 'SINALOA',
+  SR: 'SONORA',
+  TC: 'TABASCO',
+  TS: 'TAMAULIPAS',
+  TL: 'TLAXCALA',
+  VZ: 'VERACRUZ',
+  YN: 'YUCATAN',
+  ZS: 'ZACATECAS',
+  NE: 'NACIDO EN EL EXTRANJERO',
+};
+
+function birthDateFromCurp(curp: string) {
+  const yy = Number(curp.slice(4, 6));
+  const mm = curp.slice(6, 8);
+  const dd = curp.slice(8, 10);
+  const currentYear = new Date().getFullYear() % 100;
+  const century = yy > currentYear ? 1900 : 2000;
+  return `${dd}/${mm}/${century + yy}`;
+}
+
+function enrichDerivedIneFields(fields: Record<string, string>) {
+  const out = { ...fields };
+  if (out.curp && CURP_RE.test(out.curp)) {
+    if (!out.fechaNacimiento) out.fechaNacimiento = birthDateFromCurp(out.curp);
+    if (!out.sexo) out.sexo = out.curp.charAt(10);
+    const state = CURP_STATE_CODES[out.curp.slice(11, 13)];
+    if (state && !out.estadoNacimiento) out.estadoNacimiento = state;
+  }
+  return out;
+}
+
+function enrichFieldsFromText(docType: OcrDocType, fields: Record<string, string>, text: string) {
+  if (!text || docType === 'financial') return fields;
+  const parsed = parseOcrText(docType, text);
+  return {
+    ...parsed,
+    ...Object.fromEntries(Object.entries(fields).filter(([, value]) => String(value || '').trim())),
+  };
+}
+
 function sanitizeFields(docType: OcrDocType, fields: Record<string, string>) {
   const clean: Record<string, string> = {};
   for (const [key, rawValue] of Object.entries(fields || {})) {
@@ -327,6 +400,20 @@ function sanitizeFields(docType: OcrDocType, fields: Record<string, string>) {
     if (key === 'curp') {
       const curp = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
       if (CURP_RE.test(curp)) clean.curp = curp;
+      continue;
+    }
+    if (key === 'fechaNacimiento') {
+      const date = value.replace(/[^\d/-]/g, '').replace(/-/g, '/');
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(date)) clean.fechaNacimiento = date;
+      continue;
+    }
+    if (key === 'sexo') {
+      const sex = value.trim().charAt(0).toUpperCase();
+      if (sex === 'H' || sex === 'M') clean.sexo = sex;
+      continue;
+    }
+    if (key === 'estadoNacimiento') {
+      clean.estadoNacimiento = deburr(value).toUpperCase().replace(/[^A-ZÑ\s]/g, ' ').replace(/\s+/g, ' ').trim();
       continue;
     }
     if (key === 'codigoPostal') {
@@ -346,7 +433,7 @@ function sanitizeFields(docType: OcrDocType, fields: Record<string, string>) {
     }
     clean[key] = value;
   }
-  return clean;
+  return docType === 'ine' ? enrichDerivedIneFields(clean) : clean;
 }
 
 /**
@@ -475,6 +562,7 @@ async function callOllama(prompt: string, base64Images: string[]): Promise<strin
     model: OLLAMA_MODEL,
     stream: false,
     format: 'json',
+    keep_alive: OLLAMA_KEEP_ALIVE,
     messages: [{
       role: 'user',
       content: prompt,
@@ -483,6 +571,7 @@ async function callOllama(prompt: string, base64Images: string[]): Promise<strin
     options: {
       temperature: 0.0,
       num_predict: MAX_OUTPUT_TOKENS,
+      num_ctx: OLLAMA_NUM_CTX,
     },
   };
 
@@ -619,27 +708,27 @@ const VALID_PROVIDERS: OcrProvider[] = [...VALID_PROVIDER_NAMES];
 
 const DOC_ORDERS: Record<OcrDocType, Record<OcrStrategy, OcrProvider[]>> = {
   ine: {
-    adaptive: ['ollama', 'gemini', 'tesseract'],
+    adaptive: ['gemini', 'ollama', 'tesseract'],
     quality: ['ollama', 'gemini', 'tesseract'],
-    fast: ['ollama', 'gemini', 'tesseract'],
+    fast: ['gemini', 'ollama', 'tesseract'],
     local: ['ollama', 'tesseract', 'gemini'],
   },
   comprobante: {
-    adaptive: ['ollama', 'gemini', 'tesseract'],
+    adaptive: ['gemini', 'ollama', 'tesseract'],
     quality: ['ollama', 'gemini', 'tesseract'],
-    fast: ['ollama', 'gemini', 'tesseract'],
+    fast: ['gemini', 'ollama', 'tesseract'],
     local: ['ollama', 'tesseract', 'gemini'],
   },
   siac: {
-    adaptive: ['ollama', 'gemini', 'tesseract'],
+    adaptive: ['gemini', 'ollama', 'tesseract'],
     quality: ['ollama', 'gemini', 'tesseract'],
-    fast: ['ollama', 'gemini', 'tesseract'],
+    fast: ['gemini', 'ollama', 'tesseract'],
     local: ['ollama', 'tesseract', 'gemini'],
   },
   financial: {
-    adaptive: ['ollama', 'gemini', 'tesseract'],
+    adaptive: ['gemini', 'ollama', 'tesseract'],
     quality: ['ollama', 'gemini', 'tesseract'],
-    fast: ['ollama', 'gemini', 'tesseract'],
+    fast: ['gemini', 'ollama', 'tesseract'],
     local: ['ollama', 'tesseract', 'gemini'],
   },
 };
@@ -688,24 +777,26 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
   if (provider === 'gemini') {
     const raw = await callGemini(prompt, images);
     if (!raw) throw new Error('Gemini devolvió respuesta vacía');
-    const fields = sanitizeFields(docType, parseJsonResponse(raw));
-    const text = fields.rawText || raw;
-    delete fields.rawText;
+    const parsed = parseJsonResponse(raw);
+    const text = parsed.rawText || raw;
+    delete parsed.rawText;
+    const fields = sanitizeFields(docType, enrichFieldsFromText(docType, parsed, text));
     return { text, fields, provider, model: GEMINI_MODEL, durationMs: Date.now() - t0 };
   }
 
   if (provider === 'ollama') {
     const raw = await callOllama(prompt, images);
     if (!raw) throw new Error('Ollama devolvió respuesta vacía');
-    const fields = sanitizeFields(docType, parseJsonResponse(raw));
-    const text = fields.rawText || raw;
-    delete fields.rawText;
+    const parsed = parseJsonResponse(raw);
+    const text = parsed.rawText || raw;
+    delete parsed.rawText;
+    const fields = sanitizeFields(docType, enrichFieldsFromText(docType, parsed, text));
     return { text, fields, provider, model: OLLAMA_MODEL, durationMs: Date.now() - t0 };
   }
 
   // tesseract
   const { text, fields } = await callTesseract(docType, images);
-  return { text, fields: sanitizeFields(docType, fields), provider, model: 'tesseract-spa', durationMs: Date.now() - t0 };
+  return { text, fields: sanitizeFields(docType, enrichFieldsFromText(docType, fields, text)), provider, model: 'tesseract-spa', durationMs: Date.now() - t0 };
 }
 
 export async function runOcrWithFallback(docType: OcrDocType, images: string | string[]): Promise<CachedOcrResult> {
@@ -718,68 +809,84 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
     console.log(`[OCR-${docType}] cache hit (${imgs.length}img)`);
     return { ...cached, cached: true };
   }
+  const inflight = inflightOcr.get(key);
+  if (inflight) {
+    console.log(`[OCR-${docType}] reuse inflight (${imgs.length}img)`);
+    const result = await inflight;
+    return { ...result, cached: true, fallbackReason: result.fallbackReason ? `${result.fallbackReason} | inflight-hit` : 'inflight-hit' };
+  }
 
-  const errors: string[] = [];
-  let bestPartial: OcrResult | null = null;
+  const run = (async (): Promise<CachedOcrResult> => {
 
-  const providerOrder = providerOrderFor(docType);
-  const strategy = currentStrategy();
+    const errors: string[] = [];
+    let bestPartial: OcrResult | null = null;
 
-  for (const provider of providerOrder) {
-    if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin API key'); continue; }
-    if (provider === 'ollama' && !OLLAMA_URL) { errors.push('ollama: sin servidor local'); continue; }
+    const providerOrder = providerOrderFor(docType);
+    const strategy = currentStrategy();
 
-    try {
-      const result = await tryProvider(provider, docType, imgs);
+    for (const provider of providerOrder) {
+      if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin API key'); continue; }
+      if (provider === 'ollama' && !OLLAMA_URL) { errors.push('ollama: sin servidor local'); continue; }
 
-      // Validación de output — si parece basura, intentamos el siguiente proveedor
-      const valid = validateFields(docType, result.fields);
-      if (!valid.ok) {
-        console.warn(`[OCR-${docType}] ${provider} output rechazado: ${valid.reason}`);
-        errors.push(`${provider} output inválido (${valid.reason})`);
-        const partialFieldsCount = Object.values(result.fields).filter(value => String(value || '').trim()).length;
+      try {
+        const result = await tryProvider(provider, docType, imgs);
+
+        // Validación de output — si parece basura, intentamos el siguiente proveedor
+        const valid = validateFields(docType, result.fields);
+        if (!valid.ok) {
+          console.warn(`[OCR-${docType}] ${provider} output rechazado: ${valid.reason}`);
+          errors.push(`${provider} output inválido (${valid.reason})`);
+          const partialFieldsCount = Object.values(result.fields).filter(value => String(value || '').trim()).length;
+          result.strategy = strategy;
+          result.providerOrder = providerOrder;
+          result.attempts = [...errors];
+          result.fieldsCount = partialFieldsCount;
+          result.manualRequired = true;
+          result.warning = valid.reason || 'OCR sin campos confiables';
+          if (!bestPartial || partialFieldsCount > (bestPartial.fieldsCount || 0) || result.text.length > bestPartial.text.length) {
+            bestPartial = {
+              ...result,
+              fields: { ...result.fields },
+              providerOrder: [...providerOrder],
+              attempts: [...result.attempts],
+            };
+          }
+          continue;
+        }
+
+        const fieldsCount = Object.values(result.fields).filter(value => String(value || '').trim()).length;
+        if (errors.length) result.fallbackReason = errors.join(' | ');
         result.strategy = strategy;
         result.providerOrder = providerOrder;
-        result.attempts = [...errors];
-        result.fieldsCount = partialFieldsCount;
-        result.manualRequired = true;
-        result.warning = valid.reason || 'OCR sin campos confiables';
-        if (!bestPartial || partialFieldsCount > (bestPartial.fieldsCount || 0) || result.text.length > bestPartial.text.length) {
-          bestPartial = {
-            ...result,
-            fields: { ...result.fields },
-            providerOrder: [...providerOrder],
-            attempts: [...result.attempts],
-          };
-        }
-        continue;
+        result.attempts = [...errors, `${provider}: ok`];
+        result.fieldsCount = fieldsCount;
+        console.log(`[OCR-${docType}] ${provider} OK in ${result.durationMs}ms (${fieldsCount} fields)`);
+        setCached(key, result);
+        return result;
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.warn(`[OCR-${docType}] ${provider} falló: ${msg}`);
+        errors.push(`${provider}: ${msg}`);
       }
-
-      const fieldsCount = Object.values(result.fields).filter(value => String(value || '').trim()).length;
-      if (errors.length) result.fallbackReason = errors.join(' | ');
-      result.strategy = strategy;
-      result.providerOrder = providerOrder;
-      result.attempts = [...errors, `${provider}: ok`];
-      result.fieldsCount = fieldsCount;
-      console.log(`[OCR-${docType}] ${provider} OK in ${result.durationMs}ms (${fieldsCount} fields)`);
-      setCached(key, result);
-      return result;
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      console.warn(`[OCR-${docType}] ${provider} falló: ${msg}`);
-      errors.push(`${provider}: ${msg}`);
     }
-  }
 
-  if (bestPartial) {
-    bestPartial.fallbackReason = errors.join(' | ');
-    bestPartial.attempts = errors;
-    console.warn(`[OCR-${docType}] sin campos confiables; se devuelve respuesta parcial para captura manual`);
-    setCached(key, bestPartial);
-    return bestPartial;
-  }
+    if (bestPartial) {
+      bestPartial.fallbackReason = errors.join(' | ');
+      bestPartial.attempts = errors;
+      console.warn(`[OCR-${docType}] sin campos confiables; se devuelve respuesta parcial para captura manual`);
+      setCached(key, bestPartial);
+      return bestPartial;
+    }
 
-  throw new Error(`Todos los proveedores OCR fallaron — ${errors.join(' | ')}`);
+    throw new Error(`Todos los proveedores OCR fallaron — ${errors.join(' | ')}`);
+  })();
+
+  inflightOcr.set(key, run);
+  try {
+    return await run;
+  } finally {
+    inflightOcr.delete(key);
+  }
 }
 
 // ─── API PÚBLICA ─────────────────────────────────────────────────────────────
@@ -814,8 +921,19 @@ export async function checkOcrStatus() {
     orders,
     cache: {
       entries: ocrCache.size,
+      inFlight: inflightOcr.size,
       ttlMs: CACHE_TTL_MS,
       maxEntries: CACHE_MAX_ENTRIES,
+    },
+    tuning: {
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      ollamaNumCtx: OLLAMA_NUM_CTX,
+      ollamaKeepAlive: OLLAMA_KEEP_ALIVE,
+      timeoutMs: {
+        llm: TIMEOUT_MS_LLM,
+        ollama: TIMEOUT_MS_OLLAMA,
+        tesseract: TIMEOUT_MS_TESSERACT,
+      },
     },
     providers: {
       gemini:    { configured: !!GEMINI_API_KEY,   model: GEMINI_MODEL },

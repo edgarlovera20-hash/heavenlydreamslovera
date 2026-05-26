@@ -18,7 +18,7 @@ function isHeic(file: File) {
   return file.type === 'image/heic' || file.type === 'image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
 }
 
-function canvasToJpegFile(canvas: HTMLCanvasElement, sourceName: string) {
+function canvasToJpegFile(canvas: HTMLCanvasElement, sourceName: string, quality = 0.78) {
   return new Promise<File>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
@@ -27,7 +27,7 @@ function canvasToJpegFile(canvas: HTMLCanvasElement, sourceName: string) {
       }
       const cleanName = sourceName.replace(/\.[^.]+$/, '') || 'documento';
       resolve(new File([blob], `${cleanName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() }));
-    }, 'image/jpeg', 0.88);
+    }, 'image/jpeg', quality);
   });
 }
 
@@ -40,6 +40,33 @@ async function convertHeicToJpeg(file: File) {
   return new File([blob], `${cleanName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
 }
 
+async function resizeImageForFastOcr(file: File) {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('No se pudo preparar la imagen para OCR.'));
+      img.src = url;
+    });
+    const maxSide = 1500;
+    const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * ratio));
+    canvas.height = Math.max(1, Math.round(image.height * ratio));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return await canvasToJpegFile(canvas, file.name, 0.78);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function normalizeImageForOcr(file: File) {
   if (isPdf(file)) {
     throw new Error('El OCR movil todavia no lee PDF directo. Guarda el PDF en expediente o sube una foto/imagen del documento.');
@@ -49,12 +76,12 @@ async function normalizeImageForOcr(file: File) {
   }
   if (isHeic(file)) {
     try {
-      return await convertHeicToJpeg(file);
+      return await resizeImageForFastOcr(await convertHeicToJpeg(file));
     } catch {
       throw new Error('La foto esta en HEIC y este navegador no pudo convertirla. Toma la foto desde la camara de la app o cambia la camara a JPG/compatible.');
     }
   }
-  if (OCR_READY_IMAGE_TYPES.has(file.type.toLowerCase())) return file;
+  if (OCR_READY_IMAGE_TYPES.has(file.type.toLowerCase())) return resizeImageForFastOcr(file);
 
   try {
     const bitmap = await createImageBitmap(file);
@@ -65,7 +92,7 @@ async function normalizeImageForOcr(file: File) {
     if (!ctx) throw new Error('Canvas no disponible.');
     ctx.drawImage(bitmap, 0, 0);
     bitmap.close?.();
-    return await canvasToJpegFile(canvas, file.name);
+    return await canvasToJpegFile(canvas, file.name, 0.78);
   } catch {
     throw new Error('Formato de imagen no compatible para OCR. Usa JPG, PNG, WEBP o HEIC convertible.');
   }

@@ -3747,6 +3747,12 @@ async function startServer() {
     return String(value || '').match(/^data:([^;]+);base64,/i)?.[1]?.toLowerCase() || '';
   }
 
+  function ocrIntEnv(name: string, fallback: number, min: number, max: number) {
+    const value = Number(process.env[name]);
+    if (!Number.isFinite(value)) return fallback;
+    return Math.max(min, Math.min(max, Math.floor(value)));
+  }
+
   async function normalizeImageForServerOcr(value: string) {
     const match = String(value || '').match(/^data:(image\/[^;]+);base64,([\s\S]+)$/i);
     if (!match) {
@@ -3756,10 +3762,14 @@ async function startServer() {
     try {
       const buffer = Buffer.from(match[2], 'base64');
       const { default: sharp } = await import('sharp');
+      const maxSide = ocrIntEnv('OCR_IMAGE_MAX_SIDE', 1600, 900, 2400);
+      const quality = ocrIntEnv('OCR_IMAGE_JPEG_QUALITY', 82, 65, 92);
       const normalized = await sharp(buffer, { failOn: 'error', limitInputPixels: 60_000_000 })
         .rotate()
-        .resize({ width: 2200, height: 2200, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 90 })
+        .resize({ width: maxSide, height: maxSide, fit: 'inside', withoutEnlargement: true })
+        .normalize()
+        .sharpen({ sigma: 0.7 })
+        .jpeg({ quality, mozjpeg: true })
         .toBuffer();
       return `data:image/jpeg;base64,${normalized.toString('base64')}`;
     } catch {

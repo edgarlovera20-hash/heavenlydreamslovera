@@ -56,7 +56,7 @@ function findLineDeburred(lines: string[], re: RegExp): string | null {
 
 // ─── PARSER: INE ─────────────────────────────────────────────────────────────
 
-function parseIne(text: string): Record<string, string> {
+export function parseIneText(text: string): Record<string, string> {
   const fields: Record<string, string> = {};
   const lines = cleanLines(text);
   const upper = text.toUpperCase();
@@ -105,7 +105,7 @@ function parseIne(text: string): Record<string, string> {
 
 // ─── PARSER: COMPROBANTE DE DOMICILIO ────────────────────────────────────────
 
-function parseComprobante(text: string): Record<string, string> {
+export function parseComprobanteText(text: string): Record<string, string> {
   const fields: Record<string, string> = {};
   const lines = cleanLines(text);
   const upper = text.toUpperCase();
@@ -140,7 +140,7 @@ function parseComprobante(text: string): Record<string, string> {
 
 // ─── PARSER: SIAC (TELMEX) ───────────────────────────────────────────────────
 
-function parseSiac(text: string): Record<string, string> {
+export function parseSiacText(text: string): Record<string, string> {
   const fields: Record<string, string> = {};
   const lines = cleanLines(text);
 
@@ -183,17 +183,23 @@ function parseSiac(text: string): Record<string, string> {
 
 export async function runTesseractIne(base64: string): Promise<{ text: string; fields: Record<string, string> }> {
   const text = await recognize(base64);
-  return { text, fields: parseIne(text) };
+  return { text, fields: parseIneText(text) };
 }
 
 export async function runTesseractComprobante(base64: string): Promise<{ text: string; fields: Record<string, string> }> {
   const text = await recognize(base64);
-  return { text, fields: parseComprobante(text) };
+  return { text, fields: parseComprobanteText(text) };
 }
 
 export async function runTesseractSiac(base64: string): Promise<{ text: string; fields: Record<string, string> }> {
   const text = await recognize(base64);
-  return { text, fields: parseSiac(text) };
+  return { text, fields: parseSiacText(text) };
+}
+
+export function parseOcrText(docType: 'ine' | 'comprobante' | 'siac', text: string): Record<string, string> {
+  if (docType === 'ine') return parseIneText(text);
+  if (docType === 'comprobante') return parseComprobanteText(text);
+  return parseSiacText(text);
 }
 
 /** Permite limpiar el worker (útil en tests o reinicios). */
