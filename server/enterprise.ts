@@ -40,6 +40,7 @@ async function callOllama(prompt: string) {
         { role: 'user', content: `/no_think\n${prompt}` },
       ],
       think: false,
+      keep_alive: process.env.OLLAMA_KEEP_ALIVE || '30m',
       options: { temperature: 0.2, num_predict: 1200, num_ctx: 8192 },
     }),
   });
