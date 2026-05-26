@@ -108,11 +108,11 @@ interface CustomerCaptureData {
 }
 
 const PLATAFORMAS_ADICIONALES = [
-  { id: 'nfx_basico', provider: 'Netflix', name: 'Básico 2 pantallas con Anuncios', price: 99 },
+  { id: 'nfx_basico', provider: 'Netflix', name: 'Básico 2 pantallas con Anuncios', price: 99, promoFree: true, promoMonths: 6 },
   { id: 'nfx_estandar', provider: 'Netflix', name: 'Estándar 2 pantallas HD', price: 219 },
   { id: 'nfx_premium', provider: 'Netflix', name: 'Premium 4 pantallas 4K', price: 299 },
   
-  { id: 'hbo_estandar', provider: 'HBO Max', name: 'Estándar 2 pantallas HD', price: 149 },
+  { id: 'hbo_estandar', provider: 'HBO Max', name: 'Estándar 2 pantallas con Anuncios', price: 149, promoFree: true, promoMonths: 6 },
   { id: 'hbo_premium', provider: 'HBO Max', name: 'Premium', price: 199 },
   
   { id: 'dsn_estandar', provider: 'Disney+', name: 'Estándar', price: 219 },
@@ -123,6 +123,41 @@ const PLATAFORMAS_ADICIONALES = [
   { id: 'star_tv', provider: 'StarTV Stream', name: 'Suscripción StarTV Stream', price: 99 },
   { id: 'f1_tv', provider: 'F1 TV', name: 'Suscripción F1 TV Pro', price: 129 },
 ];
+
+type PlataformaAdicional = typeof PLATAFORMAS_ADICIONALES[number];
+
+function isFreePromoPlatform(platform?: { promoFree?: boolean } | null) {
+  return Boolean(platform?.promoFree);
+}
+
+function platformPromoMonths(platform?: { promoMonths?: number } | null) {
+  return Number(platform?.promoMonths || 6);
+}
+
+function platformMonthlyCharge(platform?: PlataformaAdicional | null) {
+  if (!platform) return 0;
+  return isFreePromoPlatform(platform) ? 0 : Number(platform.price || 0);
+}
+
+function platformSummaryPrice(platform: PlataformaAdicional) {
+  if (isFreePromoPlatform(platform)) {
+    return `Promoción ${platformPromoMonths(platform)} meses sin costo`;
+  }
+  return `$${platform.price}/m`;
+}
+
+function platformOptionLabel(platform: PlataformaAdicional) {
+  if (isFreePromoPlatform(platform)) {
+    return `${platform.name} - promoción ${platformPromoMonths(platform)} meses sin costo; después $${platform.price}/m`;
+  }
+  return `${platform.name} - $${platform.price}/m`;
+}
+
+function selectedPlatformsTotal(ids?: string[]) {
+  return (ids || []).reduce((acc, pid) => (
+    acc + platformMonthlyCharge(PLATAFORMAS_ADICIONALES.find(x => x.id === pid))
+  ), 0);
+}
 
 const STREET_PREFIX_OPTIONS = [
   'Calle',
@@ -2788,18 +2823,32 @@ const exportToPDF = async () => {
                   const p = PLATAFORMAS_ADICIONALES.find(x => x.id === pid);
                   if (!p) return null;
                   return (
-                    <div key={pid} className="flex justify-between items-center text-sm mb-2">
-                      <span className="text-slate-400">+ {p.provider} ({p.name})</span>
-                      <span className="text-white font-medium">${p.price}/m</span>
+                    <div key={pid} className="text-sm mb-2">
+                      <div className="flex justify-between items-center gap-3">
+                        <span className="text-slate-400">+ {p.provider} ({p.name})</span>
+                        <span className={`font-medium ${isFreePromoPlatform(p) ? 'text-emerald-300' : 'text-white'}`}>
+                          {platformSummaryPrice(p)}
+                        </span>
+                      </div>
+                      {isFreePromoPlatform(p) && (
+                        <p className="mt-1 text-[11px] font-semibold text-emerald-200/80">
+                          Promoción: no se suma al total durante {platformPromoMonths(p)} meses. Después aplica ${p.price}/m si el cliente la conserva.
+                        </p>
+                      )}
                     </div>
                   );
                 })}
                 <div className="border-t border-white/10 mt-3 pt-3 flex justify-between items-center font-bold">
                   <span className="text-white">Total Mensual Estimado</span>
                   <span className="text-blue-400 text-lg">
-                    ${(form.rentaMensual || 0) + (form.plataformasAdicionales?.reduce((acc, pid) => acc + (PLATAFORMAS_ADICIONALES.find(x => x.id === pid)?.price || 0), 0) || 0)}/m
+                    ${(form.rentaMensual || 0) + selectedPlatformsTotal(form.plataformasAdicionales)}/m
                   </span>
                 </div>
+                {form.plataformasAdicionales?.some(pid => isFreePromoPlatform(PLATAFORMAS_ADICIONALES.find(x => x.id === pid))) && (
+                  <div className="mt-3 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-100">
+                    Netflix Básico con anuncios o HBO Max Estándar con anuncios aplican como promoción por 6 meses sin costo.
+                  </div>
+                )}
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2833,12 +2882,12 @@ const exportToPDF = async () => {
                         <option value="">🚫 No incluir (Ninguno)</option>
                         <optgroup label="🎬 NETFLIX">
                           {netflixHboOptions.filter(o => o.provider === 'Netflix').map(opt => (
-                            <option key={opt.id} value={opt.id}>📺 {opt.name} - ${opt.price}/m</option>
+                            <option key={opt.id} value={opt.id}>📺 {platformOptionLabel(opt)}</option>
                           ))}
                         </optgroup>
                         <optgroup label="📺 HBO MAX">
                           {netflixHboOptions.filter(o => o.provider === 'HBO Max').map(opt => (
-                            <option key={opt.id} value={opt.id}>✨ {opt.name} - ${opt.price}/m</option>
+                            <option key={opt.id} value={opt.id}>✨ {platformOptionLabel(opt)}</option>
                           ))}
                         </optgroup>
                       </select>
@@ -3109,7 +3158,7 @@ const exportToPDF = async () => {
                   
                   {/* Declaración Final */}
                   <div className="mt-4 p-3 font-bold text-center border-2 border-black bg-gray-50 text-sm">
-                    "Doy por aceptada la información aquí plasmada, aceptando los cargos por servicio y adicionales que suman un total mensual de: <span className="underline">${formatCurrency((form.rentaMensual || 0) + (form.plataformasAdicionales?.reduce((acc, pid) => acc + (PLATAFORMAS_ADICIONALES.find(p => p.id === pid)?.price || 0), 0) || 0))}</span>"
+                    "Doy por aceptada la información aquí plasmada, aceptando los cargos por servicio y adicionales que suman un total mensual de: <span className="underline">${formatCurrency((form.rentaMensual || 0) + selectedPlatformsTotal(form.plataformasAdicionales))}</span>. Si seleccioné Netflix Básico con anuncios o HBO Max Estándar con anuncios, entiendo que aplica promoción por 6 meses sin costo y a partir del 7mo mes se aplicará el cargo adicional vigente si conservo la plataforma."
                   </div>
                 </div>
               </section>

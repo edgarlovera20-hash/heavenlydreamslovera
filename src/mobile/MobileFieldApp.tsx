@@ -273,10 +273,10 @@ const CURP_IDENTITY_DOCUMENT = 'CURP';
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
 
 const STREAMING_ADDONS = [
-  { id: 'netflix_basico', provider: 'Netflix', name: 'Basico con anuncios', price: 99 },
+  { id: 'netflix_basico', provider: 'Netflix', name: 'Basico 2 pantallas con anuncios', price: 99, promoFree: true, promoMonths: 6 },
   { id: 'netflix_estandar', provider: 'Netflix', name: 'Estandar HD', price: 219 },
   { id: 'netflix_premium', provider: 'Netflix', name: 'Premium 4K', price: 299 },
-  { id: 'hbo_estandar', provider: 'HBO Max', name: 'Estandar', price: 149 },
+  { id: 'hbo_estandar', provider: 'HBO Max', name: 'Estandar 2 pantallas con anuncios', price: 149, promoFree: true, promoMonths: 6 },
   { id: 'hbo_premium', provider: 'HBO Max', name: 'Premium', price: 199 },
   { id: 'disney_premium', provider: 'Disney+', name: 'Premium', price: 299 },
   { id: 'prime_video', provider: 'Prime Video', name: 'Prime', price: 99 },
@@ -561,8 +561,26 @@ function selectedPackageForDraft(draft: CaptureDraft) {
   return PACKAGE_CATALOG.find((pkg) => pkg.id === draft.packageId) || null;
 }
 
+function isStreamingPromoFree(addon?: { promoFree?: boolean } | null) {
+  return Boolean(addon?.promoFree);
+}
+
+function streamingPromoMonths(addon?: { promoMonths?: number } | null) {
+  return Number(addon?.promoMonths || 6);
+}
+
+function streamingCharge(addon?: typeof STREAMING_ADDONS[number] | null) {
+  if (!addon) return 0;
+  return isStreamingPromoFree(addon) ? 0 : Number(addon.price || 0);
+}
+
+function streamingPriceLabel(addon: typeof STREAMING_ADDONS[number]) {
+  if (isStreamingPromoFree(addon)) return `${streamingPromoMonths(addon)} meses sin costo`;
+  return formatMoney(addon.price);
+}
+
 function streamingTotal(draft: CaptureDraft) {
-  return draft.plataformasAdicionales.reduce((sum, id) => sum + (STREAMING_ADDONS.find((item) => item.id === id)?.price || 0), 0);
+  return draft.plataformasAdicionales.reduce((sum, id) => sum + streamingCharge(STREAMING_ADDONS.find((item) => item.id === id)), 0);
 }
 
 function buildMapSearchAddress(draft: CaptureDraft) {
@@ -3096,11 +3114,21 @@ export default function MobileFieldApp() {
                     <span>
                       <span className="block text-sm font-black">{addon.provider}</span>
                       <span className="mt-1 block text-xs text-slate-400">{addon.name}</span>
+                      {isStreamingPromoFree(addon) && (
+                        <span className="mt-1 block text-[11px] font-black text-emerald-100">
+                          Promocion {streamingPromoMonths(addon)} meses sin costo; despues {formatMoney(addon.price)}/mes
+                        </span>
+                      )}
                     </span>
-                    <span className="font-black text-cyan-100">{formatMoney(addon.price)}</span>
+                    <span className={cx('font-black', isStreamingPromoFree(addon) ? 'text-emerald-100' : 'text-cyan-100')}>{streamingPriceLabel(addon)}</span>
                   </button>
                 );
               })}
+              {draft.plataformasAdicionales.some((id) => isStreamingPromoFree(STREAMING_ADDONS.find((item) => item.id === id))) && (
+                <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-3 text-xs font-black text-emerald-100">
+                  Netflix Basico con anuncios o HBO Max Estandar con anuncios aplican como promocion por 6 meses sin costo.
+                </div>
+              )}
               <SummaryRow label="Total mensual estimado" value={formatMoney(totalMensual)} />
             </div>
           )}
