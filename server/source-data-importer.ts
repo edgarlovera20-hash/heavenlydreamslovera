@@ -1,9 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import JSZip from 'jszip';
 import db, { ClientesCrm, Morosidad, SiacRecords } from './db';
 
-export const DEFAULT_SIAC_SOURCE = process.env.SIAC_PRIMARY_SOURCE || 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\SIAC PPIES.csv';
+const REPO_SIAC_SOURCE = path.join(process.cwd(), 'server', 'source-data', 'siac-current.xlsx');
+export const DEFAULT_SIAC_SOURCE = process.env.SIAC_PRIMARY_SOURCE
+  || (existsSync(REPO_SIAC_SOURCE) ? REPO_SIAC_SOURCE : 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\SIAC PPIES.csv');
 export const DEFAULT_MOROSOS_SOURCE = process.env.MOROSOS_PRIMARY_SOURCE || 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\MOROSOS APP.csv';
 export const SIAC_IMPORTER_VERSION = 'siac-ppies-v2';
 
@@ -187,7 +190,7 @@ export async function importSiacSource(input: SourceInput = {}) {
   let imported = 0;
   let skipped = 0;
   for (const row of rows) {
-    const folio = headerValue(row, ['Folio SIAC']) || `SIN-FOLIO-${String(imported + skipped + 1).padStart(5, '0')}`;
+    const folio = headerValue(row, ['Folio SIAC']);
     const osAlta = headerValue(row, ['Orden de Servicio', 'Orrden de Servicio', 'OS de Pago']);
     const telefono = digits10(headerValue(row, ['Telefono']));
     const telefonoAsignado = digits10(headerValue(row, ['Telefono Asignado', 'Telfono Asignado', 'Tel Pago'])) || null;
@@ -196,12 +199,14 @@ export async function importSiacSource(input: SourceInput = {}) {
     if (!folio && !osAlta && !telefono && !zona) { skipped++; continue; }
     try {
       const sourceId = headerValue(row, ['ID']) || String(imported + skipped + 1);
-      const tipoLinea = headerValue(row, ['Tipo de Linea']);
-      const segmentoLinea = headerValueLast(row, ['Tipo de Linea']) || tipoLinea;
-      const tipoCliente = headerValueAt(row, ['Tipo de Cliente'], 0);
-      const tipoServicio = headerValue(row, ['Tipo de Servicio']) || headerValueAt(row, ['Tipo de Cliente'], 1);
-      const usuario = headerValue(row, ['Usuario']);
-      const promotor = headerValue(row, ['Nombre Promotor', 'Promotor']) || usuario;
+      const estatusSecundario = headerValueAt(row, ['Estatus'], 1);
+      const tipoLinea = headerValue(row, ['Tipo de Linea', 'Linea Contratada']);
+      const tipoCliente = headerValue(row, ['Tipo de Cliente', 'Tipo Cliente', 'Segmento']);
+      const segmentoLinea = headerValue(row, ['Segmento']) || tipoCliente || headerValueLast(row, ['Tipo de Linea']) || tipoLinea;
+      const tipoServicio = headerValue(row, ['Tipo de Servicio']) || headerValueAt(row, ['Tipo de Cliente', 'Tipo Cliente'], 1);
+      const usuario = headerValue(row, ['Usuario', 'Promotor']);
+      const promotor = headerValue(row, ['Nombre Promotor']) || usuario;
+      const etapaPisa = estatusSecundario || headerValue(row, ['Etapa PISA', 'Estatus Elaborada', 'Estatus Etapa']);
       SiacRecords.upsert({
         id: randomUUID(),
         source_id: sourceId,
@@ -225,12 +230,12 @@ export async function importSiacSource(input: SourceInput = {}) {
         telefono_portado: telefonoPortado,
         os_alta: osAlta,
         fecha_os_alta: dateValue(row, ['Fecha Posteo', 'Fecha OS Alta']),
-        estatus_pisa: headerValue(row, ['Etapa PISA', 'Estatus Elaborada']),
+        estatus_pisa: etapaPisa,
         fecha_cambio_estatus: dateValue(row, ['Fecha cambio estatus', 'Fecha Posteo']),
         tipo_cliente: tipoCliente,
         tipo_servicio: tipoServicio,
         correo: headerValue(row, ['Correo Electronico', 'Correo']),
-        estatus_etapa: headerValue(row, ['Etapa PISA', 'Estatus Etapa']),
+        estatus_etapa: etapaPisa,
         campana: null,
         telefono_referencia: digits10(headerValue(row, ['Num Celular', 'Celular', 'Telefono'])),
         zona,

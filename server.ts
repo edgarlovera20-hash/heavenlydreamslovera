@@ -90,7 +90,15 @@ import {
   runAgentForMessage,
 } from "./server/agent-orchestrator";
 import { registerFinanceEnterpriseRoutes } from "./server/finance-enterprise";
+import { registerDiditRoutes } from "./server/didit";
 import { answerTelmexQuestion, shouldUseTelmexInfo } from "./server/telmex-info-agent";
+import {
+  CURP_REGEX,
+  CURP_STATE_NAMES,
+  generateCurpCandidate,
+  normalizeCurpValue,
+  validateCurpChecksum,
+} from "./src/lib/curp";
 
 // ── CSV helpers ────────────────────────────────────────────────
 function toCsv(rows: any[]): string {
@@ -140,7 +148,7 @@ const ALLOWED_TABLES = [
   'estatus_folios', 'logs_sistema', 'document_files', 'oauth_accounts',
   'weekly_financial_cycles', 'financial_movements', 'financial_alerts',
   'financial_invoices', 'financial_deposits', 'financial_predictions',
-  'financial_audit_logs', 'financial_files',
+  'financial_audit_logs', 'financial_files', 'didit_checks',
 ];
 
 const DOCUMENT_TYPES = [
@@ -252,45 +260,11 @@ function normalizeDocumentStatus(status: any) {
   return `⚠ ${value || 'PENDIENTE'}`;
 }
 
-const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
-const CURP_STATES: Record<string, string> = {
-  AS: 'Aguascalientes',
-  BC: 'Baja California',
-  BS: 'Baja California Sur',
-  CC: 'Campeche',
-  CL: 'Coahuila',
-  CM: 'Colima',
-  CS: 'Chiapas',
-  CH: 'Chihuahua',
-  DF: 'Ciudad de Mexico',
-  DG: 'Durango',
-  GT: 'Guanajuato',
-  GR: 'Guerrero',
-  HG: 'Hidalgo',
-  JC: 'Jalisco',
-  MC: 'Estado de Mexico',
-  MN: 'Michoacan',
-  MS: 'Morelos',
-  NT: 'Nayarit',
-  NL: 'Nuevo Leon',
-  OC: 'Oaxaca',
-  PL: 'Puebla',
-  QT: 'Queretaro',
-  QR: 'Quintana Roo',
-  SP: 'San Luis Potosi',
-  SL: 'Sinaloa',
-  SR: 'Sonora',
-  TC: 'Tabasco',
-  TS: 'Tamaulipas',
-  TL: 'Tlaxcala',
-  VZ: 'Veracruz',
-  YN: 'Yucatan',
-  ZS: 'Zacatecas',
-  NE: 'Nacido en el extranjero',
-};
+const CURP_RE = CURP_REGEX;
+const CURP_STATES = CURP_STATE_NAMES;
 
 function normalizeCurp(value: any) {
-  return String(value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 18);
+  return normalizeCurpValue(value);
 }
 
 function pickProviderField(source: any, ...keys: string[]) {
@@ -326,37 +300,9 @@ function normalizeCurpProviderPayload(raw: any, input: any) {
   };
 }
 
-function normalizeCurpNamePart(value: any) {
-  return String(value || '')
-    .replace(/[Ññ]/g, 'X')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Za-z]/g, '')
-    .toUpperCase();
-}
-
-function firstInternalVowel(value: string) {
-  return value.slice(1).match(/[AEIOU]/)?.[0] || 'X';
-}
-
-function firstInternalConsonant(value: string) {
-  return value.slice(1).match(/[BCDFGHJKLMNPQRSTVWXYZ]/)?.[0] || 'X';
-}
-
 function generateCurpFromPersonalData(input: any) {
-  const paterno = normalizeCurpNamePart(input.apellidoPaterno);
-  const materno = normalizeCurpNamePart(input.apellidoMaterno);
-  const nombres = normalizeCurpNamePart(input.nombres);
-  const fecha = String(input.fechaNacimiento || '').trim();
-  const sexo = String(input.sexo || '').trim().toUpperCase().slice(0, 1);
-  const estado = String(input.estadoNacimiento || '').trim().toUpperCase();
-  if (!paterno || !nombres || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !['H', 'M'].includes(sexo) || !CURP_STATES[estado]) {
-    return '';
-  }
-  const yy = fecha.slice(2, 4);
-  const mm = fecha.slice(5, 7);
-  const dd = fecha.slice(8, 10);
-  return `${paterno[0] || 'X'}${firstInternalVowel(paterno)}${materno[0] || 'X'}${nombres[0] || 'X'}${yy}${mm}${dd}${sexo}${estado}${firstInternalConsonant(paterno)}${firstInternalConsonant(materno)}${firstInternalConsonant(nombres)}00`;
+  const generated = generateCurpCandidate(input);
+  return generated.ok ? generated.curp : '';
 }
 
 function buildCurpOfficialClipboard(payload: any, curpDraft = '') {
@@ -1213,6 +1159,7 @@ async function startServer() {
     const curp = normalizeCurp(req.body?.curp);
     if (!curp) return res.status(400).json({ error: 'CURP requerida' });
     if (!CURP_RE.test(curp)) return res.status(400).json({ error: 'Formato de CURP inválido' });
+    if (!validateCurpChecksum(curp)) return res.status(400).json({ error: 'Dígito verificador de CURP inválido' });
 
     const payload = {
       curp,
@@ -1249,11 +1196,50 @@ async function startServer() {
       ...normalized,
       official,
       source,
-      status: official ? normalized.status : 'VALIDADA_FORMATO_LOCAL',
+      checksumValid: validateCurpChecksum(curp),
+      status: official ? normalized.status : 'VALIDADA_DIGITO_LOCAL',
       message: official
         ? 'CURP consultada con proveedor externo configurado.'
-        : 'CURP validada por formato local. Para expediente oficial descarga y adjunta el PDF desde gob.mx.',
+        : 'CURP validada por formato y digito verificador local. Para expediente oficial descarga y adjunta el PDF desde gob.mx.',
       providerError: providerError || undefined,
+    });
+  }));
+
+  app.post("/api/curp/generate", authOnly, wrap((req: any, res: any) => {
+    const generated = generateCurpCandidate(req.body || {});
+    if (!generated.ok) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Datos incompletos para calcular la CURP preliminar.',
+        missing: generated.missing,
+        warnings: generated.warnings,
+        metadata: generated.metadata,
+      });
+    }
+
+    logSystem(
+      req,
+      'curp.generate',
+      'curp',
+      generated.curp,
+      'CURP preliminar generada con algoritmo local',
+      { missing: generated.missing, warnings: generated.warnings, metadata: generated.metadata }
+    );
+
+    res.json({
+      ok: true,
+      curp: generated.curp,
+      curpDraft: generated.curp,
+      curp17: generated.curp17,
+      homoclave: generated.homoclave,
+      checkDigit: generated.checkDigit,
+      checksumValid: validateCurpChecksum(generated.curp),
+      status: 'GENERADA_LOCAL_PRELIMINAR',
+      source: 'local-algorithm',
+      official: false,
+      message: 'CURP preliminar generada localmente. Confirma y adjunta el PDF oficial desde gob.mx/RENAPO para expediente.',
+      warnings: generated.warnings,
+      metadata: generated.metadata,
     });
   }));
 
@@ -1267,11 +1253,14 @@ async function startServer() {
       estadoNacimiento: String(req.body?.estadoNacimiento || '').trim().toUpperCase(),
       curp: normalizeCurp(req.body?.curp),
     };
-    const curpDraft = CURP_RE.test(payload.curp) ? payload.curp : generateCurpFromPersonalData(payload);
+    const generated = generateCurpCandidate(payload);
+    const curpDraft = CURP_RE.test(payload.curp) ? payload.curp : (generated.ok ? generated.curp : '');
     if (!curpDraft) {
       return res.status(400).json({
         ok: false,
         error: 'Datos incompletos para preparar la consulta oficial. Revisa nombre, apellido paterno, fecha, sexo y estado.',
+        missing: generated.missing,
+        warnings: generated.warnings,
       });
     }
 
@@ -1302,6 +1291,11 @@ async function startServer() {
       challengeDetected: portal.challengeDetected,
       requiresManualDownload: true,
       clipboardText: buildCurpOfficialClipboard(payload, curpDraft),
+      curp17: generated.ok ? generated.curp17 : undefined,
+      homoclave: generated.ok ? generated.homoclave : undefined,
+      checkDigit: generated.ok ? generated.checkDigit : undefined,
+      checksumValid: validateCurpChecksum(curpDraft),
+      warnings: generated.ok ? generated.warnings : undefined,
       message: portal.challengeDetected
         ? 'gob.mx activo una validacion humana. Abre el portal oficial, consulta con los datos capturados, descarga el PDF oficial y adjuntalo en la app.'
         : 'Portal oficial disponible. Consulta en gob.mx, descarga el PDF oficial y adjuntalo en la app.',
@@ -1479,6 +1473,7 @@ async function startServer() {
   }));
 
   registerFinanceEnterpriseRoutes(app);
+  registerDiditRoutes(app);
 
   // ── MOBILE PWA: endpoints compactos para asesores en campo ───────────────
   function mobileUser(auth: any) {
@@ -3479,6 +3474,52 @@ async function startServer() {
     res.json(answer);
   }));
 
+  function agentProfileIdFrom(value: any) {
+    const raw = String(value || '').trim().toLowerCase();
+    const normalized = raw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 48);
+    return normalized || `agent_${randomUUID().slice(0, 8)}`;
+  }
+
+  app.get("/api/agents/profiles", chatUserOnly, wrap((_req: any, res: any) => {
+    res.json(AgentProfiles.getAll());
+  }));
+
+  app.post("/api/agents/profiles", requireRole('GERENTE', 'ADMINISTRACION'), wrap((req: any, res: any) => {
+    const body = req.body || {};
+    const id = agentProfileIdFrom(body.id || body.name);
+    const metadata = {
+      ...(body.metadata && typeof body.metadata === 'object' ? body.metadata : {}),
+      custom: true,
+      enabled: body.metadata?.enabled === false ? false : true,
+    };
+    if (!String(body.name || '').trim()) return res.status(400).json({ error: 'name requerido' });
+    AgentProfiles.upsert({
+      id,
+      name: String(body.name || '').trim(),
+      role: String(body.role || 'Agente personalizado').trim(),
+      personality: String(body.personality || '').trim(),
+      selfKnowledge: String(body.selfKnowledge || body.self_knowledge || '').trim(),
+      knowledgeBase: String(body.knowledgeBase || body.knowledge_base || '').trim(),
+      learnedNotes: Array.isArray(body.learnedNotes || body.learned_notes) ? (body.learnedNotes || body.learned_notes) : [],
+      metadata,
+    });
+    const profile = AgentProfiles.getById(id);
+    AuditLog.insert({
+      accion: 'CREATE_AGENT_PROFILE',
+      entidad: 'agent_profiles',
+      entidad_id: id,
+      user_id: req.auth?.sub || null,
+      user_nombre: null,
+      detalle: profile?.name || id,
+    });
+    res.json(profile);
+  }));
+
   app.get("/api/agents/profiles/:id", chatUserOnly, wrap((req: any, res: any) => {
     const profile = AgentProfiles.getById(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Perfil de agente no encontrado' });
@@ -3497,6 +3538,20 @@ async function startServer() {
       detalle: profile.name,
     });
     res.json(profile);
+  }));
+
+  app.delete("/api/agents/profiles/:id", requireRole('GERENTE', 'ADMINISTRACION'), wrap((req: any, res: any) => {
+    if (req.params.id === 'promoter_receptionist') return res.status(400).json({ error: 'ARIUX base no se puede eliminar' });
+    AgentProfiles.delete(req.params.id);
+    AuditLog.insert({
+      accion: 'DELETE_AGENT_PROFILE',
+      entidad: 'agent_profiles',
+      entidad_id: req.params.id,
+      user_id: req.auth?.sub || null,
+      user_nombre: null,
+      detalle: null,
+    });
+    res.json({ ok: true });
   }));
 
   app.post("/api/agents/:agent/toggle", chatUserOnly, wrap(async (req: any, res: any) => {

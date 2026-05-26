@@ -826,6 +826,22 @@ db.exec(`
     FOREIGN KEY (cycle_id) REFERENCES weekly_financial_cycles(id) ON DELETE CASCADE,
     FOREIGN KEY (uploaded_by) REFERENCES users(uid) ON DELETE SET NULL
   );
+
+  CREATE TABLE IF NOT EXISTS didit_checks (
+    id                   TEXT PRIMARY KEY,
+    kind                 TEXT NOT NULL,
+    provider_request_id  TEXT,
+    status               TEXT,
+    vendor_data          TEXT,
+    capture_id           TEXT,
+    document_file_ids    TEXT,
+    request_summary      TEXT,
+    response_json        TEXT,
+    created_by           TEXT,
+    created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (capture_id) REFERENCES capturas(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(uid) ON DELETE SET NULL
+  );
 `);
 
 function ensureColumn(table: string, name: string, definition: string) {
@@ -928,6 +944,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_fin_inv_uuid     ON financial_invoices (uuid_sat);
   CREATE INDEX IF NOT EXISTS idx_fin_dep_cycle    ON financial_deposits (cycle_id, fecha_deposito DESC);
   CREATE INDEX IF NOT EXISTS idx_fin_files_cycle  ON financial_files (cycle_id, tipo);
+  CREATE INDEX IF NOT EXISTS idx_didit_checks_kind ON didit_checks (kind, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_didit_checks_capture ON didit_checks (capture_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_didit_checks_status ON didit_checks (status, created_at DESC);
 `);
 
 function passwordForStorage(value: any) {
@@ -1423,6 +1442,29 @@ export const FinancialFiles = {
   `).run(data),
 };
 
+export const DiditChecks = {
+  getRecent: (limit = 100) => db.prepare('SELECT * FROM didit_checks ORDER BY created_at DESC LIMIT ?').all(limit),
+  getById: (id: string) => db.prepare('SELECT * FROM didit_checks WHERE id=?').get(id),
+  create: (data: any) => db.prepare(`
+    INSERT INTO didit_checks (
+      id,kind,provider_request_id,status,vendor_data,capture_id,document_file_ids,request_summary,response_json,created_by
+    ) VALUES (
+      @id,@kind,@provider_request_id,@status,@vendor_data,@capture_id,@document_file_ids,@request_summary,@response_json,@created_by
+    )
+  `).run({
+    id: data.id || randomUUID(),
+    kind: data.kind,
+    provider_request_id: data.provider_request_id || null,
+    status: data.status || null,
+    vendor_data: data.vendor_data || null,
+    capture_id: data.capture_id || null,
+    document_file_ids: typeof data.document_file_ids === 'string' ? data.document_file_ids : JSON.stringify(data.document_file_ids || []),
+    request_summary: typeof data.request_summary === 'string' ? data.request_summary : JSON.stringify(data.request_summary || {}),
+    response_json: typeof data.response_json === 'string' ? data.response_json : JSON.stringify(data.response_json || {}),
+    created_by: data.created_by || null,
+  }),
+};
+
 export const Territories = {
   getAll: () => db.prepare('SELECT * FROM territories').all(),
   create: (data: any) => db.prepare(`
@@ -1826,6 +1868,10 @@ export const AgentTasks = {
 };
 
 export const AgentProfiles = {
+  getAll: () => {
+    AgentProfiles.getById(DEFAULT_RECEPTIONIST_PROFILE.id);
+    return (db.prepare('SELECT * FROM agent_profiles ORDER BY updated_at DESC, created_at DESC').all() as any[]).map(normalizeAgentProfile);
+  },
   getById: (id: string) => {
     let row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id) as any;
     if (row && id === DEFAULT_RECEPTIONIST_PROFILE.id && String(row.name || '').trim().toLowerCase() === 'agente heavenly') {
@@ -1933,6 +1979,7 @@ export const AgentProfiles = {
     });
     return AgentProfiles.getById(id);
   },
+  delete: (id: string) => db.prepare('DELETE FROM agent_profiles WHERE id=?').run(id),
 };
 
 export const AgentOutbox = {

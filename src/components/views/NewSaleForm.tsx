@@ -3,6 +3,7 @@ import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, Produc
 import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle, Search, Copy, Save, Bot, ExternalLink, RotateCw } from 'lucide-react';
 import { set as idbSet, get as idbGet, del as idbDel } from 'idb-keyval';
 import { cn, formatCurrency } from '../../lib/utils';
+import { CURP_REGEX, CURP_STATE_OPTIONS, generateCurpCandidate, normalizeCurpValue } from '../../lib/curp';
 import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
 import { MatrixInput } from '../ui/MatrixInput';
 import { SiacValidator } from '../ui/SiacValidator';
@@ -724,7 +725,7 @@ async function analyzeDocumentWithOrientationFallback(
 }
 
 const NEW_SALE_DRAFT_PREFIX = 'hd_new_sale_draft_v2';
-const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+const CURP_RE = CURP_REGEX;
 
 type CurpLookupResult = {
   ok?: boolean;
@@ -762,42 +763,6 @@ type PortabilityCheckResult = {
   error?: string;
 };
 
-const CURP_STATE_OPTIONS = [
-  { code: 'AS', name: 'Aguascalientes' },
-  { code: 'BC', name: 'Baja California' },
-  { code: 'BS', name: 'Baja California Sur' },
-  { code: 'CC', name: 'Campeche' },
-  { code: 'CL', name: 'Coahuila' },
-  { code: 'CM', name: 'Colima' },
-  { code: 'CS', name: 'Chiapas' },
-  { code: 'CH', name: 'Chihuahua' },
-  { code: 'DF', name: 'Ciudad de Mexico' },
-  { code: 'DG', name: 'Durango' },
-  { code: 'GT', name: 'Guanajuato' },
-  { code: 'GR', name: 'Guerrero' },
-  { code: 'HG', name: 'Hidalgo' },
-  { code: 'JC', name: 'Jalisco' },
-  { code: 'MC', name: 'Estado de Mexico' },
-  { code: 'MN', name: 'Michoacan' },
-  { code: 'MS', name: 'Morelos' },
-  { code: 'NT', name: 'Nayarit' },
-  { code: 'NL', name: 'Nuevo Leon' },
-  { code: 'OC', name: 'Oaxaca' },
-  { code: 'PL', name: 'Puebla' },
-  { code: 'QT', name: 'Queretaro' },
-  { code: 'QR', name: 'Quintana Roo' },
-  { code: 'SP', name: 'San Luis Potosi' },
-  { code: 'SL', name: 'Sinaloa' },
-  { code: 'SR', name: 'Sonora' },
-  { code: 'TC', name: 'Tabasco' },
-  { code: 'TS', name: 'Tamaulipas' },
-  { code: 'TL', name: 'Tlaxcala' },
-  { code: 'VZ', name: 'Veracruz' },
-  { code: 'YN', name: 'Yucatan' },
-  { code: 'ZS', name: 'Zacatecas' },
-  { code: 'NE', name: 'Nacido en el extranjero' },
-] as const;
-
 const LARGE_CAPTURE_FIELDS: Array<keyof CustomerCaptureData> = [
   'ineFrente',
   'ineReverso',
@@ -813,38 +778,7 @@ const LARGE_CAPTURE_FIELDS: Array<keyof CustomerCaptureData> = [
 ];
 
 function normalizeCurpInput(value?: string) {
-  return (value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 18);
-}
-
-function normalizePersonPart(value?: string) {
-  return (value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/Ñ/g, 'X')
-    .replace(/[^A-Za-z]/g, '')
-    .toUpperCase();
-}
-
-function firstInternalVowel(value: string) {
-  return value.slice(1).match(/[AEIOU]/)?.[0] || 'X';
-}
-
-function firstInternalConsonant(value: string) {
-  return value.slice(1).match(/[BCDFGHJKLMNPQRSTVWXYZ]/)?.[0] || 'X';
-}
-
-function generateCurpFromForm(form: Partial<CustomerCaptureData>) {
-  const paterno = normalizePersonPart(form.apellidoPaterno);
-  const materno = normalizePersonPart(form.apellidoMaterno);
-  const nombres = normalizePersonPart(form.nombres);
-  const fecha = form.fechaNacimiento || '';
-  const estado = form.estadoNacimiento || '';
-  const sexo = form.sexo || '';
-  if (!paterno || !nombres || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !estado || !sexo) return '';
-  const yy = fecha.slice(2, 4);
-  const mm = fecha.slice(5, 7);
-  const dd = fecha.slice(8, 10);
-  return `${paterno[0] || 'X'}${firstInternalVowel(paterno)}${materno[0] || 'X'}${nombres[0] || 'X'}${yy}${mm}${dd}${sexo}${estado}${firstInternalConsonant(paterno)}${firstInternalConsonant(materno)}${firstInternalConsonant(nombres)}00`;
+  return normalizeCurpValue(value);
 }
 
 function sanitizeCaptureForServer(form: Partial<CustomerCaptureData>) {
@@ -1686,7 +1620,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       if (!res.ok) throw new Error(data.error || 'No se pudo consultar la CURP.');
       setCurpLookupResult(data);
       mergeCurpResultIntoForm(data);
-      toast.success(data.official ? 'CURP consultada con proveedor externo.' : 'CURP validada por formato. Para expediente usa el PDF oficial gob.mx.');
+      toast.success(data.message || (data.official ? 'CURP consultada con proveedor externo.' : 'CURP validada por formato y digito local.'));
     } catch (err: any) {
       const message = err?.message || 'No se pudo consultar la CURP.';
       setCurpLookupError(message);
@@ -2509,26 +2443,29 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                       <button
                         type="button"
                         onClick={() => {
-                          const generated = generateCurpFromForm(form);
-                          if (!generated) {
-                            toast.error('Completa nombre, apellidos, fecha, sexo y estado para generar la CURP.');
+                          const generated = generateCurpCandidate(form);
+                          if (!generated.ok) {
+                            toast.error(`Completa ${generated.missing.join(', ') || 'los datos requeridos'} para calcular la CURP.`);
                             return;
                           }
-                          updateForm({ curp: generated });
+                          updateForm({ curp: generated.curp });
                           setCurpLookupError('');
                           setCurpLookupResult({
                             ok: true,
-                            curp: generated,
+                            curp: generated.curp,
+                            curpDraft: generated.curp,
                             nombres: form.nombres,
                             apellidoPaterno: form.apellidoPaterno,
                             apellidoMaterno: form.apellidoMaterno,
                             sexo: form.sexo === 'M' ? 'Mujer' : 'Hombre',
                             fechaNacimiento: form.fechaNacimiento,
                             entidadNacimiento: CURP_STATE_OPTIONS.find(s => s.code === form.estadoNacimiento)?.name || form.estadoNacimiento,
-                            status: 'GENERADA_LOCAL',
+                            status: 'GENERADA_LOCAL_PRELIMINAR',
                             official: false,
+                            source: 'local-algorithm',
+                            message: 'CURP preliminar generada. Confirma con PDF oficial gob.mx/RENAPO.',
                           });
-                          toast.success('Borrador CURP generado. Confirmalo con el PDF oficial gob.mx.');
+                          toast.success('CURP preliminar generada. Confirmala con el PDF oficial gob.mx.');
                         }}
                         className="rounded-xl border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200 px-4 py-2.5 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2"
                       >

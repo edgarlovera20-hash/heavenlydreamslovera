@@ -4,6 +4,7 @@ import { AlertCircle, Banknote, Calendar, Camera, CheckCircle2, Clock, CreditCar
 import { PACKAGE_CATALOG, type ClientType, type PackageCatalogItem, type ProductCategory, type ServiceSegment } from '../configs/package-catalog';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from '../lib/apiClient';
 import Logo from '../components/ui/Logo';
+import { CURP_REGEX, generateCurpCandidate, normalizeCurpValue } from '../lib/curp';
 import { getMobilePosition } from './mobileLocation';
 import { runMobileOcr } from './mobileOcr';
 
@@ -207,7 +208,7 @@ function MobileIcon({ name, className = '' }: { name: IconName; className?: stri
     wifi: <><path {...common} d="M5 12a10 10 0 0 1 14 0" /><path {...common} d="M8 15a6 6 0 0 1 8 0" /><path {...common} d="M12 19h.01" /></>,
     'wifi-off': <><path {...common} d="M3 3l18 18" /><path {...common} d="M8.5 8.5A10 10 0 0 1 19 12M5 12a10 10 0 0 1 2.5-2.1M8 15a6 6 0 0 1 6.5-.9M12 19h.01" /></>,
   };
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>{paths[name]}</svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className={cx('hd-mobile-icon', className)}>{paths[name]}</svg>;
 }
 
 const EMPTY_DRAFT: CaptureDraft = {
@@ -270,7 +271,7 @@ const EMPTY_DRAFT: CaptureDraft = {
 const CAPTURE_STEPS = ['Identidad/OCR', 'Cliente', 'Domicilio', 'Servicio', 'Paquetes', 'Streaming', 'Video firma', 'Confirmar'];
 const INE_IDENTITY_DOCUMENTS = ['INE_FRONTAL', 'INE_REVERSO'];
 const CURP_IDENTITY_DOCUMENT = 'CURP';
-const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+const CURP_RE = CURP_REGEX;
 
 const STREAMING_ADDONS = [
   { id: 'netflix_basico', provider: 'Netflix', name: 'Basico 2 pantallas con anuncios', price: 99, promoFree: true, promoMonths: 6 },
@@ -315,6 +316,34 @@ const MODULES: Array<{ id: MobileSection; label: string; icon: IconName; caption
 ];
 
 const MOBILE_SECTIONS = new Set<MobileSection>(['inicio', 'perfil', ...MODULES.map((module) => module.id)]);
+const CURP_OFFICIAL_URL = 'https://www.gob.mx/curp/';
+
+const MODULE_TONES: Record<string, string> = {
+  venta: 'hd-tone-cyan',
+  folios: 'hd-tone-blue',
+  clientes: 'hd-tone-emerald',
+  documentos: 'hd-tone-violet',
+  seguimiento: 'hd-tone-pink',
+  nominas: 'hd-tone-amber',
+  chats: 'hd-tone-violet',
+  usuarios: 'hd-tone-emerald',
+  aprobaciones: 'hd-tone-amber',
+  ajustes: 'hd-tone-blue',
+};
+
+function moduleTone(id: string) {
+  return MODULE_TONES[id] || 'hd-tone-cyan';
+}
+
+function metricTone(label: string) {
+  const normalized = label.toLowerCase();
+  if (normalized.includes('venta')) return 'hd-tone-cyan';
+  if (normalized.includes('pendiente') || normalized.includes('aprob')) return 'hd-tone-amber';
+  if (normalized.includes('chat')) return 'hd-tone-violet';
+  if (normalized.includes('cliente') || normalized.includes('doc')) return 'hd-tone-emerald';
+  if (normalized.includes('rechazo')) return 'hd-tone-pink';
+  return 'hd-tone-blue';
+}
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
@@ -1392,8 +1421,8 @@ export default function MobileFieldApp() {
       }
       return '';
     }
-    if (!hasDraftDocument(CURP_IDENTITY_DOCUMENT) && !CURP_RE.test(draft.curp.trim().toUpperCase()) && !draft.curpAgentRequestedAt) {
-      return 'Sube el documento CURP, captura una CURP valida o usa Solicitar CURP con agente.';
+    if (!hasDraftDocument(CURP_IDENTITY_DOCUMENT) && !CURP_RE.test(normalizeCurpValue(draft.curp)) && !draft.curpAgentRequestedAt) {
+      return 'Calcula la CURP con los datos basicos o sube el documento CURP antes de finalizar.';
     }
     return '';
   }, [draft.curp, draft.curpAgentRequestedAt, draft.identityDocumentType, hasDraftDocument]);
@@ -1409,7 +1438,7 @@ export default function MobileFieldApp() {
       apellidoPaterno: draft.apellidoPaterno.trim(),
       apellidoMaterno: draft.apellidoMaterno.trim(),
       apellidos: [draft.apellidoPaterno, draft.apellidoMaterno].filter(Boolean).join(' ').trim(),
-      curp: draft.curp.trim().toUpperCase(),
+      curp: normalizeCurpValue(draft.curp),
       identityDocumentType,
       fechaNacimiento: draft.fechaNacimiento,
       sexo: draft.sexo,
@@ -2006,12 +2035,44 @@ export default function MobileFieldApp() {
         sexo: data.sexo || draft.sexo,
         estadoNacimiento: data.estadoNacimiento || data.estado || draft.estadoNacimiento,
       });
-      notify('success', data.official ? 'CURP validada con proveedor.' : 'CURP validada localmente.');
+      notify('success', data.message || (data.official ? 'CURP validada con proveedor.' : 'CURP validada localmente.'));
     } catch (err: any) {
       notify('error', err?.message || 'No se pudo validar CURP.');
     } finally {
       setCurpLoading(false);
     }
+  };
+
+  const generateCurpLocal = () => {
+    const generated = generateCurpCandidate({
+      nombres: draft.nombres,
+      apellidoPaterno: draft.apellidoPaterno,
+      apellidoMaterno: draft.apellidoMaterno,
+      fechaNacimiento: draft.fechaNacimiento,
+      sexo: draft.sexo,
+      estadoNacimiento: draft.estadoNacimiento,
+    });
+    if (!generated.ok) {
+      setDraftStep(1);
+      notify('error', `Completa ${generated.missing.join(', ') || 'los datos requeridos'} para generar la CURP.`);
+      return;
+    }
+    updateDraft({
+      curp: generated.curp,
+      curpAgentRequestedAt: '',
+      curpAgentDraft: generated.curp,
+      curpAgentMessage: 'CURP preliminar generada localmente. Confirma con PDF oficial gob.mx/RENAPO.',
+    });
+    notify('success', 'CURP preliminar generada.');
+  };
+
+  const openCurpOfficialPage = () => {
+    const curp = normalizeCurpValue(draft.curp);
+    if (curp && navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(curp).catch(() => undefined);
+    }
+    window.open(CURP_OFFICIAL_URL, '_blank', 'noopener,noreferrer');
+    notify('success', curp ? 'Abriendo gob.mx. La CURP quedo copiada para validarla.' : 'Abriendo gob.mx para validar CURP.');
   };
 
   const generateCurp = async () => {
@@ -2662,28 +2723,28 @@ export default function MobileFieldApp() {
           </Panel>
 
           <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setActive('venta')} className="hd-cyber-primary min-h-20 px-3 py-3 text-left">
+            <button onClick={() => setActive('venta')} className="hd-neon-action hd-tone-cyan min-h-20 px-3 py-3 text-left">
               <MobileIcon name="clipboard" className="mb-2 h-5 w-5" />
               <span className="block text-xs font-black uppercase tracking-[0.08em]">Nueva venta</span>
             </button>
-            <button onClick={() => setActive('folios')} className="hd-cyber-secondary min-h-20 px-3 py-3 text-left">
+            <button onClick={() => setActive('folios')} className="hd-neon-action hd-tone-blue min-h-20 px-3 py-3 text-left">
               <MobileIcon name="search" className="mb-2 h-5 w-5" />
               <span className="block text-xs font-black uppercase tracking-[0.08em]">Folios</span>
             </button>
             {canUseMobileChats && (
-              <button onClick={() => setActive('chats')} className="hd-cyber-secondary min-h-20 px-3 py-3 text-left">
+              <button onClick={() => setActive('chats')} className="hd-neon-action hd-tone-violet min-h-20 px-3 py-3 text-left">
                 <MobileIcon name="message" className="mb-2 h-5 w-5" />
                 <span className="block text-xs font-black uppercase tracking-[0.08em]">Chats</span>
               </button>
             )}
             {canApproveMobile && (
-              <button onClick={() => setActive('usuarios')} className="hd-cyber-secondary min-h-20 px-3 py-3 text-left">
+              <button onClick={() => setActive('usuarios')} className="hd-neon-action hd-tone-emerald min-h-20 px-3 py-3 text-left">
                 <MobileIcon name="users" className="mb-2 h-5 w-5" />
                 <span className="block text-xs font-black uppercase tracking-[0.08em]">Usuarios</span>
               </button>
             )}
             {canApproveMobile && (
-              <button onClick={() => setActive('aprobaciones')} className="hd-cyber-secondary min-h-20 px-3 py-3 text-left">
+              <button onClick={() => setActive('aprobaciones')} className="hd-neon-action hd-tone-amber min-h-20 px-3 py-3 text-left">
                 <MobileIcon name="shield" className="mb-2 h-5 w-5" />
                 <span className="block text-xs font-black uppercase tracking-[0.08em]">Aprobaciones</span>
               </button>
@@ -2711,9 +2772,9 @@ export default function MobileFieldApp() {
                 <button
                   key={module.id}
                   onClick={() => setActive(module.id)}
-                  className="hd-cyber-card flex items-center gap-3 p-4 text-left transition active:scale-[0.99]"
+                  className={cx('hd-neon-card flex items-center gap-3 p-4 text-left transition active:scale-[0.99]', moduleTone(module.id))}
                 >
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyber-electric/20 bg-cyber-electric/10 text-cyber-neon">
+                  <span className="hd-neon-iconbox flex h-12 w-12 shrink-0 items-center justify-center rounded-xl">
                     <MobileIcon name={module.icon} className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -2745,7 +2806,7 @@ export default function MobileFieldApp() {
 
   return (
     <div className="hd-cyber-screen min-h-dvh pb-24">
-      <header className="glass-panel sticky top-0 z-20 border-x-0 border-t-0 border-cyber-electric/20 bg-cyber-black/90 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-xl">
+      <header className="glass-panel hd-mobile-topbar sticky top-0 z-20 border-x-0 border-t-0 border-cyber-electric/20 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3">
           <button onClick={() => active === 'inicio' ? refreshBootstrap() : setActive('inicio')} className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyber-electric/25 bg-white/5 text-cyber-electric transition hover:bg-cyber-neon/10 hover:text-cyber-neon">
             <MobileIcon name={active === 'inicio' ? 'refresh' : 'chevron-left'} className="h-5 w-5" />
@@ -2762,7 +2823,7 @@ export default function MobileFieldApp() {
         {renderContent()}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-cyber-electric/20 bg-cyber-black/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_30px_rgba(3,154,220,0.08)] backdrop-blur-xl">
+      <nav className="hd-mobile-bottom-nav fixed inset-x-0 bottom-0 z-30 border-t border-cyber-electric/20 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 backdrop-blur-xl">
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
           {primaryNav.map((item) => {
             const selected = active === item.id;
@@ -2770,7 +2831,7 @@ export default function MobileFieldApp() {
               <button
                 key={item.id}
                 onClick={() => setActive(item.id)}
-                className={cx('flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold tracking-[0.04em] transition', selected ? 'bg-cyber-electric text-cyber-black' : 'text-cyber-electric/55 hover:bg-cyber-neon/10 hover:text-cyber-neon')}
+                className={cx('flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold tracking-[0.04em] transition', selected ? 'hd-mobile-nav-item-active' : 'text-cyber-electric/55 hover:bg-cyber-neon/10 hover:text-cyber-neon')}
               >
                 <MobileIcon name={item.icon} className="h-5 w-5" />
                 {item.label}
@@ -2825,17 +2886,18 @@ export default function MobileFieldApp() {
     const ineFrontReady = hasDraftDocument('INE_FRONTAL');
     const ineBackReady = hasDraftDocument('INE_REVERSO');
     const curpDocumentReady = hasDraftDocument(CURP_IDENTITY_DOCUMENT);
-    const curpTextReady = CURP_RE.test(draft.curp.trim().toUpperCase());
-    const curpAgentRequested = Boolean(draft.curpAgentRequestedAt);
+    const normalizedCurp = normalizeCurpValue(draft.curp);
+    const curpTextReady = CURP_RE.test(normalizedCurp);
+    const curpAgentRequested = Boolean(draft.curpAgentRequestedAt || draft.curpAgentDraft);
     const identityStatus = identityDocumentType === 'ine'
       ? `${ineFrontReady ? 'Frente listo' : 'Falta frente'} / ${ineBackReady ? 'Reverso listo' : 'falta reverso'}`
       : curpDocumentReady
         ? 'Documento CURP listo'
         : curpTextReady
-          ? 'CURP valida capturada'
+          ? 'CURP calculada lista'
           : curpAgentRequested
             ? 'CURP solicitada al agente'
-            : 'Sube CURP, escribe la clave o solicitala con agente';
+            : 'Calcula con datos basicos o sube documento';
 
     return (
       <Panel>
@@ -2867,7 +2929,7 @@ export default function MobileFieldApp() {
               <div className="grid grid-cols-2 gap-2">
                 {([
                   { type: 'ine' as const, title: 'INE', subtitle: 'Frente y reverso' },
-                  { type: 'curp' as const, title: 'CURP', subtitle: 'Subir o consultar' },
+                  { type: 'curp' as const, title: 'CURP', subtitle: 'Calcular / validar' },
                 ]).map((option) => {
                   const isActive = identityDocumentType === option.type;
                   return (
@@ -2893,7 +2955,7 @@ export default function MobileFieldApp() {
                 <p className="mt-1 text-xs leading-5 text-slate-400">
                   {identityDocumentType === 'ine'
                     ? 'Sube frente y reverso. El OCR autocompleta nombre, CURP, folio INE y domicilio detectado.'
-                    : 'No se pedira Folio INE. Puedes subir el PDF/foto CURP, escribirla si ya la tienes o solicitarla al agente gob.mx con los datos del cliente.'}
+                    : 'No se pedira Folio INE ni CURP manual. Completa datos basicos, calcula la CURP y validala en gob.mx.'}
                 </p>
                 <p className="mt-2 text-[11px] font-black uppercase tracking-[0.12em] text-cyan-100">{identityStatus}</p>
               </div>
@@ -2908,16 +2970,22 @@ export default function MobileFieldApp() {
                 </>
               ) : (
                 <>
-                  {docRow(CURP_IDENTITY_DOCUMENT, 'Documento CURP', 'ine', undefined, IMAGE_PDF_ACCEPT)}
-                  <Field label="CURP (opcional)" value={draft.curp} onChange={(value) => updateDraft({ curp: value.toUpperCase().slice(0, 18), curpAgentRequestedAt: '', curpAgentDraft: '', curpAgentMessage: '' })} placeholder="Solo si ya la trae el cliente" />
+                  {docRow(CURP_IDENTITY_DOCUMENT, 'Documento CURP opcional', 'ine', undefined, IMAGE_PDF_ACCEPT)}
+                  <div className="hd-curp-helper rounded-2xl p-4">
+                    <p className="text-sm font-black text-cyan-50">CURP por algoritmo</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">
+                      No necesitas escribir la CURP. Completa nombre, nacimiento, sexo y estado en Cliente; luego calcula y valida en gob.mx.
+                    </p>
+                    {curpTextReady && <p className="mt-3 rounded-xl bg-black/25 px-3 py-2 font-mono text-xs font-black text-emerald-100">{normalizedCurp}</p>}
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <button onClick={validateCurp} disabled={curpLoading || !curpTextReady} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-cyan-300 font-black uppercase tracking-[0.08em] text-slate-950 disabled:opacity-45">
-                      <MobileIcon name={curpLoading ? 'loader' : 'id'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
-                      Validar
+                    <button onClick={generateCurpLocal} disabled={curpLoading} className="hd-neon-action hd-tone-emerald flex h-12 items-center justify-center gap-2 text-sm font-black disabled:opacity-60">
+                      <MobileIcon name="id" className="h-4 w-4" />
+                      Calcular CURP
                     </button>
-                    <button onClick={generateCurp} disabled={curpLoading} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-slate-100 disabled:opacity-60">
-                      <MobileIcon name={curpLoading ? 'loader' : 'search'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
-                      Solicitar
+                    <button onClick={openCurpOfficialPage} className="hd-neon-action hd-tone-blue flex h-12 items-center justify-center gap-2 text-sm font-black">
+                      <MobileIcon name="search" className="h-4 w-4" />
+                      Validar gob.mx
                     </button>
                   </div>
                   {draft.curpAgentMessage && (
@@ -2938,18 +3006,27 @@ export default function MobileFieldApp() {
                 <Field label="Apellido paterno" value={draft.apellidoPaterno} onChange={(value) => updateDraft({ apellidoPaterno: value })} />
                 <Field label="Apellido materno" value={draft.apellidoMaterno} onChange={(value) => updateDraft({ apellidoMaterno: value })} />
               </div>
-              <Field
-                label={identityDocumentType === 'ine' ? 'CURP' : 'CURP (opcional si ya la tiene)'}
-                value={draft.curp}
-                onChange={(value) => updateDraft({ curp: value.toUpperCase().slice(0, 18), curpAgentRequestedAt: '', curpAgentDraft: '', curpAgentMessage: '' })}
-                placeholder={identityDocumentType === 'ine' ? 'Autorrelleno por OCR o captura manual' : 'El agente puede solicitarla con los datos'}
-              />
+              {identityDocumentType === 'ine' && (
+                <Field
+                  label="CURP"
+                  value={draft.curp}
+                  onChange={(value) => updateDraft({ curp: normalizeCurpValue(value), curpAgentRequestedAt: '', curpAgentDraft: '', curpAgentMessage: '' })}
+                  placeholder="Autorrelleno por OCR o captura manual"
+                />
+              )}
               {identityDocumentType === 'ine' && (
                 <Field label="Folio INE" value={draft.folioIne} onChange={(value) => updateDraft({ folioIne: value.toUpperCase() })} placeholder="OCR / CIC / clave elector" />
               )}
               {identityDocumentType === 'curp' && (
-                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-xs font-semibold leading-5 text-cyan-100">
-                  Opcion CURP activa: no se pide Folio INE. Si no tienes la CURP, completa nacimiento, sexo y estado para solicitarla con el agente.
+                <div className="hd-curp-helper rounded-2xl p-4 text-xs font-semibold leading-5 text-cyan-50">
+                  <p className="text-sm font-black">Opcion CURP activa</p>
+                  <p className="mt-1 text-slate-300">No se pide Folio INE ni se captura la CURP a mano. El sistema la calcula con nombre, nacimiento, sexo y estado; despues se valida en gob.mx.</p>
+                  {curpTextReady && (
+                    <div className="mt-3 rounded-xl border border-emerald-300/25 bg-emerald-300/10 px-3 py-2">
+                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-100">CURP calculada</p>
+                      <p className="mt-1 break-all font-mono text-sm font-black text-emerald-50">{normalizedCurp}</p>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
@@ -2958,12 +3035,18 @@ export default function MobileFieldApp() {
               </div>
               <Field label="Estado nacimiento" value={draft.estadoNacimiento} onChange={(value) => updateDraft({ estadoNacimiento: value.toUpperCase() })} placeholder="DF, MC, NL..." />
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={validateCurp} disabled={curpLoading || !curpTextReady} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-cyan-300/25 bg-cyan-300/10 text-sm font-black text-cyan-100 disabled:opacity-60">
-                  <MobileIcon name={curpLoading ? 'loader' : 'id'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
-                  Validar CURP
+                {identityDocumentType === 'ine' && (
+                  <button onClick={validateCurp} disabled={curpLoading || !curpTextReady} className="hd-neon-action hd-tone-cyan flex h-12 items-center justify-center gap-2 text-sm font-black disabled:opacity-60">
+                    <MobileIcon name={curpLoading ? 'loader' : 'id'} className={cx('h-4 w-4', curpLoading && 'animate-spin')} />
+                    Validar CURP
+                  </button>
+                )}
+                <button onClick={generateCurpLocal} disabled={curpLoading} className={cx('hd-neon-action hd-tone-emerald flex h-12 items-center justify-center gap-2 text-sm font-black disabled:opacity-60', identityDocumentType === 'curp' && 'col-span-2')}>
+                  Calcular CURP
                 </button>
-                <button onClick={generateCurp} disabled={curpLoading} className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-slate-100 disabled:opacity-60">
-                  Solicitar
+                <button onClick={openCurpOfficialPage} className="hd-neon-action hd-tone-blue col-span-2 flex h-12 items-center justify-center gap-2 text-sm font-black">
+                  <MobileIcon name="search" className="h-4 w-4" />
+                  Validar en gob.mx
                 </button>
               </div>
               {draft.curpAgentMessage && (
@@ -4127,8 +4210,8 @@ export default function MobileFieldApp() {
 
 function Metric({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="hd-cyber-card-soft px-3 py-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyber-electric/65">{label}</p>
+    <div className={cx('hd-neon-metric px-3 py-3', metricTone(label))}>
+      <p className="text-[10px] font-black uppercase tracking-[0.14em]">{label}</p>
       <p className="mt-1 truncate text-lg font-black text-slate-50">{value}</p>
     </div>
   );
