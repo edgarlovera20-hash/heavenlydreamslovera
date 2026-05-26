@@ -80,6 +80,8 @@ const emptySummary: Summary = {
   predictions: [],
 };
 
+const fixedExpenseConcepts = ['Renta', 'Administración', 'Servicios', 'Nómina', 'Herramientas', 'Servidores'];
+
 const stateTone: Record<string, 'emerald' | 'amber' | 'rose' | 'purple' | 'cyan'> = {
   PAGADO: 'emerald',
   CERRADO: 'emerald',
@@ -499,10 +501,28 @@ export default function FinancesEnterpriseView() {
         <div className="grid gap-3 border-b border-white/10 p-5 lg:grid-cols-[0.8fr_0.8fr_1.6fr_0.8fr_auto] lg:items-end">
           <FinanceInput type="date" label="Fecha" value={fixedExpense.fecha} onChange={v => setFixedExpense({ ...fixedExpense, fecha: v })} />
           <FinanceInput type="date" label="Hasta" value={fixedExpense.fecha_fin} onChange={v => setFixedExpense({ ...fixedExpense, fecha_fin: v })} />
-          <FinanceInput label="Concepto" value={fixedExpense.concepto} onChange={v => setFixedExpense({ ...fixedExpense, concepto: v })} placeholder="Renta oficina" />
+          <div className="space-y-2">
+            <FinanceInput label="Concepto" value={fixedExpense.concepto} onChange={v => setFixedExpense({ ...fixedExpense, concepto: v })} placeholder="Renta oficina / Administración" />
+            <div className="flex flex-wrap gap-1.5">
+              {fixedExpenseConcepts.map(concept => (
+                <button
+                  key={concept}
+                  type="button"
+                  onClick={() => setFixedExpense(current => ({ ...current, concepto: concept }))}
+                  className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] transition ${
+                    fixedExpense.concepto === concept
+                      ? 'border-amber-300/70 bg-amber-300/15 text-amber-100'
+                      : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-amber-300/40 hover:text-amber-100'
+                  }`}
+                >
+                  {concept}
+                </button>
+              ))}
+            </div>
+          </div>
           <FinanceInput label="Cantidad" value={fixedExpense.cantidad} onChange={v => setFixedExpense({ ...fixedExpense, cantidad: v })} placeholder="4000 + 4000" />
           <PremiumButton className="h-[42px] whitespace-nowrap" onClick={createFixedExpense} disabled={busy === 'fixed-expense'}>
-            {busy === 'fixed-expense' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Guardar gasto
+            {busy === 'fixed-expense' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Guardar gasto fijo
           </PremiumButton>
         </div>
 

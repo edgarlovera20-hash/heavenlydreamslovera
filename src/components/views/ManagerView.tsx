@@ -258,7 +258,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
           {ADMIN_ROLES.includes(role) && (
             <NavGroup label="Gerencia">
-              {role === 'GERENTE' && <NavItem icon={ReceiptText} color="yellow" label="Finanzas Enterprise" active={activeSection === 'Finanzas Enterprise'} onClick={() => setActiveSection('Finanzas Enterprise')} />}
+              {ADMIN_ROLES.includes(role) && <NavItem icon={ReceiptText} color="yellow" label="Finanzas Enterprise" active={activeSection === 'Finanzas Enterprise'} onClick={() => setActiveSection('Finanzas Enterprise')} />}
               <NavItem icon={Users} color="cyan" label="Gestión de Usuarios" active={activeSection === 'Gestión de Usuarios'} onClick={() => setActiveSection('Gestión de Usuarios')} badge={pendingUsers > 0 ? pendingUsers : undefined} />
               <NavItem icon={MapPin} color="cyan" label="Territorios" active={activeSection === 'Territorios'} onClick={() => setActiveSection('Territorios')} />
               <NavItem icon={Package} color="purple" label="Catálogo" active={activeSection === 'Catálogo'} onClick={() => setActiveSection('Catálogo')} />
@@ -421,7 +421,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   <QuickAction icon={AlertTriangle} label="Morosidad" color="red" onClick={() => setActiveSection('Morosidad')} />
                   <QuickAction icon={Headphones} label="Soporte" color="purple" onClick={() => setActiveSection('Soporte a Clientes')} />
                   {OPS_ROLES.includes(role) && <>
-                    {role === 'GERENTE' && <QuickAction icon={ReceiptText} label="Finanzas" color="yellow" onClick={() => setActiveSection('Finanzas Enterprise')} />}
+                    {ADMIN_ROLES.includes(role) && <QuickAction icon={ReceiptText} label="Finanzas" color="yellow" onClick={() => setActiveSection('Finanzas Enterprise')} />}
                     <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
                     <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
                     <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
@@ -548,7 +548,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Config. Llamadas' && <ValidationConfigView />}
             {activeSection === 'Hub de Agentes' && <AgentHubView />}
             {activeSection === 'Gestión de Usuarios' && <UserManagementView />}
-            {activeSection === 'Finanzas Enterprise' && role === 'GERENTE' && <FinancesEnterpriseView />}
+            {activeSection === 'Finanzas Enterprise' && ADMIN_ROLES.includes(role) && <FinancesEnterpriseView />}
             {activeSection === 'Chats' && (
               <ChatsView
                 onOpenSettings={() => setActiveSection('Ajustes')}

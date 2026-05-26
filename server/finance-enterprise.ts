@@ -440,24 +440,24 @@ function audit(cycleId: string | null, action: string, req: any, detail: string,
 }
 
 export function registerFinanceEnterpriseRoutes(app: any) {
-  const gerenteOnly = requireRole('GERENTE');
+  const financeAdminOnly = requireRole('GERENTE', 'ADMINISTRACION');
 
-  app.get('/api/finance-enterprise/summary', gerenteOnly, wrap((_req: any, res: any) => {
+  app.get('/api/finance-enterprise/summary', financeAdminOnly, wrap((_req: any, res: any) => {
     res.json(buildSummary());
   }));
 
-  app.get('/api/finance-enterprise/cycles', gerenteOnly, wrap((req: any, res: any) => {
+  app.get('/api/finance-enterprise/cycles', financeAdminOnly, wrap((req: any, res: any) => {
     const limit = parseLimit(req.query.limit, 200, 500);
     res.json((WeeklyFinancialCycles.getAll(limit) as any[]).map(enrichCycle));
   }));
 
-  app.get('/api/finance-enterprise/cycles/:id', gerenteOnly, wrap((req: any, res: any) => {
+  app.get('/api/finance-enterprise/cycles/:id', financeAdminOnly, wrap((req: any, res: any) => {
     const cycle = WeeklyFinancialCycles.getById(req.params.id) as any;
     if (!cycle) return res.status(404).json({ error: 'Ciclo financiero no encontrado' });
     res.json(enrichCycle(cycle));
   }));
 
-  app.post('/api/finance-enterprise/cycles', gerenteOnly, wrap((req: any, res: any) => {
+  app.post('/api/finance-enterprise/cycles', financeAdminOnly, wrap((req: any, res: any) => {
     const cycle = normalizeCycleInput(req.body || {});
     cycle.diferencia = Number(cycle.monto_depositado || 0) - Number(cycle.total_facturar || 0);
     WeeklyFinancialCycles.create(cycle);
@@ -469,7 +469,7 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     res.json(enrichCycle(saved));
   }));
 
-  app.post('/api/finance-enterprise/ocr-report', gerenteOnly, wrap(async (req: any, res: any) => {
+  app.post('/api/finance-enterprise/ocr-report', financeAdminOnly, wrap(async (req: any, res: any) => {
     const body = req.body || {};
     if (!body.contentBase64) return res.status(400).json({ error: 'contentBase64 es requerido' });
     const captureFile = saveFinancialFile({
@@ -520,7 +520,7 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     res.json({ cycle: enrichCycle(saved), ocr: { ...ocr, text: ocr.text || '' }, parsed });
   }));
 
-  app.post('/api/finance-enterprise/cycles/:id/invoice', gerenteOnly, wrap((req: any, res: any) => {
+  app.post('/api/finance-enterprise/cycles/:id/invoice', financeAdminOnly, wrap((req: any, res: any) => {
     const cycle = WeeklyFinancialCycles.getById(req.params.id) as any;
     if (!cycle) return res.status(404).json({ error: 'Ciclo financiero no encontrado' });
     const body = req.body || {};
@@ -563,7 +563,7 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     res.json(enrichCycle(updated));
   }));
 
-  app.post('/api/finance-enterprise/cycles/:id/deposit', gerenteOnly, wrap((req: any, res: any) => {
+  app.post('/api/finance-enterprise/cycles/:id/deposit', financeAdminOnly, wrap((req: any, res: any) => {
     const cycle = WeeklyFinancialCycles.getById(req.params.id) as any;
     if (!cycle) return res.status(404).json({ error: 'Ciclo financiero no encontrado' });
     const body = req.body || {};
@@ -597,7 +597,7 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     res.json(enrichCycle(updated));
   }));
 
-  app.post('/api/finance-enterprise/cycles/:id/close', gerenteOnly, wrap((req: any, res: any) => {
+  app.post('/api/finance-enterprise/cycles/:id/close', financeAdminOnly, wrap((req: any, res: any) => {
     const cycle = WeeklyFinancialCycles.getById(req.params.id) as any;
     if (!cycle) return res.status(404).json({ error: 'Ciclo financiero no encontrado' });
     if (cycle.estado !== 'PAGADO' && !req.body?.force) {
@@ -609,7 +609,7 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     res.json(enrichCycle(updated));
   }));
 
-  app.post('/api/finance-enterprise/movements', gerenteOnly, wrap((req: any, res: any) => {
+  app.post('/api/finance-enterprise/movements', financeAdminOnly, wrap((req: any, res: any) => {
     const body = req.body || {};
     FinancialMovements.create({
       cycle_id: body.cycle_id || body.cycleId || null,
@@ -628,7 +628,7 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     res.json({ ok: true, summary: buildSummary() });
   }));
 
-  app.get('/api/finance-enterprise/fixed-expenses', gerenteOnly, wrap((req: any, res: any) => {
+  app.get('/api/finance-enterprise/fixed-expenses', financeAdminOnly, wrap((req: any, res: any) => {
     const limit = parseLimit(req.query.limit, 200, 500);
     const fixed = fixedExpenseSummary(limit);
     res.json({
@@ -641,7 +641,7 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     });
   }));
 
-  app.post('/api/finance-enterprise/fixed-expenses', gerenteOnly, wrap((req: any, res: any) => {
+  app.post('/api/finance-enterprise/fixed-expenses', financeAdminOnly, wrap((req: any, res: any) => {
     const body = req.body || {};
     const fecha = String(body.fecha || body.movement_date || '').trim();
     const concepto = String(body.concepto || body.description || '').trim();
@@ -649,13 +649,18 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     if (!fecha) return res.status(400).json({ error: 'Fecha requerida' });
     if (!concepto) return res.status(400).json({ error: 'Concepto requerido' });
     if (cantidad <= 0) return res.status(400).json({ error: 'Cantidad requerida' });
+    const conceptoPlano = compactText(concepto).toLowerCase();
+    const categoria = body.categoria || body.category ||
+      (conceptoPlano.includes('renta') ? 'renta' :
+       conceptoPlano.includes('admin') ? 'administracion' :
+       'gasto_fijo');
 
     const id = randomUUID();
     FinancialMovements.create({
       id,
       cycle_id: null,
       type: 'fixed_expense',
-      category: 'gasto_fijo',
+      category: categoria,
       description: concepto,
       amount: cantidad,
       direction: 'egreso',
@@ -675,7 +680,7 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     res.json({ ok: true, expense, summary: buildSummary() });
   }));
 
-  app.delete('/api/finance-enterprise/fixed-expenses/:id', gerenteOnly, wrap((req: any, res: any) => {
+  app.delete('/api/finance-enterprise/fixed-expenses/:id', financeAdminOnly, wrap((req: any, res: any) => {
     const expense = FinancialMovements.getById(req.params.id) as any;
     if (!expense || expense.source !== 'fixed_expense') return res.status(404).json({ error: 'Gasto fijo no encontrado' });
     FinancialMovements.delete(expense.id);
@@ -684,17 +689,17 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     res.json({ ok: true, summary: buildSummary() });
   }));
 
-  app.get('/api/finance-enterprise/alerts', gerenteOnly, wrap((req: any, res: any) => {
+  app.get('/api/finance-enterprise/alerts', financeAdminOnly, wrap((req: any, res: any) => {
     res.json(FinancialAlerts.getAll(parseLimit(req.query.limit, 200, 500)));
   }));
 
-  app.post('/api/finance-enterprise/alerts/:id/resolve', gerenteOnly, wrap((req: any, res: any) => {
+  app.post('/api/finance-enterprise/alerts/:id/resolve', financeAdminOnly, wrap((req: any, res: any) => {
     FinancialAlerts.resolve(req.params.id, { resolvedBy: req.auth?.sub || null, reason: req.body?.reason || null, resolvedAt: nowIso() });
     audit(null, 'RESOLVE_ALERT', req, `Alerta ${req.params.id} resuelta`, req.body || {});
     res.json({ ok: true });
   }));
 
-  app.post('/api/finance-enterprise/insights/ai', gerenteOnly, wrap(async (_req: any, res: any) => {
+  app.post('/api/finance-enterprise/insights/ai', financeAdminOnly, wrap(async (_req: any, res: any) => {
     const summary = buildSummary();
     try {
       const ai = await runAiWithFallback(`Analiza estos KPIs financieros de Heavenly Dreams Telmex/SocioMax y devuelve JSON con insights, riesgos y acciones. Datos: ${JSON.stringify(summary.kpis)} Alertas: ${JSON.stringify(summary.alerts?.slice(0, 8) || [])}`);
@@ -711,7 +716,7 @@ export function registerFinanceEnterpriseRoutes(app: any) {
     }
   }));
 
-  app.get('/api/finance-enterprise/files/:id/download', gerenteOnly, wrap((req: any, res: any) => {
+  app.get('/api/finance-enterprise/files/:id/download', financeAdminOnly, wrap((req: any, res: any) => {
     const file = FinancialFiles.getById(req.params.id) as any;
     if (!file) return res.status(404).json({ error: 'Archivo financiero no encontrado' });
     const buffer = readStoredDocument(file.storage_path);
