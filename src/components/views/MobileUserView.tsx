@@ -2,7 +2,7 @@ import React, { useState, lazy, Suspense } from 'react';
 import {
   Home, User, Wallet, Headphones,
   Bell, LogOut, PlusCircle, Activity,
-  ChevronLeft, Menu, Users, Gamepad2, ClipboardCheck, FileSearch, Megaphone, X, LayoutDashboard, AlertTriangle, SettingsIcon, FolderOpen, Zap, MessageSquare
+  ChevronLeft, Menu, Users, Gamepad2, ClipboardCheck, FileSearch, Megaphone, X, LayoutDashboard, AlertTriangle, SettingsIcon, FolderOpen, Zap, MessageSquare, Bot, Package, ReceiptText
 } from 'lucide-react';
 import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
@@ -23,6 +23,11 @@ const MyFilesView = lazy(() => import('./MyFilesView'));
 const Integrations = lazy(() => import('./Integrations'));
 const ChatsView = lazy(() => import('./ChatsView'));
 const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
+const CommissionsView = lazy(() => import('./CommissionsView'));
+const ContractsManager = lazy(() => import('./ContractsManager'));
+const QuickQuote = lazy(() => import('./QuickQuote'));
+const ReferralsView = lazy(() => import('./ReferralsView'));
+const SalesScriptView = lazy(() => import('./SalesScriptView'));
 
 const SectionLoader = () => (
   <div className="flex items-center justify-center h-48">
@@ -52,9 +57,12 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
     { id: 'Documentación', label: 'Documentos', icon: FolderOpen, color: 'cyan' },
     { id: 'Captura y Validación', label: 'Captura', icon: ClipboardCheck, color: 'green' },
     { id: 'Consulta y Seguimiento', label: 'Consultas', icon: FileSearch, color: 'yellow' },
+    { id: 'Cotizador', label: 'Cotizador', icon: Package, color: 'yellow' },
+    { id: 'Scripts IA', label: 'Scripts IA', icon: Bot, color: 'purple' },
     { id: 'Chats', label: 'Chats', icon: MessageSquare, color: 'green' },
     { id: 'Chat para Clientes', label: 'Clientes Chat', icon: MessageSquare, color: 'cyan' },
     { id: 'Seguimiento de Clientes', label: 'Seguimiento', icon: Users, color: 'cyan' },
+    { id: 'Referidos', label: 'Referidos', icon: Users, color: 'green' },
     { id: 'Nóminas', label: 'Nóminas', icon: Wallet, color: 'purple' },
     { id: 'Anuncios', label: 'Anuncios', icon: Megaphone, color: 'orange' },
     { id: 'Juego', label: 'Juego', icon: Gamepad2, color: 'pink' },
@@ -66,10 +74,15 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
       { id: 'Documentación', label: 'Documentos', icon: FolderOpen, color: 'cyan' },
       { id: 'Captura y Validación', label: 'Captura', icon: ClipboardCheck, color: 'green' },
       { id: 'Consulta y Seguimiento', label: 'Consultas', icon: FileSearch, color: 'yellow' },
+      { id: 'Cotizador', label: 'Cotizador', icon: Package, color: 'yellow' },
+      { id: 'Scripts IA', label: 'Scripts IA', icon: Bot, color: 'purple' },
       { id: 'Chats', label: 'Chats', icon: MessageSquare, color: 'green' },
       { id: 'Chat para Clientes', label: 'Clientes Chat', icon: MessageSquare, color: 'cyan' },
       { id: 'Seguimiento de Clientes', label: 'Seguimiento', icon: Users, color: 'cyan' },
+      { id: 'Referidos', label: 'Referidos', icon: Users, color: 'green' },
+      { id: 'Contratos', label: 'Contratos', icon: ReceiptText, color: 'cyan' },
       { id: 'Nóminas', label: 'Nóminas', icon: Wallet, color: 'purple' },
+      { id: 'Comisiones', label: 'Comisiones', icon: Wallet, color: 'green' },
       { id: 'Soporte a Clientes', label: 'Soporte', icon: Headphones, color: 'cyan' },
       { id: 'Morosidad', label: 'Morosidad', icon: AlertTriangle, color: 'red' },
       { id: 'Anuncios', label: 'Anuncios', icon: Megaphone, color: 'orange' },
@@ -133,17 +146,22 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
           {activeSection === 'Juego' && <Game />}
           {activeSection === 'Captura y Validación' && <CaptureValidation />}
           {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
+          {activeSection === 'Cotizador' && <QuickQuote />}
+          {activeSection === 'Scripts IA' && <SalesScriptView />}
           {activeSection === 'Chats' && <ChatsView />}
           {activeSection === 'Chat para Clientes' && <ClientChatCrmView />}
           {activeSection === 'Seguimiento de Clientes' && <CustomerFollowUpView />}
+          {activeSection === 'Referidos' && <ReferralsView />}
+          {activeSection === 'Contratos' && <ContractsManager />}
           {activeSection === 'Nóminas' && <Payroll />}
+          {activeSection === 'Comisiones' && <CommissionsView />}
           {activeSection === 'Anuncios' && <Announcements />}
           {activeSection === 'Soporte a Clientes' && <CustomerSupport />}
           {activeSection === 'Morosidad' && <Morosidad />}
           {activeSection === 'Ajustes' && <Settings />}
           {activeSection === 'Integraciones' && <Integrations />}
         </Suspense>
-        {!['Perfil', 'Documentación', 'Juego', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Chat para Clientes', 'Seguimiento de Clientes', 'Nóminas', 'Anuncios', 'Soporte a Clientes', 'Morosidad', 'Ajustes', 'Integraciones'].includes(activeSection) && (
+        {!['Perfil', 'Documentación', 'Juego', 'Captura y Validación', 'Consulta y Seguimiento', 'Cotizador', 'Scripts IA', 'Chats', 'Chat para Clientes', 'Seguimiento de Clientes', 'Referidos', 'Contratos', 'Nóminas', 'Comisiones', 'Anuncios', 'Soporte a Clientes', 'Morosidad', 'Ajustes', 'Integraciones'].includes(activeSection) && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-cyber-electric/50">
               <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>

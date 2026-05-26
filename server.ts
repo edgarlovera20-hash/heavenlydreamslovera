@@ -3180,6 +3180,12 @@ async function startServer() {
       errors: Number(saved.errors || 0),
     };
   }
+  if (process.env.AGENT_AUTO_START !== 'false') {
+    for (const key of Object.keys(agentState)) {
+      agentState[key].active = true;
+    }
+    persistAgentState();
+  }
 
   // ── Helpers compartidos por agentes ──────────────────────
   const extractField = (text: string, key: string) => {

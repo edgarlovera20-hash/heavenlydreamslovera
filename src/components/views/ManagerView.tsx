@@ -45,6 +45,11 @@ const EnterpriseOpsView = lazy(() => import('./EnterpriseOpsView'));
 const ChatsView = lazy(() => import('./ChatsView'));
 const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
 const FinancesEnterpriseView = lazy(() => import('./FinancesEnterpriseView'));
+const CommissionsView = lazy(() => import('./CommissionsView'));
+const ContractsManager = lazy(() => import('./ContractsManager'));
+const QuickQuote = lazy(() => import('./QuickQuote'));
+const ReferralsView = lazy(() => import('./ReferralsView'));
+const SalesScriptView = lazy(() => import('./SalesScriptView'));
 const OPS_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'];
 const ADMIN_ROLES = ['GERENTE', 'ADMINISTRACION'];
 
@@ -226,6 +231,8 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           <NavGroup label="Operativo">
             <NavItem icon={ClipboardCheck} color="green" label="Captura y Validación" active={activeSection === 'Captura y Validación'} onClick={() => setActiveSection('Captura y Validación')} />
             <NavItem icon={FileSearch} color="cyan" label="Consulta y Seguimiento" active={activeSection === 'Consulta y Seguimiento'} onClick={() => setActiveSection('Consulta y Seguimiento')} />
+            <NavItem icon={Package} color="yellow" label="Cotizador" active={activeSection === 'Cotizador'} onClick={() => setActiveSection('Cotizador')} />
+            <NavItem icon={Bot} color="purple" label="Scripts IA" active={activeSection === 'Scripts IA'} onClick={() => setActiveSection('Scripts IA')} />
             <NavItem icon={MessageSquare} color="green" label="Chats" active={activeSection === 'Chats'} onClick={() => setActiveSection('Chats')} />
             <NavItem icon={FolderOpen} color="purple" label="Documentación" active={activeSection === 'Documentación'} onClick={() => setActiveSection('Documentación')} />
           </NavGroup>
@@ -233,10 +240,13 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           <NavGroup label="Promotor de Campo">
             <NavItem icon={MapPin} color="cyan" label="Historial por Zona" active={activeSection === 'Historial por Zona'} onClick={() => setActiveSection('Historial por Zona')} />
             <NavItem icon={Users} color="blue" label="Seguimiento de Clientes" active={activeSection === 'Seguimiento de Clientes'} onClick={() => setActiveSection('Seguimiento de Clientes')} />
+            <NavItem icon={Users} color="green" label="Referidos" active={activeSection === 'Referidos'} onClick={() => setActiveSection('Referidos')} />
           </NavGroup>
 
           <NavGroup label="Administración">
+            <NavItem icon={ReceiptText} color="cyan" label="Contratos" active={activeSection === 'Contratos'} onClick={() => setActiveSection('Contratos')} />
             <NavItem icon={Wallet} color="yellow" label="Nóminas" active={activeSection === 'Nóminas'} onClick={() => setActiveSection('Nóminas')} />
+            {OPS_ROLES.includes(role) && <NavItem icon={ReceiptText} color="green" label="Comisiones" active={activeSection === 'Comisiones'} onClick={() => setActiveSection('Comisiones')} />}
             {ADMIN_ROLES.includes(role) && <NavItem icon={SettingsIcon} color="slate" label="Ajustes" active={activeSection === 'Ajustes'} onClick={() => setActiveSection('Ajustes')} />}
           </NavGroup>
 
@@ -279,7 +289,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           <NavGroup label="Sistema">
             <NavItem icon={User} color="blue" label="Perfil" active={activeSection === 'Perfil'} onClick={() => setActiveSection('Perfil')} />
             {OPS_ROLES.includes(role) && <NavItem icon={Zap} color="yellow" label="Integraciones" active={activeSection === 'Integraciones'} onClick={() => setActiveSection('Integraciones')} />}
-            {OPS_ROLES.includes(role) && <NavItem icon={Bot} color="purple" label="Diseñador IA" active={false} onClick={() => setShowAgentDesigner(true)} />}
+            {OPS_ROLES.includes(role) && <NavItem icon={Bot} color="purple" label="Diseñador IA" active={showAgentDesigner} onClick={() => setShowAgentDesigner(true)} />}
             <NavItem icon={Gamepad2} color="green" label="Juego" active={activeSection === 'Juego'} onClick={() => setActiveSection('Juego')} />
           </NavGroup>
         </nav>
@@ -406,12 +416,17 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <QuickAction icon={ClipboardCheck} label="Nueva Captura" color="green" onClick={() => setActiveSection('Captura y Validación')} />
                   <QuickAction icon={FileSearch} label="Consultas" color="cyan" onClick={() => setActiveSection('Consulta y Seguimiento')} />
+                  <QuickAction icon={Package} label="Cotizador" color="yellow" onClick={() => setActiveSection('Cotizador')} />
+                  <QuickAction icon={Bot} label="Scripts IA" color="purple" onClick={() => setActiveSection('Scripts IA')} />
                   <QuickAction icon={MessageSquare} label="Chats" color="green" onClick={() => setActiveSection('Chats')} />
                   <QuickAction icon={MapPin} label="Por Zona" color="cyan" onClick={() => setActiveSection('Historial por Zona')} />
                   <QuickAction icon={Users} label="Seguimiento" color="blue" onClick={() => setActiveSection('Seguimiento de Clientes')} />
+                  <QuickAction icon={Users} label="Referidos" color="green" onClick={() => setActiveSection('Referidos')} />
+                  <QuickAction icon={ReceiptText} label="Contratos" color="cyan" onClick={() => setActiveSection('Contratos')} />
                   <QuickAction icon={AlertTriangle} label="Morosidad" color="red" onClick={() => setActiveSection('Morosidad')} />
                   <QuickAction icon={Headphones} label="Soporte" color="purple" onClick={() => setActiveSection('Soporte a Clientes')} />
                   {OPS_ROLES.includes(role) && <>
+                    <QuickAction icon={ReceiptText} label="Comisiones" color="green" onClick={() => setActiveSection('Comisiones')} />
                     {ADMIN_ROLES.includes(role) && <QuickAction icon={ReceiptText} label="Finanzas" color="yellow" onClick={() => setActiveSection('Finanzas Enterprise')} />}
                     <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
                     <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
@@ -516,9 +531,13 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Ajustes' && <Settings />}
             {activeSection === 'Perfil' && <Profile />}
             {activeSection === 'Nóminas' && <Payroll />}
+            {activeSection === 'Comisiones' && <CommissionsView />}
             {activeSection === 'Anuncios' && <Announcements />}
             {activeSection === 'Captura y Validación' && <CaptureValidation />}
             {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
+            {activeSection === 'Cotizador' && <QuickQuote />}
+            {activeSection === 'Scripts IA' && <SalesScriptView />}
+            {activeSection === 'Contratos' && <ContractsManager />}
             {activeSection === 'Soporte a Clientes' && <CustomerSupport />}
             {activeSection === 'Chat para Clientes' && <ClientChatCrmView />}
             {activeSection === 'Morosidad' && <Morosidad />}
@@ -549,10 +568,11 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
               />
             )}
             {activeSection === 'Seguimiento de Clientes' && <CustomerFollowUpView />}
+            {activeSection === 'Referidos' && <ReferralsView />}
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios', 'Finanzas Enterprise'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Comisiones', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Cotizador', 'Scripts IA', 'Contratos', 'Chats', 'Seguimiento de Clientes', 'Referidos', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios', 'Finanzas Enterprise'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
