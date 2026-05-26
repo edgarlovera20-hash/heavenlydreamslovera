@@ -23,18 +23,29 @@ function normalizeText(value: string) {
 export function shouldUseWebSearch(text: string) {
   const body = normalizeText(text);
   if (!body || body.length < 6) return false;
+  const raw = String(text || '').trim();
+  if (/^\[(sticker|imagen|documento|audio|video|contacto|ubicacion|mensaje recibido sin texto)/i.test(raw)) return false;
+  if (/^[a-z0-9-]{5,}$/i.test(raw) && /\d/.test(raw)) return false;
   const isLocalFolio = /\b(folio|siac|estatus)\b/.test(body) && /\b[a-z0-9-]*\d[a-z0-9-]{4,}\b/i.test(text);
+  const isLocalCapture = /\b(ine|curp|expediente|captura|venta|cliente|telefono|whatsapp|direccion|colonia|paquete)\b/.test(body)
+    && !/\b(precio|costo|requisito|requisitos|oficial|actualizado|actualizada|internet|web|noticia|noticias)\b/.test(body);
+  const isGreeting = /^(hola|holi|buenos dias|buen dia|buenas tardes|buenas noches|buenas|hi|hello|hey)(\s|[!.?])*$/i.test(body);
   const explicitWeb = /\b(web|internet|google|googlea|noticia|noticias|actualizado|actualizada|hoy|pagina oficial)\b/.test(body);
+  const generalQuestion = /^(que|quien|quienes|cual|cuales|cuando|donde|como|cuanto|cuanta|cuantos|cuantas|por que)\b/.test(body)
+    || /[?¿]/.test(raw)
+    || /\b(explicame|dime|dame informacion|informacion de|resumen de|significa|definicion|definicion de|precio|costo|costos|requisitos|tramite|horario|direccion oficial|telefono oficial|sitio oficial|pagina oficial)\b/.test(body);
   if (isLocalFolio && !explicitWeb) return false;
+  if (isGreeting || isLocalCapture) return false;
   return explicitWeb
     || /\b(busca|buscar|buscame|investiga|investigar|verifica|verificar|revisa en linea|consulta en linea)\b/.test(body)
-    || /^https?:\/\//i.test(String(text || '').trim());
+    || generalQuestion
+    || /^https?:\/\//i.test(raw);
 }
 
 export function extractWebQuery(text: string) {
   const cleaned = String(text || '')
     .replace(/^ariux[:,]?\s*/i, '')
-    .replace(/\b(busca|buscar|buscame|investiga|investigar|googlea|verifica|verificar|revisa en linea|consulta en linea|en internet|en la web|por favor)\b/gi, ' ')
+    .replace(/\b(busca|buscar|buscame|investiga|investigar|googlea|verifica|verificar|revisa en linea|consulta en linea|en internet|en la web|por favor|dime|explicame|dame informacion|informacion de|resumen de)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return (cleaned || String(text || '').trim()).slice(0, 240);
@@ -218,6 +229,7 @@ export async function answerWebQuestion(text: string, context: { promoterName?: 
 
   const prompt = `/no_think
 Eres ARIUX, asistente de Heavenly Dreams. Responde en espanol con informacion verificada desde fuentes web.
+Puedes investigar cualquier tema: telecomunicaciones, tramites, tecnologia, noticias, cultura general, empresas, precios, requisitos, ubicaciones o datos actuales.
 Usa SOLO las fuentes listadas. Si la fuente no confirma algo, dilo. No inventes precios, fechas ni datos.
 Haz una respuesta breve, clara y accionable. Incluye "Fuentes:" con 2 o 3 enlaces.
 ${context.promoterName ? `Promotor: ${context.promoterName}` : ''}
