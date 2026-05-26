@@ -43,9 +43,13 @@ export async function createTwilioCall(to: string, message: string, options: { u
   const params = new URLSearchParams({
     To: to,
     From: from,
-    Url: options.url || `${webhookBaseUrl.replace(/\/$/, '')}/api/twilio/voice-agent?message=${encodeURIComponent(message)}`,
     MachineDetection: 'Enable',
   });
+  if (options.url) {
+    params.set('Url', options.url);
+  } else {
+    params.set('Twiml', buildValidationTwiML(message));
+  }
 
   const res = await fetch(url, {
     method: 'POST',

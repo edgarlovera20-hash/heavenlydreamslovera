@@ -60,35 +60,57 @@ export function buildDynamicVariables(snapshot: Record<string, any>) {
 }
 
 export function buildValidationMessage(scriptType: ValidationScriptType, vars: Record<string, any>) {
-  const base = [
-    `Buenos dias o buenas tardes, soy asistente autorizado de Infinitum. Me comunico con ${vars.customer_name}.`,
-    'Esta llamada sera grabada para fines de calidad en el servicio.',
-    `El motivo de mi llamada es confirmar los detalles de su contratacion realizada el dia de hoy del paquete ${vars.monthly_price_text}.`,
-    `El paquete solicitado es ${vars.package_name || 'el paquete capturado'}${vars.speed ? ` con ${vars.speed} megas` : ''}, con Claro Video y Universal Plus incluidos cuando aplique.`,
+  const promoter = vars.promoter_name || 'promotor autorizado Infinitum';
+  const requestDate = vars.request_date || 'el dia de hoy';
+  const packageName = vars.package_name || 'el paquete solicitado';
+  const speed = vars.speed ? ` con ${vars.speed} megas de velocidad` : '';
+  const streaming = vars.streaming || vars.additional_platforms;
+  const platformText = streaming
+    ? `Tambien cuenta con ${streaming}; si aplica promocion de plataforma por 6 meses sin costo, al finalizar tendra el costo adicional informado y debera cancelarse antes si no la requiere.`
+    : 'Tambien por promocion puede contar con Netflix, HBO o Formula 1 por 6 meses sin costo para 2 dispositivos con anuncios; al finalizar tendra costo adicional si no se cancela antes.';
+  const contactText = [
+    vars.phone ? `celular ${vars.phone}` : 'celular capturado',
+    vars.reference_phone ? `referencia ${vars.reference_phone}` : 'telefono de referencia capturado',
+    vars.email ? `correo ${vars.email}` : 'correo capturado',
+  ].join(', ');
+
+  const intro = [
+    `Buenos dias o buenas tardes, mi nombre es ${promoter}. Me comunico con ${vars.customer_name}.`,
+    'Para seguridad, necesito validar al titular. Esta llamada sera grabada para fines de calidad en el servicio.',
+    `El motivo de mi llamada es confirmar los detalles de su contratacion realizada ${requestDate} del paquete ${vars.monthly_price_text}.`,
+    `El paquete solicitado es ${packageName}${speed}; incluye Claro Video, Universal Plus sin costo y una linea telefonica con llamadas ilimitadas.`,
+    platformText,
+  ];
+
+  const closing = [
+    `Me podria indicar el domicilio donde se instalara el servicio: ${vars.install_address || 'domicilio capturado'}.`,
+    vars.cross_street_1 || vars.cross_street_2 ? `Tambien confirmo sus entre calles: ${[vars.cross_street_1, vars.cross_street_2].filter(Boolean).join(' y ')}.` : 'Tambien necesito confirmar sus entre calles.',
+    `Me podria confirmar sus datos de contacto: ${contactText}.`,
+    'El tecnico se comunicara con usted para agendar dia y hora de instalacion en los siguientes dias, de 3 a 5 dias habiles.',
+    'Tendra alguna duda acerca de su servicio?',
+    'Me podria confirmar si el promotor estaba portando su uniforme?',
+    'Para seguimiento recibira un SMS y un correo electronico. Le invitamos a descargar la app de Telmex; tambien esta disponible el numero 800 123 2222 para dudas o aclaraciones.',
+    `Le agradezco que haya tomado mi llamada, le atendio ${promoter}. Que tenga un excelente dia.`,
   ];
 
   if (scriptType === 'portabilidad') {
-    base.push(
-      'Por ser portabilidad, es importante recordar que el servicio no cuenta con canales de television abierta ni de paga, y la cancelacion con la compania actual la debe solicitar el titular despues de la instalacion.',
-      vars.port_number ? `Tambien confirmaremos el numero que se va a portar: ${vars.port_number}.` : 'Tambien confirmaremos el numero que se va a portar.'
-    );
-  } else {
-    base.push(
-      'Es importante mencionar que no hay promocion de meses gratis.',
-      'Para linea nueva, los gastos de instalacion son de 1600 pesos; se realiza un pago inicial de 400 pesos por la liga o correo indicado, y el resto puede diferirse segun la configuracion capturada.'
-    );
+    return [
+      ...intro,
+      'Es importante mencionarle que su servicio no cuenta con canales de television abierta ni de paga, y no cuenta con gastos de instalacion por ser portabilidad.',
+      'Tambien le recordamos que la cancelacion con su compania actual debe realizarla el titular despues de la instalacion del nuevo servicio.',
+      'El pago debe realizarlo directamente en sucursal o por medio del estado de cuenta que llega a su correo. No debe generar ningun pago en efectivo ni transferencia al promotor o al tecnico al momento de la instalacion.',
+      vars.port_number ? `Me podria confirmar el numero de casa o numero que se va a portar: ${vars.port_number}.` : 'Me podria confirmar el numero de casa o numero que se va a portar.',
+      ...closing,
+    ].join(' ');
   }
 
-  base.push(
-    'No debe realizar ningun pago en efectivo ni transferencia al promotor ni al tecnico.',
-    `Necesito confirmar el domicilio de instalacion: ${vars.install_address || 'domicilio capturado'}.`,
-    vars.cross_street_1 || vars.cross_street_2 ? `Las entre calles capturadas son ${[vars.cross_street_1, vars.cross_street_2].filter(Boolean).join(' y ')}.` : 'Tambien confirmaremos sus entre calles.',
-    `Confirmaremos celular, telefono de referencia y correo: ${vars.phone || 'sin telefono'}, ${vars.reference_phone || 'sin referencia'}, ${vars.email || 'sin correo'}.`,
-    'Si el cliente tiene dudas, responder de forma clara. No hacer labor de venta; si pide cambiar paquete o necesita explicacion comercial, marcar requiere_revision.',
-    'Al final confirma si el promotor portaba uniforme y resume si la validacion procede.'
-  );
-
-  return base.join(' ');
+  return [
+    ...intro,
+    'Es importante mencionarle que su servicio no cuenta con canales de television abierta ni de paga, y que no hay promocion de meses gratis.',
+    'Los gastos de instalacion son de 1600 pesos. Se realiza un pago inicial de 400 pesos por medio de la liga o correo indicado; despues se realiza la instalacion y el restante puede diferirse a 12 meses segun la configuracion capturada. En una sola exhibicion, los gastos son de 1600 pesos y se reflejan en la primera facturacion o estado de cuenta.',
+    'El pago debe realizarlo directamente en sucursal o por medio de la liga de pago que llega a su correo. No debe generar ningun pago en efectivo ni transferencia al promotor o al tecnico.',
+    ...closing,
+  ].join(' ');
 }
 
 export function inferProposedResult(text: string): 'validada' | 'rechazada' | 'requiere_revision' {

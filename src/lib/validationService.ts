@@ -33,13 +33,25 @@ export interface ValidationRequest {
 }
 
 export const DEFAULT_SCRIPT = [
-  'Hola, te llamo de parte de Heavenly Dreams. ¿Estoy hablando con [[NOMBRE_CLIENTE]]?',
+  'Buenos dias o buenas tardes, mi nombre es promotor autorizado Infinitum. Me comunico con [[NOMBRE_CLIENTE]].',
   '',
-  'Perfecto. Le llamo para confirmar su solicitud de servicio de internet. ¿Usted solicitó el paquete [[PAQUETE]] con una renta mensual de $[[PRECIO]] pesos?',
+  'Para seguridad, necesito validar al titular. Esta llamada sera grabada para fines de calidad en el servicio.',
   '',
-  'Excelente. ¿Puede confirmarme que está de acuerdo con los términos del servicio y que autoriza la instalación en su domicilio?',
+  'El motivo de mi llamada es confirmar los detalles de su contratacion realizada el dia de hoy del paquete $[[PRECIO]]. ¿Es correcto?',
   '',
-  'Muchas gracias por su confirmación. En breve un técnico se pondrá en contacto con usted para coordinar la instalación. Que tenga buen día.',
+  'El paquete solicitado es [[PAQUETE]]; incluye Claro Video, Universal Plus sin costo y una linea telefonica con llamadas ilimitadas. Si aplica promocion de plataforma por 6 meses sin costo, al finalizar tendra costo adicional y debe cancelarse antes si no la requiere.',
+  '',
+  'Es importante mencionarle que no debe generar ningun pago en efectivo ni transferencia al promotor o al tecnico. El pago debe realizarse directamente por los medios oficiales indicados.',
+  '',
+  'Me podria indicar el domicilio donde se instalara el servicio, incluyendo calle, numero exterior, numero interior, colonia, municipio y codigo postal. Tambien confirme sus entre calles.',
+  '',
+  'Me podria confirmar su numero de celular, telefono de referencia y correo electronico.',
+  '',
+  'El tecnico se comunicara para agendar dia y hora de instalacion en los siguientes dias, de 3 a 5 dias habiles. ¿Tiene alguna duda acerca de su servicio?',
+  '',
+  '¿Me podria confirmar si el promotor estaba portando su uniforme?',
+  '',
+  'Para seguimiento recibira un SMS y un correo electronico. Le invitamos a descargar la app de Telmex; tambien esta disponible el numero 800 123 2222 para dudas o aclaraciones. Gracias por tomar mi llamada, que tenga excelente dia.',
 ].join('\n');
 
 export const DEFAULT_CONFIG: ValidationConfig = {
