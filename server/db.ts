@@ -1609,7 +1609,9 @@ function normalizeAgentProfile(row: any) {
   } : null;
 }
 
-const DEFAULT_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
+const LEGACY_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
+const DEFAULT_ARIUX_MESSAGE = 'Puedo ayudarte con 🔎 consulta de folios, 📁 guardar expedientes e 📝 iniciar capturas. ¿Qué necesitas hoy?';
+const FIRST_CONTACT_ARIUX_MESSAGE = 'Hola, buenos días. Mi nombre es ARIUX 🤖, soy el agente inteligente de Heavenly Dreams. Estoy aquí para ayudarte con consulta de folios 🔎, guardar expedientes 📁 e iniciar capturas 📝. ¿Cuál es tu nombre o cómo te gustaría que me dirija a ti?';
 const LEGACY_RECEPTIONIST_SELF_KNOWLEDGE = 'Soy ARIUX, el agente de WhatsApp y Telegram para promotores de Heavenly Dreams. Ayudo a consultar datos, iniciar conversaciones y ordenar informacion antes de pasarla al flujo operativo.';
 const LEGACY_RECEPTIONIST_KNOWLEDGE_BASE = 'Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Si falta informacion, hago preguntas cortas y concretas.';
 const DEFAULT_AGENT_FUNCTIONS = [
@@ -1662,13 +1664,14 @@ const DEFAULT_RECEPTIONIST_PROFILE = {
   name: 'ARIUX',
   role: 'Agente de promotores',
   personality: 'Cordial, claro, rapido y profesional. Habla como apoyo de campo: directo, atento y sin sonar como robot generico.',
-  self_knowledge: DEFAULT_ARIUX_MESSAGE,
+  self_knowledge: FIRST_CONTACT_ARIUX_MESSAGE,
   knowledge_base: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta, 💬 orientar por WhatsApp o Telegram, 🌐 consultar informacion oficial de Telmex Hogar/Negocio/cobertura y 🗺️ crear rutas con Google Maps. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Para Telmex puedo responder paquetes, beneficios, precios, promociones, fibra optica y mapas de cobertura desde fuentes oficiales. Para rutas debo pedir origen y destino si falta informacion. Si falta informacion, hago preguntas cortas y concretas.',
   learned_notes: JSON.stringify([]),
   metadata: JSON.stringify({
     audience: 'promotores',
     channel: 'whatsapp_telegram',
     defaultMessage: DEFAULT_ARIUX_MESSAGE,
+    firstContactMessage: FIRST_CONTACT_ARIUX_MESSAGE,
     functions: DEFAULT_AGENT_FUNCTIONS,
     humor: 'Ligero y respetuoso; solo usa humor cuando ayuda a bajar tension.',
     responseStyle: 'Responde breve, claro, accionable y con siguiente paso concreto.',
@@ -1850,7 +1853,7 @@ export const AgentProfiles = {
       const missingDefaultFunctions = DEFAULT_AGENT_FUNCTIONS.filter(defaultItem => (
         !currentFunctions.some((item: any) => item?.id === defaultItem.id)
       ));
-      const needsDefaultMessage = !metadata.defaultMessage;
+      const needsDefaultMessage = !metadata.defaultMessage || metadata.defaultMessage === LEGACY_ARIUX_MESSAGE || /hola,\s*soy\s*ariux/i.test(String(metadata.defaultMessage || ''));
       const needsDefaultFunctions = !Array.isArray(metadata.functions) || missingDefaultFunctions.length > 0;
       const needsLegacySelfKnowledge = String(existing?.selfKnowledge || '').trim() === LEGACY_RECEPTIONIST_SELF_KNOWLEDGE;
       const needsLegacyKnowledgeBase = String(existing?.knowledgeBase || '').trim() === LEGACY_RECEPTIONIST_KNOWLEDGE_BASE;
@@ -1871,7 +1874,8 @@ export const AgentProfiles = {
           metadata: {
             ...parseJson(DEFAULT_RECEPTIONIST_PROFILE.metadata, {}),
             ...metadata,
-            defaultMessage: metadata.defaultMessage || DEFAULT_ARIUX_MESSAGE,
+            defaultMessage: needsDefaultMessage ? DEFAULT_ARIUX_MESSAGE : metadata.defaultMessage,
+            firstContactMessage: metadata.firstContactMessage || FIRST_CONTACT_ARIUX_MESSAGE,
             functions: Array.isArray(metadata.functions) ? [...metadata.functions, ...missingDefaultFunctions] : DEFAULT_AGENT_FUNCTIONS,
           },
         });

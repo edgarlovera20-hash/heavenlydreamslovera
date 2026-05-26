@@ -29,8 +29,9 @@ interface AgentDecision {
 type SendChannelMessage = (channel: string, target: string, message: string) => Promise<any>;
 const INTENTS: Intent[] = ['venta', 'consulta_folio', 'soporte', 'morosidad', 'busqueda_web', 'otro'];
 const PROPOSED_ACTIONS: ProposedAction[] = ['create_sale', 'update_lead', 'schedule_followup', 'escalate_human'];
-const DEFAULT_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
-const PROMOTER_NAME_QUESTION = 'Por cierto, ¿cómo te llamas? Así te guardo en mi memoria y te atiendo por tu nombre en WhatsApp o Telegram. 🙌';
+const LEGACY_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
+const DEFAULT_ARIUX_MESSAGE = 'Puedo ayudarte con 🔎 consulta de folios, 📁 guardar expedientes e 📝 iniciar capturas. ¿Qué necesitas hoy?';
+const FIRST_CONTACT_INTRO = 'Hola, buenos días. Mi nombre es ARIUX 🤖, soy el agente inteligente de Heavenly Dreams. Estoy aquí para ayudarte con consulta de folios 🔎, guardar expedientes 📁 e iniciar capturas 📝. ¿Cuál es tu nombre o cómo te gustaría que me dirija a ti?';
 const AI_DECISION_TIMEOUT_MS = Math.max(3000, Number(process.env.AGENT_AI_TIMEOUT_MS || 45000));
 
 function json(value: any) {
@@ -56,7 +57,7 @@ function promoterFirstName(conversation: any) {
   const memory = conversation?.memory || {};
   const promoter = memory.promoter || {};
   const source = promoter.nameConfirmed
-    ? cleanPersonName(promoter.firstName) || cleanPersonName(promoter.fullName)
+    ? cleanPersonName(promoter.preferredName) || cleanPersonName(promoter.firstName) || cleanPersonName(promoter.fullName)
     : null;
   return source?.split(/\s+/)[0] || null;
 }
@@ -71,14 +72,15 @@ function shouldAskPromoterName(conversation: any, decision: AgentDecision) {
   const memory = conversation?.memory || {};
   const promoter = memory.promoter || {};
   if (promoter.nameConfirmed || decision.extractedFields?.promoterNameConfirmed) return false;
-  if (promoter.nameRequestedAt || decision.extractedFields?._nameRequestSent) return false;
+  if (promoter.nameRequestedAt || promoter.introSentAt || decision.extractedFields?._nameRequestSent) return false;
   if (promoter.isGroup || conversation?.is_group) return false;
   return true;
 }
 
-function appendPromoterNameQuestion(reply: string) {
+function appendPromoterNameQuestion(reply: string, intent?: Intent) {
   if (/c[oó]mo te llamas|tu nombre|me dices tu nombre/i.test(reply)) return reply;
-  return `${reply}\n\n${PROMOTER_NAME_QUESTION}`.trim();
+  if (!reply || intent === 'otro') return FIRST_CONTACT_INTRO;
+  return `${reply}\n\n${FIRST_CONTACT_INTRO}`.trim();
 }
 
 function personalizeReply(reply: any, firstName?: string | null) {
@@ -99,9 +101,9 @@ function personalizeDecision(conversation: any, decision: AgentDecision): AgentD
   return {
     ...decision,
     extractedFields: askName
-      ? { ...decision.extractedFields, _nameRequestSent: true }
+      ? { ...decision.extractedFields, _nameRequestSent: true, _introSent: true }
       : decision.extractedFields,
-    proposedReply: askName && reply ? appendPromoterNameQuestion(reply) : reply,
+    proposedReply: askName ? appendPromoterNameQuestion(reply || FIRST_CONTACT_INTRO, decision.intent) : reply,
   };
 }
 
@@ -140,6 +142,260 @@ function extractFields(text: string, conversation: any) {
 
 function extractEmail(text: string) {
   return String(text || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || null;
+}
+
+function uniquePhones(text: string) {
+  const matches = String(text || '').match(/(?:\+?52)?\s*\d[\d\s().-]{8,}\d/g) || [];
+  return Array.from(new Set(matches.map(normalizePhone).filter(phone => phone && phone.length === 10))) as string[];
+}
+
+function normalizedBody(text: string) {
+  return removeAccents(String(text || '')).toLowerCase();
+}
+
+function firstTruthy(...values: any[]) {
+  for (const value of values) {
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  return null;
+}
+
+function isAffirmative(text: string) {
+  return /^(si|sí|ok|okay|vale|va|correcto|claro|adelante|inicia|iniciar|empezar|dale|hazlo)\b/i.test(normalizedBody(text).trim());
+}
+
+function isNegative(text: string) {
+  return /^(no|negativo|despues|luego|aun no|todavia no)\b/i.test(normalizedBody(text).trim());
+}
+
+function messageMedia(message: any) {
+  const media = message?.metadata?.media;
+  return media && typeof media === 'object' ? media : null;
+}
+
+function mediaLooksLikeCaptureDocument(media: any, text: string) {
+  const haystack = normalizedBody(`${text} ${media?.fileName || ''} ${media?.kind || ''} ${media?.docType || ''}`);
+  if (/(ine|curp|comprobante|domicilio|recibo|cfe|telmex|expediente|pdf|documento)/i.test(haystack)) return true;
+  return ['image', 'document'].includes(String(media?.kind || '').toLowerCase());
+}
+
+function extractOcrFields(media: any) {
+  const ocr = media?.ocr || {};
+  const fields = ocr.fields && typeof ocr.fields === 'object' ? ocr.fields : {};
+  const fullName = firstTruthy(
+    fields.nombreCompleto,
+    fields.nombre_completo,
+    [fields.nombre, fields.apellidoPaterno, fields.apellidoMaterno].filter(Boolean).join(' '),
+    [fields.nombres, fields.apellido_paterno, fields.apellido_materno].filter(Boolean).join(' '),
+  );
+  return Object.fromEntries(Object.entries({
+    nombre: fullName,
+    curp: firstTruthy(fields.curp),
+    folioIne: firstTruthy(fields.folioIne, fields.claveElector, fields.cic),
+    addressRaw: firstTruthy(fields.domicilio, fields.direccion, fields.address),
+    direccion: firstTruthy(fields.domicilio, fields.direccion, fields.address),
+    colonia: firstTruthy(fields.colonia),
+    codigoPostal: firstTruthy(fields.codigoPostal, fields.cp),
+  }).filter(([, value]) => value != null && String(value).trim() !== ''));
+}
+
+function extractCaptureFields(text: string, conversation: any, media?: any) {
+  const memory = conversation?.memory || {};
+  const known = memory.knownFields || {};
+  const draftFields = memory.captureDraft?.fields || {};
+  const body = normalizedBody(text);
+  const phones = uniquePhones(text);
+  const titularFromLabel = normalizePhone(
+    extractField(text, 'tel(?:efo(?:no)?)?\\s*(?:titular|cliente|principal)?|whatsapp')
+  );
+  const referenceFromLabel = normalizePhone(
+    extractField(text, 'tel(?:efo(?:no)?)?\\s*(?:referencia|ref)|referencia')
+  );
+  const serviceMode = /portab|n[uú]mero a portar/.test(body)
+    ? 'portabilidad'
+    : /(servicio|linea|línea)\s+nuev|nuevo servicio|alta nueva/.test(body)
+      ? 'nuevo'
+      : null;
+  const segment = /negocio|pyme|empresa|comercial/.test(body)
+    ? 'negocio'
+    : /residencial|hogar|casa/.test(body)
+      ? 'residencial'
+      : null;
+  const productType = /doble\s*play|telefono\s*\+\s*internet|internet\s*\+\s*telefono/.test(body)
+    ? 'doble_play'
+    : /infinitum\s*puro|solo\s*internet/.test(body)
+      ? 'infinitum_puro'
+      : null;
+  const allFields = {
+    ...known,
+    ...draftFields,
+    ...extractOcrFields(media),
+    nombre: extractField(text, 'nombre|cliente|titular') || draftFields.nombre || known.nombre || extractOcrFields(media).nombre,
+    titularPhone: titularFromLabel || phones[0] || draftFields.titularPhone || known.titularPhone || known.telefono,
+    telefono: titularFromLabel || phones[0] || draftFields.telefono || known.telefono,
+    referencePhone: referenceFromLabel || phones.find(phone => phone !== (titularFromLabel || phones[0])) || draftFields.referencePhone || known.referencePhone,
+    email: extractEmail(text) || draftFields.email || known.email,
+    addressRaw: extractField(text, 'direcci[oó]n|domicilio|calle') || draftFields.addressRaw || known.addressRaw || known.direccion,
+    direccion: extractField(text, 'direcci[oó]n|domicilio|calle') || draftFields.direccion || known.direccion,
+    colonia: extractField(text, 'colonia') || draftFields.colonia || known.colonia,
+    paquete: extractField(text, 'paquete|plan|internet') || draftFields.paquete || known.paquete,
+    serviceMode: serviceMode || draftFields.serviceMode || known.serviceMode,
+    segment: segment || draftFields.segment || known.segment,
+    productType: productType || draftFields.productType || known.productType,
+    portabilityNumber: normalizePhone(extractField(text, 'n[uú]mero\\s*a\\s*portar|numero\\s*a\\s*portar|portar')) || draftFields.portabilityNumber || known.portabilityNumber,
+    portabilityCompany: extractField(text, 'compa(?:ñ|n)ia|operador|empresa actual') || draftFields.portabilityCompany || known.portabilityCompany,
+    portabilityNip: text.match(/\bnip\D*(\d{4})\b/i)?.[1] || draftFields.portabilityNip || known.portabilityNip,
+  };
+
+  if (!allFields.addressRaw && /(calle|avenida|av\.|colonia|cp|codigo postal|c[oó]digo postal|mz|lt|lote|manzana)/i.test(text) && text.length > 18) {
+    allFields.addressRaw = text.trim();
+    allFields.direccion = text.trim();
+  }
+
+  return Object.fromEntries(Object.entries(allFields).filter(([, value]) => value != null && String(value).trim() !== ''));
+}
+
+function captureMissing(fields: Record<string, any>) {
+  const missing: string[] = [];
+  if (!fields.nombre) missing.push('nombre');
+  if (!fields.titularPhone && !fields.telefono) missing.push('titularPhone');
+  if (!fields.referencePhone) missing.push('referencePhone');
+  if (!fields.email) missing.push('email');
+  if (!fields.addressRaw && !fields.direccion) missing.push('addressRaw');
+  if (!fields.serviceMode) missing.push('serviceMode');
+  if (!fields.segment) missing.push('segment');
+  if (!fields.productType) missing.push('productType');
+  if (!fields.paquete) missing.push('paquete');
+  if (fields.serviceMode === 'portabilidad') {
+    if (!fields.portabilityNumber) missing.push('portabilityNumber');
+    if (!fields.portabilityCompany) missing.push('portabilityCompany');
+    if (!fields.portabilityNip) missing.push('portabilityNip');
+  }
+  return missing;
+}
+
+function stageForMissing(missing: string[]) {
+  if (missing.some(key => ['titularPhone', 'referencePhone', 'email'].includes(key))) return 'collecting_contact';
+  if (missing.includes('addressRaw')) return 'collecting_address';
+  if (missing.some(key => ['serviceMode', 'segment', 'productType', 'paquete'].includes(key))) return 'collecting_service';
+  if (missing.some(key => key.startsWith('portability'))) return 'collecting_portability';
+  return 'ready_for_review';
+}
+
+function promptForMissing(missing: string[]) {
+  const labels: Record<string, string> = {
+    nombre: 'nombre completo del titular',
+    titularPhone: 'teléfono del titular a 10 dígitos',
+    referencePhone: 'teléfono de referencia a 10 dígitos',
+    email: 'correo electrónico',
+    addressRaw: 'dirección completa de instalación',
+    serviceMode: 'si es servicio nuevo o portabilidad',
+    segment: 'si es residencial o negocio',
+    productType: 'si será doble play o infinitum puro',
+    paquete: 'paquete o plan de interés',
+    portabilityNumber: 'número a portar',
+    portabilityCompany: 'compañía actual',
+    portabilityNip: 'NIP de portabilidad de 4 dígitos',
+  };
+  return missing.slice(0, 3).map(key => labels[key] || key).join(', ');
+}
+
+function captureIntentRequested(text: string, media?: any) {
+  const body = normalizedBody(text);
+  return /\b(captura|capturar|venta|contratar|contratacion|contratación|alta|instalacion|instalación|cliente nuevo|quiero internet|servicio)\b/.test(body)
+    || Boolean(media && mediaLooksLikeCaptureDocument(media, text));
+}
+
+function buildDocumentSummary(media: any) {
+  if (!media) return null;
+  const label = media.docType || media.kind || 'documento';
+  const ocr = media.ocr?.status === 'completed' ? ' OCR listo.' : media.ocr?.status === 'failed' ? ' OCR pendiente/manual.' : '';
+  return `${label}${media.fileName ? ` (${media.fileName})` : ''}.${ocr}`;
+}
+
+function buildCaptureDecision(conversation: any, message: any, baseFields: Record<string, any>) {
+  const text = String(message.body || '');
+  const media = messageMedia(message);
+  const previousDraft = conversation?.memory?.captureDraft || {};
+  const activeStage = String(previousDraft.stage || 'idle');
+  const hasActiveDraft = activeStage !== 'idle';
+  const wantsStart = hasActiveDraft && activeStage === 'offer_capture_after_document' && isAffirmative(text);
+  const declinedStart = hasActiveDraft && activeStage === 'offer_capture_after_document' && isNegative(text);
+  const mediaDocument = media && mediaLooksLikeCaptureDocument(media, text);
+
+  if (mediaDocument && !hasActiveDraft) {
+    return {
+      fields: {
+        ...baseFields,
+        _captureDraft: {
+          stage: 'offer_capture_after_document',
+          fields: { ...baseFields, ...extractCaptureFields(text, conversation, media) },
+          documents: [media],
+          ocr: media.ocr || null,
+          missing: [],
+          lastPromptedField: 'start_capture',
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      reply: `Recibí el documento 📎${buildDocumentSummary(media) ? ` ${buildDocumentSummary(media)}` : ''}\n¿Quieres iniciar una captura de venta con este expediente?`,
+      actions: [] as ProposedAction[],
+    };
+  }
+
+  if (declinedStart) {
+    return {
+      fields: {
+        ...baseFields,
+        _captureDraft: {
+          ...previousDraft,
+          stage: 'idle',
+          lastPromptedField: null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      reply: 'Perfecto, dejo el documento guardado en expediente. Cuando quieras iniciar captura, dime “iniciar captura”.',
+      actions: [] as ProposedAction[],
+    };
+  }
+
+  if (hasActiveDraft && activeStage === 'offer_capture_after_document' && !wantsStart) return null;
+  if (!hasActiveDraft && !captureIntentRequested(text, media)) return null;
+
+  const mergedFields = {
+    ...(previousDraft.fields || {}),
+    ...baseFields,
+    ...extractCaptureFields(text, conversation, media),
+  };
+  const documents = [
+    ...(Array.isArray(previousDraft.documents) ? previousDraft.documents : []),
+    ...(media ? [media] : []),
+  ].filter((doc, index, list) => doc && list.findIndex(item => item.documentId === doc.documentId && item.fileName === doc.fileName) === index);
+  const missing = captureMissing(mergedFields);
+  const stage = stageForMissing(missing);
+  const draft = {
+    ...previousDraft,
+    stage: wantsStart && missing.length ? stage : stage,
+    fields: mergedFields,
+    documents,
+    ocr: media?.ocr || previousDraft.ocr || null,
+    missing,
+    lastPromptedField: missing[0] || null,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (missing.length === 0) {
+    return {
+      fields: { ...mergedFields, _captureDraft: draft },
+      reply: 'Listo. Ya armé el borrador con los datos recibidos. Lo mando a revisión para confirmarlo antes de capturarlo oficialmente.',
+      actions: ['create_sale', 'schedule_followup'] as ProposedAction[],
+    };
+  }
+
+  return {
+    fields: { ...mergedFields, missing, _captureDraft: draft },
+    reply: `Perfecto, voy armando la captura. Para avanzar necesito: ${promptForMissing(missing)}.`,
+    actions: ['update_lead'] as ProposedAction[],
+  };
 }
 
 function extractFolioCandidate(text: string) {
@@ -255,11 +511,22 @@ function classifyIntent(text: string): { intent: Intent; confidence: number } {
 function requiredMissing(fields: Record<string, any>) {
   const required = [
     ['nombre', 'nombre completo'],
-    ['telefono', 'telefono WhatsApp a 10 digitos'],
-    ['direccion', 'direccion o domicilio'],
+    [fields.titularPhone ? 'titularPhone' : 'telefono', 'telefono del titular a 10 digitos'],
+    ['referencePhone', 'telefono de referencia a 10 digitos'],
+    ['email', 'correo electronico'],
+    [fields.addressRaw ? 'addressRaw' : 'direccion', 'direccion o domicilio'],
+    ['serviceMode', 'servicio nuevo o portabilidad'],
+    ['segment', 'residencial o negocio'],
+    ['productType', 'doble play o infinitum puro'],
     ['paquete', 'paquete o plan de interes'],
   ];
-  return required.filter(([key]) => !fields[key]).map(([, label]) => label);
+  const missing = required.filter(([key]) => !fields[key]).map(([, label]) => label);
+  if (fields.serviceMode === 'portabilidad') {
+    if (!fields.portabilityNumber) missing.push('numero a portar');
+    if (!fields.portabilityCompany) missing.push('compania actual');
+    if (!fields.portabilityNip) missing.push('NIP de portabilidad de 4 digitos');
+  }
+  return missing;
 }
 
 function buildSalesReply(fields: Record<string, any>, missing: string[]) {
@@ -339,6 +606,7 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
   const confidence = promoterName?.source === 'name_reply' ? 0.96 : classified.confidence;
   const fields = {
     ...extractFields(text, conversation),
+    ...extractCaptureFields(text, conversation, messageMedia(message)),
     ...(promoterName ? {
       promoterName: promoterName.fullName,
       promoterFirstName: promoterName.firstName,
@@ -346,6 +614,18 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
       promoterNameSource: promoterName.source,
     } : {}),
   };
+
+  const captureFlow = buildCaptureDecision(conversation, message, fields);
+  if (captureFlow) {
+    return personalizeDecision(conversation, {
+      intent: 'venta',
+      confidence: Math.max(confidence, 0.9),
+      extractedFields: captureFlow.fields,
+      proposedReply: captureFlow.reply,
+      proposedActions: captureFlow.actions,
+      requiresApproval: true,
+    });
+  }
 
   const macro = matchProfileMacro(text, profile);
   if (macro) {
@@ -459,7 +739,9 @@ function cleanReply(value: any) {
 }
 
 function defaultProfileReply(profile: any) {
-  return String(profile?.metadata?.defaultMessage || DEFAULT_ARIUX_MESSAGE).trim();
+  const configured = String(profile?.metadata?.defaultMessage || '').trim();
+  if (!configured || configured === LEGACY_ARIUX_MESSAGE || /hola,\s*soy\s*ariux/i.test(configured)) return DEFAULT_ARIUX_MESSAGE;
+  return configured;
 }
 
 function getDesignerConfig(profile: any) {
@@ -533,8 +815,12 @@ Reglas:
 - ARIUX debe responder ante cualquier mensaje entrante, aunque sea corto, raro o incompleto.
 - Tono: social, profesional, rapido, con humor ligero cuando ayude. Usa 1 a 3 emojis utiles, sin saturar.
 - Si hay nombre del promotor registrado, hablale por su nombre de forma natural y personalizada.
-- Si no hay nombre confirmado del promotor, pide su nombre una sola vez para guardarlo en memoria y personalizar la charla.
+- Si no hay nombre confirmado del promotor, pide su nombre una sola vez con presentacion formal para guardarlo en memoria y personalizar la charla.
 - Si el promotor dice "me llamo", "soy" o responde solo con su nombre, confirma que lo guardaste y usalo desde ese momento.
+- Si hay captureDraft activo, continua el flujo y pide solo los datos faltantes.
+- Si recibe INE/CURP/comprobante y el usuario acepta iniciar captura, recolecta telefono titular, telefono referencia, correo, direccion, tipo de servicio, segmento, producto y paquete.
+- Si es portabilidad, pide numero a portar, compania actual y NIP de 4 digitos.
+- La captura final siempre queda como borrador pendiente de aprobacion humana.
 - Siempre termina con una pregunta o siguiente paso concreto cuando falte contexto.
 - No inventes folios, telefonos, nombres, paquetes ni direcciones.
 - Todas las acciones requieren aprobacion humana aunque el JSON diga lo contrario.
@@ -732,6 +1018,8 @@ function mergeMemory(conversation: any, decision: AgentDecision) {
     '_web',
     'sources',
     '_nameRequestSent',
+    '_introSent',
+    '_captureDraft',
     'promoterName',
     'promoterFirstName',
     'promoterNameConfirmed',
@@ -748,15 +1036,37 @@ function mergeMemory(conversation: any, decision: AgentDecision) {
     || previousPromoter.firstName
     || null;
   const nowIso = new Date().toISOString();
+  const incomingDraft = decision.extractedFields?._captureDraft && typeof decision.extractedFields._captureDraft === 'object'
+    ? decision.extractedFields._captureDraft
+    : null;
+  const captureDraft = incomingDraft
+    ? {
+        ...(previous.captureDraft || {}),
+        ...incomingDraft,
+        fields: {
+          ...((previous.captureDraft || {}).fields || {}),
+          ...(incomingDraft.fields || {}),
+        },
+        documents: Array.isArray(incomingDraft.documents)
+          ? incomingDraft.documents
+          : Array.isArray((previous.captureDraft || {}).documents)
+            ? (previous.captureDraft || {}).documents
+            : [],
+        updatedAt: incomingDraft.updatedAt || nowIso,
+      }
+    : previous.captureDraft;
   return {
     ...previous,
     knownFields,
+    ...(captureDraft ? { captureDraft } : {}),
     promoter: {
       ...previousPromoter,
+      ...(decision.extractedFields?._introSent && !previousPromoter.introSentAt ? { introSentAt: nowIso } : {}),
       ...(decision.extractedFields?._nameRequestSent && !previousPromoter.nameRequestedAt ? { nameRequestedAt: nowIso } : {}),
       ...(promoterName ? {
         fullName: promoterName,
         firstName: promoterFirst,
+        preferredName: promoterFirst,
         nameConfirmed: true,
         nameSource: decision.extractedFields?.promoterNameSource || 'self_reported',
         nameConfirmedAt: nowIso,
@@ -788,21 +1098,25 @@ function createOutboxItems(conversation: any, message: any, decisionId: string, 
   }
 
   if (decision.proposedActions.includes('create_sale')) {
-    items.push(AgentOutbox.create({
-      conversation_id: conversation.id,
-      decision_id: decisionId,
-      type: 'action',
-      channel: conversation.channel,
-      target: conversation.external_chat_id,
-      message: null,
-      action: 'create_sale',
-      payload: {
-        ...decision.extractedFields,
-        sourceMessageId: message.id,
-        conversationId: conversation.id,
+    const alreadyQueued = (AgentOutbox.getByConversation(conversation.id, 30) as any[])
+      .some(item => item?.action === 'create_sale' && ['pending_approval', 'approved'].includes(String(item.status || '')));
+    if (!alreadyQueued) {
+      items.push(AgentOutbox.create({
+        conversation_id: conversation.id,
+        decision_id: decisionId,
+        type: 'action',
         channel: conversation.channel,
-      },
-    }));
+        target: conversation.external_chat_id,
+        message: null,
+        action: 'create_sale',
+        payload: {
+          ...decision.extractedFields,
+          sourceMessageId: message.id,
+          conversationId: conversation.id,
+          channel: conversation.channel,
+        },
+      }));
+    }
   }
 
   if (decision.proposedActions.includes('schedule_followup')) {
@@ -882,31 +1196,41 @@ export async function runAgentForConversation(conversationId: string) {
 
 function salePayloadFromOutbox(item: any, actor: any) {
   const payload = item.payload || {};
+  const draftFields = payload._captureDraft?.fields || {};
+  const fields = { ...draftFields, ...payload };
   return {
     id: randomUUID(),
     folio: null,
     asesor_id: actor?.sub || actor?.uid || 'agente_whatsapp',
     asesor_nombre: actor?.nombre || actor?.name || 'Copiloto WhatsApp',
     status: 'pendiente',
-    nombres: payload.nombre || null,
+    nombres: fields.nombre || null,
     apellidos: null,
-    telefono: payload.telefono || null,
-    direccion: payload.direccion || null,
-    colonia: payload.colonia || null,
+    telefono: fields.titularPhone || fields.telefono || null,
+    direccion: fields.addressRaw || fields.direccion || null,
+    colonia: fields.colonia || null,
     municipio: null,
-    tipo_cliente: null,
-    tipo_servicio: null,
-    plan: payload.paquete || null,
+    tipo_cliente: fields.segment || null,
+    tipo_servicio: fields.serviceMode || fields.productType || null,
+    plan: fields.paquete || null,
     renta_mensual: null,
-    zona: payload.zona || null,
+    zona: fields.zona || null,
     notas: `Borrador aprobado desde ${item.channel}: ${item.target}`,
     fecha_solicitud: new Date().toISOString(),
     metadata: json({
       source: item.channel,
       conversationId: item.conversation_id,
       outboxId: item.id,
-      sourceMessageId: payload.sourceMessageId || null,
+      sourceMessageId: fields.sourceMessageId || null,
       proposedBy: 'agent_orchestrator',
+      referencePhone: fields.referencePhone || null,
+      email: fields.email || null,
+      curp: fields.curp || null,
+      folioIne: fields.folioIne || null,
+      portabilityNumber: fields.portabilityNumber || null,
+      portabilityCompany: fields.portabilityCompany || null,
+      portabilityNip: fields.portabilityNip || null,
+      documents: payload._captureDraft?.documents || [],
     }),
   };
 }

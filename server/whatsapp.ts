@@ -1,5 +1,6 @@
 import makeWASocket, {
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
@@ -9,6 +10,8 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ingestChannelMessage, recordOutgoingChannelMessage, upsertChannelAccount } from './messaging';
+import { storeDocument } from './document-storage';
+import { runComprobanteOcr, runIneOcr } from './ocr-service';
 
 type Status = 'disconnected' | 'qr' | 'authenticating' | 'connected';
 export type WhatsAppAccount = 'promotores' | 'clientes';
@@ -223,6 +226,111 @@ function messageTypes(message: any) {
   return Object.keys(message?.message || {});
 }
 
+function mediaDescriptor(message: any, body: string) {
+  const payload = message?.message || {};
+  const candidates = [
+    ['image', payload.imageMessage],
+    ['document', payload.documentMessage],
+    ['audio', payload.audioMessage],
+    ['video', payload.videoMessage],
+    ['sticker', payload.stickerMessage],
+  ] as const;
+  for (const [kind, data] of candidates) {
+    if (!data) continue;
+    const mimeType = String(data.mimetype || data.mimeType || '').toLowerCase() || (
+      kind === 'image' ? 'image/jpeg' :
+      kind === 'audio' ? 'audio/ogg' :
+      kind === 'video' ? 'video/mp4' :
+      kind === 'sticker' ? 'image/webp' :
+      'application/octet-stream'
+    );
+    const fileName = String(data.fileName || data.title || `${kind}-${Date.now()}`).trim();
+    const text = `${body} ${fileName} ${mimeType}`.toLowerCase();
+    const docType = /comprobante|domicilio|recibo|cfe|telmex/.test(text)
+      ? 'COMPROBANTE_DOMICILIO'
+      : /curp/.test(text)
+        ? 'CURP'
+        : /ine|credencial|elector|image/.test(text)
+          ? 'INE_WHATSAPP'
+          : kind.toUpperCase();
+    return { kind, mimeType, fileName, docType };
+  }
+  return null;
+}
+
+function dataUrl(mimeType: string, buffer: Buffer) {
+  return `data:${mimeType || 'application/octet-stream'};base64,${buffer.toString('base64')}`;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    promise.finally(() => {
+      if (timer) clearTimeout(timer);
+    }),
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} excedio ${ms}ms`)), ms);
+    }),
+  ]);
+}
+
+async function runMediaOcr(descriptor: any, contentDataUrl: string) {
+  if (descriptor.kind !== 'image') return { status: 'skipped', reason: 'OCR solo se ejecuta automaticamente para imagenes.' };
+  try {
+    const runner = descriptor.docType === 'COMPROBANTE_DOMICILIO' ? runComprobanteOcr : runIneOcr;
+    const result = await withTimeout(runner(contentDataUrl), 45_000, 'OCR WhatsApp');
+    return {
+      status: 'completed',
+      docType: descriptor.docType,
+      provider: result.provider,
+      model: result.model,
+      durationMs: result.durationMs,
+      fields: result.fields || {},
+      fieldsCount: result.fieldsCount || Object.keys(result.fields || {}).length,
+    };
+  } catch (err: any) {
+    return { status: 'failed', docType: descriptor.docType, error: err?.message || String(err) };
+  }
+}
+
+async function extractAndStoreMedia(runtime: WaRuntime, message: any, body: string) {
+  const descriptor = mediaDescriptor(message, body);
+  if (!descriptor) return null;
+  try {
+    const buffer = await downloadMediaMessage(
+      message,
+      'buffer',
+      {},
+      { logger: Pino({ level: 'silent' }), reuploadRequest: runtime.socket?.updateMediaMessage },
+    ) as Buffer;
+    if (!buffer?.length) throw new Error('WhatsApp no entrego contenido del archivo.');
+    const contentBase64 = dataUrl(descriptor.mimeType, buffer);
+    const stored = storeDocument({
+      contentBase64,
+      fileName: descriptor.fileName,
+      mimeType: descriptor.mimeType,
+      captureId: null,
+      docType: descriptor.docType,
+    });
+    const ocr = await runMediaOcr(descriptor, contentBase64);
+    return {
+      ...descriptor,
+      documentId: stored.id,
+      storageProvider: stored.storageProvider,
+      storagePath: stored.storagePath,
+      sha256: stored.sha256,
+      sizeBytes: stored.sizeBytes,
+      ocr,
+    };
+  } catch (err: any) {
+    return {
+      ...descriptor,
+      ocr: { status: 'failed', error: err?.message || String(err) },
+      error: err?.message || String(err),
+    };
+  }
+}
+
 function normalizeTimestamp(value: any) {
   if (!value) return Date.now();
   if (typeof value === 'number') return value * 1000;
@@ -380,6 +488,7 @@ async function startBaileysSocket(runtime: WaRuntime) {
       if (!body) continue;
       const remoteJid = msg.key.remoteJid || '';
       const storedChatId = storageChatId(runtime.account, remoteJid);
+      const media = await extractAndStoreMedia(runtime, msg, body);
       const entry: WaMessage = {
         id: msg.key.id || `${remoteJid}-${Date.now()}`,
         from: remoteJid,
@@ -401,7 +510,13 @@ async function startBaileysSocket(runtime: WaRuntime) {
         fromName: entry.fromName,
         timestamp: entry.timestamp,
         isGroup: entry.isGroup,
-        metadata: { rawId: entry.id, account: runtime.account, jid: entry.from, messageTypes: messageTypes(msg) },
+        metadata: {
+          rawId: entry.id,
+          account: runtime.account,
+          jid: entry.from,
+          messageTypes: messageTypes(msg),
+          ...(media ? { media } : {}),
+        },
       });
       if (runtime.messageHandler) {
         try {

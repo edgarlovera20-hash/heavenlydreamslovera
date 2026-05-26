@@ -69,13 +69,18 @@ function buildConversationMemory(
   const nowIso = new Date(timestamp).toISOString();
   const account = String(message.metadata?.account || previousPromoter.account || memory.account || '').trim() || null;
   const incomingName = message.direction === 'incoming' ? cleanDisplayName(message.fromName || displayName) : null;
-  const fullName = incomingName || previousPromoter.fullName || cleanDisplayName(displayName);
-  const firstName = firstNameFromDisplayName(fullName) || previousPromoter.firstName || null;
+  const fullName = previousPromoter.nameConfirmed
+    ? previousPromoter.fullName
+    : incomingName || previousPromoter.fullName || cleanDisplayName(displayName);
+  const firstName = previousPromoter.nameConfirmed
+    ? previousPromoter.firstName
+    : firstNameFromDisplayName(fullName) || previousPromoter.firstName || null;
 
   return {
     ...memory,
     summary: memory.summary || '',
     knownFields: memory.knownFields || {},
+    captureDraft: memory.captureDraft || { stage: 'idle', fields: {}, documents: [], missing: [] },
     stage: memory.stage || 'nuevo',
     lastAgent: memory.lastAgent || null,
     nextAction: memory.nextAction || 'clasificar',
@@ -89,6 +94,10 @@ function buildConversationMemory(
       displayName: cleanDisplayName(displayName),
       fullName,
       firstName,
+      preferredName: previousPromoter.preferredName || firstName,
+      nameConfirmed: Boolean(previousPromoter.nameConfirmed),
+      introSentAt: previousPromoter.introSentAt || null,
+      nameRequestedAt: previousPromoter.nameRequestedAt || null,
       isGroup: Boolean(message.isGroup),
       firstSeenAt: previousPromoter.firstSeenAt || nowIso,
       lastSeenAt: message.direction === 'incoming' ? nowIso : (previousPromoter.lastSeenAt || nowIso),
