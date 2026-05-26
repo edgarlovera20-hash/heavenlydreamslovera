@@ -913,9 +913,16 @@ export async function checkOcrStatus() {
     ine: providerOrderFor('ine'),
     comprobante: providerOrderFor('comprobante'),
     siac: providerOrderFor('siac'),
+    financial: providerOrderFor('financial'),
   };
+  const providerReady = (provider: OcrProvider) => {
+    if (provider === 'gemini') return Boolean(GEMINI_API_KEY);
+    if (provider === 'ollama') return Boolean(OLLAMA_URL);
+    return true;
+  };
+  const activePrimary = orders.ine.find(providerReady) || orders.ine[0];
   return {
-    primary: orders.ine[0],
+    primary: activePrimary,
     strategy: currentStrategy(),
     order: orders.ine,
     orders,
