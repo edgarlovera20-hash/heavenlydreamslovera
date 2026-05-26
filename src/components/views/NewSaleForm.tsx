@@ -2,13 +2,27 @@ import React, { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { PACKAGE_CATALOG, PackageCatalogItem, ClientType, ServiceSegment, ProductCategory } from '../../configs/package-catalog';
 import { ChevronRight, ChevronLeft, CheckCircle2, FileText, Download, Upload, User, MapPin, Wifi, Tv, Phone, Loader2, MessageCircle, X, ScanLine, Sparkles, CheckCircle, AlertCircle, Search, Copy, Save, Bot, ExternalLink, RotateCw } from 'lucide-react';
 import { set as idbSet, get as idbGet, del as idbDel } from 'idb-keyval';
-import { chatUrl } from '../../lib/channels';
 import { cn, formatCurrency } from '../../lib/utils';
 import { AnimatedCheckbox } from '../ui/AnimatedCheckbox';
 import { MatrixInput } from '../ui/MatrixInput';
 import { SiacValidator } from '../ui/SiacValidator';
 function getCurrentUserId(): string {
   try { const s = localStorage.getItem('hd_session'); return s ? JSON.parse(s).uid : 'anonymous'; } catch { return 'anonymous'; }
+}
+function getCurrentUserProfile(): CurrentUserProfile {
+  try {
+    const s = localStorage.getItem('hd_session');
+    const user = s ? JSON.parse(s) : {};
+    const name = user.displayName || user.nombre || user.name || user.email || 'asesor autorizado';
+    return {
+      uid: user.uid || user.id || 'anonymous',
+      name,
+      role: String(user.role || user.puesto || 'ASESOR').toUpperCase(),
+      userKey: user.username || user.email || user.uid || 'sin_clave',
+    };
+  } catch {
+    return { uid: 'anonymous', name: 'asesor autorizado', role: 'ASESOR', userKey: 'sin_clave' };
+  }
 }
 import { toast } from 'sonner';
 import { aiAgent } from '../../services/aiAgent';
@@ -21,6 +35,8 @@ interface CustomerCaptureData {
   folioSiac?: string;
   servicioSiac?: string;
   capturaSiac?: string;
+  validacionSiacDespues?: boolean;
+  validacionSiacStatus?: 'capturada' | 'pendiente';
   tipoCliente: ClientType;
   tipoServicio: ServiceSegment;
   categoriaProducto: ProductCategory;
@@ -107,6 +123,13 @@ interface CustomerCaptureData {
   fechaSolicitud: string;
 }
 
+type CurrentUserProfile = {
+  uid: string;
+  name: string;
+  role: string;
+  userKey: string;
+};
+
 const PLATAFORMAS_ADICIONALES = [
   { id: 'nfx_basico', provider: 'Netflix', name: 'Básico 2 pantallas con Anuncios', price: 99, promoFree: true, promoMonths: 6 },
   { id: 'nfx_estandar', provider: 'Netflix', name: 'Estándar 2 pantallas HD', price: 219 },
@@ -157,6 +180,25 @@ function selectedPlatformsTotal(ids?: string[]) {
   return (ids || []).reduce((acc, pid) => (
     acc + platformMonthlyCharge(PLATAFORMAS_ADICIONALES.find(x => x.id === pid))
   ), 0);
+}
+
+function selectedPlatformsSummary(ids?: string[]) {
+  return (ids || [])
+    .map(pid => {
+      const platform = PLATAFORMAS_ADICIONALES.find(x => x.id === pid);
+      if (!platform) return '';
+      return `${platform.provider} ${platform.name} (${platformSummaryPrice(platform)})`;
+    })
+    .filter(Boolean);
+}
+
+function safeFilePart(value?: string) {
+  return String(value || 'sin_folio')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80) || 'sin_folio';
 }
 
 const STREET_PREFIX_OPTIONS = [
@@ -320,12 +362,71 @@ function buildInstallAddress(data: Partial<CustomerCaptureData>) {
   ].filter(Boolean).join(', ');
 }
 
+function normalizeMexicanWhatsAppPhone(value?: string) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length === 10) return `52${digits}`;
+  if (digits.length === 12 && digits.startsWith('52')) return digits;
+  if (digits.length === 13 && digits.startsWith('521')) return `52${digits.slice(3)}`;
+  return digits;
+}
+
+function buildCustomerWhatsAppMessage(form: Partial<CustomerCaptureData>, advisor: CurrentUserProfile) {
+  const cliente = [form.nombres, form.apellidoPaterno, form.apellidoMaterno].filter(Boolean).join(' ').trim() || 'cliente';
+  const direccion = buildInstallAddress(form) || 'domicilio capturado en la solicitud';
+  const platforms = selectedPlatformsSummary(form.plataformasAdicionales);
+  const totalMensual = (form.rentaMensual || 0) + selectedPlatformsTotal(form.plataformasAdicionales);
+  const tipoSolicitud = form.tipoCliente === 'portado' ? 'Portabilidad' : 'Línea nueva';
+  const segmento = form.tipoServicio === 'negocio' ? 'Negocio' : 'Residencial';
+  const streamingPromo = platforms.some(item => /promoción 6 meses sin costo/i.test(item));
+  const asesorRole = advisor.role === 'SUPERVISOR' ? 'supervisor' : advisor.role === 'GERENTE' ? 'gerente' : 'asesor';
+
+  return [
+    `Hola ${cliente}, muchas gracias por su preferencia. 🙌`,
+    '',
+    `Soy *${advisor.name}*, ${asesorRole} de *Heavenly Dreams*. Esta solicitud fue realizada con la clave de usuario *${advisor.userKey}*.`,
+    '',
+    '📌 *Resumen de la solicitud*',
+    `• Folio interno: *${form.folio || 'pendiente'}*`,
+    `• Tipo: *${tipoSolicitud}* · Segmento: *${segmento}*`,
+    `• Servicio: *${form.paqueteNombre || 'paquete por confirmar'}*`,
+    `• Renta mensual estimada: *${formatCurrency(totalMensual)}*`,
+    `• Domicilio de instalación: ${direccion}`,
+    form.numeroAPortar ? `• Número a portar: *${form.numeroAPortar}* (${form.companiaActual || 'compañía por confirmar'})` : '',
+    platforms.length ? `• Plataformas adicionales: ${platforms.join(', ')}` : '',
+    streamingPromo ? '• Promoción: Netflix Básico con anuncios o HBO Max Estándar con anuncios aplica por *6 meses sin costo*; desde el mes 7 se cobra la tarifa vigente si se conserva la plataforma.' : '',
+    '',
+    '✅ *Términos y condiciones resumidos*',
+    '• La contratación queda sujeta a cobertura, validación de identidad, disponibilidad técnica y políticas vigentes de Telmex/Sociomax.',
+    form.tipoCliente === 'portado'
+      ? '• En portabilidad, la instalación puede quedar bonificada conforme a la promoción vigente y el proceso depende de la validación del NIP/compañía anterior.'
+      : '• En línea nueva, los cargos de instalación y diferidos aplican conforme al paquete y condiciones vigentes informadas en la solicitud.',
+    '• El pago del servicio se realiza por canales oficiales. Ningún asesor está autorizado a solicitar efectivo por fuera del proceso.',
+    '• La firma, video-firma y documentos se usan únicamente para validar la contratación y resguardar el expediente.',
+    '',
+    '☎️ *Siguientes llamadas que debe atender*',
+    '1. *Validación:* confirmarán sus datos, consentimiento y paquete contratado.',
+    '2. *Agendación corporativa:* coordinarán fecha y ventana de instalación.',
+    '3. *Técnico instalador:* se comunicará antes de acudir al domicilio para completar el servicio.',
+    '',
+    'Le pedimos conservar este mensaje y atender llamadas oficiales para evitar retrasos. Quedamos atentos para acompañarle hasta que su servicio quede instalado. ✨',
+  ].filter(Boolean).join('\n');
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
     reader.onloadend = () => resolve(reader.result as string);
     reader.readAsDataURL(file);
+  });
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo generado.'));
+    reader.onloadend = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -771,9 +872,11 @@ function isDraftWorthSaving(form: Partial<CustomerCaptureData>) {
     'ineReverso', 'curpDoc', 'comprobanteDomicilio', 'calle',
     'codigoPostal', 'colonia', 'ciudad', 'delegacion', 'coordenadas',
     'packageId', 'paqueteNombre', 'numeroAPortar', 'anexoPortabilidad', 'anexoPortabilidad2',
+    'validacionSiacDespues',
   ];
   return meaningfulKeys.some(key => {
     const value = form[key];
+    if (typeof value === 'boolean') return value;
     return value !== undefined && value !== null && String(value).trim() !== '';
   });
 }
@@ -862,27 +965,117 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
   const [initialDist, setInitialDist] = useState<number | null>(null);
 
   const [isVideoFirmaActive, setIsVideoFirmaActive] = useState(false);
+  const [videoFirmaBlob, setVideoFirmaBlob] = useState<Blob | null>(null);
+  const [videoFirmaUrl, setVideoFirmaUrl] = useState('');
+  const [videoFirmaFileName, setVideoFirmaFileName] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoChunksRef = useRef<Blob[]>([]);
+  const videoFirmaBlobRef = useRef<Blob | null>(null);
+  const videoStopResolverRef = useRef<((blob: Blob | null) => void) | null>(null);
+
+  const getVideoFirmaMimeType = () => {
+    if (typeof MediaRecorder === 'undefined') return '';
+    return [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
+    ].find(type => MediaRecorder.isTypeSupported(type)) || '';
+  };
+
+  const stopVideoStream = () => {
+    if (videoRef.current) videoRef.current.srcObject = null;
+    videoStreamRef.current?.getTracks().forEach(track => track.stop());
+    videoStreamRef.current = null;
+  };
 
   const startVideoFirma = async () => {
-    setIsVideoFirmaActive(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      if (isVideoFirmaActive) return;
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }).catch(async () => {
+        toast.warning('No se detectó micrófono. La video-firma se grabará solo con cámara.');
+        return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      });
+      videoStreamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
       }
+
+      videoChunksRef.current = [];
+      videoFirmaBlobRef.current = null;
+      setVideoFirmaBlob(null);
+      setVideoFirmaFileName(`VideoFirma_${safeFilePart(form.folio)}.webm`);
+      setVideoFirmaUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return '';
+      });
+
+      if (typeof MediaRecorder === 'undefined') {
+        setIsVideoFirmaActive(true);
+        toast.warning('El navegador no soporta grabación MediaRecorder. Se mostrará cámara, pero no se podrá guardar video.');
+        return;
+      }
+
+      const mimeType = getVideoFirmaMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const fileName = `VideoFirma_${safeFilePart(form.folio)}.webm`;
+      setVideoFirmaFileName(fileName);
+      recorder.ondataavailable = event => {
+        if (event.data?.size) videoChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = videoChunksRef.current.length
+          ? new Blob(videoChunksRef.current, { type: recorder.mimeType || 'video/webm' })
+          : null;
+        if (blob) {
+          const objectUrl = URL.createObjectURL(blob);
+          videoFirmaBlobRef.current = blob;
+          setVideoFirmaBlob(blob);
+          setVideoFirmaUrl(prev => {
+            if (prev) URL.revokeObjectURL(prev);
+            return objectUrl;
+          });
+          updateForm({ videofirma: `expediente:${fileName}` });
+          toast.success('Video-firma capturada y lista para guardarse en el expediente.');
+        }
+        stopVideoStream();
+        setIsVideoFirmaActive(false);
+        mediaRecorderRef.current = null;
+        videoStopResolverRef.current?.(blob);
+        videoStopResolverRef.current = null;
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start(1000);
+      setIsVideoFirmaActive(true);
+      toast.success('Video-firma iniciada. Pide al cliente decir su nombre y aceptar la contratación.');
     } catch (err) {
       console.error("Error accessing camera", err);
-      alert("No se pudo acceder a la cámara. Por favor verifica los permisos.");
+      stopVideoStream();
+      setIsVideoFirmaActive(false);
+      toast.error("No se pudo acceder a la cámara. Verifica permisos de cámara y micrófono.");
     }
   };
 
-  const stopVideoFirma = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
+  const stopVideoFirma = async () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      return new Promise<Blob | null>((resolve) => {
+        videoStopResolverRef.current = resolve;
+        try {
+          recorder.stop();
+        } catch {
+          stopVideoStream();
+          setIsVideoFirmaActive(false);
+          videoStopResolverRef.current = null;
+          resolve(videoFirmaBlobRef.current);
+        }
+      });
     }
+    stopVideoStream();
     setIsVideoFirmaActive(false);
+    return videoFirmaBlobRef.current;
   };
 
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -1003,6 +1196,21 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
       if (draftTimerRef.current) window.clearTimeout(draftTimerRef.current);
     };
   }, [form, step]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch {}
+      }
+      stopVideoStream();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (videoFirmaUrl) URL.revokeObjectURL(videoFirmaUrl);
+    };
+  }, [videoFirmaUrl]);
 
   const isPhone10 = (v?: string) => !!v && /^\d{10}$/.test(v.replace(/\D/g, ''));
 
@@ -1654,30 +1862,75 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
     window.open('https://www.gob.mx/curp/', '_blank', 'noopener,noreferrer');
   };
 
-  const uploadCurpOfficialPdfToServer = async (savedSale: any) => {
-    if (!looksLikePdfDataUrl(form.curpDoc)) return;
+  const savedSaleId = (savedSale: any) => savedSale?.id || savedSale?.venta_id || null;
+
+  const uploadDataUrlDocumentToServer = async (
+    savedSale: any,
+    docType: string,
+    fileName: string,
+    mimeType: string,
+    dataUrl: string,
+  ) => {
     const captureId = savedSale?.id || savedSale?.venta_id || null;
     if (!captureId) return;
-    const curp = normalizeCurpInput(form.curp);
     const res = await fetch('/api/document-files', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         captureId,
         saleId: savedSale?.id || null,
-        docType: 'CURP',
-        fileName: form.curpPdfFileName || `CURP_${curp || captureId}.pdf`,
-        mimeType: 'application/pdf',
-        contentBase64: base64FromDataUrl(form.curpDoc!),
+        docType,
+        fileName,
+        mimeType,
+        contentBase64: base64FromDataUrl(dataUrl),
       }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || 'No se pudo guardar el PDF oficial CURP.');
+    if (!res.ok) throw new Error(data.error || `No se pudo guardar ${docType}.`);
     return data.file;
   };
 
-const exportToPDF = async () => {
-    if (!receiptRef.current) return;
+  const uploadBlobDocumentToServer = async (
+    savedSale: any,
+    docType: string,
+    fileName: string,
+    mimeType: string,
+    blob: Blob | null,
+  ) => {
+    if (!blob) return null;
+    const dataUrl = await blobToDataUrl(blob);
+    return uploadDataUrlDocumentToServer(savedSale, docType, fileName, mimeType, dataUrl);
+  };
+
+  const uploadCurpOfficialPdfToServer = async (savedSale: any) => {
+    if (!looksLikePdfDataUrl(form.curpDoc)) return;
+    const captureId = savedSaleId(savedSale);
+    if (!captureId) return;
+    const curp = normalizeCurpInput(form.curp);
+    return uploadDataUrlDocumentToServer(
+      savedSale,
+      'CURP',
+      form.curpPdfFileName || `CURP_${curp || captureId}.pdf`,
+      'application/pdf',
+      form.curpDoc!,
+    );
+  };
+
+  const embedSignatureIntoReceipt = () => {
+    const sourceCanvas = sigCanvasRef.current;
+    if (!sourceCanvas || !receiptRef.current) return false;
+    const firmaContainer = receiptRef.current.querySelector('[data-signature-slot="client"]') as HTMLDivElement | null;
+    if (!firmaContainer) return false;
+    const img = new Image();
+    img.src = sourceCanvas.toDataURL('image/png');
+    img.className = 'absolute inset-0 w-full h-full object-contain p-2';
+    firmaContainer.innerHTML = '';
+    firmaContainer.appendChild(img);
+    return true;
+  };
+
+  const exportToPDF = async () => {
+    if (!receiptRef.current) return null;
     try {
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import('html2canvas'),
@@ -1689,18 +1942,27 @@ const exportToPDF = async () => {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Contrato_${form.folio}_${form.nombres}.pdf`);
+      const fileName = `Solicitud_Firmada_${safeFilePart(form.folio)}_${safeFilePart(form.nombres)}.pdf`;
+      const dataUrl = await blobToDataUrl(pdf.output('blob'));
+      pdf.save(fileName);
+      return { fileName, dataUrl };
     } catch (error) {
       console.error("Error generating PDF", error);
+      return null;
     }
   };
 
   const handleSaveAndFinish = async () => {
-    if (isVideoFirmaActive) stopVideoFirma();
-    
     setIsLoading(true);
 
     try {
+      const capturedVideo = isVideoFirmaActive ? await stopVideoFirma() : videoFirmaBlobRef.current;
+      const siacPendiente = Boolean(form.validacionSiacDespues && !form.capturaSiac);
+      const formForMetadata: Partial<CustomerCaptureData> = {
+        ...form,
+        validacionSiacStatus: form.capturaSiac ? 'capturada' : 'pendiente',
+        videofirma: capturedVideo ? `expediente:${videoFirmaFileName || `VideoFirma_${safeFilePart(form.folio)}.webm`}` : form.videofirma,
+      };
       const duplicateRes = await fetch('/api/duplicates/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1720,18 +1982,8 @@ const exportToPDF = async () => {
         setDuplicateMatches([]);
       }
 
-      // 1. Copy signature to PDF ref
-      const sourceCanvas = sigCanvasRef.current;
-      if (sourceCanvas && receiptRef.current) {
-        const firmaContainer = receiptRef.current.querySelector('.border-b.h-32') as HTMLDivElement;
-        if (firmaContainer) {
-          const img = new Image();
-          img.src = sourceCanvas.toDataURL();
-          img.className = "absolute inset-0 w-full h-full object-contain p-2";
-          firmaContainer.innerHTML = '';
-          firmaContainer.appendChild(img);
-        }
-      }
+      // 1. La firma dibujada queda incrustada dentro del PDF firmado.
+      embedSignatureIntoReceipt();
       
       // 2. Save to server API
       const direccionInstalacion = buildInstallAddress(form);
@@ -1770,9 +2022,9 @@ const exportToPDF = async () => {
         numero_a_portar: form.numeroAPortar,
         compania_actual: form.companiaActual,
         asesor_id: getCurrentUserId(),
-        status: 'pendiente',
+        status: siacPendiente ? 'pendiente_siac' : 'pendiente',
         fecha_solicitud: new Date().toISOString(),
-        metadata: sanitizeCaptureForServer(form),
+        metadata: sanitizeCaptureForServer(formForMetadata),
       };
       const apiRes = await fetch('/api/ventas', {
         method: 'POST',
@@ -1790,14 +2042,36 @@ const exportToPDF = async () => {
       } catch (uploadErr: any) {
         toast.warning(uploadErr?.message || 'La venta se guardó, pero el PDF oficial CURP no se adjuntó.');
       }
-      
-      // 3. Export PDF
-      await exportToPDF();
+
+      try {
+        const videoToUpload = capturedVideo || videoFirmaBlob;
+        const videoFile = await uploadBlobDocumentToServer(
+          savedSale,
+          'VIDEO_FIRMA',
+          videoFirmaFileName || `VideoFirma_${safeFilePart(form.folio)}.webm`,
+          videoToUpload?.type || 'video/webm',
+          videoToUpload,
+        );
+        if (videoFile) toast.success('Video-firma guardada en la carpeta del expediente.');
+      } catch (uploadErr: any) {
+        toast.warning(uploadErr?.message || 'La venta se guardó, pero la video-firma no se adjuntó.');
+      }
+
+      // 3. Exportar PDF firmado y guardarlo también en el expediente.
+      const signedPdf = await exportToPDF();
+      if (signedPdf) {
+        try {
+          await uploadDataUrlDocumentToServer(savedSale, 'SOLICITUD_FIRMADA', signedPdf.fileName, 'application/pdf', signedPdf.dataUrl);
+          toast.success('Solicitud firmada guardada en el expediente.');
+        } catch (uploadErr: any) {
+          toast.warning(uploadErr?.message || 'El PDF se generó, pero no se adjuntó al expediente.');
+        }
+      }
       await idbDel(draftKeyRef.current);
       setDraftStatus('idle');
       setDraftUpdatedAt('');
       
-      toast.success('Venta registrada con éxito en el sistema.');
+      toast.success(siacPendiente ? 'Venta guardada con validación SIAC pendiente.' : 'Venta registrada con éxito en el sistema.');
       onBack();
     } catch (err) {
       console.error('Error al guardar la venta:', err);
@@ -1806,6 +2080,29 @@ const exportToPDF = async () => {
       toast.error(message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendCustomerWhatsApp = async () => {
+    const phone = normalizeMexicanWhatsAppPhone(form.telefonoTitular || form.telefonoReferencia);
+    if (phone.length < 12) {
+      toast.error('Captura un WhatsApp del cliente con 10 dígitos antes de enviar el comprobante.');
+      return;
+    }
+    const mensaje = buildCustomerWhatsAppMessage(form, getCurrentUserProfile());
+    const fallbackUrl = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
+    try {
+      const res = await fetch('/api/whatsapp/send?account=clientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: 'clientes', phone, message: mensaje }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data.error || data.message || 'WhatsApp clientes no respondió.');
+      toast.success('Mensaje formal enviado al WhatsApp del cliente.');
+    } catch (err: any) {
+      window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+      toast.warning(err?.message ? `${err.message} Abrí WhatsApp con el mensaje listo.` : 'Abrí WhatsApp con el mensaje listo.');
     }
   };
 
@@ -3166,9 +3463,8 @@ const exportToPDF = async () => {
               {/* Firmas */}
               <div className="mt-12 grid grid-cols-2 gap-8 text-center pb-8 border-b-2 border-dashed">
                 <div>
-                   <div className="border-b border-black w-full mb-1 h-32 relative">
-                      {/* Firma Capture inside PDF invisibly layered or explicitly requested? 
-                          We will capture the signature from the UI and wait for it. */}
+                   <div data-signature-slot="client" className="border-b border-black w-full mb-1 h-32 relative">
+                      {/* La firma dibujada se inyecta aquí antes de exportar el PDF. */}
                    </div>
                    <p className="font-bold text-xs">Firma del Cliente</p>
                 </div>
@@ -3287,19 +3583,62 @@ const exportToPDF = async () => {
                 </div>
               )}
 
+              {videoFirmaUrl && !isVideoFirmaActive && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-emerald-200">Video-firma lista para expediente</p>
+                      <p className="text-xs text-emerald-100/70">{videoFirmaFileName || 'VideoFirma.webm'}</p>
+                    </div>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-300" />
+                  </div>
+                  <video src={videoFirmaUrl} controls className="w-full rounded-lg border border-white/10 bg-black" />
+                </div>
+              )}
+
+              <div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-[0.16em] text-amber-200">Validación SIAC</h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Puedes subir la captura ahora o marcarla para adjuntarla después sin detener la venta.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateForm({ validacionSiacDespues: !form.validacionSiacDespues })}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border transition-colors",
+                      form.validacionSiacDespues
+                        ? "bg-amber-400 text-slate-950 border-amber-300"
+                        : "bg-slate-950/60 text-amber-200 border-amber-400/30 hover:bg-amber-400/10"
+                    )}
+                  >
+                    {form.validacionSiacDespues ? 'SIAC pendiente' : 'Subir SIAC después'}
+                  </button>
+                </div>
+                {form.validacionSiacDespues && !form.capturaSiac && (
+                  <div className="rounded-lg border border-amber-400/20 bg-slate-950/60 p-3 text-xs text-amber-100">
+                    Esta venta se guardará con estado <strong>pendiente_siac</strong>. Administración o gerencia podrá subir la validación SIAC posteriormente desde el expediente.
+                  </div>
+                )}
+              </div>
+
               {/* Validación SIAC — sube captura y compara contra contrato */}
-              <SiacValidator
-                contract={{
-                  nombres: form.nombres,
-                  apellidoPaterno: form.apellidoPaterno,
-                  apellidoMaterno: form.apellidoMaterno,
-                  telefonoTitular: form.telefonoTitular,
-                  correo: form.correo,
-                }}
-                onValidated={({ folioSiac, servicio, image }) =>
-                  updateForm({ folioSiac, servicioSiac: servicio, capturaSiac: image })
-                }
-              />
+              {!(form.validacionSiacDespues && !form.capturaSiac) && (
+                <SiacValidator
+                  contract={{
+                    nombres: form.nombres,
+                    apellidoPaterno: form.apellidoPaterno,
+                    apellidoMaterno: form.apellidoMaterno,
+                    telefonoTitular: form.telefonoTitular,
+                    correo: form.correo,
+                  }}
+                  onValidated={({ folioSiac, servicio, image }) =>
+                    updateForm({ folioSiac, servicioSiac: servicio, capturaSiac: image, validacionSiacDespues: false, validacionSiacStatus: 'capturada' })
+                  }
+                />
+              )}
 
               <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-3">
                 <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -3337,13 +3676,7 @@ const exportToPDF = async () => {
               </button>
               
               <button
-                onClick={() => {
-                  const mensaje = `Hola ${form.nombres || 'estimado cliente'} 👋, te comparto el comprobante de tu solicitud de servicio *Heavenly Dreams* (Folio: *${form.folio}*). Paquete: *${form.paqueteNombre || '—'}* | Renta: *$${form.rentaMensual || '—'}*/mes. Por favor consérvalo. ¡Gracias por tu preferencia! 🚀`;
-                  const waUrl = chatUrl('whatsappClientes') || chatUrl('whatsappVendedores');
-                  const phone = waUrl ? waUrl.replace('https://wa.me/', '') : '';
-                  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`, '_blank');
-                  onBack();
-                }}
+                onClick={handleSendCustomerWhatsApp}
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-xl font-bold flex justify-center items-center gap-2 shadow-lg hover:scale-[1.02] transition-transform"
               >
                 <MessageCircle className="w-5 h-5" /> ENVIAR COMPROBANTE POR WHATSAPP
