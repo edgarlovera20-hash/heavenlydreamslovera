@@ -1,11 +1,11 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
-  BarChart3, Users, Activity, Bell, Search,
+  BarChart3, Users, Activity, Bell,
   LogOut, TrendingUp, ArrowUpRight, ArrowDownRight,
-  LayoutDashboard, Settings as SettingsIcon, PieChart, ChevronLeft, ChevronRight,
-  User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, ImagePlus, Gamepad2, FolderOpen,
-  Cpu, Database, Smartphone, Sun, Moon, X, Crown, Zap, Bot, Home, MessageSquare, MessageCircle,
-  MapPin, WifiOff, RefreshCw, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall, ReceiptText
+  LayoutDashboard, Settings as SettingsIcon, ChevronRight,
+  User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, Gamepad2, FolderOpen,
+  Database, Sun, Moon, Crown, Zap, Bot, Home, MessageSquare, MessageCircle,
+  MapPin, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall, ReceiptText
 } from 'lucide-react';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
@@ -654,48 +654,5 @@ function NavItem({ icon: Icon, label, color, active = false, onClick, badge }: {
         }`}></div>
       )}
     </button>
-  );
-}
-
-function KpiCard({ title, value, trend, trendUp, icon: Icon, color }: any) {
-  return (
-    <div className="bg-[#0a0d14] border border-slate-800/80 overflow-hidden rounded-[14px] p-5 transition-all hover:border-slate-700 hover:shadow-[0_4px_24px_rgba(0,0,0,0.2)] duration-300 relative group">
-      <div className="flex justify-between items-center mb-4 relative z-10 w-full">
-         <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest">{title}</h4>
-         <Icon className={`w-5 h-5 ${color === 'cyan' ? 'text-cyan-500' : color === 'purple' ? 'text-purple-400' : color === 'green' ? 'text-emerald-500' : color === 'red' ? 'text-rose-500' : 'text-blue-400'}`} />
-      </div>
-      <div className="relative z-10 mb-6">
-         <p className="text-4xl font-semibold text-white tracking-tight">{value}</p>
-      </div>
-      <div className="flex items-center gap-2 relative z-10">
-         <span className={`w-1.5 h-1.5 rounded-full ${trendUp ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.8)]' : color === 'red' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]' : color === 'purple' ? 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]'}`}></span>
-         <span className={`text-[10px] font-bold uppercase tracking-widest ${trendUp ? 'text-cyan-500' : color === 'red' ? 'text-rose-500' : color === 'purple' ? 'text-purple-400' : 'text-emerald-500'}`}>
-            {trend}
-         </span>
-      </div>
-    </div>
-  );
-}
-
-function ActivityItem({ user, action, amount, time, isSystem = false }: any) {
-  return (
-    <div className={`flex items-center justify-between p-3 rounded hover:bg-cyber-electric/5 transition-colors border border-transparent hover:border-cyber-electric/20 group ${isSystem ? 'bg-cyber-electric/5 border-cyber-neon/30' : ''}`}>
-      <div className="flex items-center gap-3">
-        <div className={`w-8 h-8 rounded flex items-center justify-center text-xs font-bold border ${isSystem ? 'bg-cyber-neon/20 text-cyber-neon border-cyber-neon/50' : 'bg-cyber-dark text-cyber-electric border-cyber-electric/30'}`}>
-          {isSystem ? <Cpu className="w-4 h-4" /> : user.charAt(0)}
-        </div>
-        <div>
-          <p className={`text-sm font-bold ${isSystem ? 'text-cyber-neon' : 'text-slate-200'}`}>{user}</p>
-          <p className="text-[10px] text-cyber-electric/70 font-medium uppercase tracking-wider">{action}</p>
-        </div>
-      </div>
-      <div className="text-right">
-        <p className="text-sm font-bold text-white flex items-center justify-end gap-1">
-           {isSystem && <span className="text-cyber-matrix text-xs">✓</span>}
-           {amount}
-        </p>
-        <p className="text-[10px] text-cyber-electric/50 font-mono">{time}</p>
-      </div>
-    </div>
   );
 }

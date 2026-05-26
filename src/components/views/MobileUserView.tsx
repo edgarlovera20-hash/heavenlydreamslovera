@@ -1,13 +1,12 @@
 import React, { useState, lazy, Suspense } from 'react';
 import {
-  Home, User, Wallet, Headphones,
-  Bell, LogOut, PlusCircle, Activity,
-  ChevronLeft, Menu, Users, Gamepad2, ClipboardCheck, FileSearch, Megaphone, X, LayoutDashboard, AlertTriangle, SettingsIcon, FolderOpen, Zap, MessageSquare, Bot, Package, ReceiptText
+  User, Wallet, Headphones,
+  Bell, LogOut,
+  ChevronLeft, Menu, Users, Gamepad2, ClipboardCheck, FileSearch, Megaphone, X, AlertTriangle, SettingsIcon, FolderOpen, Zap, MessageSquare, Bot, Package, ReceiptText
 } from 'lucide-react';
 import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
 import { Role } from '../../App';
-import NetworkPattern from '../ui/NetworkPattern';
 
 const Profile = lazy(() => import('./Profile'));
 const Game = lazy(() => import('./Game'));
