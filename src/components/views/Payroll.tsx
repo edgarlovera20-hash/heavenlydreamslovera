@@ -495,7 +495,7 @@ const PayrollReceiptPreview = React.forwardRef<HTMLDivElement, {
   return (
     <div className="bg-white text-slate-900 p-6 md:p-12 rounded-lg max-w-5xl mx-auto shadow-2xl" ref={ref}>
       <header className="grid grid-cols-[140px_1fr] gap-8 items-center pb-10 border-b-2 border-slate-900">
-        <img src="/logo.png" alt="Heavenly Dreams" className="w-28 h-28 rounded-full object-cover shadow-md" />
+        <img src="/logo-mobile.webp" alt="Heavenly Dreams" className="w-28 h-28 rounded-full object-cover shadow-md" decoding="async" />
         <div className="text-center">
           <h2 className="text-3xl md:text-4xl font-black tracking-wide">{COMPANY_NAME}</h2>
           <p className="text-lg text-slate-600 mt-4 leading-relaxed">{COMPANY_ADDRESS}</p>

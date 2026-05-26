@@ -34,9 +34,10 @@ export function LoadingOverlay({
         {/* Truck + ZZZ */}
         <div className="relative animate-drive drop-shadow-2xl w-72">
           <img
-            src="/loading-van.png"
+            src="/loading-van.webp"
             alt="Cargando..."
             className="w-full object-contain"
+            decoding="async"
           />
 
           {/* ZZZ flotando desde ventana del conductor */}

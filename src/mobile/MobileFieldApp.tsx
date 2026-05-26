@@ -1,5 +1,4 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { startAuthentication } from '@simplewebauthn/browser';
 import { del as idbDel, get as idbGet, set as idbSet } from 'idb-keyval';
 import { AlertCircle, Banknote, Calendar, Camera, CheckCircle2, Clock, CreditCard, Crown, DollarSign, Download, FileText, Flame, Medal, Search, Shield, Sparkles, Star, Target, TrendingUp, Trophy, Upload, Users, Zap } from 'lucide-react';
 import { PACKAGE_CATALOG, type ClientType, type PackageCatalogItem, type ProductCategory, type ServiceSegment } from '../configs/package-catalog';
@@ -11,6 +10,7 @@ import { runMobileOcr } from './mobileOcr';
 const MapPicker = lazy(() => import('../components/ui/MapPicker').then(m => ({ default: m.MapPicker })));
 
 const SESSION_KEY = 'hd_session';
+const BOOTSTRAP_CACHE_KEY = 'hd_mobile_bootstrap_cache_v1';
 const DRAFT_KEY = 'hd_mobile_capture_draft_v1';
 const LOCAL_SETTINGS_KEY = 'hd_mobile_settings_v1';
 const OFFLINE_QUEUE_KEY = 'hd_mobile_offline_queue_v1';
@@ -304,8 +304,19 @@ const MODULES: Array<{ id: MobileSection; label: string; icon: IconName; caption
   { id: 'ajustes', label: 'Ajustes', icon: 'settings', caption: 'Cache, sesión y modo campo' },
 ];
 
+const MOBILE_SECTIONS = new Set<MobileSection>(['inicio', 'perfil', ...MODULES.map((module) => module.id)]);
+
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
+}
+
+function initialMobileSection(): MobileSection {
+  try {
+    const section = new URLSearchParams(window.location.search).get('section') as MobileSection | null;
+    return section && MOBILE_SECTIONS.has(section) ? section : 'inicio';
+  } catch {
+    return 'inicio';
+  }
 }
 
 function loadSession(): SessionUser | null {
@@ -322,10 +333,17 @@ function saveSession(session: SessionUser) {
 }
 
 function loadMobileSettings() {
+  const defaultSettings = {
+    compact: true,
+    reduceMotion: Boolean(
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
+      (navigator as any).connection?.saveData
+    ),
+  };
   try {
-    return JSON.parse(localStorage.getItem(LOCAL_SETTINGS_KEY) || 'null') || { compact: true, reduceMotion: false };
+    return JSON.parse(localStorage.getItem(LOCAL_SETTINGS_KEY) || 'null') || defaultSettings;
   } catch {
-    return { compact: true, reduceMotion: false };
+    return defaultSettings;
   }
 }
 
@@ -626,6 +644,17 @@ async function writeOfflineQueue(items: OfflineQueueItem[]) {
   await idbSet(OFFLINE_QUEUE_KEY, items);
 }
 
+async function readBootstrapCache(uid: string): Promise<MobileBootstrap | null> {
+  if (!uid) return null;
+  const cached = await idbGet(`${BOOTSTRAP_CACHE_KEY}:${uid}`).catch(() => null);
+  return cached?.data || null;
+}
+
+async function writeBootstrapCache(uid: string, data: MobileBootstrap) {
+  if (!uid) return;
+  await idbSet(`${BOOTSTRAP_CACHE_KEY}:${uid}`, { data, savedAt: Date.now() });
+}
+
 async function readModuleCache<T>(section: MobileSection): Promise<{ data: T; savedAt: number } | null> {
   const cached = await idbGet(`${MODULE_CACHE_PREFIX}${section}`).catch(() => null);
   return cached?.data ? cached : null;
@@ -745,6 +774,45 @@ async function compressImageFile(file: File) {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.78));
   if (!blob) return file;
   return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg', lastModified: Date.now() });
+}
+
+async function imageFileToOptimizedDataUrl(file: File, maxSide = 360) {
+  if (!file.type.startsWith('image/')) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('No se pudo leer la imagen.'));
+      reader.readAsDataURL(file);
+    });
+  }
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('No se pudo optimizar la imagen.'));
+      img.src = objectUrl;
+    });
+    const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * ratio));
+    canvas.height = Math.max(1, Math.round(image.height * ratio));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('No se pudo leer la imagen.'));
+        reader.readAsDataURL(file);
+      });
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.82);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 function Field(props: {
@@ -914,6 +982,7 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
     setError('');
     setPasskeyLoading(true);
     try {
+      const { startAuthentication } = await import('@simplewebauthn/browser');
       const options = await apiJson<any>('/api/webauthn/login/options', {
         method: 'POST',
         body: JSON.stringify({ username: account }),
@@ -1016,7 +1085,7 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
 
 export default function MobileFieldApp() {
   const [session, setSession] = useState<SessionUser | null>(() => loadSession());
-  const [active, setActive] = useState<MobileSection>('inicio');
+  const [active, setActive] = useState<MobileSection>(() => initialMobileSection());
   const [bootstrap, setBootstrap] = useState<MobileBootstrap | null>(null);
   const [bootLoading, setBootLoading] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
@@ -1076,6 +1145,7 @@ export default function MobileFieldApp() {
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
   const [profileLeaderboardFilter, setProfileLeaderboardFilter] = useState<'weekly' | 'monthly' | 'all-time'>('weekly');
   const profileFileInputRef = useRef<HTMLInputElement | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
 
   const profileUser = bootstrap?.user || session;
   const profileUid = profileUser?.uid || session?.uid || '';
@@ -1222,26 +1292,32 @@ export default function MobileFieldApp() {
   }, [bootstrap?.recentSales, canManagePayroll, payrollSales, payrollUserId, payrollUsers, payrollWeek, payrollYear, profileName, profileUid]);
 
   const notify = useCallback((kind: 'success' | 'error', message: string) => {
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
     setNotice({ kind, message });
-    window.setTimeout(() => setNotice(null), 3500);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 3500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    };
   }, []);
 
   const handleProfileImageUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const imageUrl = String(reader.result || '');
-      setProfileAvatar(imageUrl);
-      if (profileUid) {
-        try {
-          localStorage.setItem(`hd_avatar_${profileUid}`, imageUrl);
-        } catch {
-          notify('error', 'No se pudo guardar el avatar localmente.');
+    imageFileToOptimizedDataUrl(file)
+      .then((imageUrl) => {
+        setProfileAvatar(imageUrl);
+        if (profileUid) {
+          try {
+            localStorage.setItem(`hd_avatar_${profileUid}`, imageUrl);
+          } catch {
+            notify('error', 'No se pudo guardar el avatar localmente.');
+          }
         }
-      }
-    };
-    reader.readAsDataURL(file);
+      })
+      .catch(() => notify('error', 'No se pudo optimizar el avatar.'));
   }, [notify, profileUid]);
 
   const profileAvatarUrl = profileAvatar || profileUser?.avatar || null;
@@ -1384,10 +1460,12 @@ export default function MobileFieldApp() {
 
   const refreshBootstrap = useCallback(async () => {
     if (!session?.uid) return;
+    const uid = session.uid;
     setBootLoading(true);
     try {
       const data = await apiJson<MobileBootstrap>('/api/mobile/bootstrap');
       setBootstrap(data);
+      writeBootstrapCache(uid, data).catch(() => undefined);
     } catch (err: any) {
       if (String(err?.message || '').includes('Token') || String(err?.message || '').includes('401')) {
         clearApiSession();
@@ -1423,7 +1501,15 @@ export default function MobileFieldApp() {
   }, [profileUid]);
 
   useEffect(() => {
-    if (session?.uid) refreshBootstrap();
+    if (!session?.uid) return;
+    let activeLoad = true;
+    readBootstrapCache(session.uid).then((cached) => {
+      if (activeLoad && cached) setBootstrap(cached);
+    });
+    refreshBootstrap();
+    return () => {
+      activeLoad = false;
+    };
   }, [session?.uid, refreshBootstrap]);
 
   useEffect(() => {
@@ -3258,7 +3344,7 @@ export default function MobileFieldApp() {
     const receiptPreview = (
       <div ref={payrollReceiptRef} className="rounded-2xl bg-white p-5 text-slate-950 shadow-2xl">
         <div className="flex items-center gap-4 border-b-2 border-slate-950 pb-4">
-          <img src="/logo.png" alt="Heavenly Dreams" className="h-16 w-16 rounded-full object-cover" />
+          <img src="/logo-mobile.webp" alt="Heavenly Dreams" className="h-16 w-16 rounded-full object-cover" decoding="async" />
           <div className="min-w-0 flex-1 text-center">
             <p className="text-lg font-black leading-6">{COMPANY_NAME}</p>
             <p className="mt-1 text-[10px] leading-4 text-slate-600">{COMPANY_ADDRESS}</p>
