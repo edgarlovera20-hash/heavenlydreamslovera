@@ -332,6 +332,7 @@ function buildFolioReply(text: string) {
 
 function decideWithRules(conversation: any, message: any): AgentDecision {
   const text = String(message.body || '');
+  const profile = AgentProfiles.getById('promoter_receptionist') as any;
   const promoterName = extractPromoterName(text, conversation);
   const classified = classifyIntent(text);
   const intent = promoterName?.source === 'name_reply' ? 'otro' : classified.intent;
@@ -345,6 +346,18 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
       promoterNameSource: promoterName.source,
     } : {}),
   };
+
+  const macro = matchProfileMacro(text, profile);
+  if (macro) {
+    return personalizeDecision(conversation, {
+      intent: macro.intent || 'otro',
+      confidence: 0.98,
+      extractedFields: { ...fields, macro: macro.command, macroName: macro.name },
+      proposedReply: macro.reply,
+      proposedActions: macro.actions,
+      requiresApproval: true,
+    });
+  }
 
   if (promoterName && intent === 'otro') {
     return personalizeDecision(conversation, {
@@ -396,10 +409,7 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
     intent,
     confidence,
     extractedFields: fields,
-    proposedReply: (() => {
-      const profile = AgentProfiles.getById('promoter_receptionist') as any;
-      return buildAutonomousReply(text, profile);
-    })(),
+    proposedReply: buildAutonomousReply(text, profile),
     proposedActions: [],
     requiresApproval: true,
   });
@@ -452,6 +462,44 @@ function defaultProfileReply(profile: any) {
   return String(profile?.metadata?.defaultMessage || DEFAULT_ARIUX_MESSAGE).trim();
 }
 
+function getDesignerConfig(profile: any) {
+  const metadata = profile?.metadata || {};
+  return metadata.agentDesigner && typeof metadata.agentDesigner === 'object'
+    ? metadata.agentDesigner
+    : {};
+}
+
+function getProfileMacros(profile: any) {
+  const metadata = profile?.metadata || {};
+  const designer = getDesignerConfig(profile);
+  const raw = Array.isArray(designer.macros)
+    ? designer.macros
+    : Array.isArray(metadata.macros)
+      ? metadata.macros
+      : [];
+  return raw
+    .filter((macro: any) => macro && macro.enabled !== false && macro.command && macro.reply)
+    .map((macro: any) => ({
+      id: String(macro.id || macro.command || '').trim(),
+      name: String(macro.name || macro.command || '').trim(),
+      command: String(macro.command || '').trim().toLowerCase(),
+      reply: cleanReply(macro.reply),
+      intent: normalizeIntent(macro.intent, 'otro'),
+      actions: normalizeActions(macro.actions || []),
+    }))
+    .filter((macro: any) => macro.command && macro.reply);
+}
+
+function matchProfileMacro(text: string, profile: any) {
+  const normalized = String(text || '').trim().toLowerCase();
+  if (!normalized) return null;
+  return getProfileMacros(profile).find((macro: any) => (
+    normalized === macro.command
+    || normalized === macro.name.toLowerCase()
+    || normalized === macro.command.replace(/^\//, '')
+  )) || null;
+}
+
 function isSimpleGreeting(text: string) {
   const normalized = String(text || '')
     .normalize('NFD')
@@ -501,6 +549,7 @@ Reglas:
 - Si recibe un email, pregunta si debe guardarlo en expediente, usarlo para seguimiento o asociarlo a cliente.
 - Si recibe INE, imagen, PDF o documento, confirma recepcion y pide nombre/folio/telefono para relacionar expediente.
 - Si recibe sticker, audio o video, responde de forma amable y con humor ligero; pide el dato operativo que falta.
+- Si el mensaje coincide con un macro activo del diseñador, respeta ese macro como respuesta base y conserva su intencion.
 - Si no entiendes el mensaje, ofrece opciones: consultar folio, guardar expediente o iniciar captura.
 - proposedActions solo puede usar: create_sale, update_lead, schedule_followup, escalate_human.
 
@@ -509,6 +558,14 @@ ${JSON.stringify({
     name: profile?.name || 'ARIUX',
     selfKnowledge: profile?.selfKnowledge || '',
     knowledgeBase: profile?.knowledgeBase || '',
+    designer: getDesignerConfig(profile),
+    macros: getProfileMacros(profile).map((macro: any) => ({
+      name: macro.name,
+      command: macro.command,
+      intent: macro.intent,
+      reply: macro.reply,
+      actions: macro.actions,
+    })),
     defaultMessage: profile?.metadata?.defaultMessage || DEFAULT_ARIUX_MESSAGE,
     functions: Array.isArray(profile?.metadata?.functions) ? profile.metadata.functions : [],
     learnedNotes: (profile?.learnedNotes || []).slice(0, 6),
