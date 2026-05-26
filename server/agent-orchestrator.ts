@@ -190,11 +190,45 @@ function buildSalesReply(fields: Record<string, any>, missing: string[]) {
   return `Soy ${agentName}. Ya tengo los datos principales de ${fields.nombre}. Voy a pasar la solicitud para revision y seguimiento del equipo.`;
 }
 
+function normalizeStatus(value: any) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function isPostedRecord(record: any) {
+  return [
+    record?.estatus_siac,
+    record?.estatus_pisa,
+    record?.estatus_etapa,
+    record?.respuesta_telmex,
+  ].some(value => normalizeStatus(value).includes('POSTEAD'));
+}
+
+function postedRecordReply(record: any) {
+  const fechaPosteo = record.fecha_os_alta || record.fecha_cambio_estatus || 'N/D';
+  return [
+    `Folio ${record.folio_siac} ✅ POSTEADO`,
+    `Fecha de captura: ${record.fecha_captura || 'N/D'}`,
+    `Folio: ${record.folio_siac || 'N/D'}`,
+    `Orden de servicio: ${record.os_alta || 'N/D'}`,
+    `Fecha de posteo: ${fechaPosteo}`,
+  ].join('\n');
+}
+
 function buildFolioReply(text: string) {
   const folio = extractFolioCandidate(text);
   if (!folio) return { reply: 'Enviame el numero de folio para consultar. Ejemplo: folio 123456', fields: {} };
   const record = SiacRecords.getByFolio(folio) as any;
   if (!record) return { reply: `Busqué el folio ${folio} 🔎 y no lo encontré en la base disponible. ¿Quieres que lo escale a un asesor o me compartes otro folio?`, fields: { folio } };
+  if (isPostedRecord(record)) {
+    return {
+      reply: postedRecordReply(record),
+      fields: { folio, found: true, status: 'POSTEADO' },
+    };
+  }
   return {
     reply: `Folio ${record.folio_siac} ✅\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha captura: ${record.fecha_captura || 'N/D'}\nPaquete: ${record.paquete || 'N/D'}`,
     fields: { folio, found: true },
