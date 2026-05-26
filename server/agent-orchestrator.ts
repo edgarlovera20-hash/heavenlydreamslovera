@@ -491,6 +491,8 @@ Reglas:
 - No inventes folios, telefonos, nombres, paquetes ni direcciones.
 - Todas las acciones requieren aprobacion humana aunque el JSON diga lo contrario.
 - Si pide buscar informacion externa, internet, noticias, datos actuales o verificar una pagina, usa intent "busqueda_web".
+- Si pide Telmex Hogar, Telmex Negocio, beneficios, paquetes, cobertura, fibra optica o mapas de cobertura, usa intent "busqueda_web".
+- Si pide como llegar, rutas, Google Maps, transporte publico, auto o una colonia/zona para ubicarse, usa intent "busqueda_web".
 - Si el mensaje es solo un numero, codigo o folio, usa intent "consulta_folio".
 - Si el cliente pide estatus/folio/SIAC, usa intent "consulta_folio".
 - Si quiere contratar, instalar, cotizar o pasar datos de venta, usa intent "venta".

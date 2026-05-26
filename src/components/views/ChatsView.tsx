@@ -166,8 +166,15 @@ const DEFAULT_AGENT_FUNCTIONS: AgentFunctionConfig[] = [
   {
     id: 'info_telmex',
     emoji: '🌐',
-    title: 'Info Telmex Hogar',
-    description: 'Consultar paquetes, precios, promociones y contratacion desde la fuente oficial de Telmex Hogar.',
+    title: 'Info Telmex',
+    description: 'Consultar Telmex Hogar/Negocio, paquetes, beneficios, promociones, fibra y mapas de cobertura desde fuentes oficiales.',
+    enabled: true,
+  },
+  {
+    id: 'rutas_google_maps',
+    emoji: '🗺️',
+    title: 'Rutas Google Maps',
+    description: 'Generar rutas para llegar a colonias o zonas por auto, transporte publico, caminando o bicicleta.',
     enabled: true,
   },
 ];
@@ -185,7 +192,7 @@ const DEFAULT_MEMORY: BotMemory = {
   humor: 'Ligero y respetuoso; solo usa humor cuando ayuda a bajar tension.',
   responseStyle: 'Breve, claro, accionable y con siguiente paso concreto.',
   selfKnowledge: DEFAULT_ARIUX_MESSAGE,
-  knowledgeBase: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta, 💬 orientar por WhatsApp o Telegram y 🌐 consultar informacion oficial de Telmex Hogar. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Para Telmex puedo responder paquetes, precios, promociones y datos de contratacion desde fuente oficial.',
+  knowledgeBase: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta, 💬 orientar por WhatsApp o Telegram, 🌐 consultar informacion oficial de Telmex Hogar/Negocio/cobertura y 🗺️ crear rutas con Google Maps. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Para Telmex puedo responder paquetes, beneficios, precios, promociones, fibra optica y mapas de cobertura desde fuentes oficiales. Para rutas debo pedir origen y destino si falta informacion.',
   learnedNotes: [],
   metadata: DEFAULT_METADATA,
 };
@@ -754,7 +761,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
               <AgentToggle
                 icon={Globe2}
                 title="Info Telmex"
-                desc="Paquetes, precios y promos"
+                desc="Negocio, fibra, rutas"
                 active={Boolean(agents.telmex?.active)}
                 loading={agentBusy.telmex}
                 onClick={() => toggleAgent('telmex')}

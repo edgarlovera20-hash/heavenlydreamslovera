@@ -1,4 +1,5 @@
 import { runAiWithFallback } from './enterprise';
+import { answerMapsQuestion, shouldUseMapsDirections } from './maps-directions-agent';
 import { answerTelmexQuestion, shouldUseTelmexInfo } from './telmex-info-agent';
 
 export interface WebSearchResult {
@@ -25,6 +26,7 @@ export function shouldUseWebSearch(text: string) {
   const body = normalizeText(text);
   if (!body || body.length < 6) return false;
   const raw = String(text || '').trim();
+  if (shouldUseMapsDirections(text)) return true;
   if (shouldUseTelmexInfo(text)) return true;
   if (/^\[(sticker|imagen|documento|audio|video|contacto|ubicacion|mensaje recibido sin texto)/i.test(raw)) return false;
   if (/^[a-z0-9-]{5,}$/i.test(raw) && /\d/.test(raw)) return false;
@@ -215,6 +217,10 @@ function withSources(reply: string, sources: WebSearchResult[]) {
 }
 
 export async function answerWebQuestion(text: string, context: { promoterName?: string | null } = {}): Promise<WebAnswer> {
+  if (shouldUseMapsDirections(text)) {
+    return answerMapsQuestion(text);
+  }
+
   if (shouldUseTelmexInfo(text)) {
     return answerTelmexQuestion(text);
   }

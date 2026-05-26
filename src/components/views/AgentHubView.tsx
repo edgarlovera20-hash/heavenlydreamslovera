@@ -81,12 +81,12 @@ const AGENT_META = [
   },
   {
     id: 'telmex',
-    name: 'Agente Telmex Hogar',
-    desc: 'Consulta la pagina oficial de Telmex Hogar para paquetes Infinitum, precios, promociones y datos de contratacion.',
+    name: 'Agente Telmex y Cobertura',
+    desc: 'Consulta fuentes oficiales de Telmex Hogar y Negocio para paquetes, beneficios, promociones, cobertura de fibra y contratacion.',
     icon: Globe2,
     color: 'cyan',
-    channels: ['WhatsApp', 'Telegram', 'Web Telmex'],
-    hint: 'Ejemplos:\n"paquetes Telmex 500 megas"\n"promociones Telmex hogar"\n"telefono para contratar Telmex"',
+    channels: ['WhatsApp', 'Telegram', 'Telmex', 'Maps'],
+    hint: 'Ejemplos:\n"paquetes Telmex negocio 500 megas"\n"beneficios Telmex Negocio"\n"cobertura fibra en colonia Roma"\n"como llegar desde Xochimilco a colonia Roma"',
   },
   {
     id: 'validador',
