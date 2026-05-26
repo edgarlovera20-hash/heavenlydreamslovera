@@ -288,14 +288,34 @@ function isPostedRecord(record: any) {
   ].some(value => normalizeStatus(value).includes('POSTEAD'));
 }
 
-function postedRecordReply(record: any) {
-  const fechaPosteo = record.fecha_os_alta || record.fecha_cambio_estatus || 'N/D';
+function siacValue(value: any) {
+  const text = String(value ?? '').trim();
+  return text || 'N/D';
+}
+
+function siacStatus(record: any) {
+  return siacValue(record?.estatus_siac || record?.estatus_pisa || record?.estatus_etapa || record?.respuesta_telmex);
+}
+
+export function formatSiacFolioReply(record: any) {
+  const fechaPosteo = record?.fecha_os_alta || record?.fecha_cambio_estatus;
   return [
-    `Folio ${record.folio_siac} ✅ POSTEADO`,
-    `Fecha de captura: ${record.fecha_captura || 'N/D'}`,
-    `Folio: ${record.folio_siac || 'N/D'}`,
-    `Orden de servicio: ${record.os_alta || 'N/D'}`,
-    `Fecha de posteo: ${fechaPosteo}`,
+    `Folio ${siacValue(record?.folio_siac)} ✅`,
+    `STATUS: ${siacStatus(record)}`,
+    `FECHA DE CAPTURA: ${siacValue(record?.fecha_captura)}`,
+    `FOLIO: ${siacValue(record?.folio_siac)}`,
+    `TIPO DE LÍNEA: ${siacValue(record?.tipo_linea)}`,
+    `SEGMENTO: ${siacValue(record?.linea_contratada || record?.tipo_cliente)}`,
+    `PAQUETE: ${siacValue(record?.paquete)}`,
+    `ÁREA: ${siacValue(record?.area)}`,
+    `ESTRATEGIA: ${siacValue(record?.estrategia)}`,
+    `USUARIO: ${siacValue(record?.usuario || record?.promotor)}`,
+    `ORDEN DE SERVICIO: ${siacValue(record?.os_alta)}`,
+    `FECHA DE POSTEO: ${siacValue(fechaPosteo)}`,
+    `TIENDA: ${siacValue(record?.tienda)}`,
+    `ETAPA PISA (SIAC): ${siacValue(record?.estatus_pisa || record?.estatus_etapa)}`,
+    `TIPO DE SERVICIO: ${siacValue(record?.tipo_servicio)}`,
+    `ZONA: ${siacValue(record?.zona)}`,
   ].join('\n');
 }
 
@@ -304,15 +324,9 @@ function buildFolioReply(text: string) {
   if (!folio) return { reply: 'Enviame el numero de folio para consultar. Ejemplo: folio 123456', fields: {} };
   const record = SiacRecords.getByFolio(folio) as any;
   if (!record) return { reply: `Busqué el folio ${folio} 🔎 y no lo encontré en la base disponible. ¿Quieres que lo escale a un asesor o me compartes otro folio?`, fields: { folio } };
-  if (isPostedRecord(record)) {
-    return {
-      reply: postedRecordReply(record),
-      fields: { folio, found: true, status: 'POSTEADO' },
-    };
-  }
   return {
-    reply: `Folio ${record.folio_siac} ✅\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha captura: ${record.fecha_captura || 'N/D'}\nPaquete: ${record.paquete || 'N/D'}`,
-    fields: { folio, found: true },
+    reply: formatSiacFolioReply(record),
+    fields: { folio, found: true, status: isPostedRecord(record) ? 'POSTEADO' : siacStatus(record) },
   };
 }
 

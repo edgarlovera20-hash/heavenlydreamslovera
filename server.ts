@@ -84,6 +84,7 @@ import {
 } from "./server/messaging";
 import {
   approveAgentOutbox,
+  formatSiacFolioReply,
   rejectAgentOutbox,
   runAgentForConversation,
   runAgentForMessage,
@@ -3119,7 +3120,7 @@ async function startServer() {
       if (folioMatch) {
         const record = SiacRecords.getByFolio(folioMatch[1]) as any;
         const reply = record
-          ? `Folio ${record.folio_siac}\nEstatus: ${record.estatus_siac || 'N/D'}\nPromotora: ${record.promotor || 'N/D'}\nFecha: ${record.fecha_captura || 'N/D'}`
+          ? formatSiacFolioReply(record)
           : `Folio ${folioMatch[1]} no encontrado. ¿Deseas que un asesor te contacte?`;
         try {
           await replyToMsg(msg, reply);
