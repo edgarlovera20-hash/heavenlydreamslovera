@@ -1,6 +1,6 @@
 export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
 export const DEFAULT_OLLAMA_OCR_MODEL = 'glm-ocr:latest';
-export const DEFAULT_OLLAMA_CHAT_MODEL = 'qwen3:4b';
+export const DEFAULT_OLLAMA_CHAT_MODEL = 'gemma4:e4b';
 
 function cleanBaseUrl(value: string) {
   return String(value || '').trim().replace(/\/+$/, '');

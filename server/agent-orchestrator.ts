@@ -356,7 +356,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-function buildQwenDecisionPrompt(conversation: any, message: any, rules: AgentDecision) {
+function buildAiDecisionPrompt(conversation: any, message: any, rules: AgentDecision) {
   const profile = AgentProfiles.getById('promoter_receptionist') as any;
   const memory = conversation?.memory || {};
   const promoter = memory.promoter || {};
@@ -442,7 +442,7 @@ function decisionFromModel(conversation: any, rules: AgentDecision, modelPayload
   const extractedFields: Record<string, any> = {
     ...rules.extractedFields,
     ...Object.fromEntries(Object.entries(modelFields).filter(([, value]) => value != null && String(value).trim() !== '')),
-    _ai: { provider: ai.provider || 'ollama', model: ai.model || 'qwen3', mode: 'qwen3' },
+    _ai: { provider: ai.provider || 'ollama', model: ai.model || 'gemma4:e4b', mode: 'ollama-gemma4' },
   };
 
   if (intent === 'consulta_folio') {
@@ -520,9 +520,9 @@ async function decide(conversation: any, message: any): Promise<AgentDecision> {
     return rules;
   }
   try {
-    const ai = await withTimeout(runAiWithFallback(buildQwenDecisionPrompt(conversation, message, rules)), AI_DECISION_TIMEOUT_MS, 'Qwen decision');
+    const ai = await withTimeout(runAiWithFallback(buildAiDecisionPrompt(conversation, message, rules)), AI_DECISION_TIMEOUT_MS, 'AI decision');
     const parsed = parseModelJson(ai.output);
-    if (!parsed) throw new Error('Qwen no devolvio JSON valido');
+    if (!parsed) throw new Error('El modelo IA no devolvio JSON valido');
     return decisionFromModel(conversation, rules, parsed, ai, message);
   } catch (err: any) {
     return {

@@ -35,7 +35,7 @@ async function callOllama(prompt: string) {
       messages: [
         {
           role: 'system',
-          content: 'Eres Qwen 3 operando Heavenly Dreams CRM. Responde en espanol, sin razonamiento visible, sin etiquetas <think>, y entrega solo lo que se pide.',
+          content: 'Eres ARIUX operando Heavenly Dreams CRM sobre Ollama Gemma 4. Responde en espanol, sin razonamiento visible, sin etiquetas <think>, y entrega solo lo que se pide.',
         },
         { role: 'user', content: `/no_think\n${prompt}` },
       ],
