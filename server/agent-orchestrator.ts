@@ -12,8 +12,9 @@ import {
   Ventas,
 } from './db';
 import { runAiWithFallback } from './enterprise';
+import { answerWebQuestion, shouldUseWebSearch } from './web-search';
 
-type Intent = 'venta' | 'consulta_folio' | 'soporte' | 'morosidad' | 'otro';
+type Intent = 'venta' | 'consulta_folio' | 'soporte' | 'morosidad' | 'busqueda_web' | 'otro';
 type ProposedAction = 'create_sale' | 'update_lead' | 'schedule_followup' | 'escalate_human';
 
 interface AgentDecision {
@@ -26,7 +27,7 @@ interface AgentDecision {
 }
 
 type SendChannelMessage = (channel: string, target: string, message: string) => Promise<any>;
-const INTENTS: Intent[] = ['venta', 'consulta_folio', 'soporte', 'morosidad', 'otro'];
+const INTENTS: Intent[] = ['venta', 'consulta_folio', 'soporte', 'morosidad', 'busqueda_web', 'otro'];
 const PROPOSED_ACTIONS: ProposedAction[] = ['create_sale', 'update_lead', 'schedule_followup', 'escalate_human'];
 const DEFAULT_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
 const AI_DECISION_TIMEOUT_MS = Math.max(3000, Number(process.env.AGENT_AI_TIMEOUT_MS || 8000));
@@ -158,6 +159,7 @@ function buildAutonomousReply(text: string, profile: any) {
 
 function classifyIntent(text: string): { intent: Intent; confidence: number } {
   const body = text.toLowerCase();
+  if (shouldUseWebSearch(text)) return { intent: 'busqueda_web', confidence: 0.9 };
   if (/\b(folio|consulta|estatus|siac|mi folio)\b/.test(body)) return { intent: 'consulta_folio', confidence: 0.88 };
   if (/\b(contratar|quiero internet|paquete|cobertura|fibra|instalar|servicio|alta)\b/.test(body)) return { intent: 'venta', confidence: 0.86 };
   if (body.includes('nombre:') && (body.includes('tel:') || body.includes('telefono:') || body.includes('teléfono:'))) return { intent: 'venta', confidence: 0.92 };
@@ -335,6 +337,7 @@ Reglas:
 - Siempre termina con una pregunta o siguiente paso concreto cuando falte contexto.
 - No inventes folios, telefonos, nombres, paquetes ni direcciones.
 - Todas las acciones requieren aprobacion humana aunque el JSON diga lo contrario.
+- Si pide buscar informacion externa, internet, noticias, datos actuales o verificar una pagina, usa intent "busqueda_web".
 - Si el mensaje es solo un numero, codigo o folio, usa intent "consulta_folio".
 - Si el cliente pide estatus/folio/SIAC, usa intent "consulta_folio".
 - Si quiere contratar, instalar, cotizar o pasar datos de venta, usa intent "venta".
@@ -379,7 +382,7 @@ ${JSON.stringify(message.metadata || {})}
 
 Devuelve exactamente:
 {
-  "intent": "venta|consulta_folio|soporte|morosidad|otro",
+  "intent": "venta|consulta_folio|soporte|morosidad|busqueda_web|otro",
   "confidence": 0.0,
   "extractedFields": {
     "nombre": "",
@@ -449,6 +452,36 @@ function decisionFromModel(conversation: any, rules: AgentDecision, modelPayload
 async function decide(conversation: any, message: any): Promise<AgentDecision> {
   const rules = decideWithRules(conversation, message);
   const text = String(message?.body || '');
+  if (rules.intent === 'busqueda_web') {
+    try {
+      const web = await withTimeout(answerWebQuestion(text, { promoterName: promoterFirstName(conversation) }), 15_000, 'Web search');
+      return personalizeDecision(conversation, {
+        intent: 'busqueda_web',
+        confidence: Math.max(rules.confidence, 0.9),
+        extractedFields: {
+          ...rules.extractedFields,
+          query: web.query,
+          sources: web.sources,
+          _web: { provider: 'duckduckgo', count: web.sources.length },
+        },
+        proposedReply: web.reply,
+        proposedActions: [],
+        requiresApproval: true,
+      });
+    } catch (err: any) {
+      return personalizeDecision(conversation, {
+        intent: 'busqueda_web',
+        confidence: rules.confidence,
+        extractedFields: {
+          ...rules.extractedFields,
+          _web: { provider: 'duckduckgo', error: err?.message || String(err) },
+        },
+        proposedReply: 'No pude consultar la web en este momento. Dame una palabra clave mas concreta o intenta de nuevo en unos minutos.',
+        proposedActions: [],
+        requiresApproval: true,
+      });
+    }
+  }
   if (rules.intent === 'consulta_folio' || isSimpleGreeting(text)) {
     return rules;
   }
@@ -470,6 +503,7 @@ async function decide(conversation: any, message: any): Promise<AgentDecision> {
 
 function nextStatus(decision: AgentDecision) {
   if (decision.proposedActions.includes('escalate_human')) return 'requiere_humano';
+  if (decision.intent === 'busqueda_web') return 'consulta_web';
   if (decision.intent === 'venta') {
     const missing = decision.extractedFields.missing || [];
     return missing.length ? 'datos_incompletos' : 'captura_pendiente_aprobacion';
@@ -480,9 +514,10 @@ function nextStatus(decision: AgentDecision) {
 
 function mergeMemory(conversation: any, decision: AgentDecision) {
   const previous = conversation?.memory || {};
+  const transientFields = new Set(['missing', '_ai', '_web', 'sources']);
   const knownFields = {
     ...(previous.knownFields || {}),
-    ...Object.fromEntries(Object.entries(decision.extractedFields).filter(([key]) => key !== 'missing')),
+    ...Object.fromEntries(Object.entries(decision.extractedFields).filter(([key]) => !transientFields.has(key))),
   };
   return {
     ...previous,
