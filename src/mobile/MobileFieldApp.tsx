@@ -1422,9 +1422,6 @@ export default function MobileFieldApp() {
       }
       return '';
     }
-    if (!hasDraftDocument(CURP_IDENTITY_DOCUMENT) && !CURP_RE.test(normalizeCurpValue(draft.curp)) && !draft.curpAgentRequestedAt) {
-      return 'Calcula la CURP con los datos basicos o sube el documento CURP antes de finalizar.';
-    }
     return '';
   }, [draft.curp, draft.curpAgentRequestedAt, draft.identityDocumentType, hasDraftDocument]);
 
@@ -3015,13 +3012,11 @@ export default function MobileFieldApp() {
                 <Field label="Apellido paterno" value={draft.apellidoPaterno} onChange={(value) => updateDraft({ apellidoPaterno: value })} />
                 <Field label="Apellido materno" value={draft.apellidoMaterno} onChange={(value) => updateDraft({ apellidoMaterno: value })} />
               </div>
-              {identityDocumentType === 'ine' && (
-                <Field
-                  label="CURP"
-                  value={draft.curp}
-                  onChange={(value) => updateDraft({ curp: normalizeCurpValue(value), curpAgentRequestedAt: '', curpAgentDraft: '', curpAgentMessage: '' })}
-                  placeholder="Autorrelleno por OCR o captura manual"
-                />
+              {identityDocumentType === 'ine' && curpTextReady && (
+                <div className="hd-curp-helper rounded-2xl p-4 text-xs font-semibold leading-5 text-emerald-50">
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-100">CURP detectada / calculada</p>
+                  <p className="mt-1 break-all font-mono text-sm font-black">{normalizedCurp}</p>
+                </div>
               )}
               {identityDocumentType === 'ine' && (
                 <Field label="Folio INE" value={draft.folioIne} onChange={(value) => updateDraft({ folioIne: value.toUpperCase() })} placeholder="OCR / CIC / clave elector" />

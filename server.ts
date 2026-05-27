@@ -1086,15 +1086,21 @@ async function startServer() {
       } catch {
         return res.status(401).json({ error: 'Token requerido' });
       }
-    } else if (process.env.NODE_ENV === 'production' && process.env.PUBLIC_REGISTRATION_ENABLED !== 'true') {
+    } else if (process.env.PUBLIC_REGISTRATION_ENABLED === 'false') {
       return res.status(403).json({
-        error: 'Registro público deshabilitado en producción. Solicita una invitación a gerencia.',
+        error: 'Registro público deshabilitado. Solicita una invitación a gerencia.',
         code: 'PUBLIC_REGISTRATION_DISABLED',
       });
     }
     const data = normalizeUserPayload(req.body, { publicRegistration });
     if (!data.nombre || !data.email || !data.username || !data.password) {
       return res.status(400).json({ error: 'Nombre, email, usuario y contraseña son requeridos.' });
+    }
+    if (Users.getByEmail(data.email)) {
+      return res.status(409).json({ error: 'Ya existe un usuario con ese correo.' });
+    }
+    if (Users.getByUsername(data.username)) {
+      return res.status(409).json({ error: 'Ya existe un usuario con ese nombre de usuario.' });
     }
     Users.create(data);
     AuditLog.insert({

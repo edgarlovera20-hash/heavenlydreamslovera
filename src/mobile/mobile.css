@@ -13,15 +13,15 @@
 
 @layer base {
   :root {
-    --theme-electric: #0ea5e9;
-    --theme-deep: #075985;
-    --theme-dark: #0c4a6e;
+    --theme-electric: #0437F2;
+    --theme-deep: #0073CF;
+    --theme-dark: #041f8f;
     --theme-black: #020617;
     --theme-neon: #38f8ff;
     --theme-matrix: #10b981;
     --theme-text-main: #f8fafc;
-    --hd-bg: #38bdf8;
-    --hd-bg-soft: #7dd3fc;
+    --hd-bg: #0437F2;
+    --hd-bg-soft: #0073CF;
     --hd-surface: rgba(3, 10, 31, 0.9);
     --hd-surface-strong: rgba(2, 6, 23, 0.94);
     --hd-surface-muted: rgba(8, 24, 64, 0.92);
@@ -29,8 +29,8 @@
     --hd-border-strong: rgba(125, 249, 255, 0.58);
     --hd-text: #f8fafc;
     --hd-text-muted: #94a3b8;
-    --hd-accent: #0ea5e9;
-    --hd-accent-strong: #7dd3fc;
+    --hd-accent: #0073CF;
+    --hd-accent-strong: #e0f2fe;
     --hd-success: #34d399;
     --hd-warning: #fbbf24;
     --hd-danger: #fb7185;
@@ -56,9 +56,9 @@
     margin: 0;
     background:
       radial-gradient(circle at 18% -10%, rgba(224, 242, 254, 0.88), transparent 28rem),
-      radial-gradient(circle at 88% 6%, rgba(56, 189, 248, 0.72), transparent 24rem),
-      radial-gradient(circle at 42% 64%, rgba(14, 165, 233, 0.46), transparent 22rem),
-      linear-gradient(160deg, #7dd3fc 0%, #38bdf8 44%, #0ea5e9 100%);
+      radial-gradient(circle at 88% 6%, rgba(0, 115, 207, 0.78), transparent 24rem),
+      radial-gradient(circle at 42% 64%, rgba(4, 55, 242, 0.58), transparent 22rem),
+      linear-gradient(160deg, #0437F2 0%, #0073CF 54%, #041f8f 100%);
     color: var(--theme-text-main);
     font-family: var(--font-sans);
     overflow-x: hidden;
@@ -175,9 +175,9 @@
     color: var(--hd-text);
     background:
       radial-gradient(circle at 18% -8%, rgba(240, 249, 255, 0.92), transparent 26rem),
-      radial-gradient(circle at 86% 10%, rgba(125, 211, 252, 0.86), transparent 25rem),
-      radial-gradient(circle at 48% 48%, rgba(14, 165, 233, 0.52), transparent 22rem),
-      linear-gradient(160deg, #bae6fd 0%, #38bdf8 45%, #0284c7 100%);
+      radial-gradient(circle at 86% 10%, rgba(0, 115, 207, 0.86), transparent 25rem),
+      radial-gradient(circle at 48% 48%, rgba(4, 55, 242, 0.62), transparent 22rem),
+      linear-gradient(160deg, #0437F2 0%, #0073CF 52%, #041f8f 100%);
     background-size: 130% 130%, 125% 125%, 140% 140%, 220% 220%;
     animation: hd-sky-breathe 12s ease-in-out infinite;
   }
@@ -193,7 +193,7 @@
       linear-gradient(rgba(224, 242, 254, 0.42) 1px, transparent 1px),
       linear-gradient(90deg, rgba(224, 242, 254, 0.36) 1px, transparent 1px),
       radial-gradient(circle at 55% 4%, rgba(240, 249, 255, 0.56), transparent 16rem),
-      linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(14, 165, 233, 0.08));
+      linear-gradient(135deg, rgba(0, 115, 207, 0.28), rgba(4, 55, 242, 0.14));
     background-size: 42px 42px, 42px 42px, auto, 220% 220%;
     animation: hd-grid-flow 10s linear infinite;
     mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.78) 54%, transparent 100%);
@@ -207,8 +207,8 @@
     pointer-events: none;
     background:
       radial-gradient(circle at 24% 22%, rgba(224, 242, 254, 0.76), transparent 18rem),
-      radial-gradient(circle at 72% 36%, rgba(56, 248, 255, 0.62), transparent 22rem),
-      radial-gradient(circle at 42% 74%, rgba(2, 132, 199, 0.44), transparent 20rem);
+      radial-gradient(circle at 72% 36%, rgba(0, 115, 207, 0.72), transparent 22rem),
+      radial-gradient(circle at 42% 74%, rgba(4, 55, 242, 0.54), transparent 20rem);
     filter: blur(14px) saturate(150%);
     animation: hd-electric-drift 8s ease-in-out infinite alternate;
   }
@@ -381,7 +381,7 @@
 
   .hd-tone-cyan {
     --hd-tone: #22d3ee;
-    --hd-tone-2: #0ea5e9;
+    --hd-tone-2: #0073CF;
     --hd-tone-rgb: 34, 211, 238;
   }
 
@@ -417,7 +417,7 @@
 
   :where(.hd-neon-card, .hd-neon-action, .hd-neon-metric, .hd-curp-helper) {
     --hd-tone: #22d3ee;
-    --hd-tone-2: #0ea5e9;
+    --hd-tone-2: #0073CF;
     --hd-tone-rgb: 34, 211, 238;
   }
 

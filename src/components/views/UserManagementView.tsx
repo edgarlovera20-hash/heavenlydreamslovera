@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, CheckCircle, XCircle, Trash2, RefreshCw, Search, Shield, UserCheck, UserX, Clock, Phone, Mail, MapPin } from 'lucide-react';
+import { Users, CheckCircle, XCircle, Trash2, RefreshCw, Search, Shield, UserCheck, UserX, Clock, Phone, Mail, MapPin, Plus, KeyRound } from 'lucide-react';
 
 interface AppUser {
   uid: string;
@@ -29,6 +29,17 @@ const STATUS_LABELS: Record<number, { label: string; color: string }> = {
   2: { label: 'Pendiente', color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
 };
 
+const emptyUserForm = {
+  nombre: '',
+  email: '',
+  username: '',
+  password: '',
+  role: 'ASESOR',
+  puesto: 'Asesor',
+  zona: '',
+  activo: '1',
+};
+
 export default function UserManagementView() {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +47,9 @@ export default function UserManagementView() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'active' | 'rejected'>('all');
   const [actionMsg, setActionMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [loadError, setLoadError] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [userForm, setUserForm] = useState(emptyUserForm);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -57,6 +71,50 @@ export default function UserManagementView() {
   const notify = (text: string, ok: boolean) => {
     setActionMsg({ text, ok });
     setTimeout(() => setActionMsg(null), 4000);
+  };
+
+  const updateUserForm = (field: keyof typeof emptyUserForm, value: string) => {
+    setUserForm(current => ({ ...current, [field]: value }));
+  };
+
+  const createUser = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!userForm.nombre.trim() || !userForm.email.trim() || !userForm.username.trim() || !userForm.password.trim()) {
+      notify('Completa nombre, correo, usuario y contraseña.', false);
+      return;
+    }
+    if (userForm.password.length < 8) {
+      notify('La contraseña debe tener al menos 8 caracteres.', false);
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: userForm.nombre.trim(),
+          email: userForm.email.trim(),
+          username: userForm.username.trim(),
+          password: userForm.password,
+          role: userForm.role,
+          puesto: userForm.puesto.trim() || null,
+          zona: userForm.zona.trim() || null,
+          activo: Number(userForm.activo),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'No se pudo crear el usuario.');
+      notify(Number(userForm.activo) === 1 ? 'Usuario creado y activo.' : 'Usuario creado como pendiente.', true);
+      setUserForm(emptyUserForm);
+      setShowCreateForm(false);
+      loadUsers();
+    } catch (err: any) {
+      notify(err?.message || 'No se pudo crear el usuario.', false);
+    } finally {
+      setCreating(false);
+    }
   };
 
   const approveUser = async (uid: string) => {
@@ -107,6 +165,74 @@ export default function UserManagementView() {
         <button onClick={loadUsers} className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors" title="Recargar">
           <RefreshCw className="w-4 h-4" />
         </button>
+      </div>
+
+      <div className="rounded-2xl border border-cyan-400/20 bg-[#0a0d14] p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.14em] text-cyan-100">
+              <Plus className="h-4 w-4 text-cyan-300" /> Crear usuario
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">Alta manual desde la app. Puedes dejarlo activo o pendiente de aprobación.</p>
+          </div>
+          <button
+            onClick={() => setShowCreateForm(value => !value)}
+            className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-100 hover:bg-cyan-400/20"
+          >
+            {showCreateForm ? 'Cerrar formulario' : 'Nuevo usuario'}
+          </button>
+        </div>
+
+        {showCreateForm && (
+          <form onSubmit={createUser} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nombre</span>
+              <input value={userForm.nombre} onChange={e => updateUserForm('nombre', e.target.value)} className="w-full rounded-xl border border-slate-800 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400/50" placeholder="Edgar Lovera" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Correo</span>
+              <input value={userForm.email} onChange={e => updateUserForm('email', e.target.value)} type="email" className="w-full rounded-xl border border-slate-800 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400/50" placeholder="usuario@correo.com" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Usuario</span>
+              <input value={userForm.username} onChange={e => updateUserForm('username', e.target.value)} className="w-full rounded-xl border border-slate-800 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400/50" placeholder="usuario" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Contraseña temporal</span>
+              <div className="relative">
+                <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input value={userForm.password} onChange={e => updateUserForm('password', e.target.value)} type="password" className="w-full rounded-xl border border-slate-800 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-white outline-none focus:border-cyan-400/50" placeholder="Mínimo 8 caracteres" />
+              </div>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Rol</span>
+              <select value={userForm.role} onChange={e => updateUserForm('role', e.target.value)} className="w-full rounded-xl border border-slate-800 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400/50">
+                {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value} className="bg-slate-950">{label}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Puesto</span>
+              <input value={userForm.puesto} onChange={e => updateUserForm('puesto', e.target.value)} className="w-full rounded-xl border border-slate-800 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400/50" placeholder="Asesor" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Zona</span>
+              <input value={userForm.zona} onChange={e => updateUserForm('zona', e.target.value)} className="w-full rounded-xl border border-slate-800 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400/50" placeholder="CDMX / zona 1" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Estado inicial</span>
+              <select value={userForm.activo} onChange={e => updateUserForm('activo', e.target.value)} className="w-full rounded-xl border border-slate-800 bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400/50">
+                <option value="1" className="bg-slate-950">Activo, puede entrar</option>
+                <option value="2" className="bg-slate-950">Pendiente de aprobar</option>
+              </select>
+            </label>
+            <div className="md:col-span-2 xl:col-span-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => { setUserForm(emptyUserForm); setShowCreateForm(false); }} className="rounded-xl border border-slate-800 px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-white">Cancelar</button>
+              <button disabled={creating} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-slate-950 disabled:opacity-60">
+                {creating ? 'Creando...' : 'Crear usuario'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* KPI row */}

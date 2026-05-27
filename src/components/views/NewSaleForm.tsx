@@ -2493,14 +2493,14 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                   <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500" 
                     value={form.apellidoMaterno || ''} onChange={e => updateForm({ apellidoMaterno: e.target.value })} />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1.5">CURP</label>
-                  <MatrixInput type="text" className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 text-white focus:ring-1 focus:ring-blue-500 uppercase font-mono" 
-                    value={form.curp || ''} onChange={e => {
-                      updateForm({ curp: normalizeCurpInput(e.target.value) });
-                      setCurpLookupError('');
-                    }} />
-                </div>
+                {form.curp && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">CURP detectada / calculada</label>
+                    <div className="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 font-mono text-sm font-bold uppercase text-emerald-100">
+                      {normalizeCurpInput(form.curp)}
+                    </div>
+                  </div>
+                )}
                 {docType === 'ine' && (
                   <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1.5">Folio INE (Atrás)</label>
