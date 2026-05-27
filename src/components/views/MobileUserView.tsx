@@ -103,14 +103,14 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
                 onBack(); // Logout
               }
             }} 
-            className="flex items-center text-cyber-electric/70 hover:text-cyber-neon transition-colors bg-cyber-electric/5 hover:bg-cyber-neon/10 rounded border border-cyber-electric/20 hover:border-cyber-neon/50 mr-1 px-1.5 sm:px-2 py-1 sm:py-1.5 uppercase tracking-widest text-[9px] sm:text-[10px] font-bold"
+            className="hd-liquid-button flex items-center text-orange-100/80 hover:text-white transition-colors bg-orange-300/5 hover:bg-orange-300/10 rounded border border-orange-300/20 hover:border-orange-200/60 mr-1 px-1.5 sm:px-2 py-1 sm:py-1.5 uppercase tracking-widest text-[9px] sm:text-[10px] font-bold"
           >
             <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             <span className="hidden sm:inline-block ml-1">Regresar</span>
           </button>
           <div className="relative">
             <div className="absolute inset-0 bg-cyber-neon/20 blur-md rounded-full"></div>
-            <Logo className="w-8 h-8 sm:w-10 sm:h-10 relative z-10 drop-shadow-[0_0_8px_rgba(0,229,255,0.5)]" />
+            <Logo className="w-12 h-12 sm:w-16 sm:h-16 relative z-10 drop-shadow-[0_0_18px_rgba(34,255,136,0.38)]" />
           </div>
           <div>
             <h1 className="text-sm sm:text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyber-neon to-cyber-electric tracking-tight leading-tight">Heavenly Dreams</h1>
@@ -118,7 +118,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="relative p-1.5 sm:p-2 text-cyber-electric/70 hover:text-cyber-neon transition-colors bg-cyber-electric/5 hover:bg-cyber-neon/10 rounded border border-cyber-electric/20 hover:border-cyber-neon/50 group">
+          <button className="hd-liquid-button relative p-1.5 sm:p-2 text-orange-100/80 hover:text-white transition-colors bg-orange-300/5 hover:bg-orange-300/10 rounded border border-orange-300/20 hover:border-orange-200/60 group">
             <Bell className="w-4 h-4 sm:w-5 sm:h-5 group-hover:drop-shadow-[0_0_8px_rgba(0,229,255,0.8)]" />
             <span className="absolute top-1 sm:top-1.5 right-1 sm:right-1.5 w-1.5 sm:w-2 h-1.5 sm:h-2 bg-red-500 rounded-full border border-cyber-black shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse"></span>
           </button>
@@ -173,7 +173,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
               <button
                 key={section.id}
                 onClick={() => handleNavClick(section.id)}
-                className={`flex flex-col items-center justify-center gap-3 p-6 rounded-xl border transition-all ${activeSection === section.id ? 'bg-cyber-neon/10 border-cyber-neon/50 text-cyber-neon shadow-[0_0_20px_rgba(0,229,255,0.2)]' : 'bg-cyber-dark/50 border-cyber-electric/20 text-cyber-electric/70 hover:bg-cyber-electric/10 hover:border-cyber-electric/50 hover:text-white group'}`}
+                className={`hd-liquid-button flex flex-col items-center justify-center gap-3 p-6 rounded-xl border transition-all ${activeSection === section.id ? 'hd-liquid-selected bg-orange-300/10 border-orange-200/60 text-orange-100 shadow-[0_0_24px_rgba(255,138,31,0.32)]' : 'bg-cyber-dark/50 border-cyber-electric/20 text-cyber-electric/70 hover:bg-orange-300/10 hover:border-orange-200/50 hover:text-white group'}`}
               >
                 <div className="relative mb-1">
                   <CyberIcon icon={section.icon} color={section.color} size="md" glowOpacity={activeSection === section.id ? 0.6 : 0.3} />
@@ -182,7 +182,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
               </button>
             ))}
           </div>
-          <button onClick={onBack} className="mt-4 flex items-center justify-center gap-2 w-full py-4 bg-red-900/20 hover:bg-red-900/40 text-red-500 rounded-xl font-bold border border-red-500/30 transition-colors uppercase tracking-widest text-sm shadow-[0_0_15px_rgba(239,68,68,0.1)] shrink-0">
+          <button onClick={onBack} className="hd-liquid-button mt-4 flex items-center justify-center gap-2 w-full py-4 bg-red-900/20 hover:bg-red-900/40 text-red-500 rounded-xl font-bold border border-red-500/30 transition-colors uppercase tracking-widest text-sm shadow-[0_0_15px_rgba(239,68,68,0.1)] shrink-0">
             <LogOut className="w-5 h-5" /> Desconectar
           </button>
         </div>
@@ -217,7 +217,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
 // Subcomponents
 function NavItem({ icon: Icon, label, active, onClick }: any) {
   return (
-    <button onClick={onClick} className={`flex flex-col items-center justify-center gap-1 w-16 h-full transition-all relative z-10 ${active ? 'text-cyber-neon' : 'text-cyber-electric/50 hover:text-cyber-electric/80'}`}>
+    <button onClick={onClick} className={`hd-liquid-button flex flex-col items-center justify-center gap-1 w-16 h-full transition-all relative z-10 rounded-xl ${active ? 'hd-liquid-selected text-orange-100' : 'text-cyber-electric/50 hover:text-cyber-electric/80'}`}>
       <div className="relative">
         {active && <div className="absolute inset-0 bg-cyber-neon/40 blur-md rounded-full"></div>}
         <Icon className={`w-6 h-6 relative z-10 transition-transform ${active ? 'scale-110 drop-shadow-[0_0_8px_rgba(0,229,255,0.8)]' : ''}`} />

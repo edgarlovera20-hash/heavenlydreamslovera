@@ -128,7 +128,7 @@ export default function Integrations() {
         ))}
         
         {/* Add New Integration Card */}
-        <button className="group flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-cyan-300/18 bg-white/[0.025] p-8 transition-all hover:border-cyan-300/45 hover:bg-cyan-300/[0.04]">
+        <button className="hd-card hd-card-interactive hd-tone-amber group flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-cyan-300/18 p-8 transition-all hover:border-cyan-300/45">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-500 transition-all group-hover:border-cyan-300/45 group-hover:text-cyan-300">
             <Plus className="w-8 h-8" />
           </div>
@@ -140,7 +140,7 @@ export default function Integrations() {
       </div>
 
       {/* System Logs / Integration Activity */}
-      <PremiumCard className="relative z-10 overflow-hidden p-6">
+      <PremiumCard className="relative z-10 overflow-hidden p-6" tone="purple">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(14,165,233,0.12),transparent_34%)]" />
         <div className="absolute top-0 left-0 w-1 h-full bg-cyber-electric/30"></div>
         <div className="relative z-10 flex items-center justify-between mb-6">
@@ -172,9 +172,19 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
 }) => {
   const isConnected = integration.status === 'connected';
   const isConfiguring = integration.status === 'configuring';
+  const toneClass: Record<string, string> = {
+    cyan: 'hd-tone-cyan',
+    blue: 'hd-tone-blue',
+    purple: 'hd-tone-violet',
+    green: 'hd-tone-emerald',
+    yellow: 'hd-tone-amber',
+    pink: 'hd-tone-pink',
+    red: 'hd-tone-pink',
+    slate: 'hd-tone-slate',
+  };
 
   return (
-    <div className={`relative group overflow-hidden transition-all duration-300 p-6 rounded-2xl border backdrop-blur-sm ${
+    <div className={`hd-card hd-card-interactive ${toneClass[integration.color] || 'hd-tone-cyan'} relative group overflow-hidden transition-all duration-300 p-6 rounded-2xl border backdrop-blur-sm ${
       isConnected 
       ? 'bg-slate-950/78 border-cyber-electric/28 hover:border-cyber-electric/48' 
       : 'bg-slate-950/48 border-white/10 hover:border-white/18'

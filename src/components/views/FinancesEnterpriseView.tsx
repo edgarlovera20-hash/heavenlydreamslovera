@@ -393,7 +393,7 @@ export default function FinancesEnterpriseView() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <PremiumCard className="p-5">
+        <PremiumCard className="p-5" tone="cyan">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">Lunes · OCR financiero IA</p>
@@ -417,7 +417,7 @@ export default function FinancesEnterpriseView() {
           </div>
         </PremiumCard>
 
-        <PremiumCard className="p-5">
+        <PremiumCard className="p-5" tone="amber">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">Alertas IA</p>
@@ -439,7 +439,7 @@ export default function FinancesEnterpriseView() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-        <PremiumCard className="p-5">
+        <PremiumCard className="p-5" tone="purple">
           <h3 className="mb-4 text-lg font-black text-white">Crear ciclo manual</h3>
           <div className="grid grid-cols-2 gap-3">
             <FinanceInput label="Semana" value={manual.semana} onChange={v => setManual({ ...manual, semana: v })} />
@@ -458,7 +458,7 @@ export default function FinancesEnterpriseView() {
           </PremiumButton>
         </PremiumCard>
 
-        <PremiumCard className="p-5">
+        <PremiumCard className="p-5" tone="emerald">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-black text-white">Flujo y utilidad</h3>
             <PremiumBadge tone="cyan">Estados financieros</PremiumBadge>
@@ -484,7 +484,7 @@ export default function FinancesEnterpriseView() {
         </PremiumCard>
       </div>
 
-      <PremiumCard className="overflow-hidden">
+      <PremiumCard className="overflow-hidden" tone="amber">
         <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">Egresos recurrentes</p>
@@ -572,7 +572,7 @@ export default function FinancesEnterpriseView() {
         </div>
       </PremiumCard>
 
-      <PremiumCard className="overflow-hidden">
+      <PremiumCard className="overflow-hidden" tone="cyan">
         <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">Control semanal financiero</p>
@@ -629,7 +629,7 @@ export default function FinancesEnterpriseView() {
       </PremiumCard>
 
       {latestCycle && (
-        <PremiumCard className="p-5">
+        <PremiumCard className="p-5" tone="emerald">
           <div className="flex items-center gap-3">
             <ShieldCheck className="h-5 w-5 text-emerald-300" />
             <div>

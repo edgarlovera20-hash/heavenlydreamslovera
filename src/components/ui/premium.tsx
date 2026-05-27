@@ -3,6 +3,16 @@ import { cn } from '../../lib/utils';
 
 type Tone = 'cyan' | 'blue' | 'emerald' | 'amber' | 'rose' | 'purple' | 'slate';
 
+const toneClassNames: Record<Tone, string> = {
+  cyan: 'hd-tone-cyan',
+  blue: 'hd-tone-blue',
+  emerald: 'hd-tone-emerald',
+  amber: 'hd-tone-amber',
+  rose: 'hd-tone-pink',
+  purple: 'hd-tone-violet',
+  slate: 'hd-tone-slate',
+};
+
 const toneStyles: Record<Tone, { text: string; soft: string; border: string; solid: string; dot: string }> = {
   cyan: {
     text: 'text-cyan-300',
@@ -58,25 +68,29 @@ const toneStyles: Record<Tone, { text: string; soft: string; border: string; sol
 export function PremiumPanel({
   children,
   className,
+  tone = 'cyan',
   as: Comp = 'section',
 }: {
   children: React.ReactNode;
   className?: string;
+  tone?: Tone;
   as?: React.ElementType;
 }) {
-  return <Comp className={cn('hd-panel', className)}>{children}</Comp>;
+  return <Comp className={cn('hd-panel', toneClassNames[tone], className)}>{children}</Comp>;
 }
 
 export function PremiumCard({
   children,
   className,
-  interactive = false,
+  interactive = true,
+  tone = 'cyan',
 }: {
   children: React.ReactNode;
   className?: string;
   interactive?: boolean;
+  tone?: Tone;
 }) {
-  return <div className={cn('hd-card', interactive && 'hd-card-interactive', className)}>{children}</div>;
+  return <div className={cn('hd-card', toneClassNames[tone], interactive && 'hd-card-interactive', className)}>{children}</div>;
 }
 
 export function PremiumButton({
@@ -167,14 +181,14 @@ export function PremiumKpiCard({
 }) {
   const toneClass = toneStyles[tone];
   return (
-    <PremiumCard className="p-5">
+    <PremiumCard className="p-5" tone={tone}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold text-slate-400">{title}</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{value}</p>
         </div>
-        <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl border', toneClass.soft, toneClass.border, toneClass.text)}>
-          <Icon className="h-5 w-5" />
+        <div className={cn('hd-premium-iconbox flex h-14 w-14 items-center justify-center rounded-2xl border', toneClass.soft, toneClass.border, toneClass.text)}>
+          <Icon className="h-8 w-8" />
         </div>
       </div>
       {detail && <p className={cn('mt-4 text-xs font-semibold', toneClass.text)}>{detail}</p>}

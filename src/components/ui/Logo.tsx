@@ -11,7 +11,7 @@ export default function Logo({ className = "w-32 h-32" }: LogoProps) {
       <img
         src="/logo-192.png"
         alt="HD"
-        className={`rounded-full object-cover shrink-0 ${className}`}
+        className={`hd-app-logo rounded-full object-cover shrink-0 ${className}`}
         draggable={false}
         decoding="async"
       />

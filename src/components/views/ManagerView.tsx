@@ -169,8 +169,8 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       {/* Sidebar */}
       <aside className="w-72 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col relative z-20">
         
-        <div className="h-28 flex flex-col items-center justify-center px-6 relative overflow-hidden border-b border-white/5 gap-3 z-10">
-          <Logo className="w-12 h-12 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] hover:scale-110 transition-transform duration-500" />
+        <div className="h-36 flex flex-col items-center justify-center px-6 relative overflow-hidden border-b border-white/5 gap-3 z-10">
+          <Logo className="w-20 h-20 drop-shadow-[0_0_22px_rgba(34,255,136,0.32)] hover:scale-110 transition-transform duration-500" />
           <div className="text-center">
             <h1 className="text-sm font-semibold text-white tracking-[0.08em] leading-none">Heavenly Dreams</h1>
             <p className="text-[10px] text-cyan-300/70 tracking-[0.08em] font-semibold mt-1 leading-tight">
@@ -180,7 +180,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
         </div>
 
         <div className="p-3 border-b border-white/5 space-y-2 relative z-10">
-          <div className="flex items-center justify-between hd-card p-3">
+          <div className="flex items-center justify-between hd-card hd-tone-amber p-3">
              <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-amber-400/10 border border-amber-300/25 flex items-center justify-center text-xs font-bold text-amber-300">
                    <Crown className="w-4 h-4" />
@@ -371,7 +371,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
               {/* Secondary Stats Row */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <PremiumCard className="p-5">
+                <PremiumCard className="p-5" tone="blue">
                   <div className="flex items-center gap-3 mb-2">
                     <Users className="w-5 h-5 text-blue-400" />
                     <h4 className="text-slate-400 text-xs font-semibold">Personal registrado</h4>
@@ -379,7 +379,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   <p className="text-3xl font-semibold text-white">{userCount}</p>
                   <p className="text-xs text-slate-500 mt-2">Asesores + supervisores</p>
                 </PremiumCard>
-                <PremiumCard className="p-5">
+                <PremiumCard className="p-5" tone="emerald">
                   <div className="flex items-center gap-3 mb-2">
                     <ArrowUpRight className="w-5 h-5 text-emerald-400" />
                     <h4 className="text-slate-400 text-xs font-semibold">Tasa de aprobación</h4>
@@ -389,7 +389,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   </p>
                   <p className="text-xs text-slate-500 mt-2">{approvedSales}/{saleCount} ventas</p>
                 </PremiumCard>
-                <PremiumCard className="p-5">
+                <PremiumCard className="p-5" tone="rose">
                   <div className="flex items-center gap-3 mb-2">
                     <ArrowDownRight className="w-5 h-5 text-rose-400" />
                     <h4 className="text-slate-400 text-xs font-semibold">Rechazos</h4>
@@ -400,7 +400,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
               </div>
 
               {/* Quick Actions */}
-              <PremiumCard className="p-6">
+              <PremiumCard className="p-6" tone="cyan">
                 <div className="flex items-center gap-2 mb-5">
                   <div className="w-1.5 h-1.5 rounded-full bg-cyan-300"></div>
                   <h3 className="text-sm font-semibold text-slate-300">Accesos rápidos</h3>
@@ -427,7 +427,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
               {OPS_ROLES.includes(role) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* WhatsApp panel */}
-                  <PremiumCard className="p-5 space-y-4">
+                  <PremiumCard className="p-5 space-y-4" tone="emerald">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${waStatus === 'connected' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : waStatus === 'qr' ? 'bg-yellow-400 animate-pulse' : 'bg-slate-600'}`} />
@@ -481,7 +481,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   </PremiumCard>
 
                   {/* Telegram panel */}
-                  <PremiumCard className="p-5 space-y-4">
+                  <PremiumCard className="p-5 space-y-4" tone="blue">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${tgStatus === 'polling' ? 'bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]' : tgStatus === 'error' ? 'bg-rose-400' : 'bg-slate-600'}`} />
@@ -583,19 +583,19 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
 function QuickAction({ icon: Icon, label, color, onClick }: { icon: any; label: string; color: string; onClick: () => void }) {
   const colors: Record<string, string> = {
-    cyan: 'text-cyan-400 border-cyan-400/30 hover:bg-cyan-400/10',
-    green: 'text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10',
-    red: 'text-rose-400 border-rose-400/30 hover:bg-rose-400/10',
-    purple: 'text-purple-400 border-purple-400/30 hover:bg-purple-400/10',
-    yellow: 'text-yellow-400 border-yellow-400/30 hover:bg-yellow-400/10',
-    blue: 'text-blue-400 border-blue-400/30 hover:bg-blue-400/10',
+    cyan: 'hd-tone-cyan text-cyan-200',
+    green: 'hd-tone-emerald text-emerald-200',
+    red: 'hd-tone-pink text-rose-200',
+    purple: 'hd-tone-violet text-violet-200',
+    yellow: 'hd-tone-amber text-yellow-100',
+    blue: 'hd-tone-blue text-blue-100',
   };
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border bg-white/[0.035] transition-all hover:-translate-y-0.5 ${colors[color] || colors.cyan}`}
+      className={`hd-liquid-button hd-card hd-card-interactive flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all ${colors[color] || colors.cyan}`}
     >
-      <Icon className="w-6 h-6" />
+      <Icon className="w-8 h-8" />
       <span className="text-xs font-semibold">{label}</span>
     </button>
   );
@@ -618,7 +618,7 @@ function NavItem({ icon: Icon, label, color, active = false, onClick, badge }: {
   return (
     <button 
       onClick={onClick} 
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all relative overflow-hidden group border border-transparent ${colorClasses}`}
+      className={`hd-liquid-button w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all relative overflow-hidden group border border-transparent ${active ? 'hd-liquid-selected' : ''} ${colorClasses}`}
     >
       <Icon className={`w-4 h-4 transition-transform group-hover:scale-110`} />
       <span className="text-[13px] font-semibold flex-1">{label}</span>

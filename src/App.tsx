@@ -335,7 +335,7 @@ export default function App() {
             <div className="text-center mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="flex justify-center mb-6 relative">
                 <div className="absolute inset-0 bg-cyber-electric/15 blur-3xl rounded-full" />
-                <Logo className="w-24 h-24 md:w-32 md:h-32 relative z-10 drop-shadow-[0_0_12px_rgba(0,229,255,0.35)]" />
+                <Logo className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 relative z-10 drop-shadow-[0_0_26px_rgba(34,255,136,0.35)]" />
               </div>
               <h1 className="mb-4 drop-shadow-md px-4">
                 <MatrixText text="HEAVENLY DREAMS" className="text-2xl sm:text-3xl md:text-5xl font-black font-sans tracking-[0.1em] sm:tracking-[0.14em] flex-nowrap uppercase" />
@@ -351,7 +351,7 @@ export default function App() {
             </div>
             <div className="mt-8 sm:mt-12 animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
               <button onClick={() => setIsRegistering(true)}
-                className="px-7 sm:px-9 py-3 sm:py-3.5 rounded-xl border border-emerald-300/45 bg-[#0f5f3f] text-emerald-50 hover:bg-[#29e67b] hover:text-[#04140b] hover:border-emerald-100 transition-all font-black text-xs sm:text-sm flex items-center gap-3 shadow-[0_0_18px_rgba(34,197,94,0.22)] hover:shadow-[0_0_26px_rgba(34,255,136,0.65),0_0_48px_rgba(34,197,94,0.34)] backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200/80">
+                className="hd-liquid-button px-7 sm:px-9 py-3 sm:py-3.5 rounded-xl border border-orange-300/45 bg-[#8a3f0f] text-orange-50 hover:bg-[#ff8a1f] hover:text-[#1f1004] hover:border-orange-100 transition-all font-black text-xs sm:text-sm flex items-center gap-3 shadow-[0_0_18px_rgba(249,115,22,0.24)] hover:shadow-[0_0_28px_rgba(255,138,31,0.72),0_0_54px_rgba(249,115,22,0.38)] backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-200/80">
                 <UserPlus className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" /> Iniciar Registro
               </button>
             </div>
@@ -370,8 +370,11 @@ export default function App() {
             <div className="absolute top-0 right-0 w-24 h-24 bg-cyber-electric/12 blur-3xl rounded-full" />
             <div className="absolute -left-2 top-10 w-1 h-12 bg-cyber-neon/80 rounded-r-md" />
             <div className="flex justify-center mb-4 sm:mb-6 relative z-10">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center border bg-cyber-electric/10 border-cyber-neon/40 text-cyber-neon">
-                {pendingRole === 'GERENTE' ? <Shield className="w-6 h-6 sm:w-8 sm:h-8" /> : <Smartphone className="w-6 h-6 sm:w-8 sm:h-8" />}
+              <div className={pendingRole === 'GERENTE'
+                ? "hd-liquid-selected w-14 h-14 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl flex items-center justify-center border bg-yellow-300/10 border-yellow-200/70 text-yellow-300 shadow-[0_0_28px_rgba(250,204,21,0.72),0_0_58px_rgba(250,204,21,0.26)]"
+                : "w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center border bg-orange-400/10 border-orange-300/40 text-orange-200"}
+              >
+                {pendingRole === 'GERENTE' ? <Crown className="w-8 h-8 sm:w-10 sm:h-10 drop-shadow-[0_0_14px_rgba(250,204,21,0.9)]" /> : <Smartphone className="w-6 h-6 sm:w-8 sm:h-8" />}
               </div>
             </div>
             <h2 className="text-xl sm:text-2xl font-semibold text-center text-white mb-1 sm:mb-2 tracking-tight">Bienvenido al sistema</h2>
@@ -410,7 +413,7 @@ export default function App() {
                 </button>
               </div>
               <button type="submit" disabled={loggingIn}
-                className="w-full mt-6 py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 bg-cyber-electric hover:bg-cyber-neon text-cyber-black text-sm">
+                className="hd-liquid-button w-full mt-6 py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 bg-[#8a3f0f] hover:bg-[#ff8a1f] text-orange-50 hover:text-[#1f1004] border border-orange-300/45 text-sm">
                 {loggingIn
                   ? <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />
                   : <><Lock className="w-4 h-4" /> Entrar</>}
@@ -425,7 +428,7 @@ export default function App() {
                   type="button"
                   disabled={!googleOAuthAvailable}
                   onClick={() => startOAuthLogin('google')}
-                  className="py-3 rounded-xl border border-cyber-electric/30 bg-white/5 hover:bg-white/10 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/5"
+                  className="hd-liquid-button py-3 rounded-xl border border-orange-300/30 bg-white/5 hover:bg-orange-300/10 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/5"
                   title={googleOAuthAvailable ? 'Entrar con cuenta Google' : 'Faltan credenciales OAuth de Google en el servidor'}
                 >
                   <span className="w-5 h-5 rounded-full bg-white text-slate-900 flex items-center justify-center font-black">G</span>
@@ -445,7 +448,7 @@ export default function App() {
                     <div className="flex-1 h-px bg-cyber-electric/20" />
                   </div>
                   <button type="button" onClick={() => handleBiometricLogin()}
-                    className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.01] bg-cyber-dark/50 hover:bg-cyber-neon/10 text-cyber-neon border border-cyber-neon/40 text-sm">
+                    className="hd-liquid-button w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.01] bg-cyber-dark/50 hover:bg-orange-300/10 text-orange-100 border border-orange-300/40 text-sm">
                     <Fingerprint className="w-4 h-4" /> Entrar con huella digital
                   </button>
                 </>
@@ -475,7 +478,7 @@ export default function App() {
             <button
               onClick={handleContinueWithoutPasskey}
               disabled={continuingWithoutPasskey}
-              className="w-full mb-3 py-4 rounded-xl bg-cyber-electric text-cyber-black font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+              className="hd-liquid-button w-full mb-3 py-4 rounded-xl bg-[#8a3f0f] hover:bg-[#ff8a1f] text-orange-50 hover:text-[#1f1004] border border-orange-300/45 font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
             >
               {continuingWithoutPasskey
                 ? <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />
@@ -562,7 +565,7 @@ const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, col
 
   return (
     <button onClick={onClick}
-      className={`group rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 relative overflow-hidden bg-[#061a38] ${toneStyle.card}`}>
+      className={`hd-liquid-button group rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 relative overflow-hidden bg-[#061a38] ${toneStyle.card}`}>
       <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300 ${toneStyle.aura}`} />
       <div className="mb-4 sm:mb-6">
         <div className="sm:hidden"><CyberIcon icon={Icon} color={color} size="lg" glowOpacity={0.6} /></div>

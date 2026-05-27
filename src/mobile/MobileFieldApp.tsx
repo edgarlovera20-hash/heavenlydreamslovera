@@ -1074,8 +1074,8 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
     <main className="hd-cyber-screen min-h-dvh px-5 py-8">
       <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl border border-cyber-neon/40 bg-cyber-electric/10 text-cyber-neon">
-            <Logo className="h-16 w-16" />
+          <div className="mb-5 flex h-32 w-32 items-center justify-center rounded-[2rem] border border-orange-300/45 bg-white/10 text-cyber-neon shadow-[0_0_32px_rgba(255,138,31,0.3)]">
+            <Logo className="h-28 w-28" />
           </div>
           <h1 className="text-center text-3xl font-semibold tracking-[0.08em] text-slate-50">Heavenly Dreams</h1>
           <p className="mt-3 text-sm font-black tracking-[0.1em] text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.42)]">Tu Dream Team comienza aqui</p>
@@ -2699,7 +2699,7 @@ export default function MobileFieldApp() {
                 <h1 className="mt-1 text-2xl font-black tracking-tight text-white">Hola, {displayName(session)}</h1>
                 <p className="mt-1 text-sm text-slate-400">{session.puesto || session.role || 'Asesor'}{session.zona ? ` - ${session.zona}` : ''}</p>
               </div>
-              <button onClick={refreshBootstrap} className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyber-electric/30 bg-cyber-electric/10 text-cyber-neon transition hover:bg-cyber-neon/10">
+          <button onClick={refreshBootstrap} className="hd-liquid-button flex h-11 w-11 items-center justify-center rounded-xl border border-orange-300/35 bg-orange-300/10 text-orange-100 transition hover:bg-orange-300/15">
                 <MobileIcon name={bootLoading ? 'loader' : 'refresh'} className={cx('h-5 w-5', bootLoading && 'animate-spin')} />
               </button>
             </div>
@@ -2721,7 +2721,7 @@ export default function MobileFieldApp() {
           </Panel>
 
           <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setActive('venta')} className="hd-neon-action hd-tone-cyan min-h-20 px-3 py-3 text-left">
+              <button onClick={() => setActive('venta')} className="hd-neon-action hd-tone-cyan min-h-20 px-3 py-3 text-left">
               <MobileIcon name="clipboard" className="mb-2 h-5 w-5" />
               <span className="block text-xs font-black uppercase tracking-[0.08em]">Nueva venta</span>
             </button>
@@ -2814,7 +2814,7 @@ export default function MobileFieldApp() {
     <div className="hd-cyber-screen min-h-dvh pb-24">
       <header className="glass-panel hd-mobile-topbar sticky top-0 z-20 border-x-0 border-t-0 border-cyber-electric/20 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3">
-          <button onClick={() => active === 'inicio' ? refreshBootstrap() : setActive('inicio')} className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyber-electric/25 bg-white/5 text-cyber-electric transition hover:bg-cyber-neon/10 hover:text-cyber-neon">
+            <button onClick={() => active === 'inicio' ? refreshBootstrap() : setActive('inicio')} className="hd-liquid-button flex h-11 w-11 items-center justify-center rounded-xl border border-orange-300/30 bg-orange-300/8 text-orange-100 transition hover:bg-orange-300/12 hover:text-white">
             <MobileIcon name={active === 'inicio' ? 'refresh' : 'chevron-left'} className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">
@@ -2837,7 +2837,7 @@ export default function MobileFieldApp() {
               <button
                 key={item.id}
                 onClick={() => setActive(item.id)}
-                className={cx('flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold tracking-[0.04em] transition', selected ? 'hd-mobile-nav-item-active' : 'text-cyber-electric/55 hover:bg-cyber-neon/10 hover:text-cyber-neon')}
+                className={cx('hd-liquid-button flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold tracking-[0.04em] transition', selected ? 'hd-mobile-nav-item-active hd-liquid-selected' : 'text-cyber-electric/55 hover:bg-cyber-neon/10 hover:text-cyber-neon')}
               >
                 <MobileIcon name={item.icon} className="h-5 w-5" />
                 {item.label}

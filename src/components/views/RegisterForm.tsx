@@ -489,7 +489,7 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
             <button
               type="submit"
               disabled={isSubmitting || !acceptedTerms}
-              className="w-full py-4 rounded-xl font-black flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 bg-[#0f5f3f] hover:bg-[#29e67b] text-emerald-50 hover:text-[#04140b] border border-emerald-300/45 hover:border-emerald-100 shadow-[0_0_18px_rgba(34,197,94,0.22)] hover:shadow-[0_0_26px_rgba(34,255,136,0.65),0_0_48px_rgba(34,197,94,0.34)] uppercase tracking-wider text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200/80"
+              className="hd-liquid-button w-full py-4 rounded-xl font-black flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 bg-[#8a3f0f] hover:bg-[#ff8a1f] text-orange-50 hover:text-[#1f1004] border border-orange-300/45 hover:border-orange-100 shadow-[0_0_18px_rgba(249,115,22,0.24)] hover:shadow-[0_0_28px_rgba(255,138,31,0.72),0_0_54px_rgba(249,115,22,0.38)] uppercase tracking-wider text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-200/80"
             >
               {isSubmitting ? (
                 <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />
