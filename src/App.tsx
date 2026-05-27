@@ -9,7 +9,6 @@ import { MatrixText } from './components/ui/matrix-text';
 import { LoadingOverlay } from './components/ui/LoadingOverlay';
 import { CyberIcon } from './components/ui/CyberIcon';
 import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Binoculars, ClipboardList, UserPlus, Fingerprint } from 'lucide-react';
-import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
 export type Role = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'ASESOR';
@@ -175,6 +174,7 @@ export default function App() {
       const options = await optionsRes.json();
       if (!optionsRes.ok) { setError(options.error || 'No hay passkey registrada.'); return; }
       const verifiedUserId = options.userId || targetUserId;
+      const { startAuthentication } = await import('@simplewebauthn/browser');
       const assertion = await startAuthentication({ optionsJSON: options });
       const verifyRes = await fetch('/api/webauthn/login/verify', {
         method: 'POST',
@@ -199,6 +199,7 @@ export default function App() {
       const optionsRes = await fetch('/api/webauthn/register/options', { method: 'POST' });
       const options = await optionsRes.json();
       if (!optionsRes.ok) { setError(options.error || 'No se pudo iniciar el registro biométrico.'); return; }
+      const { startRegistration } = await import('@simplewebauthn/browser');
       const credential = await startRegistration({ optionsJSON: options });
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST',

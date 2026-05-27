@@ -1,10 +1,26 @@
 import express from 'express';
+import compression from 'compression';
 import { requestLogger } from './http';
 
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
   app.set('etag', false);
+  app.disable('x-powered-by');
+  app.use(compression({
+    threshold: 1024,
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) return false;
+      return compression.filter(req, res);
+    },
+  }));
+  app.use((_req, res, next) => {
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.set('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self), payment=()');
+    res.set('X-Frame-Options', 'SAMEORIGIN');
+    next();
+  });
   app.use('/api', (_req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');

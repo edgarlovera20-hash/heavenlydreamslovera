@@ -9,12 +9,22 @@ import { routeToDeviceVersion } from './lib/device';
 installApiFetch();
 const redirectedToDeviceVersion = routeToDeviceVersion();
 
-// Register PWA service worker
-if ('serviceWorker' in navigator) {
+function registerServiceWorkerWhenIdle(scriptUrl: string, options?: RegistrationOptions) {
+  if (!('serviceWorker' in navigator)) return;
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {/* silent in dev */});
+    const register = () => {
+      navigator.serviceWorker.register(scriptUrl, options).catch(() => {/* silent in dev */});
+    };
+    const requestIdleCallback = (window as any).requestIdleCallback;
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(register, { timeout: 3000 });
+    } else {
+      window.setTimeout(register, 500);
+    }
   });
 }
+
+registerServiceWorkerWhenIdle('/sw.js');
 
 if (!redirectedToDeviceVersion) {
   createRoot(document.getElementById('root')!).render(

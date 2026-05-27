@@ -4,11 +4,11 @@ import { AlertCircle, Banknote, Calendar, Camera, CheckCircle2, Clock, CreditCar
 import { PACKAGE_CATALOG, type ClientType, type PackageCatalogItem, type ProductCategory, type ServiceSegment } from '../configs/package-catalog';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from '../lib/apiClient';
 import Logo from '../components/ui/Logo';
-import AvatarStudio from '../components/ui/AvatarStudio';
 import { CURP_REGEX, generateCurpCandidate, normalizeCurpValue } from '../lib/curp';
 import { getMobilePosition } from './mobileLocation';
 import { runMobileOcr } from './mobileOcr';
 
+const AvatarStudio = lazy(() => import('../components/ui/AvatarStudio'));
 const MapPicker = lazy(() => import('../components/ui/MapPicker').then(m => ({ default: m.MapPicker })));
 const NewSaleForm = lazy(() => import('../components/views/NewSaleForm'));
 
@@ -4086,17 +4086,23 @@ export default function MobileFieldApp() {
           </div>
         </Panel>
 
-        <AvatarStudio
-          uid={profileUid}
-          name={profileName}
-          role={profileRoleLabel}
-          currentAvatar={profileAvatarUrl}
-          phrase={profilePhrase}
-          compact
-          onAvatarChange={persistGeneratedProfileAvatar}
-          onPhraseChange={saveProfilePhraseLocal}
-          onUploadClick={() => profileFileInputRef.current?.click()}
-        />
+        <Suspense fallback={
+          <Panel>
+            <div className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+          </Panel>
+        }>
+          <AvatarStudio
+            uid={profileUid}
+            name={profileName}
+            role={profileRoleLabel}
+            currentAvatar={profileAvatarUrl}
+            phrase={profilePhrase}
+            compact
+            onAvatarChange={persistGeneratedProfileAvatar}
+            onPhraseChange={saveProfilePhraseLocal}
+            onUploadClick={() => profileFileInputRef.current?.click()}
+          />
+        </Suspense>
 
         <div className="grid grid-cols-2 gap-3">
           <Metric label="Success rate" value={`${profileModel.successRate}%`} />

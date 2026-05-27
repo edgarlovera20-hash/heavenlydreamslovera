@@ -23,7 +23,7 @@ export default defineConfig(({mode}) => {
       target: 'esnext',
       sourcemap: false,
       modulePreload: false,
-      chunkSizeWarningLimit: 1000,
+      chunkSizeWarningLimit: 1200,
       rollupOptions: {
         input: {
           app: path.resolve(__dirname, 'index.html'),
@@ -32,6 +32,11 @@ export default defineConfig(({mode}) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined;
+            if (id.includes('@google/generative-ai')) return 'vendor-ai';
+            if (id.includes('tesseract.js')) return 'vendor-ocr';
+            if (id.includes('qrcode')) return 'vendor-qrcode';
+            if (id.includes('@firebase') || id.includes('/firebase/')) return 'vendor-firebase';
+            if (id.includes('socket.io-client') || id.includes('engine.io-client') || id.includes('socket.io-parser')) return 'vendor-realtime';
             if (id.includes('maplibre-gl')) return 'vendor-maps';
             if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('scheduler')) return 'vendor-react';
             if (id.includes('lucide-react') || id.includes('sonner') || id.includes('clsx') || id.includes('tailwind-merge')) return 'vendor-ui';

@@ -78,6 +78,24 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  #mobile-root *,
+  #mobile-root *::before,
+  #mobile-root *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+
+  .hd-cyber-screen::before,
+  .hd-cyber-screen::after,
+  body::before,
+  body::after {
+    animation: none !important;
+  }
+}
+
 #mobile-root .hd-mobile-login-screen {
   min-height: 100dvh;
   padding: max(0.75rem, env(safe-area-inset-top)) clamp(1rem, 4vw, 1.25rem) max(1rem, env(safe-area-inset-bottom)) !important;

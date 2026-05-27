@@ -1,5 +1,5 @@
 // Service Worker - Heavenly Dreams mobile PWA
-const CACHE = 'hd-mobile-v2';
+const CACHE = 'hd-mobile-v3';
 const PRECACHE = ['/m/', '/mobile.html', '/manifest-mobile.json', '/logo-192.png', '/logo-mobile.webp'];
 
 self.addEventListener('install', event => {

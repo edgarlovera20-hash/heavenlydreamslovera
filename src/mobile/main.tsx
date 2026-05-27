@@ -8,13 +8,24 @@ import MobileFieldApp from './MobileFieldApp';
 installApiFetch();
 const redirectedToDeviceVersion = routeToDeviceVersion();
 
-if ('serviceWorker' in navigator) {
+function registerServiceWorkerWhenIdle(scriptUrl: string, options?: RegistrationOptions) {
+  if (!('serviceWorker' in navigator)) return;
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw-mobile.js', { scope: '/m/' }).catch(() => {
-      // Development and private browsing can block service workers.
-    });
+    const register = () => {
+      navigator.serviceWorker.register(scriptUrl, options).catch(() => {
+        // Development and private browsing can block service workers.
+      });
+    };
+    const requestIdleCallback = (window as any).requestIdleCallback;
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(register, { timeout: 3000 });
+    } else {
+      window.setTimeout(register, 500);
+    }
   });
 }
+
+registerServiceWorkerWhenIdle('/sw-mobile.js', { scope: '/m/' });
 
 if (!redirectedToDeviceVersion) {
   createRoot(document.getElementById('mobile-root')!).render(

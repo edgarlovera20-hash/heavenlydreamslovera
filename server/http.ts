@@ -59,6 +59,21 @@ export function wrap(fn: (req: Request, res: Response, next?: NextFunction) => u
 }
 
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
+  const path = req.originalUrl || req.url;
+  if (
+    req.method === 'GET' &&
+    (path.startsWith('/assets/') ||
+      path.startsWith('/favicon') ||
+      path.startsWith('/manifest') ||
+      path.endsWith('.png') ||
+      path.endsWith('.webp') ||
+      path.endsWith('.ico') ||
+      path.endsWith('.map'))
+  ) {
+    next();
+    return;
+  }
+
   const start = Date.now();
   const requestId = String(req.headers['x-request-id'] || randomUUID());
   (req as any).requestId = requestId;
@@ -69,7 +84,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
     logger[level]({
       requestId,
       method: req.method,
-      path: req.originalUrl || req.url,
+      path,
       status: res.statusCode,
       durationMs,
       userId: (req as any).auth?.sub || null,

@@ -38,6 +38,7 @@
     "better-sqlite3": "^12.10.0",
     "bullmq": "^5.77.0",
     "clsx": "^2.1.1",
+    "compression": "^1.8.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "google-auth-library": "^10.6.2",
@@ -70,6 +71,7 @@
   "devDependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/compression": "^1.8.1",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/ws": "^8.18.1",
