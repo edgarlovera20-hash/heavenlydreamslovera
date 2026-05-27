@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils';
 import { auth } from '../../lib/firebase';
 import { UsersAPI, VentasAPI } from '../../services/db';
 import { sendPushNotification } from '../../lib/notifications';
+import AvatarStudio from '../ui/AvatarStudio';
 
 interface Sale {
   id?: string;
@@ -247,15 +248,31 @@ export default function Profile() {
     });
   }, [mySales]);
 
+  const persistAvatar = (url: string) => {
+    setAvatar(url);
+    if (session?.uid) {
+      try { localStorage.setItem(`hd_avatar_${session.uid}`, url); } catch { /* quota */ }
+    }
+  };
+
+  const persistProfilePhrase = (value: string) => {
+    const clean = value.trim().slice(0, 140);
+    setProfilePhrase(clean);
+    setPhraseDraft(clean);
+    if (phraseKey) {
+      try { localStorage.setItem(phraseKey, clean); } catch { /* quota */ }
+    }
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onloadend = () => {
       const url = reader.result as string;
-      setAvatar(url);
+      persistAvatar(url);
       if (session?.uid) {
-        try { localStorage.setItem(`hd_avatar_${session.uid}`, url); } catch { /* quota */ }
+        window.dispatchEvent(new CustomEvent('hd-avatar-updated', { detail: { uid: session.uid, url } }));
       }
     };
     reader.readAsDataURL(file);
@@ -263,12 +280,8 @@ export default function Profile() {
 
   const saveProfilePhrase = () => {
     const value = phraseDraft.trim().slice(0, 140);
-    setProfilePhrase(value);
-    setPhraseDraft(value);
+    persistProfilePhrase(value);
     setEditingPhrase(false);
-    if (phraseKey) {
-      try { localStorage.setItem(phraseKey, value); } catch { /* quota */ }
-    }
   };
 
   return (
@@ -487,6 +500,16 @@ export default function Profile() {
 
         {/* RIGHT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
+          <AvatarStudio
+            uid={session?.uid}
+            name={userName}
+            role={userRoleLabel}
+            currentAvatar={avatar}
+            phrase={profilePhrase}
+            onAvatarChange={persistAvatar}
+            onPhraseChange={persistProfilePhrase}
+            onUploadClick={() => fileInputRef.current?.click()}
+          />
 
           {/* MEDALS SYSTEM */}
           <div className="glass-panel rounded-2xl p-6">

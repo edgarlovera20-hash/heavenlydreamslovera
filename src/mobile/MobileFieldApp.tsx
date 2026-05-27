@@ -4,6 +4,7 @@ import { AlertCircle, Banknote, Calendar, Camera, CheckCircle2, Clock, CreditCar
 import { PACKAGE_CATALOG, type ClientType, type PackageCatalogItem, type ProductCategory, type ServiceSegment } from '../configs/package-catalog';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from '../lib/apiClient';
 import Logo from '../components/ui/Logo';
+import AvatarStudio from '../components/ui/AvatarStudio';
 import { CURP_REGEX, generateCurpCandidate, normalizeCurpValue } from '../lib/curp';
 import { getMobilePosition } from './mobileLocation';
 import { runMobileOcr } from './mobileOcr';
@@ -1071,17 +1072,17 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
   };
 
   return (
-    <main className="hd-cyber-screen min-h-dvh px-5 py-8">
-      <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-5 flex h-32 w-32 items-center justify-center rounded-[2rem] border border-orange-300/45 bg-white/10 text-cyber-neon shadow-[0_0_32px_rgba(255,138,31,0.3)]">
+    <main className="hd-cyber-screen hd-mobile-login-screen min-h-dvh px-5 py-8">
+      <div className="hd-mobile-login-shell mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center">
+        <div className="hd-mobile-login-brand mb-8 flex flex-col items-center text-center">
+          <div className="hd-mobile-login-logo mb-5 flex h-32 w-32 items-center justify-center rounded-[2rem] border bg-white/10 text-cyber-neon">
             <Logo className="h-28 w-28" />
           </div>
           <h1 className="text-center text-3xl font-semibold tracking-[0.08em] text-slate-50">Heavenly Dreams</h1>
           <p className="mt-3 text-sm font-black tracking-[0.1em] text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.42)]">Tu Dream Team comienza aqui</p>
           <p className="mt-2 text-sm leading-6 text-slate-300">App version campo para movil</p>
         </div>
-        <form onSubmit={submit} className="glass-panel-neon relative space-y-4 overflow-hidden rounded-3xl p-5">
+        <form onSubmit={submit} className="glass-panel-neon hd-mobile-login-card relative space-y-4 overflow-hidden rounded-3xl p-5">
           <div className="pointer-events-none absolute -left-2 top-10 h-12 w-1 rounded-r-md bg-cyber-neon" />
           <Field label="Usuario" value={username} onChange={setUsername} placeholder="edgar" />
           <div className="space-y-2">
@@ -1209,12 +1210,14 @@ export default function MobileFieldApp() {
   const [syncingQueue, setSyncingQueue] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+  const [profilePhrase, setProfilePhrase] = useState('');
   const [profileLeaderboardFilter, setProfileLeaderboardFilter] = useState<'weekly' | 'monthly' | 'all-time'>('weekly');
   const profileFileInputRef = useRef<HTMLInputElement | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
 
   const profileUser = bootstrap?.user || session;
   const profileUid = profileUser?.uid || session?.uid || '';
+  const profilePhraseKey = profileUid ? `hd_profile_phrase_${profileUid}` : '';
   const profileName = displayName(profileUser || session);
   const profileRole = String(profileUser?.role || session?.role || 'ASESOR').toUpperCase();
   const profileRoleLabel = roleLabel(profileRole);
@@ -1378,6 +1381,7 @@ export default function MobileFieldApp() {
         if (profileUid) {
           try {
             localStorage.setItem(`hd_avatar_${profileUid}`, imageUrl);
+            window.dispatchEvent(new CustomEvent('hd-avatar-updated', { detail: { uid: profileUid, url: imageUrl } }));
           } catch {
             notify('error', 'No se pudo guardar el avatar localmente.');
           }
@@ -1385,6 +1389,30 @@ export default function MobileFieldApp() {
       })
       .catch(() => notify('error', 'No se pudo optimizar el avatar.'));
   }, [notify, profileUid]);
+
+  const persistGeneratedProfileAvatar = useCallback((imageUrl: string) => {
+    setProfileAvatar(imageUrl);
+    if (profileUid) {
+      try {
+        localStorage.setItem(`hd_avatar_${profileUid}`, imageUrl);
+      } catch {
+        notify('error', 'No se pudo guardar el avatar localmente.');
+        return;
+      }
+    }
+    notify('success', 'Avatar IA guardado en tu perfil.');
+  }, [notify, profileUid]);
+
+  const saveProfilePhraseLocal = useCallback((value: string) => {
+    const clean = value.trim().slice(0, 44);
+    setProfilePhrase(clean);
+    if (!profilePhraseKey) return;
+    try {
+      localStorage.setItem(profilePhraseKey, clean);
+    } catch {
+      notify('error', 'No se pudo guardar la frase localmente.');
+    }
+  }, [notify, profilePhraseKey]);
 
   const profileAvatarUrl = profileAvatar || profileUser?.avatar || null;
 
@@ -1562,6 +1590,18 @@ export default function MobileFieldApp() {
       setProfileAvatar(null);
     }
   }, [profileUid]);
+
+  useEffect(() => {
+    if (!profilePhraseKey) {
+      setProfilePhrase('');
+      return;
+    }
+    try {
+      setProfilePhrase(localStorage.getItem(profilePhraseKey) || '');
+    } catch {
+      setProfilePhrase('');
+    }
+  }, [profilePhraseKey]);
 
   useEffect(() => {
     if (!session?.uid) return;
@@ -2720,31 +2760,31 @@ export default function MobileFieldApp() {
             </div>
           </Panel>
 
-          <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setActive('venta')} className="hd-neon-action hd-tone-cyan min-h-20 px-3 py-3 text-left">
-              <MobileIcon name="clipboard" className="mb-2 h-5 w-5" />
-              <span className="block text-xs font-black uppercase tracking-[0.08em]">Nueva venta</span>
+          <div className="hd-mobile-quick-grid grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button onClick={() => setActive('venta')} className="hd-neon-action hd-mobile-quick-action hd-tone-cyan min-h-20 px-4 py-4 text-left">
+              <MobileIcon name="clipboard" className="h-6 w-6" />
+              <span className="block text-sm font-black uppercase tracking-[0.08em]">Nueva venta</span>
             </button>
-            <button onClick={() => setActive('folios')} className="hd-neon-action hd-tone-blue min-h-20 px-3 py-3 text-left">
-              <MobileIcon name="search" className="mb-2 h-5 w-5" />
-              <span className="block text-xs font-black uppercase tracking-[0.08em]">Folios</span>
+            <button onClick={() => setActive('folios')} className="hd-neon-action hd-mobile-quick-action hd-tone-blue min-h-20 px-4 py-4 text-left">
+              <MobileIcon name="search" className="h-6 w-6" />
+              <span className="block text-sm font-black uppercase tracking-[0.08em]">Folios</span>
             </button>
             {canUseMobileChats && (
-              <button onClick={() => setActive('chats')} className="hd-neon-action hd-tone-violet min-h-20 px-3 py-3 text-left">
-                <MobileIcon name="message" className="mb-2 h-5 w-5" />
-                <span className="block text-xs font-black uppercase tracking-[0.08em]">Chats</span>
+              <button onClick={() => setActive('chats')} className="hd-neon-action hd-mobile-quick-action hd-tone-violet min-h-20 px-4 py-4 text-left">
+                <MobileIcon name="message" className="h-6 w-6" />
+                <span className="block text-sm font-black uppercase tracking-[0.08em]">Chats</span>
               </button>
             )}
             {canApproveMobile && (
-              <button onClick={() => setActive('usuarios')} className="hd-neon-action hd-tone-emerald min-h-20 px-3 py-3 text-left">
-                <MobileIcon name="users" className="mb-2 h-5 w-5" />
-                <span className="block text-xs font-black uppercase tracking-[0.08em]">Usuarios</span>
+              <button onClick={() => setActive('usuarios')} className="hd-neon-action hd-mobile-quick-action hd-tone-emerald min-h-20 px-4 py-4 text-left">
+                <MobileIcon name="users" className="h-6 w-6" />
+                <span className="block text-sm font-black uppercase tracking-[0.08em]">Usuarios</span>
               </button>
             )}
             {canApproveMobile && (
-              <button onClick={() => setActive('aprobaciones')} className="hd-neon-action hd-tone-amber min-h-20 px-3 py-3 text-left">
-                <MobileIcon name="shield" className="mb-2 h-5 w-5" />
-                <span className="block text-xs font-black uppercase tracking-[0.08em]">Aprobaciones</span>
+              <button onClick={() => setActive('aprobaciones')} className="hd-neon-action hd-mobile-quick-action hd-tone-amber min-h-20 px-4 py-4 text-left">
+                <MobileIcon name="shield" className="h-6 w-6" />
+                <span className="block text-sm font-black uppercase tracking-[0.08em]">Aprobaciones</span>
               </button>
             )}
           </div>
@@ -2825,7 +2865,7 @@ export default function MobileFieldApp() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-lg space-y-4 px-4 py-4">
+      <main className="hd-mobile-main mx-auto w-full max-w-lg space-y-4 px-4 py-4">
         {renderContent()}
       </main>
 
@@ -4045,6 +4085,18 @@ export default function MobileFieldApp() {
             </div>
           </div>
         </Panel>
+
+        <AvatarStudio
+          uid={profileUid}
+          name={profileName}
+          role={profileRoleLabel}
+          currentAvatar={profileAvatarUrl}
+          phrase={profilePhrase}
+          compact
+          onAvatarChange={persistGeneratedProfileAvatar}
+          onPhraseChange={saveProfilePhraseLocal}
+          onUploadClick={() => profileFileInputRef.current?.click()}
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <Metric label="Success rate" value={`${profileModel.successRate}%`} />

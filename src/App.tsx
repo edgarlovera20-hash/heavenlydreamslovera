@@ -112,12 +112,24 @@ export default function App() {
     document.documentElement.classList.remove('light');
   }, []);
 
+  useEffect(() => {
+    const handleAvatarUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ uid?: string; url?: string }>).detail;
+      if (!detail?.url) return;
+      if (!currentUser?.uid || !detail.uid || detail.uid === currentUser.uid) {
+        setAvatarUrl(detail.url);
+      }
+    };
+    window.addEventListener('hd-avatar-updated', handleAvatarUpdated);
+    return () => window.removeEventListener('hd-avatar-updated', handleAvatarUpdated);
+  }, [currentUser?.uid]);
+
   const applyLogin = (user: any) => {
     const session = saveSession(user);
     setCurrentUser(session);
     setRole(session.role as Role);
     const av = localStorage.getItem(`hd_avatar_${session.uid}`);
-    if (av) setAvatarUrl(av);
+    setAvatarUrl(av || null);
     setUsername(''); setPassword('');
     setPendingRole(null);
   };
@@ -272,7 +284,10 @@ export default function App() {
     reader.onload = () => {
       const url = reader.result as string;
       setAvatarUrl(url);
-      if (currentUser?.uid) try { localStorage.setItem(`hd_avatar_${currentUser.uid}`, url); } catch {}
+      if (currentUser?.uid) {
+        try { localStorage.setItem(`hd_avatar_${currentUser.uid}`, url); } catch {}
+        window.dispatchEvent(new CustomEvent('hd-avatar-updated', { detail: { uid: currentUser.uid, url } }));
+      }
       setAvatarUploading(false);
     };
     reader.readAsDataURL(file);
