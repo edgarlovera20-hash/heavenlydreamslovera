@@ -287,16 +287,20 @@ html.light {
     min-height: 100%;
     overflow: hidden;
     isolation: isolate;
+    background-size: 160% 160% !important;
+    animation: module-bg-blue-flow 18s ease-in-out infinite alternate;
   }
 
   .data-grid-hero .grid-container {
     position: absolute;
-    inset: 0;
+    inset: -7%;
     z-index: 0;
     display: grid;
-    opacity: 0.78;
+    opacity: 0.9;
     pointer-events: none;
-    mask-image: radial-gradient(circle at center, #000 0%, #000 56%, transparent 100%);
+    mask-image: radial-gradient(circle at center, #000 0%, #000 62%, transparent 100%);
+    transform: translate3d(0, 0, 0);
+    animation: grid-field-drift 26s ease-in-out infinite alternate;
   }
 
   .data-grid-hero .grid-container::before {
@@ -307,18 +311,24 @@ html.light {
     pointer-events: none;
     opacity: var(--mouse-glow-opacity, 1);
     background:
-      radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 42%), rgba(56, 189, 248, 0.18), transparent 16rem),
-      radial-gradient(circle at 60% 18%, rgba(37, 99, 235, 0.14), transparent 30rem);
+      radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 42%), rgba(56, 248, 255, 0.22), transparent 16rem),
+      radial-gradient(circle at 60% 18%, rgba(37, 99, 235, 0.2), transparent 30rem),
+      radial-gradient(circle at 28% 70%, rgba(14, 165, 233, 0.16), transparent 26rem);
     mix-blend-mode: screen;
+    animation: grid-glow-blue-cycle 12s ease-in-out infinite alternate;
   }
 
   .data-grid-hero .grid-cell {
     min-width: 0;
     min-height: 0;
-    border-radius: 2px;
+    border-radius: 4px;
     opacity: var(--opacity-min);
-    box-shadow: 0 0 14px rgba(56, 189, 248, 0.14);
-    will-change: opacity;
+    background:
+      linear-gradient(135deg, rgba(56, 189, 248, 0.9), rgba(14, 165, 233, 0.82)) !important;
+    box-shadow:
+      0 0 16px rgba(56, 189, 248, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    will-change: opacity, transform, filter, background-color;
   }
 
   .data-grid-hero .hero-content {
@@ -453,9 +463,73 @@ html.light {
   }
 }
 
+@keyframes cell-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(calc(var(--cell-shift-x) * 0.45), calc(var(--cell-shift-y) * 0.45), 0) scale(var(--cell-scale));
+  }
+  100% {
+    transform: translate3d(var(--cell-shift-x), var(--cell-shift-y), 0) scale(1);
+  }
+}
+
+@keyframes cell-blue-shift {
+  0% {
+    filter: hue-rotate(calc(var(--cell-hue) - 22deg)) saturate(1.2) brightness(0.78);
+  }
+  50% {
+    filter: hue-rotate(var(--cell-hue)) saturate(1.65) brightness(1.22);
+  }
+  100% {
+    filter: hue-rotate(calc(var(--cell-hue) + 24deg)) saturate(1.35) brightness(0.95);
+  }
+}
+
+@keyframes grid-field-drift {
+  0% {
+    transform: translate3d(-1.8%, -1.2%, 0) scale(1.03);
+  }
+  50% {
+    transform: translate3d(1.4%, 1.8%, 0) scale(1.06);
+  }
+  100% {
+    transform: translate3d(-0.8%, 2.4%, 0) scale(1.04);
+  }
+}
+
+@keyframes grid-glow-blue-cycle {
+  0% {
+    filter: hue-rotate(-12deg) saturate(1.05);
+    opacity: 0.7;
+  }
+  100% {
+    filter: hue-rotate(24deg) saturate(1.45);
+    opacity: 1;
+  }
+}
+
+@keyframes module-bg-blue-flow {
+  0% {
+    background-position: 0% 10%;
+    filter: saturate(1);
+  }
+  100% {
+    background-position: 100% 86%;
+    filter: saturate(1.25);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .data-grid-hero,
+  .data-grid-hero .grid-container,
+  .data-grid-hero .grid-container::before,
   .data-grid-hero .grid-cell {
     animation: none !important;
+  }
+
+  .data-grid-hero .grid-cell {
     opacity: 0.12;
   }
 }

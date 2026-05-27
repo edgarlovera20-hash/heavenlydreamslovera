@@ -6,9 +6,12 @@ import {
   CheckCircle2,
   Clock,
   ClipboardCheck,
+  CreditCard,
   FileSearch,
   Hash,
   Loader2,
+  Mail,
+  MapPin,
   MessageCircle,
   MessageSquare,
   Phone,
@@ -17,7 +20,9 @@ import {
   Search,
   Send,
   Settings,
+  ShieldCheck,
   Sparkles,
+  User,
   UserPlus,
   Globe2,
   WifiOff,
@@ -66,6 +71,35 @@ interface AgentOutboxItem {
   payload?: Record<string, any>;
   display_name?: string;
   created_at: string;
+}
+
+interface ClientChatRow {
+  id: string;
+  folio?: string | null;
+  nombre?: string | null;
+  telefono?: string | null;
+  whatsapp?: string | null;
+  correo?: string | null;
+  direccion?: string | null;
+  status_cliente?: string | null;
+  ultimo_contacto?: string | null;
+  proximo_seguimiento?: string | null;
+  riesgo_cancelacion?: string | null;
+  vendedor_asignado?: string | null;
+  morosidad_id?: string | null;
+  monto_adeudo?: number | null;
+  dias_atraso?: number | null;
+  status_cobranza?: string | null;
+  clientChat?: {
+    welcomeSentAt?: string;
+    domiciliationInvitedAt?: string;
+    paymentReminderSentAt?: string;
+    lastMessageAt?: string;
+    lastMessageType?: string;
+    lastMessage?: string;
+  };
+  phone10?: string;
+  suggestedAction?: string;
 }
 
 interface ChannelStatus {
@@ -257,6 +291,27 @@ function formatTime(timestamp: number) {
   });
 }
 
+function money(value: any) {
+  return Number(value || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+}
+
+function normalizeText(value: any) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function phone10(value: any) {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+function customerName(client?: ClientChatRow | null) {
+  return client?.nombre || 'Cliente sin nombre';
+}
+
 function statusCopy(channel: ChatChannel, status?: string) {
   if (channel === 'whatsapp') {
     if (status === 'connected') return 'Conectado';
@@ -296,6 +351,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('whatsapp');
   const [messages, setMessages] = useState<ChannelMessage[]>([]);
   const [conversations, setConversations] = useState<ChannelConversation[]>([]);
+  const [crmClients, setCrmClients] = useState<ClientChatRow[]>([]);
   const [outbox, setOutbox] = useState<AgentOutboxItem[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [whatsAppStatus, setWhatsAppStatus] = useState<ChannelStatus>({});
@@ -389,6 +445,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
         fetch('/api/channels/conversations', { cache: 'no-store' }).catch(() => null),
         fetch('/api/agents/outbox', { cache: 'no-store' }).catch(() => null),
       ]);
+      const crmRes = await fetch('/api/client-chat-crm', { cache: 'no-store' }).catch(() => null);
       const profileRes = await fetch(`/api/agents/profiles/${RECEPTIONIST_PROFILE_ID}`, { cache: 'no-store' }).catch(() => null);
 
       if (waStatusRes.ok) setWhatsAppStatus(normalizeWhatsAppStatus(await waStatusRes.json()));
@@ -396,6 +453,10 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
       if (agentsRes?.ok) setAgents(await agentsRes.json());
       if (conversationsRes?.ok) setConversations(await conversationsRes.json());
       if (outboxRes?.ok) setOutbox(await outboxRes.json());
+      if (crmRes?.ok) {
+        const crmBody = await crmRes.json().catch(() => ({}));
+        setCrmClients(Array.isArray(crmBody?.clients) ? crmBody.clients : []);
+      }
       if (profileRes?.ok) {
         const profile = normalizeProfile(await profileRes.json());
         setMemory(profile);
@@ -459,6 +520,39 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const activeConversations = useMemo(() => (
     conversations.filter(conversation => conversation.channel === activeChannel)
   ), [activeChannel, conversations]);
+
+  const selectedConversation = useMemo(() => (
+    conversations.find(conversation => conversation.id === selectedConversationId) || null
+  ), [conversations, selectedConversationId]);
+
+  const selectedCrmClient = useMemo(() => {
+    if (!selectedConversation) return null;
+
+    const conversationMessages = messages.filter(msg => msg.conversationId === selectedConversation.id);
+    const candidatePhones = [
+      selectedConversation.external_chat_id,
+      selectedConversation.display_name,
+      ...conversationMessages.flatMap(msg => [msg.from, msg.to, msg.chatId]),
+    ].map(phone10).filter(Boolean);
+
+    const candidateTexts = [
+      selectedConversation.display_name,
+      selectedConversation.external_chat_id,
+      selectedConversation.last_body,
+      ...conversationMessages.flatMap(msg => [msg.fromName, msg.body]),
+    ].map(normalizeText).filter(Boolean);
+
+    return crmClients.find(client => {
+      const clientPhones = [client.phone10, client.whatsapp, client.telefono].map(phone10).filter(Boolean);
+      if (clientPhones.some(phone => candidatePhones.includes(phone))) return true;
+
+      const folio = normalizeText(client.folio);
+      if (folio && candidateTexts.some(text => text.includes(folio))) return true;
+
+      const name = normalizeText(client.nombre);
+      return name.length >= 5 && candidateTexts.some(text => text.includes(name) || name.includes(text));
+    }) || null;
+  }, [crmClients, messages, selectedConversation]);
 
   const pendingOutbox = useMemo(() => (
     outbox.filter(item => item.status === 'pending_approval')
@@ -1078,6 +1172,12 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
             </div>
           )}
 
+          <ChatCrmCard
+            client={selectedCrmClient}
+            conversation={selectedConversation}
+            onStartCapture={onStartCapture}
+          />
+
           <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-black/25 p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-sm font-black text-white">
@@ -1212,6 +1312,93 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
             )}
           </div>
         </section>
+      </div>
+    </div>
+  );
+}
+
+function ChatCrmCard({
+  client,
+  conversation,
+  onStartCapture,
+}: {
+  client: ClientChatRow | null;
+  conversation: ChannelConversation | null;
+  onStartCapture?: () => void;
+}) {
+  const contact = client?.phone10 || client?.whatsapp || client?.telefono || conversation?.external_chat_id || 'Sin contacto';
+  const lastContact = client?.clientChat?.lastMessageAt || client?.ultimo_contacto;
+
+  return (
+    <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-4 shadow-[0_0_28px_rgba(34,211,238,0.08)]">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">CRM del usuario</p>
+          <h3 className="mt-1 truncate text-lg font-black text-white">
+            {client ? customerName(client) : conversation ? (conversation.display_name || conversation.external_chat_id) : 'Selecciona un chat'}
+          </h3>
+          <p className="mt-1 truncate text-xs text-slate-400">
+            {client ? `${client.folio || 'Sin folio'} · ${client.status_cliente || 'Sin estatus'}` : 'Datos vinculados a la conversacion activa'}
+          </p>
+        </div>
+        <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
+          client
+            ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+            : 'border-slate-600 bg-slate-900 text-slate-400'
+        }`}>
+          {client ? 'Encontrado' : 'Sin match'}
+        </span>
+      </div>
+
+      {!conversation ? (
+        <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-sm text-slate-400">
+          Elige una conversacion para ver telefono, folio, direccion y estado del cliente.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-2">
+            <CrmField icon={Phone} label="Contacto" value={contact} />
+            <CrmField icon={User} label="Vendedor" value={client?.vendedor_asignado || 'Sin asignar'} />
+            <CrmField icon={Mail} label="Correo" value={client?.correo || 'Sin correo'} />
+            <CrmField icon={MapPin} label="Direccion" value={client?.direccion || 'Sin direccion'} />
+            <CrmField icon={ShieldCheck} label="Riesgo" value={client?.riesgo_cancelacion || 'Sin riesgo'} />
+            <CrmField
+              icon={CreditCard}
+              label="Morosidad"
+              value={client?.morosidad_id ? `${money(client.monto_adeudo)} · ${client.dias_atraso || 0} dias` : 'Sin morosidad'}
+            />
+          </div>
+
+          <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ultimo seguimiento</p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-300">
+              {lastContact ? formatTime(new Date(lastContact).getTime()) : client?.clientChat?.lastMessage || conversation.last_body || 'Sin historial registrado.'}
+            </p>
+          </div>
+
+          {!client && onStartCapture && (
+            <button
+              type="button"
+              onClick={onStartCapture}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2.5 text-xs font-black uppercase tracking-widest text-cyan-100 transition-colors hover:bg-cyan-400/20"
+            >
+              <UserPlus className="h-4 w-4" />
+              Crear ficha de cliente
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CrmField({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 rounded-xl border border-white/10 bg-slate-950/70 p-3">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+      <div className="min-w-0">
+        <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">{label}</p>
+        <p className="mt-0.5 break-words text-xs font-bold text-slate-200">{value}</p>
       </div>
     </div>
   );

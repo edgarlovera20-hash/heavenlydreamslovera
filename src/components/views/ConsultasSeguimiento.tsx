@@ -4,6 +4,7 @@ import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContaine
 import { cn } from '../../lib/utils';
 import { LinkChannelModal } from '../ui/LinkChannelModal';
 import { getChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/channels';
+import { getPaginationItems, matchesTableSearch } from '../../lib/tableSearch';
 
 interface SiacRecord {
   id: string;
@@ -236,19 +237,7 @@ export default function ConsultasSeguimiento() {
   }, []);
 
   const handleFilter = async () => {
-    if (folioSearch.trim()) {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/siac/search?folio=${encodeURIComponent(folioSearch.trim())}`);
-        const data = await res.json();
-        setRecords(Array.isArray(data) ? data : []);
-        setLoaded(true);
-      } catch {
-        setRecords([]);
-      } finally {
-        setLoading(false);
-      }
-    } else {
+    if (!loaded) {
       await fetchAll();
     }
     setCurrentPage(1);
@@ -360,6 +349,39 @@ export default function ConsultasSeguimiento() {
 
   const filteredData = useMemo(() => {
     return records.filter(item => {
+      const matchSearch = matchesTableSearch(folioSearch, [
+        item.id,
+        item.source_id,
+        item.folio_siac,
+        item.fecha_captura,
+        item.estrategia,
+        item.promotor,
+        item.usuario,
+        item.morosidad,
+        item.estatus_siac,
+        item.tipo_linea,
+        item.linea_contratada,
+        item.area,
+        item.division,
+        item.tienda,
+        item.paquete,
+        item.observaciones,
+        item.respuesta_telmex,
+        item.motivo_rechazo,
+        item.telefono_asignado,
+        item.telefono_portado,
+        item.telefono_referencia,
+        item.os_alta,
+        item.estatus_pisa,
+        item.tipo_cliente,
+        item.tipo_servicio,
+        item.correo,
+        item.estatus_etapa,
+        item.campana,
+        item.zona,
+        item.distrito,
+        item.colonia,
+      ]);
       const matchEstatus = !estatus || item.estatus_siac === estatus;
       const matchQuality = !qualityFilter || recordQualityFlags(item).includes(qualityFilter);
       const matchUsuario = !usuarioFilter || recordUser(item) === usuarioFilter;
@@ -367,9 +389,9 @@ export default function ConsultasSeguimiento() {
       const matchTienda = !tiendaFilter || (item.tienda || 'Sin dato') === tiendaFilter;
       const matchEstrategia = !estrategiaFilter || (item.estrategia || 'Sin dato') === estrategiaFilter;
       const matchMorosidad = !morosidadFilter || (item.morosidad || 'Sin dato') === morosidadFilter;
-      return matchEstatus && matchQuality && matchUsuario && matchZona && matchTienda && matchEstrategia && matchMorosidad;
+      return matchSearch && matchEstatus && matchQuality && matchUsuario && matchZona && matchTienda && matchEstrategia && matchMorosidad;
     });
-  }, [records, estatus, qualityFilter, usuarioFilter, zonaFilter, tiendaFilter, estrategiaFilter, morosidadFilter]);
+  }, [records, folioSearch, estatus, qualityFilter, usuarioFilter, zonaFilter, tiendaFilter, estrategiaFilter, morosidadFilter]);
 
   const getStatusBadge = (status: string | null) => {
     const s = (status || '').toUpperCase();
@@ -424,7 +446,7 @@ export default function ConsultasSeguimiento() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [estatus, qualityFilter, usuarioFilter, zonaFilter, tiendaFilter, estrategiaFilter, morosidadFilter]);
+  }, [folioSearch, estatus, qualityFilter, usuarioFilter, zonaFilter, tiendaFilter, estrategiaFilter, morosidadFilter]);
 
   const waLinked = channelState.whatsappVendedores || channelState.whatsappClientes;
   const tgLinked = channelState.telegramVendedores;
@@ -517,14 +539,14 @@ export default function ConsultasSeguimiento() {
           }}
         >
           <label className="space-y-2">
-            <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Folio SIAC</span>
+            <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Buscar en tabla</span>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500" />
               <input
                 type="text"
                 value={folioSearch}
                 onChange={(e) => setFolioSearch(e.target.value)}
-                placeholder="Escribe el folio y presiona Buscar"
+                placeholder="Folio, cliente, telefono, zona, tienda, paquete..."
                 className="w-full bg-black/40 border border-blue-500/30 rounded-xl py-3 pl-10 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
               />
             </div>
@@ -721,17 +743,19 @@ export default function ConsultasSeguimiento() {
             >
               Anterior
             </button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(totalPages, 10) }, (_, i) => i + 1).map(page => (
+            <div className="flex max-w-full items-center gap-1 overflow-x-auto pb-1 custom-scrollbar">
+              {getPaginationItems(currentPage, totalPages).map((item, index) => item === 'ellipsis' ? (
+                <span key={`ellipsis-${index}`} className="flex h-8 w-8 shrink-0 items-center justify-center text-sm font-bold text-slate-500">…</span>
+              ) : (
                 <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
+                  key={item}
+                  onClick={() => setCurrentPage(item)}
                   className={cn(
-                    'w-8 h-8 rounded-lg text-sm font-medium transition-colors flex items-center justify-center',
-                    currentPage === page ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    'w-8 h-8 shrink-0 rounded-lg text-sm font-medium transition-colors flex items-center justify-center',
+                    currentPage === item ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   )}
                 >
-                  {page}
+                  {item}
                 </button>
               ))}
             </div>

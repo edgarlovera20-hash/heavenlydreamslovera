@@ -57,6 +57,10 @@ export default function DataGridHero({
       cell.style.backgroundColor = color;
       cell.style.setProperty('--opacity-min', String(opacityMin));
       cell.style.setProperty('--opacity-max', String(opacityMax));
+      cell.style.setProperty('--cell-shift-x', `${((Math.random() - 0.5) * 18).toFixed(2)}px`);
+      cell.style.setProperty('--cell-shift-y', `${((Math.random() - 0.5) * 18).toFixed(2)}px`);
+      cell.style.setProperty('--cell-hue', `${Math.round(Math.random() * 54 - 18)}deg`);
+      cell.style.setProperty('--cell-scale', `${(1 + Math.random() * 0.18).toFixed(2)}`);
 
       if (pulseEffect) {
         const r = Math.floor(i / cols);
@@ -73,7 +77,7 @@ export default function DataGridHero({
           delay = Math.sqrt(dr * dr + dc * dc) * 0.2;
         }
 
-        cell.style.animation = `cell-pulse ${duration}s infinite alternate`;
+        cell.style.animation = `cell-pulse ${duration}s ease-in-out infinite alternate, cell-drift ${duration * 2.15}s ease-in-out infinite alternate, cell-blue-shift ${duration * 1.45}s ease-in-out infinite alternate`;
         cell.style.animationDelay = `${delay.toFixed(3)}s`;
       }
 

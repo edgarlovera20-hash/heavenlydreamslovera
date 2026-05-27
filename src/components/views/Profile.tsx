@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Camera, Crown, Flame, Trophy, Target, TrendingUp,
   Award, Star, Zap, ChevronRight, Medal, Clock,
-  BarChart2, Shield, Sparkles, DollarSign
+  BarChart2, Shield, Sparkles, DollarSign, Edit3, Save
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { auth } from '../../lib/firebase';
@@ -61,15 +61,29 @@ function formatRelative(iso?: string): string {
 
 export default function Profile() {
   const session = auth.currentUser;
+  const phraseKey = session?.uid ? `hd_profile_phrase_${session.uid}` : '';
   const [avatar, setAvatar] = useState<string | null>(
     session?.uid ? localStorage.getItem(`hd_avatar_${session.uid}`) : null
   );
+  const [profilePhrase, setProfilePhrase] = useState(() => (
+    phraseKey ? localStorage.getItem(phraseKey) || '' : ''
+  ));
+  const [phraseDraft, setPhraseDraft] = useState(profilePhrase);
+  const [editingPhrase, setEditingPhrase] = useState(!profilePhrase);
   const [lbFilter, setLbFilter] = useState<'weekly' | 'monthly' | 'all-time'>('weekly');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [goal, setGoal] = useState<QuotaRecord | null>(null);
+
+  useEffect(() => {
+    if (!phraseKey) return;
+    const stored = localStorage.getItem(phraseKey) || '';
+    setProfilePhrase(stored);
+    setPhraseDraft(stored);
+    setEditingPhrase(!stored);
+  }, [phraseKey]);
 
   useEffect(() => {
     const load = () => {
@@ -247,6 +261,16 @@ export default function Profile() {
     reader.readAsDataURL(file);
   };
 
+  const saveProfilePhrase = () => {
+    const value = phraseDraft.trim().slice(0, 140);
+    setProfilePhrase(value);
+    setPhraseDraft(value);
+    setEditingPhrase(false);
+    if (phraseKey) {
+      try { localStorage.setItem(phraseKey, value); } catch { /* quota */ }
+    }
+  };
+
   return (
     <div className="w-full space-y-6 pb-12">
 
@@ -325,6 +349,37 @@ export default function Profile() {
 
               <h2 className="text-2xl font-bold text-white tracking-tight">{userName}</h2>
               <p className="text-sm text-slate-400 uppercase tracking-widest font-medium mt-1">{userRoleLabel}</p>
+
+              <div className="mt-5 w-full rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Frase personal</p>
+                  <button
+                    type="button"
+                    onClick={() => editingPhrase ? saveProfilePhrase() : setEditingPhrase(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-200 transition hover:bg-cyan-400/20"
+                  >
+                    {editingPhrase ? <Save className="h-3.5 w-3.5" /> : <Edit3 className="h-3.5 w-3.5" />}
+                    {editingPhrase ? 'Guardar' : 'Editar'}
+                  </button>
+                </div>
+                {editingPhrase ? (
+                  <textarea
+                    value={phraseDraft}
+                    onChange={(event) => setPhraseDraft(event.target.value.slice(0, 140))}
+                    onKeyDown={(event) => {
+                      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') saveProfilePhrase();
+                    }}
+                    placeholder="Escribe tu frase, lema o meta personal..."
+                    rows={3}
+                    className="min-h-[78px] w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm leading-5 text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-400/20"
+                  />
+                ) : (
+                  <p className="min-h-[44px] rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-sm italic leading-6 text-slate-200">
+                    “{profilePhrase || 'Sin frase todavía. Agrega una para personalizar tu perfil.'}”
+                  </p>
+                )}
+                <p className="mt-2 text-right text-[10px] text-slate-500">{phraseDraft.length}/140</p>
+              </div>
 
               <div className="w-full mt-6 bg-slate-900/90 rounded-2xl p-4 border border-white/5">
                 <div className="flex justify-between items-end mb-2">

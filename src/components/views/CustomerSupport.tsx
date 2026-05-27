@@ -5,6 +5,7 @@ import { aiAgent, CustomerData, EventType } from '../../services/aiAgent';
 import { LinkChannelModal } from '../ui/LinkChannelModal';
 import { getChannels, refreshChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/channels';
 import { TicketsAPI } from '../../services/db';
+import { getPaginationItems, matchesTableSearch } from '../../lib/tableSearch';
 
 interface SupportTicket {
   id: string;
@@ -92,7 +93,16 @@ export default function CustomerSupport() {
   const filteredData = useMemo(() => {
     return tickets.filter(item => {
       const { search: q, estado: e, prioridad: p } = appliedFilters;
-      const matchGlobal = item.id.toLowerCase().includes(q) || item.cliente.toLowerCase().includes(q) || item.telefono.includes(q);
+      const matchGlobal = matchesTableSearch(q, [
+        item.id,
+        item.cliente,
+        item.telefono,
+        item.asunto,
+        item.estado,
+        item.prioridad,
+        item.fecha,
+        item.agente,
+      ]);
       const matchEstado = e === "" || item.estado === e;
       const matchPrioridad = p === "" || item.prioridad === p;
       return matchGlobal && matchEstado && matchPrioridad;
@@ -371,19 +381,21 @@ export default function CustomerSupport() {
             >
               Anterior
             </button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+            <div className="flex max-w-full items-center gap-1 overflow-x-auto pb-1 custom-scrollbar">
+              {getPaginationItems(currentPage, totalPages).map((item, index) => item === 'ellipsis' ? (
+                <span key={`ellipsis-${index}`} className="flex h-8 w-8 shrink-0 items-center justify-center text-sm font-bold text-slate-500">…</span>
+              ) : (
                 <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
+                  key={item}
+                  onClick={() => setCurrentPage(item)}
                   className={cn(
-                    "w-8 h-8 rounded-lg text-sm font-medium transition-colors flex items-center justify-center",
-                    currentPage === page 
-                      ? "bg-blue-600 text-white" 
+                    "w-8 h-8 shrink-0 rounded-lg text-sm font-medium transition-colors flex items-center justify-center",
+                    currentPage === item
+                      ? "bg-blue-600 text-white"
                       : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                   )}
                 >
-                  {page}
+                  {item}
                 </button>
               ))}
             </div>

@@ -7,6 +7,7 @@ import { LinkChannelModal } from '../ui/LinkChannelModal';
 import { getChannels, refreshChannels, chatUrl, ChannelKey, ChannelsState } from '../../lib/channels';
 import { MorosidadAPI } from '../../services/db';
 import { toast } from 'sonner';
+import { getPaginationItems, matchesTableSearch } from '../../lib/tableSearch';
 
 interface Moroso {
   id: string;
@@ -16,6 +17,10 @@ interface Moroso {
   diasAtraso: number;
   estado: string;
   paquete: string;
+  fechaVencimiento?: string;
+  ultimoPago?: string;
+  createdAt?: string;
+  updatedAt?: string;
   promotor?: string;
   usuario?: string;
   area?: string;
@@ -34,9 +39,13 @@ interface MorosidadApiRow {
   whatsapp?: string;
   monto_adeudo?: number | string;
   dias_atraso?: number | string;
+  fecha_vencimiento?: string;
+  ultimo_pago?: string;
   status_cobranza?: string;
   metadata?: string;
   cliente_metadata?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface AnalyticsBucket { name: string; total: number; monto: number; }
@@ -69,12 +78,60 @@ function buildMorososFromApi(rows: MorosidadApiRow[]): Moroso[] {
       diasAtraso: Number(row.dias_atraso) || 0,
       estado: row.status_cobranza || 'Sin contactar',
       paquete: metadata.paquete || 'Sin paquete',
+      fechaVencimiento: row.fecha_vencimiento,
+      ultimoPago: row.ultimo_pago,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
       promotor: metadata.promotor,
       usuario: metadata.usuario,
       area: metadata.area,
       mercado: metadata.mercado,
+      zona: metadata.zona,
+      tienda: metadata.tienda,
+      estrategia: metadata.estrategia,
     };
   });
+}
+
+function recordDateValue(item: Moroso) {
+  return item.fechaVencimiento || item.createdAt || item.updatedAt || item.ultimoPago || '';
+}
+
+function matchesDateFilter(item: Moroso, month: string, day: string) {
+  const value = recordDateValue(item);
+  if (!value) return !month && !day;
+  if (day) return value.slice(0, 10) === day;
+  if (month) return value.slice(0, 7) === month;
+  return true;
+}
+
+function groupMorosidad(rows: Moroso[], field: keyof Moroso): AnalyticsBucket[] {
+  const grouped = rows.reduce<Record<string, AnalyticsBucket>>((acc, row) => {
+    const key = String(row[field] || `SIN ${String(field).toUpperCase()}`).trim() || `SIN ${String(field).toUpperCase()}`;
+    if (!acc[key]) acc[key] = { name: key, total: 0, monto: 0 };
+    acc[key].total += 1;
+    acc[key].monto += Number(row.deuda) || 0;
+    return acc;
+  }, {});
+
+  return Object.values(grouped)
+    .sort((a, b) => b.monto - a.monto || b.total - a.total)
+    .slice(0, 12);
+}
+
+function buildMorosidadAnalytics(rows: Moroso[]): MorosidadAnalytics {
+  return {
+    total: rows.length,
+    montoTotal: rows.reduce((sum, row) => sum + (Number(row.deuda) || 0), 0),
+    byUsuario: groupMorosidad(rows, 'usuario'),
+    byPromotor: groupMorosidad(rows, 'promotor'),
+    byZona: groupMorosidad(rows, 'zona'),
+    byTienda: groupMorosidad(rows, 'tienda'),
+    byEstrategia: groupMorosidad(rows, 'estrategia'),
+    byArea: groupMorosidad(rows, 'area'),
+    byMercado: groupMorosidad(rows, 'mercado'),
+    byStatus: groupMorosidad(rows, 'estado'),
+  };
 }
 
 export default function Morosidad() {
@@ -109,6 +166,8 @@ export default function Morosidad() {
   }, []);
   const [search, setSearch] = useState('');
   const [estado, setEstado] = useState('');
+  const [chartMonth, setChartMonth] = useState('');
+  const [chartDay, setChartDay] = useState('');
   
   const [appliedFilters, setAppliedFilters] = useState({
     search: '',
@@ -188,7 +247,22 @@ export default function Morosidad() {
   const filteredData = useMemo(() => {
     return allMorosos.filter(item => {
       const { search: q, estado: e } = appliedFilters;
-      const matchGlobal = item.id.toLowerCase().includes(q) || item.cliente.toLowerCase().includes(q) || item.telefono.includes(q);
+      const matchGlobal = matchesTableSearch(q, [
+        item.id,
+        item.cliente,
+        item.telefono,
+        item.paquete,
+        item.deuda,
+        item.diasAtraso,
+        item.estado,
+        item.promotor,
+        item.usuario,
+        item.area,
+        item.mercado,
+        item.zona,
+        item.tienda,
+        item.estrategia,
+      ]);
       const matchEstado = e === "" || item.estado === e;
       return matchGlobal && matchEstado;
     });
@@ -199,6 +273,18 @@ export default function Morosidad() {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredData.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredData, currentPage, itemsPerPage]);
+
+  const chartRows = useMemo(() => (
+    allMorosos.filter(item => matchesDateFilter(item, chartMonth, chartDay))
+  ), [allMorosos, chartMonth, chartDay]);
+
+  const chartAnalytics = useMemo(() => buildMorosidadAnalytics(chartRows), [chartRows]);
+
+  const chartFilterLabel = chartDay
+    ? `Dia ${chartDay}`
+    : chartMonth
+      ? `Mes ${chartMonth}`
+      : 'Todos los periodos';
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -303,38 +389,83 @@ export default function Morosidad() {
         </div>
       )}
 
+      <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 shadow-xl">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-bold text-slate-100">Filtros de graficas</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Aplicado a tarjetas y graficas: <span className="font-semibold text-cyan-300">{chartFilterLabel}</span>
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_180px_auto]">
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mes</span>
+              <input
+                type="month"
+                value={chartMonth}
+                onChange={(event) => {
+                  setChartMonth(event.target.value);
+                  if (chartDay && !chartDay.startsWith(event.target.value)) setChartDay('');
+                }}
+                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition-all focus:ring-2 focus:ring-red-500/50"
+              />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Dia</span>
+              <input
+                type="date"
+                value={chartDay}
+                onChange={(event) => {
+                  setChartDay(event.target.value);
+                  if (event.target.value) setChartMonth(event.target.value.slice(0, 7));
+                }}
+                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition-all focus:ring-2 focus:ring-red-500/50"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => { setChartMonth(''); setChartDay(''); }}
+              className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700"
+            >
+              <X className="h-4 w-4" />
+              Limpiar
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
-          <p className="text-2xl font-black text-red-300">{analytics?.total ?? allMorosos.length}</p>
+          <p className="text-2xl font-black text-red-300">{chartAnalytics.total}</p>
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Cuentas morosas</p>
         </div>
         <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
-          <p className="text-2xl font-black text-amber-300">{money(analytics?.montoTotal || allMorosos.reduce((s, m) => s + m.deuda, 0))}</p>
+          <p className="text-2xl font-black text-amber-300">{money(chartAnalytics.montoTotal)}</p>
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Saldo total</p>
         </div>
         <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
-          <p className="text-2xl font-black text-cyan-300">{analytics?.byPromotor?.[0]?.name || '—'}</p>
+          <p className="text-2xl font-black text-cyan-300">{chartAnalytics.byPromotor?.[0]?.name || '—'}</p>
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Promotor con más saldo</p>
         </div>
         <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
-          <p className="text-2xl font-black text-purple-300">{analytics?.byZona?.[0]?.name || '—'}</p>
+          <p className="text-2xl font-black text-purple-300">{chartAnalytics.byZona?.[0]?.name || '—'}</p>
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Zona con más morosidad</p>
         </div>
       </div>
 
-      {analytics && (
+      {chartAnalytics && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <MiniBar title="Morosidad por usuario" data={analytics.byUsuario} />
-          <MiniBar title="Morosidad por zona" data={analytics.byZona} />
-          <MiniBar title="Morosidad por tienda" data={analytics.byTienda} />
-          <MiniBar title="Morosidad por estrategia" data={analytics.byEstrategia} />
-          <MiniBar title="Morosidad por área" data={analytics.byArea} />
+          <MiniBar title="Morosidad por usuario" data={chartAnalytics.byUsuario} />
+          <MiniBar title="Morosidad por zona" data={chartAnalytics.byZona} />
+          <MiniBar title="Morosidad por tienda" data={chartAnalytics.byTienda} />
+          <MiniBar title="Morosidad por estrategia" data={chartAnalytics.byEstrategia} />
+          <MiniBar title="Morosidad por área" data={chartAnalytics.byArea} />
           <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 min-h-[260px]">
             <h3 className="text-sm font-bold text-slate-100 mb-3">Morosidad por mercado</h3>
             <ResponsiveContainer width="100%" height={205}>
               <PieChart>
-                <Pie data={analytics.byMercado.slice(0, 6)} dataKey="monto" nameKey="name" innerRadius={45} outerRadius={82} paddingAngle={2}>
-                  {analytics.byMercado.slice(0, 6).map((_, index) => <Cell key={index} fill={chartColors[index % chartColors.length]} />)}
+                <Pie data={chartAnalytics.byMercado.slice(0, 6)} dataKey="monto" nameKey="name" innerRadius={45} outerRadius={82} paddingAngle={2}>
+                  {chartAnalytics.byMercado.slice(0, 6).map((_, index) => <Cell key={index} fill={chartColors[index % chartColors.length]} />)}
                 </Pie>
                 <Tooltip formatter={(value: any) => money(Number(value))} contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,.12)', borderRadius: 8 }} />
               </PieChart>
@@ -520,19 +651,21 @@ export default function Morosidad() {
             >
               Anterior
             </button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+            <div className="flex max-w-full items-center gap-1 overflow-x-auto pb-1 custom-scrollbar">
+              {getPaginationItems(currentPage, totalPages).map((item, index) => item === 'ellipsis' ? (
+                <span key={`ellipsis-${index}`} className="flex h-8 w-8 shrink-0 items-center justify-center text-sm font-bold text-slate-500">…</span>
+              ) : (
                 <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
+                  key={item}
+                  onClick={() => setCurrentPage(item)}
                   className={cn(
-                    "w-8 h-8 rounded-lg text-sm font-medium transition-colors flex items-center justify-center",
-                    currentPage === page 
-                      ? "bg-red-600 text-white" 
+                    "w-8 h-8 shrink-0 rounded-lg text-sm font-medium transition-colors flex items-center justify-center",
+                    currentPage === item
+                      ? "bg-red-600 text-white"
                       : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                   )}
                 >
-                  {page}
+                  {item}
                 </button>
               ))}
             </div>

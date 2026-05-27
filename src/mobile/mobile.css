@@ -13,31 +13,31 @@
 
 @layer base {
   :root {
-    --theme-electric: #0ea5e9;
-    --theme-deep: #111827;
-    --theme-dark: #131d2f;
-    --theme-black: #0B1120;
-    --theme-neon: #22d3ee;
+    --theme-electric: #1d4ed8;
+    --theme-deep: #061338;
+    --theme-dark: #071a45;
+    --theme-black: #020617;
+    --theme-neon: #38f8ff;
     --theme-matrix: #10b981;
     --theme-text-main: #f8fafc;
-    --hd-bg: #07111f;
-    --hd-bg-soft: #0b1728;
-    --hd-surface: #0d1a2d;
-    --hd-surface-strong: #091220;
-    --hd-surface-muted: #12233a;
-    --hd-border: rgba(125, 211, 252, 0.18);
-    --hd-border-strong: rgba(125, 211, 252, 0.34);
+    --hd-bg: #031b73;
+    --hd-bg-soft: #0639c9;
+    --hd-surface: rgba(3, 10, 31, 0.9);
+    --hd-surface-strong: rgba(2, 6, 23, 0.94);
+    --hd-surface-muted: rgba(8, 24, 64, 0.92);
+    --hd-border: rgba(103, 232, 249, 0.34);
+    --hd-border-strong: rgba(125, 249, 255, 0.58);
     --hd-text: #f8fafc;
     --hd-text-muted: #94a3b8;
     --hd-accent: #38bdf8;
-    --hd-accent-strong: #22d3ee;
+    --hd-accent-strong: #38f8ff;
     --hd-success: #34d399;
     --hd-warning: #fbbf24;
     --hd-danger: #fb7185;
     --hd-radius-md: 14px;
     --hd-radius-lg: 18px;
-    --hd-shadow: 0 18px 55px rgba(0, 0, 0, 0.28);
-    --hd-glow: 0 0 0 1px rgba(56, 189, 248, 0.16), 0 16px 44px rgba(8, 145, 178, 0.12);
+    --hd-shadow: 0 22px 64px rgba(0, 8, 36, 0.46);
+    --hd-glow: 0 0 0 1px rgba(56, 248, 255, 0.18), 0 18px 52px rgba(0, 102, 255, 0.2);
   }
 
   html,
@@ -55,9 +55,9 @@
   body {
     margin: 0;
     background:
-      radial-gradient(circle at 16% -12%, rgba(59, 130, 246, 0.16), transparent 34%),
-      radial-gradient(circle at 90% 8%, rgba(14, 165, 233, 0.1), transparent 30%),
-      linear-gradient(180deg, var(--hd-bg), #050a12 80%);
+      radial-gradient(circle at 18% -10%, rgba(56, 248, 255, 0.55), transparent 28rem),
+      radial-gradient(circle at 88% 6%, rgba(0, 102, 255, 0.58), transparent 24rem),
+      linear-gradient(160deg, #03115a 0%, #063dce 42%, #011237 100%);
     color: var(--theme-text-main);
     font-family: var(--font-sans);
     overflow-x: hidden;
@@ -79,23 +79,61 @@
   }
 }
 
+@keyframes hd-electric-drift {
+  0% {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(3%, 2%, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+}
+
+@keyframes hd-grid-flow {
+  0% {
+    background-position: 0 0, 0 0, 0 0;
+  }
+  100% {
+    background-position: 0 36px, 36px 0, 0 0;
+  }
+}
+
+@keyframes hd-panel-sheen {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+    opacity: 0;
+  }
+  24% {
+    opacity: 0.45;
+  }
+  56% {
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(130%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
 @layer utilities {
   .glass-panel {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--hd-surface) 94%, rgba(56, 189, 248, 0.08)), var(--hd-surface)),
+      linear-gradient(180deg, color-mix(in srgb, var(--hd-surface) 88%, rgba(56, 248, 255, 0.12)), var(--hd-surface-strong)),
       var(--hd-surface);
-    border: 1px solid var(--hd-border);
-    box-shadow: var(--hd-glow);
-    backdrop-filter: none;
+    border: 1px solid var(--hd-border-strong);
+    box-shadow: var(--hd-shadow), var(--hd-glow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(14px) saturate(135%);
   }
 
   .glass-panel-neon {
     background:
-      linear-gradient(145deg, var(--hd-surface-strong), var(--hd-surface)),
-      radial-gradient(circle at 20% 0%, rgba(34, 211, 238, 0.08), transparent 32%);
+      linear-gradient(145deg, rgba(2, 6, 23, 0.96), rgba(4, 20, 68, 0.92)),
+      radial-gradient(circle at 20% 0%, rgba(56, 248, 255, 0.18), transparent 32%);
     border: 1px solid var(--hd-border-strong);
-    box-shadow: var(--hd-glow);
-    backdrop-filter: none;
+    box-shadow: var(--hd-shadow), var(--hd-glow);
+    backdrop-filter: blur(16px) saturate(140%);
   }
 
   .text-glow {
@@ -108,9 +146,10 @@
     overflow-x: hidden;
     color: var(--hd-text);
     background:
-      radial-gradient(circle at 16% -12%, rgba(59, 130, 246, 0.16), transparent 34%),
-      radial-gradient(circle at 90% 8%, rgba(14, 165, 233, 0.1), transparent 30%),
-      linear-gradient(180deg, var(--hd-bg), #050a12 80%);
+      radial-gradient(circle at 18% -8%, rgba(103, 232, 249, 0.62), transparent 26rem),
+      radial-gradient(circle at 86% 10%, rgba(37, 99, 235, 0.74), transparent 25rem),
+      radial-gradient(circle at 48% 48%, rgba(14, 165, 233, 0.34), transparent 22rem),
+      linear-gradient(160deg, #021057 0%, #0756ff 44%, #031032 100%);
   }
 
   .hd-cyber-screen::before {
@@ -119,13 +158,28 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    opacity: 0.42;
+    opacity: 0.64;
     background:
-      linear-gradient(rgba(56, 189, 248, 0.07) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(56, 189, 248, 0.07) 1px, transparent 1px),
-      radial-gradient(circle at 55% 4%, rgba(34, 211, 238, 0.15), transparent 15rem);
-    background-size: 32px 32px, 32px 32px, auto;
-    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.65) 48%, transparent 100%);
+      linear-gradient(rgba(125, 249, 255, 0.16) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(125, 249, 255, 0.14) 1px, transparent 1px),
+      radial-gradient(circle at 55% 4%, rgba(56, 248, 255, 0.28), transparent 16rem);
+    background-size: 36px 36px, 36px 36px, auto;
+    animation: hd-grid-flow 16s linear infinite;
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.78) 54%, transparent 100%);
+  }
+
+  .hd-cyber-screen::after {
+    content: "";
+    position: fixed;
+    inset: -18%;
+    z-index: -2;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 24% 22%, rgba(56, 248, 255, 0.34), transparent 18rem),
+      radial-gradient(circle at 72% 36%, rgba(29, 78, 216, 0.68), transparent 22rem),
+      radial-gradient(circle at 42% 74%, rgba(14, 165, 233, 0.38), transparent 20rem);
+    filter: blur(18px) saturate(130%);
+    animation: hd-electric-drift 10s ease-in-out infinite;
   }
 
   .hd-cyber-screen > * {
@@ -136,12 +190,13 @@
   .hd-cyber-panel {
     @apply relative overflow-hidden p-4;
     border-radius: var(--hd-radius-lg);
-    border: 1px solid var(--hd-border);
+    border: 1px solid var(--hd-border-strong);
     background:
-      linear-gradient(145deg, color-mix(in srgb, var(--hd-surface) 96%, rgba(56, 189, 248, 0.08)), var(--hd-surface-strong)),
+      radial-gradient(circle at 14% 0%, rgba(56, 248, 255, 0.16), transparent 36%),
+      linear-gradient(145deg, rgba(2, 6, 23, 0.96), rgba(5, 18, 52, 0.92)),
       var(--hd-surface);
-    box-shadow: var(--hd-glow);
-    backdrop-filter: none;
+    box-shadow: var(--hd-shadow), var(--hd-glow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px) saturate(140%);
     contain: layout paint;
   }
 
@@ -151,8 +206,14 @@
     inset: 0;
     pointer-events: none;
     background:
-      linear-gradient(90deg, rgba(56, 189, 248, 0.08), transparent 38%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 32%);
+      linear-gradient(90deg, rgba(125, 249, 255, 0.16), transparent 38%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 32%);
+  }
+
+  .hd-cyber-panel:hover::after,
+  .hd-neon-card:hover::after,
+  .hd-neon-action:hover::after {
+    animation: hd-panel-sheen 1.8s ease-out;
   }
 
   .hd-cyber-panel > * {
@@ -167,19 +228,19 @@
 
   .hd-cyber-card {
     border-radius: var(--hd-radius-md);
-    border: 1px solid var(--hd-border);
-    background: var(--hd-surface-strong);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
-    backdrop-filter: none;
+    border: 1px solid var(--hd-border-strong);
+    background: rgba(2, 6, 23, 0.92);
+    box-shadow: 0 18px 42px rgba(0, 8, 36, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(12px);
     contain: layout paint;
   }
 
   .hd-cyber-card-soft {
     border-radius: var(--hd-radius-md);
-    border: 1px solid var(--hd-border);
-    background: var(--hd-surface-strong);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
-    backdrop-filter: none;
+    border: 1px solid var(--hd-border-strong);
+    background: rgba(2, 6, 23, 0.9);
+    box-shadow: 0 16px 36px rgba(0, 8, 36, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(12px);
     contain: layout paint;
   }
 
@@ -238,16 +299,16 @@
 
   .hd-mobile-topbar {
     background:
-      linear-gradient(180deg, rgba(11, 17, 32, 0.98), rgba(7, 17, 31, 0.92)),
+      linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(3, 18, 63, 0.88)),
       var(--theme-black);
-    box-shadow: 0 12px 32px rgba(3, 154, 220, 0.08);
+    box-shadow: 0 14px 38px rgba(0, 8, 36, 0.4), 0 0 28px rgba(56, 248, 255, 0.12);
   }
 
   .hd-mobile-bottom-nav {
     background:
-      linear-gradient(180deg, rgba(9, 18, 32, 0.88), rgba(11, 17, 32, 0.98)),
+      linear-gradient(180deg, rgba(4, 18, 57, 0.86), rgba(2, 6, 23, 0.98)),
       var(--theme-black);
-    box-shadow: 0 -12px 30px rgba(3, 154, 220, 0.08);
+    box-shadow: 0 -16px 34px rgba(0, 8, 36, 0.44), 0 0 28px rgba(56, 248, 255, 0.12);
   }
 
   .hd-mobile-nav-item-active {
@@ -333,14 +394,16 @@
     position: relative;
     overflow: hidden;
     border-radius: var(--hd-radius-md);
-    border: 1px solid rgba(var(--hd-tone-rgb), 0.32);
+    border: 1px solid rgba(var(--hd-tone-rgb), 0.5);
     background:
-      radial-gradient(circle at 16% 0%, rgba(var(--hd-tone-rgb), 0.18), transparent 42%),
-      linear-gradient(145deg, color-mix(in srgb, var(--hd-surface-muted) 72%, rgba(var(--hd-tone-rgb), 0.16)), var(--hd-surface-strong));
+      radial-gradient(circle at 16% 0%, rgba(var(--hd-tone-rgb), 0.28), transparent 42%),
+      linear-gradient(145deg, rgba(2, 6, 23, 0.94), rgba(4, 18, 52, 0.9));
     box-shadow:
-      0 0 0 1px rgba(var(--hd-tone-rgb), 0.08),
-      0 16px 38px rgba(var(--hd-tone-rgb), 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      0 0 0 1px rgba(var(--hd-tone-rgb), 0.12),
+      0 18px 42px rgba(0, 8, 36, 0.34),
+      0 16px 38px rgba(var(--hd-tone-rgb), 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(14px) saturate(130%);
   }
 
   .hd-neon-card::after {
@@ -348,7 +411,7 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: linear-gradient(120deg, rgba(var(--hd-tone-rgb), 0.13), transparent 34%, rgba(255, 255, 255, 0.025));
+    background: linear-gradient(120deg, rgba(var(--hd-tone-rgb), 0.2), transparent 34%, rgba(255, 255, 255, 0.06));
   }
 
   .hd-neon-card > * {
@@ -377,14 +440,16 @@
     position: relative;
     overflow: hidden;
     border-radius: 1rem;
-    border: 1px solid rgba(var(--hd-tone-rgb), 0.36);
+    border: 1px solid rgba(var(--hd-tone-rgb), 0.56);
     background:
-      radial-gradient(circle at 20% 0%, rgba(var(--hd-tone-rgb), 0.24), transparent 44%),
-      linear-gradient(135deg, rgba(var(--hd-tone-rgb), 0.22), rgba(8, 15, 28, 0.84));
+      radial-gradient(circle at 20% 0%, rgba(var(--hd-tone-rgb), 0.34), transparent 44%),
+      linear-gradient(135deg, rgba(var(--hd-tone-rgb), 0.24), rgba(2, 6, 23, 0.9));
     color: color-mix(in srgb, var(--hd-tone) 82%, white);
     box-shadow:
-      0 0 0 1px rgba(var(--hd-tone-rgb), 0.08),
-      0 16px 34px rgba(var(--hd-tone-rgb), 0.13);
+      0 0 0 1px rgba(var(--hd-tone-rgb), 0.12),
+      0 18px 40px rgba(0, 8, 36, 0.32),
+      0 16px 34px rgba(var(--hd-tone-rgb), 0.18);
+    backdrop-filter: blur(12px) saturate(130%);
     transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   }
 
@@ -402,11 +467,11 @@
 
   .hd-neon-metric {
     border-radius: var(--hd-radius-md);
-    border: 1px solid rgba(var(--hd-tone-rgb), 0.24);
+    border: 1px solid rgba(var(--hd-tone-rgb), 0.46);
     background:
-      radial-gradient(circle at 100% 0%, rgba(var(--hd-tone-rgb), 0.13), transparent 46%),
-      var(--hd-surface-strong);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 10px 24px rgba(var(--hd-tone-rgb), 0.08);
+      radial-gradient(circle at 100% 0%, rgba(var(--hd-tone-rgb), 0.2), transparent 46%),
+      rgba(2, 6, 23, 0.94);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 14px 30px rgba(0, 8, 36, 0.3), 0 10px 24px rgba(var(--hd-tone-rgb), 0.12);
   }
 
   .hd-neon-metric p:first-child {
