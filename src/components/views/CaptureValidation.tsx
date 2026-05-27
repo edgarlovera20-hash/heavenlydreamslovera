@@ -61,7 +61,7 @@ export default function CaptureValidation() {
   return (
     <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* AI Greeting Banner */}
-      <div className="glass-panel-neon border-cyber-electric/40 rounded-2xl p-6 md:p-8 flex gap-6 items-start shadow-[0_0_30px_rgba(0,229,255,0.15)] relative overflow-hidden group">
+      <div className="neural-command-hero glass-panel-neon border-cyber-electric/40 rounded-2xl p-6 md:p-10 flex gap-6 items-start shadow-[0_0_30px_rgba(0,229,255,0.15)] relative overflow-hidden group">
         {/* Decorative background glow */}
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-cyber-neon/10 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
         <div className="absolute top-0 left-0 w-1 h-full bg-cyber-neon" />
@@ -76,12 +76,12 @@ export default function CaptureValidation() {
             Neural AI Assistant Online
           </div>
           
-          <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight uppercase">
-            System Control Panel
+          <h2 className="text-2xl md:text-4xl font-bold text-white tracking-tight uppercase">
+            Neural AI Control System
           </h2>
           
           <p className="text-cyber-electric/80 font-mono text-sm leading-relaxed max-w-3xl">
-            Awaiting input. I am your autonomous management AI. My objective is to optimize workflows, organize nodes, and execute validation scripts instantaneously.
+            Centro de comando para capturas, clientes y validaciones. La IA organiza nodos operativos, prioriza procesos y mantiene el flujo listo para ejecutar.
           </p>
           
           <p className="text-cyber-electric/50 text-[10px] font-bold uppercase tracking-widest pt-2">

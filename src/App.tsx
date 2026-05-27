@@ -360,9 +360,9 @@ export default function App() {
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-700 px-4 sm:px-0">
-              <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} color="yellow" tone="admin" onClick={() => setPendingRole('GERENTE')} />
-              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} color="orange" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
-              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} color="red" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
+              <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} color="cyan" tone="admin" onClick={() => setPendingRole('GERENTE')} />
+              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} color="blue" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
+              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} color="purple" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
             </div>
             <div className="mt-8 sm:mt-12 animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
               <button onClick={() => setIsRegistering(true)}
@@ -552,22 +552,22 @@ export default function App() {
 const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, color = 'cyan', tone = 'default', onClick }: any) {
   const styles: Record<string, { card: string; aura: string; title: string; desc: string }> = {
     admin: {
-      card: 'border-[#123a6a] hover:border-yellow-300/90 focus-visible:border-yellow-300/90 hover:shadow-[0_0_34px_rgba(250,204,21,0.44),0_0_70px_rgba(250,204,21,0.18)] focus-visible:shadow-[0_0_34px_rgba(250,204,21,0.44),0_0_70px_rgba(250,204,21,0.18)]',
-      aura: 'bg-yellow-300/10',
-      title: 'group-hover:text-yellow-100',
-      desc: 'text-yellow-100/78',
+      card: 'border-[#123a6a] hover:border-cyan-200/90 focus-visible:border-cyan-200/90 hover:shadow-[0_0_34px_rgba(0,194,255,0.44),0_0_70px_rgba(10,132,255,0.18)] focus-visible:shadow-[0_0_34px_rgba(0,194,255,0.44),0_0_70px_rgba(10,132,255,0.18)]',
+      aura: 'bg-cyan-300/10',
+      title: 'group-hover:text-cyan-100',
+      desc: 'text-cyan-100/78',
     },
     supervisor: {
-      card: 'border-[#123a6a] hover:border-orange-300/90 focus-visible:border-orange-300/90 hover:shadow-[0_0_34px_rgba(251,146,60,0.46),0_0_70px_rgba(251,146,60,0.18)] focus-visible:shadow-[0_0_34px_rgba(251,146,60,0.46),0_0_70px_rgba(251,146,60,0.18)]',
-      aura: 'bg-orange-400/10',
-      title: 'group-hover:text-orange-100',
-      desc: 'text-orange-100/78',
+      card: 'border-[#123a6a] hover:border-sky-300/90 focus-visible:border-sky-300/90 hover:shadow-[0_0_34px_rgba(10,132,255,0.46),0_0_70px_rgba(0,194,255,0.18)] focus-visible:shadow-[0_0_34px_rgba(10,132,255,0.46),0_0_70px_rgba(0,194,255,0.18)]',
+      aura: 'bg-sky-400/10',
+      title: 'group-hover:text-sky-100',
+      desc: 'text-sky-100/78',
     },
     advisor: {
-      card: 'border-[#123a6a] hover:border-red-400/90 focus-visible:border-red-400/90 hover:shadow-[0_0_34px_rgba(248,113,113,0.48),0_0_70px_rgba(239,68,68,0.2)] focus-visible:shadow-[0_0_34px_rgba(248,113,113,0.48),0_0_70px_rgba(239,68,68,0.2)]',
-      aura: 'bg-red-500/10',
-      title: 'group-hover:text-red-100',
-      desc: 'text-red-100/78',
+      card: 'border-[#123a6a] hover:border-violet-300/80 focus-visible:border-violet-300/80 hover:shadow-[0_0_34px_rgba(116,110,255,0.34),0_0_70px_rgba(0,194,255,0.14)] focus-visible:shadow-[0_0_34px_rgba(116,110,255,0.34),0_0_70px_rgba(0,194,255,0.14)]',
+      aura: 'bg-violet-400/10',
+      title: 'group-hover:text-violet-100',
+      desc: 'text-violet-100/78',
     },
     default: {
       card: 'border-[#123a6a] hover:border-cyber-neon/50 hover:shadow-[0_0_34px_rgba(34,211,238,0.35)]',

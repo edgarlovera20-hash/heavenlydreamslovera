@@ -311,7 +311,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           mouseGlow
           opacityMin={0.035}
           opacityMax={0.34}
-          background="linear-gradient(145deg, #67e8f9 0%, #0437F2 42%, #0073CF 72%, #002B5E 100%)"
+          background="radial-gradient(circle at 22% 12%, rgba(0,194,255,0.28), transparent 30rem), radial-gradient(circle at 78% 24%, rgba(10,132,255,0.22), transparent 34rem), radial-gradient(circle at 52% 82%, rgba(88,80,255,0.14), transparent 32rem), linear-gradient(145deg, #020A16 0%, #031326 34%, #071D3B 68%, #020A16 100%)"
           className="hd-module-stage flex min-h-0 flex-1 flex-col"
           contentClassName="flex min-h-0 flex-1 flex-col"
         >

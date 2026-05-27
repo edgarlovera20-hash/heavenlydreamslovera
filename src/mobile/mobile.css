@@ -80,6 +80,387 @@
 
 @layer utilities {
   :root {
+    --theme-electric: #0A84FF;
+    --theme-deep: #071D3B;
+    --theme-dark: #031326;
+    --theme-black: #020A16;
+    --theme-neon: #00C2FF;
+    --theme-matrix: #66E8FF;
+    --theme-text-main: #F7FBFF;
+    --hd-bg: #020A16;
+    --hd-bg-soft: #071D3B;
+    --hd-surface: #061B3A;
+    --hd-surface-strong: #082A5E;
+    --hd-surface-muted: #031326;
+    --hd-border: rgba(0, 194, 255, 0.22);
+    --hd-border-strong: rgba(102, 232, 255, 0.76);
+    --hd-text: #F7FBFF;
+    --hd-text-muted: #A9C4E5;
+    --hd-accent: #0A84FF;
+    --hd-accent-strong: #00C2FF;
+    --hd-success: #66E8FF;
+    --hd-warning: #7DD3FC;
+    --hd-danger: #B7A7FF;
+    --hd-radius-md: 22px;
+    --hd-radius-lg: 28px;
+    --hd-shadow: 0 34px 96px rgba(0, 6, 22, 0.72);
+    --hd-glow: 0 0 0 1px rgba(0, 194, 255, 0.16), 0 0 42px rgba(10, 132, 255, 0.24);
+  }
+
+  html,
+  body,
+  #mobile-root {
+    background: #020A16 !important;
+    color: #F7FBFF !important;
+    color-scheme: dark !important;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 14% -8%, rgba(0, 194, 255, 0.22), transparent 18rem),
+      radial-gradient(circle at 88% 10%, rgba(10, 132, 255, 0.2), transparent 20rem),
+      radial-gradient(circle at 50% 110%, rgba(96, 80, 255, 0.12), transparent 24rem),
+      linear-gradient(145deg, #020A16 0%, #031326 36%, #071D3B 76%, #020A16 100%) !important;
+  }
+
+  .hd-cyber-screen {
+    background:
+      radial-gradient(circle at 18% 6%, rgba(0, 194, 255, 0.22), transparent 19rem),
+      radial-gradient(circle at 84% 20%, rgba(10, 132, 255, 0.2), transparent 22rem),
+      radial-gradient(circle at 52% 84%, rgba(96, 80, 255, 0.12), transparent 24rem),
+      linear-gradient(145deg, #020A16 0%, #031326 35%, #071D3B 72%, #020A16 100%) !important;
+    background-size: 150% 150%, 140% 140%, 130% 130%, 220% 220% !important;
+    animation: hd-neural-ai-bg-shift 18s ease-in-out infinite !important;
+  }
+
+  .hd-cyber-screen::before {
+    inset: -18% !important;
+    opacity: 0.56 !important;
+    background:
+      radial-gradient(circle, rgba(247, 251, 255, 0.72) 0 1px, transparent 1.55px) 0 0 / 42px 42px,
+      radial-gradient(circle, rgba(0, 194, 255, 0.58) 0 0.9px, transparent 1.45px) 24px 18px / 66px 66px,
+      radial-gradient(circle, rgba(125, 211, 252, 0.42) 0 0.75px, transparent 1.3px) 12px 36px / 92px 92px,
+      repeating-linear-gradient(18deg, transparent 0 56px, rgba(0, 194, 255, 0.13) 57px 58px, transparent 59px 114px),
+      repeating-linear-gradient(132deg, transparent 0 70px, rgba(125, 211, 252, 0.1) 71px 72px, transparent 73px 140px) !important;
+    filter: drop-shadow(0 0 10px rgba(0, 194, 255, 0.32));
+    mask-image: radial-gradient(circle at center, #000 0%, rgba(0, 0, 0, 0.82) 62%, transparent 100%) !important;
+    animation: hd-neural-ai-network-drift 28s linear infinite !important;
+  }
+
+  .hd-cyber-screen::after {
+    inset: -24% !important;
+    opacity: 0.62 !important;
+    background:
+      radial-gradient(circle at 18% 22%, rgba(0, 194, 255, 0.18), transparent 14rem),
+      radial-gradient(circle at 76% 28%, rgba(10, 132, 255, 0.24), transparent 20rem),
+      radial-gradient(circle at 46% 72%, rgba(96, 80, 255, 0.13), transparent 22rem) !important;
+    filter: blur(20px) saturate(150%) !important;
+    animation: hd-neural-ai-orb-drift 14s ease-in-out infinite alternate !important;
+  }
+
+  .hd-mobile-main {
+    max-width: 30rem;
+    padding: 1.2rem 1.05rem 1.5rem;
+  }
+
+  :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-cyber-panel,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-neon-card,
+    .hd-neon-action,
+    .hd-neon-metric,
+    .hd-curp-helper,
+    .hd-mobile-topbar,
+    .hd-mobile-bottom-nav
+  ) {
+    border-radius: 28px !important;
+    border: 1px solid rgba(0, 194, 255, 0.22) !important;
+    background:
+      radial-gradient(circle at 16% 0%, rgba(var(--hd-tone-rgb, 0, 194, 255), 0.14), transparent 34%),
+      linear-gradient(145deg, rgba(8, 42, 94, 0.76), rgba(7, 29, 59, 0.72) 46%, rgba(3, 19, 38, 0.84)) !important;
+    box-shadow:
+      0 26px 20px -22px rgba(0, 0, 0, 0.96),
+      0 44px 96px -48px rgba(0, 20, 92, 0.88),
+      0 0 0 1px rgba(247, 251, 255, 0.055),
+      0 0 34px rgba(var(--hd-tone-rgb, 0, 194, 255), 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.13),
+      inset 0 -34px 88px rgba(0, 194, 255, 0.04) !important;
+    backdrop-filter: blur(24px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+    transition:
+      transform 260ms cubic-bezier(0.2, 0.9, 0.22, 1),
+      box-shadow 260ms ease,
+      border-color 260ms ease,
+      filter 260ms ease,
+      background 260ms ease !important;
+  }
+
+  :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-cyber-panel,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-neon-card,
+    .hd-neon-action,
+    .hd-neon-metric,
+    .hd-curp-helper
+  ):hover,
+  :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-cyber-panel,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-neon-card,
+    .hd-neon-action,
+    .hd-neon-metric,
+    .hd-curp-helper
+  ):focus-within,
+  :where(.hd-neon-action, .hd-liquid-button):active {
+    border-color: rgba(102, 232, 255, 0.72) !important;
+    box-shadow:
+      0 30px 24px -24px rgba(0, 0, 0, 0.98),
+      0 54px 112px -48px rgba(0, 34, 140, 0.96),
+      0 0 0 1px rgba(210, 246, 255, 0.14),
+      0 0 36px rgba(0, 194, 255, 0.26),
+      0 0 92px rgba(10, 132, 255, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+    filter: saturate(1.12) brightness(1.06);
+    transform: translateY(-4px) scale(1.012);
+  }
+
+  .hd-cyber-input,
+  #mobile-root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+    border-radius: 20px !important;
+    border-color: rgba(0, 194, 255, 0.24) !important;
+    background: rgba(3, 19, 38, 0.72) !important;
+    color: #F7FBFF !important;
+    box-shadow:
+      0 16px 20px -18px rgba(0, 0, 0, 0.86),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 0 28px rgba(0, 194, 255, 0.035) !important;
+  }
+
+  .hd-cyber-input:focus,
+  #mobile-root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus {
+    border-color: rgba(102, 232, 255, 0.78) !important;
+    box-shadow:
+      0 0 0 3px rgba(0, 194, 255, 0.14),
+      0 0 30px rgba(0, 194, 255, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  }
+
+  .hd-cyber-primary,
+  .hd-cyber-secondary,
+  .hd-liquid-button,
+  #mobile-root button:not(.hd-no-liquid):not(.absolute),
+  .hd-cyber-screen button:not(.hd-no-liquid):not(.absolute) {
+    border-color: rgba(0, 194, 255, 0.32) !important;
+    background:
+      linear-gradient(135deg, rgba(8, 42, 94, 0.94), rgba(10, 132, 255, 0.26) 54%, rgba(3, 19, 38, 0.92)) !important;
+    color: #F7FBFF !important;
+    box-shadow:
+      0 18px 34px -22px rgba(0, 0, 0, 0.94),
+      0 0 24px rgba(0, 194, 255, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.11) !important;
+  }
+
+  .hd-cyber-primary,
+  #mobile-root button[type="submit"] {
+    background:
+      linear-gradient(135deg, #00C2FF 0%, #0A84FF 52%, #071D3B 100%) !important;
+    border-color: rgba(210, 246, 255, 0.48) !important;
+    box-shadow:
+      0 20px 46px -24px rgba(0, 0, 0, 0.98),
+      0 0 34px rgba(0, 194, 255, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  }
+
+  .hd-cyber-primary:hover,
+  .hd-cyber-primary:focus-visible,
+  .hd-cyber-primary:active,
+  .hd-cyber-secondary:hover,
+  .hd-cyber-secondary:focus-visible,
+  .hd-cyber-secondary:active,
+  .hd-liquid-button:hover,
+  .hd-liquid-button:focus-visible,
+  .hd-liquid-button:active,
+  #mobile-root button:not(.hd-no-liquid):not(.absolute):hover,
+  #mobile-root button:not(.hd-no-liquid):not(.absolute):focus-visible,
+  #mobile-root button:not(.hd-no-liquid):not(.absolute):active {
+    border-color: rgba(210, 246, 255, 0.76) !important;
+    background:
+      linear-gradient(135deg, #66E8FF 0%, #0A84FF 48%, #082A5E 100%) !important;
+    color: #F7FBFF !important;
+    box-shadow:
+      0 26px 54px -24px rgba(0, 0, 0, 0.98),
+      0 0 38px rgba(0, 194, 255, 0.38),
+      0 0 82px rgba(10, 132, 255, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+    transform: translateY(-2px) scale(1.025);
+  }
+
+  #mobile-root .hd-tone-cyan,
+  #mobile-root .hd-tone-blue,
+  #mobile-root .hd-tone-emerald,
+  #mobile-root .hd-tone-amber,
+  #mobile-root .hd-tone-pink,
+  #mobile-root .hd-tone-violet,
+  #mobile-root .hd-tone-slate {
+    --hd-tone-rgb: 0, 194, 255;
+  }
+
+  #mobile-root .hd-tone-violet,
+  #mobile-root .hd-tone-pink {
+    --hd-tone-rgb: 116, 110, 255;
+  }
+
+  #mobile-root :is(
+    .text-amber-100,
+    .text-amber-200,
+    .text-amber-300,
+    .text-yellow-100,
+    .text-yellow-200,
+    .text-yellow-300,
+    .text-yellow-400,
+    .text-orange-50,
+    .text-orange-100,
+    .text-orange-200,
+    .text-orange-300,
+    .text-orange-400,
+    .text-emerald-200,
+    .text-emerald-300,
+    .text-emerald-400,
+    .text-green-200,
+    .text-green-300,
+    .text-rose-200,
+    .text-rose-300,
+    .text-rose-400,
+    .text-red-300,
+    .text-red-400,
+    .text-red-500,
+    .text-pink-300,
+    .text-pink-400
+  ) {
+    color: #D2F6FF !important;
+  }
+
+  #mobile-root :is(
+    .bg-amber-300,
+    .bg-amber-400,
+    .bg-yellow-300,
+    .bg-yellow-400,
+    .bg-orange-300,
+    .bg-orange-400,
+    .bg-orange-500,
+    .bg-emerald-300,
+    .bg-emerald-400,
+    .bg-green-300,
+    .bg-rose-300,
+    .bg-rose-400,
+    .bg-red-400,
+    .bg-red-500,
+    .bg-pink-400,
+    .bg-pink-500
+  ) {
+    background-color: #00C2FF !important;
+    color: #020A16 !important;
+  }
+
+  #mobile-root :is(
+    .border-amber-300,
+    .border-amber-400,
+    .border-yellow-300,
+    .border-yellow-400,
+    .border-orange-300,
+    .border-orange-400,
+    .border-emerald-300,
+    .border-emerald-400,
+    .border-green-300,
+    .border-rose-300,
+    .border-rose-400,
+    .border-red-400,
+    .border-red-500,
+    .border-pink-400,
+    .border-pink-500
+  ) {
+    border-color: rgba(0, 194, 255, 0.42) !important;
+  }
+
+  .hd-mobile-topbar,
+  .hd-mobile-bottom-nav {
+    background:
+      radial-gradient(circle at 18% 0%, rgba(0, 194, 255, 0.16), transparent 18rem),
+      linear-gradient(145deg, rgba(3, 19, 38, 0.86), rgba(2, 10, 22, 0.78)) !important;
+  }
+
+  .hd-mobile-nav-item-active {
+    background:
+      linear-gradient(135deg, rgba(0, 194, 255, 0.2), rgba(10, 132, 255, 0.18)) !important;
+    color: #F7FBFF !important;
+    box-shadow:
+      0 0 0 1px rgba(210, 246, 255, 0.13),
+      0 0 30px rgba(0, 194, 255, 0.28) !important;
+  }
+
+  #mobile-root .lucide,
+  #mobile-root svg[style],
+  .hd-mobile-icon {
+    filter:
+      drop-shadow(0 0 7px rgba(0, 194, 255, 0.52))
+      drop-shadow(0 0 18px rgba(10, 132, 255, 0.28)) !important;
+  }
+
+  #mobile-root :is(h1, h2, h3, h4, .hd-label, .hd-cyber-label) {
+    color: #F7FBFF !important;
+    text-shadow: 0 0 22px rgba(0, 194, 255, 0.12);
+  }
+
+  #mobile-root :is(.hd-eyebrow, label, .text-cyber-electric, .text-cyber-neon, .text-cyan-300, .text-sky-300) {
+    color: #66E8FF !important;
+  }
+
+  #mobile-root :is(.text-slate-400, .text-slate-500, .text-cyber-electric\/50, .text-cyber-electric\/70, .text-cyber-electric\/80) {
+    color: rgba(169, 196, 229, 0.82) !important;
+  }
+}
+
+@keyframes hd-neural-ai-bg-shift {
+  0% { background-position: 0% 8%, 100% 0%, 42% 100%, 0% 0%; }
+  50% { background-position: 42% 24%, 68% 28%, 56% 72%, 80% 45%; }
+  100% { background-position: 100% 70%, 16% 36%, 48% 42%, 100% 100%; }
+}
+
+@keyframes hd-neural-ai-network-drift {
+  0% {
+    background-position: 0 0, 24px 18px, 12px 36px, 0 0, 0 0;
+    transform: translate3d(-2.4%, -2%, 0) scale(1.03);
+    opacity: 0.42;
+  }
+  48% {
+    background-position: 80px 56px, 118px 86px, 64px 128px, 68px 34px, -48px 60px;
+    transform: translate3d(2.8%, 2%, 0) scale(1.08);
+    opacity: 0.68;
+  }
+  100% {
+    background-position: 160px 112px, 212px 154px, 132px 220px, 136px 68px, -96px 120px;
+    transform: translate3d(-1%, 4.2%, 0) scale(1.04);
+    opacity: 0.5;
+  }
+}
+
+@keyframes hd-neural-ai-orb-drift {
+  0% { transform: translate3d(-3%, -2%, 0) scale(1); filter: hue-rotate(-10deg) saturate(1.25) brightness(1); }
+  50% { transform: translate3d(3.2%, 2.4%, 0) scale(1.08); filter: hue-rotate(14deg) saturate(1.55) brightness(1.14); }
+  100% { transform: translate3d(-1.4%, 4%, 0) scale(1.04); filter: hue-rotate(28deg) saturate(1.38) brightness(1.04); }
+}
+
+@layer utilities {
+  :root {
     --theme-electric: #18B6FF;
     --theme-deep: #0047FF;
     --theme-dark: #071B34;
