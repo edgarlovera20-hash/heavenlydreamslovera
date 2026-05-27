@@ -10,7 +10,7 @@ import { Role } from '../../App';
 
 const Profile = lazy(() => import('./Profile'));
 const Game = lazy(() => import('./Game'));
-const CaptureValidation = lazy(() => import('./CaptureValidation'));
+const NewSaleForm = lazy(() => import('./NewSaleForm'));
 const ConsultasSeguimiento = lazy(() => import('./ConsultasSeguimiento'));
 const Payroll = lazy(() => import('./Payroll'));
 const Announcements = lazy(() => import('./Announcements'));
@@ -132,7 +132,11 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
           {activeSection === 'Perfil' && <Profile />}
           {activeSection === 'Documentación' && <MyFilesView onBack={() => setActiveSection('Perfil')} />}
           {activeSection === 'Juego' && <Game />}
-          {activeSection === 'Captura y Validación' && <CaptureValidation />}
+          {activeSection === 'Captura y Validación' && (
+            <div className="hd-mobile-sale-flow -mx-4">
+              <NewSaleForm onBack={() => setActiveSection('Perfil')} />
+            </div>
+          )}
           {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
           {activeSection === 'Chats' && <ChatsView />}
           {activeSection === 'Chat para Clientes' && <ClientChatCrmView />}

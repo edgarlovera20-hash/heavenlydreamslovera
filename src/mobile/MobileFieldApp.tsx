@@ -9,6 +9,7 @@ import { getMobilePosition } from './mobileLocation';
 import { runMobileOcr } from './mobileOcr';
 
 const MapPicker = lazy(() => import('../components/ui/MapPicker').then(m => ({ default: m.MapPicker })));
+const NewSaleForm = lazy(() => import('../components/views/NewSaleForm'));
 
 const SESSION_KEY = 'hd_session';
 const BOOTSTRAP_CACHE_KEY = 'hd_mobile_bootstrap_cache_v1';
@@ -2789,7 +2790,15 @@ export default function MobileFieldApp() {
       );
     }
 
-    if (active === 'venta') return renderCapture();
+    if (active === 'venta') {
+      return (
+        <div className="hd-mobile-sale-flow -mx-4">
+          <Suspense fallback={<Panel><EmptyState icon="loader" text="Cargando flujo completo de venta..." /></Panel>}>
+            <NewSaleForm onBack={() => setActive('inicio')} />
+          </Suspense>
+        </div>
+      );
+    }
     if (active === 'folios') return renderFolios();
     if (active === 'clientes') return renderClients();
     if (active === 'documentos') return renderDocuments();

@@ -118,6 +118,163 @@ function extractField(text: string, key: string) {
   return text.match(re)?.[1]?.trim() || null;
 }
 
+const QUICK_CAPTURE_LABELS = [
+  't\\.t',
+  'tt',
+  'telefono\\s*(?:de\\s*)?titular',
+  'tel[eé]fono\\s*(?:de\\s*)?titular',
+  'telefono\\s*(?:del\\s*)?cliente',
+  't\\s*titular',
+  'celular',
+  'cel',
+  'tref',
+  't\\.ref',
+  'referencia',
+  'telefono\\s*(?:de\\s*)?referencia',
+  'tel[eé]fono\\s*(?:de\\s*)?referencia',
+  'email',
+  'correo(?:\\s*electronico|\\s*electr[oó]nico)?',
+  'nombre',
+  'nombre\\s*(?:del\\s*)?cliente',
+  'sn',
+  'servicio\\s*nuevo',
+  'paquete',
+  'plan',
+  'gastos?\\s*(?:de\\s*)?instalaci[oó]n',
+  'porta',
+  'portabilidad',
+  'num(?:ero)?\\s*a\\s*portar',
+  'n[uú]mero\\s*a\\s*portar',
+  'nip',
+  'compa(?:ñ|n)ia',
+  'compa(?:ñ|n)[ií]a',
+  'operador',
+  'datos\\s*adicionales',
+  'observaciones',
+  'terminal',
+  'direccion',
+  'direcci[oó]n',
+  'domicilio',
+  'entre\\s*calle\\s*1',
+  'entre\\s*calle\\s*2',
+  'entre\\s*calles?',
+  'coordenadas?',
+  'coords?',
+  'cp',
+  'c\\.p',
+  'c[oó]digo\\s*postal',
+];
+
+const QUICK_CAPTURE_LABEL_RE = QUICK_CAPTURE_LABELS.join('|');
+
+function extractQuickValue(text: string, labelPattern: string) {
+  const re = new RegExp(
+    `(?:^|[\\n;|/,-])\\s*(?:${labelPattern})\\s*[:\\-]?\\s*([\\s\\S]*?)(?=\\s*(?:[\\n;|/,-]\\s*)?(?:${QUICK_CAPTURE_LABEL_RE})\\s*[:\\-]?|$)`,
+    'i',
+  );
+  const value = text.match(re)?.[1]?.trim();
+  return value ? value.replace(/\s+/g, ' ').trim() : null;
+}
+
+function extractMoneyNumber(value: any) {
+  const match = String(value || '').match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/);
+  return match ? Number(match[1].replace(/,/g, '')) : null;
+}
+
+function extractPostalCode(text: string) {
+  return extractQuickValue(text, 'cp|c\\.p|c[oó]digo\\s*postal')?.replace(/\D/g, '').slice(0, 5)
+    || text.match(/\b(?:c\.?p\.?|cp|codigo postal|c[oó]digo postal)\D*(\d{5})\b/i)?.[1]
+    || text.match(/\b(\d{5})\b/)?.[1]
+    || null;
+}
+
+function extractCoordinates(text: string) {
+  const source = extractQuickValue(text, 'coordenadas?|coords?') || text;
+  const match = source.match(/([+-]?\d{1,3}(?:\.\d+)?)\s*[, ]+\s*([+-]?\d{1,3}(?:\.\d+)?)/);
+  if (!match) return {};
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return {};
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return {};
+  return { gpsLatitud: String(lat), gpsLongitud: String(lng), coordenadas: { lat, lng } };
+}
+
+function extractMapUrl(text: string) {
+  return String(text || '').match(/https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|www\.google\.com\/maps)[^\s]+/i)?.[0] || null;
+}
+
+function cleanAddressBlock(value: any) {
+  const cleaned = String(value || '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\bTERMINAL\s*[:.-]?.*$/gim, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || null;
+}
+
+function extractAuthorizationAddress(text: string) {
+  const direct = extractQuickValue(text, 'direccion|direcci[oó]n|domicilio');
+  if (direct) return cleanAddressBlock(direct);
+  const match = String(text || '').match(/(?:este\s+domicilio|domicilio)\s*[:.-]?\s*([\s\S]*?)(?=\n\s*(?:terminal|https?:\/\/|$))/i);
+  if (match?.[1]) return cleanAddressBlock(match[1]);
+  const mapPreface = String(text || '').match(/(?:^|\n)\s*([^\n]{8,120})\s*\n\s*https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|www\.google\.com\/maps)/i);
+  if (mapPreface?.[1]) return cleanAddressBlock(mapPreface[1]);
+  return null;
+}
+
+function inferProductType(text: string, serviceMode: any, packageName: any) {
+  const body = normalizedBody(`${text} ${packageName || ''}`);
+  if (/infinitum\s*puro|solo\s*internet/.test(body)) return 'infinitum_puro';
+  if (/doble\s*play|internet\s*(?:\+|y)\s*tel[eé]fono|telefono\s*(?:\+|y)\s*internet/.test(body)) return 'doble_play';
+  if (serviceMode === 'portabilidad') return 'doble_play';
+  return packageName ? 'doble_play' : null;
+}
+
+function parseQuickCaptureTemplate(text: string) {
+  const titularRaw = extractQuickValue(text, 't\\.t|tt|celular|cel|telefono\\s*(?:de\\s*)?titular|tel[eé]fono\\s*(?:de\\s*)?titular|telefono\\s*(?:del\\s*)?cliente|t\\s*titular');
+  const refRaw = extractQuickValue(text, 'tref|t\\.ref|referencia|telefono\\s*(?:de\\s*)?referencia|tel[eé]fono\\s*(?:de\\s*)?referencia');
+  const emailRaw = extractQuickValue(text, 'email|correo(?:\\s*electronico|\\s*electr[oó]nico)?');
+  const nameRaw = extractQuickValue(text, 'nombre\\s*(?:del\\s*)?cliente|nombre');
+  const packageName = extractQuickValue(text, 'paquete|plan');
+  const addressRaw = extractAuthorizationAddress(text);
+  const portNumber = extractQuickValue(text, 'num(?:ero)?\\s*a\\s*portar|n[uú]mero\\s*a\\s*portar|porta|portabilidad');
+  const body = normalizedBody(text);
+  const serviceMode = /\b(sn|servicio nuevo|linea nueva|línea nueva|alta nueva)\b/.test(body)
+    ? 'nuevo'
+    : /\b(porta|portabilidad|numero a portar|n[uú]mero a portar)\b/.test(body)
+      ? 'portabilidad'
+      : null;
+
+  const fields = {
+    nombre: nameRaw,
+    titularPhone: normalizePhone(titularRaw),
+    telefono: normalizePhone(titularRaw),
+    referencePhone: normalizePhone(refRaw),
+    email: extractEmail(emailRaw || '') || extractEmail(text),
+    serviceMode,
+    segment: /negocio|empresa|comercial|pyme/.test(body) ? 'negocio' : 'residencial',
+    paquete: packageName,
+    gastosInstalacion: extractMoneyNumber(extractQuickValue(text, 'gastos?\\s*(?:de\\s*)?instalaci[oó]n')),
+    portabilityNumber: normalizePhone(portNumber),
+    portabilityNip: extractQuickValue(text, 'nip')?.match(/\d{4}/)?.[0] || null,
+    portabilityCompany: extractQuickValue(text, 'compa(?:ñ|n)ia|compa(?:ñ|n)[ií]a|operador'),
+    addressRaw,
+    direccion: addressRaw,
+    codigoPostal: extractPostalCode(text),
+    entreCalle1: extractQuickValue(text, 'entre\\s*calle\\s*1|entre\\s*calles?'),
+    entreCalle2: extractQuickValue(text, 'entre\\s*calle\\s*2'),
+    datosAdicionales: extractQuickValue(text, 'datos\\s*adicionales|observaciones'),
+    terminal: extractQuickValue(text, 'terminal'),
+    mapsUrl: extractMapUrl(text),
+    ...extractCoordinates(text),
+  };
+
+  return Object.fromEntries(Object.entries({
+    ...fields,
+    productType: inferProductType(text, serviceMode, packageName),
+  }).filter(([, value]) => value != null && String(value).trim() !== ''));
+}
+
 function extractFields(text: string, conversation: any) {
   const memory = conversation?.memory || {};
   const known = memory.knownFields || {};
@@ -205,6 +362,8 @@ function extractCaptureFields(text: string, conversation: any, media?: any) {
   const draftFields = memory.captureDraft?.fields || {};
   const body = normalizedBody(text);
   const phones = uniquePhones(text);
+  const ocrFields = extractOcrFields(media);
+  const quickFields = parseQuickCaptureTemplate(text);
   const titularFromLabel = normalizePhone(
     extractField(text, 'tel(?:efo(?:no)?)?\\s*(?:titular|cliente|principal)?|whatsapp')
   );
@@ -229,25 +388,36 @@ function extractCaptureFields(text: string, conversation: any, media?: any) {
   const allFields = {
     ...known,
     ...draftFields,
-    ...extractOcrFields(media),
-    nombre: extractField(text, 'nombre|cliente|titular') || draftFields.nombre || known.nombre || extractOcrFields(media).nombre,
-    titularPhone: titularFromLabel || phones[0] || draftFields.titularPhone || known.titularPhone || known.telefono,
-    telefono: titularFromLabel || phones[0] || draftFields.telefono || known.telefono,
-    referencePhone: referenceFromLabel || phones.find(phone => phone !== (titularFromLabel || phones[0])) || draftFields.referencePhone || known.referencePhone,
-    email: extractEmail(text) || draftFields.email || known.email,
-    addressRaw: extractField(text, 'direcci[oó]n|domicilio|calle') || draftFields.addressRaw || known.addressRaw || known.direccion,
-    direccion: extractField(text, 'direcci[oó]n|domicilio|calle') || draftFields.direccion || known.direccion,
-    colonia: extractField(text, 'colonia') || draftFields.colonia || known.colonia,
-    paquete: extractField(text, 'paquete|plan|internet') || draftFields.paquete || known.paquete,
-    serviceMode: serviceMode || draftFields.serviceMode || known.serviceMode,
-    segment: segment || draftFields.segment || known.segment,
-    productType: productType || draftFields.productType || known.productType,
-    portabilityNumber: normalizePhone(extractField(text, 'n[uú]mero\\s*a\\s*portar|numero\\s*a\\s*portar|portar')) || draftFields.portabilityNumber || known.portabilityNumber,
-    portabilityCompany: extractField(text, 'compa(?:ñ|n)ia|operador|empresa actual') || draftFields.portabilityCompany || known.portabilityCompany,
-    portabilityNip: text.match(/\bnip\D*(\d{4})\b/i)?.[1] || draftFields.portabilityNip || known.portabilityNip,
+    ...ocrFields,
+    ...quickFields,
+    nombre: extractField(text, 'nombre|cliente|titular') || quickFields.nombre || draftFields.nombre || known.nombre || ocrFields.nombre,
+    titularPhone: quickFields.titularPhone || titularFromLabel || phones[0] || draftFields.titularPhone || known.titularPhone || known.telefono,
+    telefono: quickFields.telefono || titularFromLabel || phones[0] || draftFields.telefono || known.telefono,
+    referencePhone: quickFields.referencePhone || referenceFromLabel || phones.find(phone => phone !== (titularFromLabel || phones[0])) || draftFields.referencePhone || known.referencePhone,
+    email: quickFields.email || extractEmail(text) || draftFields.email || known.email,
+    addressRaw: quickFields.addressRaw || extractField(text, 'direcci[oó]n|domicilio|calle') || draftFields.addressRaw || known.addressRaw || known.direccion,
+    direccion: quickFields.direccion || extractField(text, 'direcci[oó]n|domicilio|calle') || draftFields.direccion || known.direccion,
+    colonia: quickFields.colonia || extractField(text, 'colonia') || draftFields.colonia || known.colonia,
+    codigoPostal: quickFields.codigoPostal || draftFields.codigoPostal || known.codigoPostal || ocrFields.codigoPostal || extractPostalCode(text),
+    paquete: quickFields.paquete || extractField(text, 'paquete|plan|internet') || draftFields.paquete || known.paquete,
+    serviceMode: quickFields.serviceMode || serviceMode || draftFields.serviceMode || known.serviceMode,
+    segment: quickFields.segment || segment || draftFields.segment || known.segment,
+    productType: quickFields.productType || productType || inferProductType(text, quickFields.serviceMode || serviceMode, quickFields.paquete || draftFields.paquete || known.paquete) || draftFields.productType || known.productType,
+    gastosInstalacion: quickFields.gastosInstalacion || draftFields.gastosInstalacion || known.gastosInstalacion,
+    portabilityNumber: quickFields.portabilityNumber || normalizePhone(extractField(text, 'n[uú]mero\\s*a\\s*portar|numero\\s*a\\s*portar|portar')) || draftFields.portabilityNumber || known.portabilityNumber,
+    portabilityCompany: quickFields.portabilityCompany || extractField(text, 'compa(?:ñ|n)ia|operador|empresa actual') || draftFields.portabilityCompany || known.portabilityCompany,
+    portabilityNip: quickFields.portabilityNip || text.match(/\bnip\D*(\d{4})\b/i)?.[1] || draftFields.portabilityNip || known.portabilityNip,
+    entreCalle1: quickFields.entreCalle1 || draftFields.entreCalle1 || known.entreCalle1,
+    entreCalle2: quickFields.entreCalle2 || draftFields.entreCalle2 || known.entreCalle2,
+    datosAdicionales: quickFields.datosAdicionales || draftFields.datosAdicionales || known.datosAdicionales,
+    terminal: quickFields.terminal || draftFields.terminal || known.terminal,
+    mapsUrl: quickFields.mapsUrl || draftFields.mapsUrl || known.mapsUrl,
+    gpsLatitud: quickFields.gpsLatitud || draftFields.gpsLatitud || known.gpsLatitud,
+    gpsLongitud: quickFields.gpsLongitud || draftFields.gpsLongitud || known.gpsLongitud,
+    coordenadas: quickFields.coordenadas || draftFields.coordenadas || known.coordenadas,
   };
 
-  if (!allFields.addressRaw && /(calle|avenida|av\.|colonia|cp|codigo postal|c[oó]digo postal|mz|lt|lote|manzana)/i.test(text) && text.length > 18) {
+  if (!allFields.addressRaw && /(calle|avenida|av\.|constituci[oó]n|colonia|cp|codigo postal|c[oó]digo postal|mz|lt|lote|manzana|cerrada|privada)/i.test(text) && text.length > 8) {
     allFields.addressRaw = text.trim();
     allFields.direccion = text.trim();
   }
@@ -498,6 +668,7 @@ function classifyIntent(text: string): { intent: Intent; confidence: number } {
   const body = text.toLowerCase();
   if (shouldUseWebSearch(text)) return { intent: 'busqueda_web', confidence: 0.9 };
   if (/\b(folio|consulta|estatus|siac|mi folio)\b/.test(body)) return { intent: 'consulta_folio', confidence: 0.88 };
+  if (/(?:^|[\n;|/,-])\s*(?:t\.t|tt|celular|referencia|tref|email|correo|nombre|sn|servicio nuevo|porta|portabilidad|paquete|terminal)\b/i.test(text)) return { intent: 'venta', confidence: 0.94 };
   if (/\b(contratar|quiero internet|paquete|cobertura|fibra|instalar|servicio|alta)\b/.test(body)) return { intent: 'venta', confidence: 0.86 };
   if (body.includes('nombre:') && (body.includes('tel:') || body.includes('telefono:') || body.includes('teléfono:'))) return { intent: 'venta', confidence: 0.92 };
   if (/\b(pagar|adeudo|debo|atraso|promesa|liquido|cobranza)\b/.test(body)) return { intent: 'morosidad', confidence: 0.8 };
@@ -1198,6 +1369,12 @@ function salePayloadFromOutbox(item: any, actor: any) {
   const payload = item.payload || {};
   const draftFields = payload._captureDraft?.fields || {};
   const fields = { ...draftFields, ...payload };
+  const addressParts = [
+    fields.addressRaw || fields.direccion,
+    fields.entreCalle1 ? `entre ${fields.entreCalle1}` : null,
+    fields.entreCalle2 ? `y ${fields.entreCalle2}` : null,
+    fields.codigoPostal ? `CP ${fields.codigoPostal}` : null,
+  ].filter(Boolean).join(' ');
   return {
     id: randomUUID(),
     folio: null,
@@ -1207,7 +1384,7 @@ function salePayloadFromOutbox(item: any, actor: any) {
     nombres: fields.nombre || null,
     apellidos: null,
     telefono: fields.titularPhone || fields.telefono || null,
-    direccion: fields.addressRaw || fields.direccion || null,
+    direccion: addressParts || fields.addressRaw || fields.direccion || null,
     colonia: fields.colonia || null,
     municipio: null,
     tipo_cliente: fields.segment || null,
@@ -1225,6 +1402,15 @@ function salePayloadFromOutbox(item: any, actor: any) {
       proposedBy: 'agent_orchestrator',
       referencePhone: fields.referencePhone || null,
       email: fields.email || null,
+      codigoPostal: fields.codigoPostal || null,
+      gastosInstalacion: fields.gastosInstalacion || null,
+      entreCalle1: fields.entreCalle1 || null,
+      entreCalle2: fields.entreCalle2 || null,
+      datosAdicionales: fields.datosAdicionales || null,
+      terminal: fields.terminal || null,
+      mapsUrl: fields.mapsUrl || null,
+      gpsLatitud: fields.gpsLatitud || fields.coordenadas?.lat || null,
+      gpsLongitud: fields.gpsLongitud || fields.coordenadas?.lng || null,
       curp: fields.curp || null,
       folioIne: fields.folioIne || null,
       portabilityNumber: fields.portabilityNumber || null,

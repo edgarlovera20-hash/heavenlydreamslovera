@@ -139,6 +139,52 @@ html.light {
     box-shadow: var(--hd-shadow);
   }
 
+  .hd-mobile-sale-flow {
+    color: var(--theme-text-main);
+  }
+
+  @media (max-width: 767px) {
+    .hd-mobile-sale-flow .max-w-4xl {
+      max-width: none;
+      padding-left: 0.25rem;
+      padding-right: 0.25rem;
+    }
+
+    .hd-mobile-sale-flow h1 {
+      font-size: 1.25rem;
+      line-height: 1.65rem;
+    }
+
+    .hd-mobile-sale-flow .sticky {
+      top: 0;
+    }
+
+    .hd-mobile-sale-flow .mb-12 {
+      margin-bottom: 2.75rem;
+    }
+
+    .hd-mobile-sale-flow .p-6,
+    .hd-mobile-sale-flow .p-8,
+    .hd-mobile-sale-flow .md\:p-8,
+    .hd-mobile-sale-flow .md\:p-12 {
+      padding: 1rem;
+    }
+
+    .hd-mobile-sale-flow .grid-cols-2 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .hd-mobile-sale-flow .whitespace-nowrap {
+      white-space: normal;
+    }
+
+    .hd-mobile-sale-flow input,
+    .hd-mobile-sale-flow select,
+    .hd-mobile-sale-flow textarea {
+      font-size: 16px;
+    }
+  }
+
   .hd-screen {
     background:
       radial-gradient(circle at 16% -12%, rgba(59, 130, 246, 0.16), transparent 34%),
