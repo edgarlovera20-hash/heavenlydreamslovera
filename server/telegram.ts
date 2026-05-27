@@ -1,3 +1,5 @@
+import fsp from 'node:fs/promises';
+import path from 'node:path';
 import { ingestChannelMessage, recordOutgoingChannelMessage, upsertChannelAccount } from './messaging';
 
 export interface TgMessage {
@@ -221,4 +223,43 @@ export async function sendTelegramMessage(chatId: number | string, text: string)
   });
   if (messageBuffer.length > MAX_MESSAGES) messageBuffer.shift();
   return { ok: true, messageId: r.result?.message_id };
+}
+
+export async function sendTelegramVideo(chatId: number | string, videoPath: string, caption = '', mimeType = 'video/mp4') {
+  if (!botToken || status !== 'polling') throw new Error('Telegram no está conectado');
+  const body = String(caption || '').trim();
+  const bytes = await fsp.readFile(videoPath);
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  if (body) form.append('caption', body);
+  form.append('video', new Blob([bytes], { type: mimeType }), path.basename(videoPath));
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendVideo`, { method: 'POST', body: form as any });
+  const r: any = await response.json().catch(() => ({}));
+  if (!r.ok) throw new Error(r.description || 'Error enviando video');
+  messageBuffer.push({
+    id: String(r.result?.message_id || `sent-video-${chatId}-${Date.now()}`),
+    from: 'crm',
+    fromName: 'Heavenly Dreams CRM',
+    to: String(chatId),
+    body: body || '[video enviado]',
+    timestamp: Date.now(),
+    chatId: Number(chatId) || 0,
+    isGroup: false,
+    channel: 'telegram',
+    direction: 'outgoing',
+  });
+  await recordOutgoingChannelMessage({
+    id: `telegram:${r.result?.message_id || `sent-video-${chatId}-${Date.now()}`}`,
+    channel: 'telegram',
+    externalChatId: String(chatId),
+    direction: 'outgoing',
+    body: body || '[video enviado]',
+    fromName: 'Heavenly Dreams CRM',
+    toId: String(chatId),
+    timestamp: Date.now(),
+    isGroup: false,
+    metadata: { messageId: r.result?.message_id || null, media: { kind: 'video', path: videoPath } },
+  });
+  if (messageBuffer.length > MAX_MESSAGES) messageBuffer.shift();
+  return { ok: true, messageId: r.result?.message_id, media: 'video' };
 }

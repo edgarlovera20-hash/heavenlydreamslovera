@@ -1712,11 +1712,54 @@ const DEFAULT_RECEPTIONIST_PROFILE = {
   metadata: JSON.stringify({
     audience: 'promotores',
     channel: 'whatsapp_telegram',
+    whatsappAccount: 'promotores',
+    phonePurpose: 'numero exclusivo para promotores',
     defaultMessage: DEFAULT_ARIUX_MESSAGE,
     firstContactMessage: FIRST_CONTACT_ARIUX_MESSAGE,
     functions: DEFAULT_AGENT_FUNCTIONS,
     humor: 'Ligero y respetuoso; solo usa humor cuando ayuda a bajar tension.',
     responseStyle: 'Responde breve, claro, accionable y con siguiente paso concreto.',
+  }),
+};
+
+const DEFAULT_CUSTOMER_SUPPORT_PROFILE = {
+  id: 'customer_support_agent',
+  name: 'ARIA',
+  role: 'Agente de atencion al cliente',
+  personality: 'Cordial, empatica, clara y resolutiva. Habla con clientes finales sin mezclar procesos internos de promotores.',
+  self_knowledge: 'Soy ARIA, el agente de atencion al cliente de Heavenly Dreams. Ayudo a clientes con dudas de servicio, soporte, seguimiento, pagos y orientacion general.',
+  knowledge_base: 'Atiendo clientes finales. No debo iniciar flujos internos de promotores ni pedir datos de captura salvo que sean necesarios para soporte. Si el cliente reporta falla, pago, instalacion, seguimiento o duda de servicio, doy pasos claros y escalo cuando corresponda. Si existe un video de apoyo por tema, puedo recomendarlo para explicar mejor.',
+  learned_notes: JSON.stringify([]),
+  metadata: JSON.stringify({
+    audience: 'clientes',
+    channel: 'whatsapp_clientes',
+    whatsappAccount: 'clientes',
+    phonePurpose: 'numero exclusivo para atencion al cliente',
+    defaultMessage: 'Hola, soy ARIA de atencion a clientes. Te ayudo con soporte, seguimiento, pagos o dudas de tu servicio. ¿Que necesitas revisar?',
+    functions: [
+      {
+        id: 'soporte_clientes',
+        emoji: '🛠️',
+        title: 'Soporte a clientes',
+        description: 'Atender dudas, fallas y seguimiento de clientes finales.',
+        enabled: true,
+      },
+      {
+        id: 'videos_ayuda',
+        emoji: '🎥',
+        title: 'Videos de ayuda',
+        description: 'Responder dudas y enviar videos asociados por tema.',
+        enabled: true,
+      },
+      {
+        id: 'morosidad_clientes',
+        emoji: '💳',
+        title: 'Pagos y morosidad',
+        description: 'Orientar sobre pagos, saldos y promesas de pago sin mezclar promotores.',
+        enabled: true,
+      },
+    ],
+    responseStyle: 'Responde breve, amable y orientado a resolver. Evita lenguaje interno de captura o promotores.',
   }),
 };
 
@@ -1870,6 +1913,7 @@ export const AgentTasks = {
 export const AgentProfiles = {
   getAll: () => {
     AgentProfiles.getById(DEFAULT_RECEPTIONIST_PROFILE.id);
+    AgentProfiles.getById(DEFAULT_CUSTOMER_SUPPORT_PROFILE.id);
     return (db.prepare('SELECT * FROM agent_profiles ORDER BY updated_at DESC, created_at DESC').all() as any[]).map(normalizeAgentProfile);
   },
   getById: (id: string) => {
@@ -1931,6 +1975,10 @@ export const AgentProfiles = {
     if (row) return normalizeAgentProfile(row);
     if (id === DEFAULT_RECEPTIONIST_PROFILE.id) {
       AgentProfiles.upsert(DEFAULT_RECEPTIONIST_PROFILE);
+      return normalizeAgentProfile(db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id));
+    }
+    if (id === DEFAULT_CUSTOMER_SUPPORT_PROFILE.id) {
+      AgentProfiles.upsert(DEFAULT_CUSTOMER_SUPPORT_PROFILE);
       return normalizeAgentProfile(db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id));
     }
     return null;

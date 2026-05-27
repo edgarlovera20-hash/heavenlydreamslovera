@@ -49,6 +49,7 @@ interface MorosidadApiRow {
 }
 
 interface AnalyticsBucket { name: string; total: number; monto: number; }
+type PeriodMode = 'all' | 'month' | 'day';
 
 interface MorosidadAnalytics {
   total: number;
@@ -97,11 +98,12 @@ function recordDateValue(item: Moroso) {
   return item.fechaVencimiento || item.createdAt || item.updatedAt || item.ultimoPago || '';
 }
 
-function matchesDateFilter(item: Moroso, month: string, day: string) {
+function matchesDateFilter(item: Moroso, month: string, day: string, mode: PeriodMode = 'all') {
+  if (mode === 'all') return true;
   const value = recordDateValue(item);
-  if (!value) return !month && !day;
-  if (day) return value.slice(0, 10) === day;
-  if (month) return value.slice(0, 7) === month;
+  if (!value) return false;
+  if (mode === 'day') return day ? value.slice(0, 10) === day : true;
+  if (mode === 'month') return month ? value.slice(0, 7) === month : true;
   return true;
 }
 
@@ -132,6 +134,21 @@ function buildMorosidadAnalytics(rows: Moroso[]): MorosidadAnalytics {
     byMercado: groupMorosidad(rows, 'mercado'),
     byStatus: groupMorosidad(rows, 'estado'),
   };
+}
+
+function buildMonthlyMorosidad(rows: Moroso[]): AnalyticsBucket[] {
+  const grouped = rows.reduce<Record<string, AnalyticsBucket>>((acc, row) => {
+    const value = recordDateValue(row);
+    const key = value ? value.slice(0, 7) : 'Sin fecha';
+    if (!acc[key]) acc[key] = { name: key, total: 0, monto: 0 };
+    acc[key].total += 1;
+    acc[key].monto += Number(row.deuda) || 0;
+    return acc;
+  }, {});
+
+  return Object.values(grouped)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(-12);
 }
 
 export default function Morosidad() {
@@ -166,6 +183,7 @@ export default function Morosidad() {
   }, []);
   const [search, setSearch] = useState('');
   const [estado, setEstado] = useState('');
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('all');
   const [chartMonth, setChartMonth] = useState('');
   const [chartDay, setChartDay] = useState('');
   
@@ -264,9 +282,12 @@ export default function Morosidad() {
         item.estrategia,
       ]);
       const matchEstado = e === "" || item.estado === e;
-      return matchGlobal && matchEstado;
+      const activeMonth = periodMode === 'month' || periodMode === 'day' ? chartMonth : '';
+      const activeDay = periodMode === 'day' ? chartDay : '';
+      const matchPeriod = matchesDateFilter(item, activeMonth, activeDay, periodMode);
+      return matchGlobal && matchEstado && matchPeriod;
     });
-  }, [appliedFilters, allMorosos]);
+  }, [appliedFilters, allMorosos, chartDay, chartMonth, periodMode]);
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const paginatedData = useMemo(() => {
@@ -275,14 +296,19 @@ export default function Morosidad() {
   }, [filteredData, currentPage, itemsPerPage]);
 
   const chartRows = useMemo(() => (
-    allMorosos.filter(item => matchesDateFilter(item, chartMonth, chartDay))
-  ), [allMorosos, chartMonth, chartDay]);
+    allMorosos.filter(item => {
+      const activeMonth = periodMode === 'month' || periodMode === 'day' ? chartMonth : '';
+      const activeDay = periodMode === 'day' ? chartDay : '';
+      return matchesDateFilter(item, activeMonth, activeDay, periodMode);
+    })
+  ), [allMorosos, chartMonth, chartDay, periodMode]);
 
   const chartAnalytics = useMemo(() => buildMorosidadAnalytics(chartRows), [chartRows]);
+  const monthlyAnalytics = useMemo(() => buildMonthlyMorosidad(allMorosos), [allMorosos]);
 
-  const chartFilterLabel = chartDay
+  const chartFilterLabel = periodMode === 'day' && chartDay
     ? `Dia ${chartDay}`
-    : chartMonth
+    : periodMode === 'month' && chartMonth
       ? `Mes ${chartMonth}`
       : 'Todos los periodos';
 
@@ -392,12 +418,42 @@ export default function Morosidad() {
       <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 shadow-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-bold text-slate-100">Filtros de graficas</p>
+            <p className="text-sm font-bold text-slate-100">Periodo de morosidad</p>
             <p className="mt-1 text-xs text-slate-500">
-              Aplicado a tarjetas y graficas: <span className="font-semibold text-cyan-300">{chartFilterLabel}</span>
+              Aplicado a tarjetas, graficas y tabla: <span className="font-semibold text-cyan-300">{chartFilterLabel}</span>
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_180px_auto]">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[230px_180px_180px_auto]">
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ver por</span>
+              <div className="grid grid-cols-3 rounded-xl border border-white/10 bg-black/30 p-1">
+                {[
+                  { id: 'all', label: 'Todo' },
+                  { id: 'month', label: 'Mes' },
+                  { id: 'day', label: 'Dia' },
+                ].map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      setPeriodMode(option.id as PeriodMode);
+                      if (option.id === 'all') {
+                        setChartMonth('');
+                        setChartDay('');
+                      }
+                    }}
+                    className={cn(
+                      'rounded-lg px-3 py-2 text-xs font-bold transition-colors',
+                      periodMode === option.id
+                        ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                        : 'text-slate-400 hover:bg-white/10 hover:text-white'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="space-y-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mes</span>
               <input
@@ -405,9 +461,11 @@ export default function Morosidad() {
                 value={chartMonth}
                 onChange={(event) => {
                   setChartMonth(event.target.value);
+                  if (event.target.value && periodMode === 'all') setPeriodMode('month');
                   if (chartDay && !chartDay.startsWith(event.target.value)) setChartDay('');
                 }}
-                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition-all focus:ring-2 focus:ring-red-500/50"
+                disabled={periodMode === 'all'}
+                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition-all focus:ring-2 focus:ring-cyan-500/50 disabled:cursor-not-allowed disabled:opacity-45"
               />
             </label>
             <label className="space-y-1.5">
@@ -417,14 +475,18 @@ export default function Morosidad() {
                 value={chartDay}
                 onChange={(event) => {
                   setChartDay(event.target.value);
-                  if (event.target.value) setChartMonth(event.target.value.slice(0, 7));
+                  if (event.target.value) {
+                    setPeriodMode('day');
+                    setChartMonth(event.target.value.slice(0, 7));
+                  }
                 }}
-                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition-all focus:ring-2 focus:ring-red-500/50"
+                disabled={periodMode !== 'day'}
+                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition-all focus:ring-2 focus:ring-cyan-500/50 disabled:cursor-not-allowed disabled:opacity-45"
               />
             </label>
             <button
               type="button"
-              onClick={() => { setChartMonth(''); setChartDay(''); }}
+              onClick={() => { setPeriodMode('all'); setChartMonth(''); setChartDay(''); }}
               className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700"
             >
               <X className="h-4 w-4" />
@@ -455,6 +517,7 @@ export default function Morosidad() {
 
       {chartAnalytics && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <MiniBar title="Morosidad por mes" data={monthlyAnalytics} />
           <MiniBar title="Morosidad por usuario" data={chartAnalytics.byUsuario} />
           <MiniBar title="Morosidad por zona" data={chartAnalytics.byZona} />
           <MiniBar title="Morosidad por tienda" data={chartAnalytics.byTienda} />

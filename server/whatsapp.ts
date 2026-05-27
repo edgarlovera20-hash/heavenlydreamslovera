@@ -593,6 +593,43 @@ export async function sendWhatsAppMessage(phone: string, message: string, accoun
   return { ok: true, id: result?.key?.id, account: runtime.account };
 }
 
+export async function sendWhatsAppVideo(phone: string, videoPath: string, caption = '', account: WhatsAppAccount = 'promotores') {
+  const parsed = parseTarget(phone, account);
+  const runtime = runtimeFor(parsed.account);
+  if (!runtime.socket || runtime.status !== 'connected') {
+    throw new Error(`${runtime.label} no está conectado. Conecta primero escaneando el QR.`);
+  }
+  const jid = normalizePhoneOrJid(parsed.target);
+  const body = String(caption || '').trim();
+  const result = await runtime.socket.sendMessage(jid, { video: { url: videoPath }, caption: body });
+  const messageId = result?.key?.id || `sent-video-${jid}-${Date.now()}`;
+  pushMessage(runtime, {
+    id: messageId,
+    from: 'crm',
+    fromName: runtime.label,
+    to: jid,
+    body: body || '[video enviado]',
+    timestamp: Date.now(),
+    isGroup: jid.endsWith('@g.us'),
+    channel: 'whatsapp',
+    account: runtime.account,
+    direction: 'outgoing',
+  });
+  await recordOutgoingChannelMessage({
+    id: `whatsapp:${runtime.account}:${messageId}`,
+    channel: 'whatsapp',
+    externalChatId: storageChatId(runtime.account, jid),
+    direction: 'outgoing',
+    body: body || '[video enviado]',
+    fromName: runtime.label,
+    toId: jid,
+    timestamp: Date.now(),
+    isGroup: jid.endsWith('@g.us'),
+    metadata: { engine: 'baileys', account: runtime.account, jid, media: { kind: 'video', path: videoPath } },
+  });
+  return { ok: true, id: result?.key?.id, account: runtime.account, media: 'video' };
+}
+
 export function sendWhatsAppClientMessage(phone: string, message: string) {
   return sendWhatsAppMessage(phone, message, 'clientes');
 }

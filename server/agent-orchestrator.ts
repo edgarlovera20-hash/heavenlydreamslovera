@@ -13,6 +13,7 @@ import {
 } from './db';
 import { runAiWithFallback } from './enterprise';
 import { answerWebQuestion, shouldUseWebSearch } from './web-search';
+import { findAgentVideoForQuestion, type AgentVideoAudience } from './agent-video-library';
 
 type Intent = 'venta' | 'consulta_folio' | 'soporte' | 'morosidad' | 'busqueda_web' | 'otro';
 type ProposedAction = 'create_sale' | 'update_lead' | 'schedule_followup' | 'escalate_human';
@@ -26,7 +27,7 @@ interface AgentDecision {
   requiresApproval: true;
 }
 
-type SendChannelMessage = (channel: string, target: string, message: string) => Promise<any>;
+type SendChannelMessage = (channel: string, target: string, message: string, payload?: any) => Promise<any>;
 const INTENTS: Intent[] = ['venta', 'consulta_folio', 'soporte', 'morosidad', 'busqueda_web', 'otro'];
 const PROPOSED_ACTIONS: ProposedAction[] = ['create_sale', 'update_lead', 'schedule_followup', 'escalate_human'];
 const LEGACY_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
@@ -62,6 +63,22 @@ function promoterFirstName(conversation: any) {
   return source?.split(/\s+/)[0] || null;
 }
 
+function conversationAudience(conversation: any): AgentVideoAudience {
+  const memory = conversation?.memory || {};
+  const raw = `${conversation?.external_chat_id || ''} ${memory.account || ''} ${memory.promoter?.account || ''}`.toLowerCase();
+  if (raw.includes('clientes:') || /\bclientes?\b/.test(raw)) return 'clientes';
+  return 'promotores';
+}
+
+function profileIdForConversation(conversation: any) {
+  return conversationAudience(conversation) === 'clientes' ? 'customer_support_agent' : 'promoter_receptionist';
+}
+
+function agentLabelForDecision(conversation: any, decision: AgentDecision) {
+  if (conversationAudience(conversation) === 'clientes') return 'atencion_cliente';
+  return decision.intent === 'venta' ? 'capturista' : decision.intent === 'consulta_folio' ? 'consultor' : 'recepcionista_promotores';
+}
+
 function firstNameForDecision(conversation: any, decision: AgentDecision) {
   return cleanPersonName(decision.extractedFields?.promoterFirstName)
     || cleanPersonName(decision.extractedFields?.promoterName)?.split(/\s+/)[0]
@@ -69,6 +86,7 @@ function firstNameForDecision(conversation: any, decision: AgentDecision) {
 }
 
 function shouldAskPromoterName(conversation: any, decision: AgentDecision) {
+  if (conversationAudience(conversation) === 'clientes') return false;
   const memory = conversation?.memory || {};
   const promoter = memory.promoter || {};
   if (promoter.nameConfirmed || decision.extractedFields?.promoterNameConfirmed) return false;
@@ -770,12 +788,17 @@ function buildFolioReply(text: string) {
 
 function decideWithRules(conversation: any, message: any): AgentDecision {
   const text = String(message.body || '');
-  const profile = AgentProfiles.getById('promoter_receptionist') as any;
+  const audience = conversationAudience(conversation);
+  const profile = AgentProfiles.getById(profileIdForConversation(conversation)) as any;
+  const matchedVideo = findAgentVideoForQuestion(text, audience);
   const promoterName = extractPromoterName(text, conversation);
   const classified = classifyIntent(text);
-  const intent = promoterName?.source === 'name_reply' ? 'otro' : classified.intent;
+  const intent = audience === 'clientes' && classified.intent === 'venta'
+    ? 'soporte'
+    : promoterName?.source === 'name_reply' ? 'otro' : classified.intent;
   const confidence = promoterName?.source === 'name_reply' ? 0.96 : classified.confidence;
   const fields = {
+    audience,
     ...extractFields(text, conversation),
     ...extractCaptureFields(text, conversation, messageMedia(message)),
     ...(promoterName ? {
@@ -785,6 +808,28 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
       promoterNameSource: promoterName.source,
     } : {}),
   };
+
+  if (matchedVideo) {
+    return personalizeDecision(conversation, {
+      intent: intent === 'otro' ? 'soporte' : intent,
+      confidence: Math.max(confidence, 0.92),
+      extractedFields: {
+        ...fields,
+        matchedVideo: {
+          id: matchedVideo.id,
+          title: matchedVideo.title,
+          topic: matchedVideo.topic,
+          url: matchedVideo.url,
+          mimeType: matchedVideo.mimeType,
+          storagePath: matchedVideo.storagePath,
+          fileName: matchedVideo.fileName,
+        },
+      },
+      proposedReply: `Te comparto este video sobre ${matchedVideo.topic}: ${matchedVideo.title}.`,
+      proposedActions: [],
+      requiresApproval: true,
+    });
+  }
 
   const captureFlow = buildCaptureDecision(conversation, message, fields);
   if (captureFlow) {
@@ -850,7 +895,9 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
       intent,
       confidence,
       extractedFields: fields,
-      proposedReply: 'Recibimos tu mensaje. Un asesor revisara tu caso y te dara seguimiento.',
+      proposedReply: audience === 'clientes'
+        ? 'Recibimos tu mensaje. Te ayudo a revisarlo y, si hace falta, lo escalo a atencion a clientes.'
+        : 'Recibimos tu mensaje. Un asesor revisara tu caso y te dara seguimiento.',
       proposedActions: ['escalate_human'],
       requiresApproval: true,
     });
@@ -975,7 +1022,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 function buildAiDecisionPrompt(conversation: any, message: any, rules: AgentDecision) {
-  const profile = AgentProfiles.getById('promoter_receptionist') as any;
+  const audience = conversationAudience(conversation);
+  const profile = AgentProfiles.getById(profileIdForConversation(conversation)) as any;
   const memory = conversation?.memory || {};
   const promoter = memory.promoter || {};
   return `/no_think
@@ -984,6 +1032,8 @@ Analiza el mensaje entrante para Heavenly Dreams CRM.
 Reglas:
 - Responde SOLO JSON valido, sin markdown y sin explicaciones.
 - ARIUX debe responder ante cualquier mensaje entrante, aunque sea corto, raro o incompleto.
+- Hay dos agentes separados: promotores usa ARIUX y clientes usa ARIA. Nunca mezcles instrucciones internas de promotores con clientes finales.
+- Audiencia actual: ${audience}.
 - Tono: social, profesional, rapido, con humor ligero cuando ayude. Usa 1 a 3 emojis utiles, sin saturar.
 - Si hay nombre del promotor registrado, hablale por su nombre de forma natural y personalizada.
 - Si no hay nombre confirmado del promotor, pide su nombre una sola vez con presentacion formal para guardarlo en memoria y personalizar la charla.
@@ -1001,6 +1051,7 @@ Reglas:
 - Si el mensaje es solo un numero, codigo o folio, usa intent "consulta_folio".
 - Si el cliente pide estatus/folio/SIAC, usa intent "consulta_folio".
 - Si quiere contratar, instalar, cotizar o pasar datos de venta, usa intent "venta".
+- Si la audiencia es clientes, no inicies captura de venta de promotores; trata dudas como soporte/atencion general salvo consulta de folio o pago.
 - Si habla de falla o queja, usa intent "soporte".
 - Si habla de adeudo/pago/promesa de pago, usa intent "morosidad".
 - Si recibe un email, pregunta si debe guardarlo en expediente, usarlo para seguimiento o asociarlo a cliente.
@@ -1191,6 +1242,7 @@ function mergeMemory(conversation: any, decision: AgentDecision) {
     '_nameRequestSent',
     '_introSent',
     '_captureDraft',
+    'matchedVideo',
     'promoterName',
     'promoterFirstName',
     'promoterNameConfirmed',
@@ -1243,11 +1295,12 @@ function mergeMemory(conversation: any, decision: AgentDecision) {
         nameConfirmedAt: nowIso,
       } : {}),
     },
+    audience: conversationAudience(conversation),
     summary: decision.intent === 'venta'
       ? `Cliente interesado en venta. Datos conocidos: ${Object.keys(knownFields).join(', ') || 'sin datos completos'}.`
       : `Ultima intencion detectada: ${decision.intent}.`,
     stage: nextStatus(decision),
-    lastAgent: decision.intent === 'venta' ? 'capturista' : decision.intent === 'consulta_folio' ? 'consultor' : 'recepcionista',
+    lastAgent: agentLabelForDecision(conversation, decision),
     nextAction: decision.proposedActions.length ? decision.proposedActions.join(',') : 'responder',
     updatedAt: new Date().toISOString(),
   };
@@ -1265,6 +1318,24 @@ function createOutboxItems(conversation: any, message: any, decisionId: string, 
       message: decision.proposedReply,
       action: 'send_message',
       payload: { sourceMessageId: message.id, intent: decision.intent },
+    }));
+  }
+
+  const matchedVideo = decision.extractedFields?.matchedVideo;
+  if (matchedVideo?.storagePath) {
+    items.push(AgentOutbox.create({
+      conversation_id: conversation.id,
+      decision_id: decisionId,
+      type: 'media',
+      channel: conversation.channel,
+      target: conversation.external_chat_id,
+      message: decision.proposedReply || `Video de apoyo: ${matchedVideo.title || matchedVideo.topic || 'tema solicitado'}`,
+      action: 'send_video',
+      payload: {
+        sourceMessageId: message.id,
+        intent: decision.intent,
+        video: matchedVideo,
+      },
     }));
   }
 
@@ -1334,7 +1405,7 @@ export async function runAgentForMessage(conversation: any, message: any) {
     id: decisionId,
     conversation_id: conversation.id,
     message_id: message.id,
-    agent: decision.intent === 'venta' ? 'capturista' : decision.intent === 'consulta_folio' ? 'consultor' : 'recepcionista',
+    agent: agentLabelForDecision(conversation, decision),
     intent: decision.intent,
     confidence: decision.confidence,
     extracted_fields: decision.extractedFields,
@@ -1428,7 +1499,9 @@ export async function approveAgentOutbox(id: string, actor: any, sendMessage: Se
 
   try {
     let result: any = null;
-    if (item.type === 'reply') {
+    if (item.action === 'send_video') {
+      result = await sendMessage(item.channel, item.target, item.message || '', item.payload);
+    } else if (item.type === 'reply') {
       result = await sendMessage(item.channel, item.target, item.message || '');
     } else if (item.action === 'create_sale') {
       const sale = salePayloadFromOutbox(item, actor);

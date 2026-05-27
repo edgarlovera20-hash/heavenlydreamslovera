@@ -3,7 +3,7 @@ import {
   Bot, Zap, Archive, Search, Phone, Play, Square, RefreshCw,
   Activity, MessageSquare, Plus, User, Info,
   Key, CheckCircle2, XCircle, Loader2, Globe2, Save,
-  Trash2, Settings2, Workflow, Wand2,
+  Trash2, Settings2, Workflow, Wand2, Video,
 } from 'lucide-react';
 
 const NewSaleForm = lazy(() => import('./NewSaleForm'));
@@ -20,6 +20,8 @@ interface AgentState {
   consultor: AgentStatus;
   telmex: AgentStatus;
   validador: AgentStatus;
+  promotores?: AgentStatus;
+  clientes?: AgentStatus;
 }
 interface ChannelMsg {
   id: string;
@@ -40,7 +42,7 @@ interface TgStatus {
 interface AgentOutboxItem {
   id: string;
   conversationId: string;
-  type: 'reply' | 'action' | 'task';
+  type: 'reply' | 'action' | 'task' | 'media';
   status: string;
   channel: 'whatsapp' | 'telegram';
   target: string;
@@ -50,6 +52,18 @@ interface AgentOutboxItem {
   display_name?: string;
   intent?: string;
   created_at: string;
+}
+interface AgentVideoItem {
+  id: string;
+  title: string;
+  topic: string;
+  keywords: string[];
+  audience: 'promotores' | 'clientes' | 'todos';
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string;
+  createdAt: string;
 }
 interface AgentProfile {
   id: string;
@@ -73,7 +87,7 @@ interface AutomationRule {
   created_at?: string;
   updated_at?: string;
 }
-type HubTab = 'agents' | 'builder' | 'automations' | 'approvals' | 'telegram' | 'messages' | 'manual';
+type HubTab = 'agents' | 'builder' | 'videos' | 'automations' | 'approvals' | 'telegram' | 'messages' | 'manual';
 
 const emptyAgentForm = () => ({
   name: '',
@@ -131,6 +145,24 @@ function normalizeAutomationRule(rule: any): AutomationRule {
 }
 
 const AGENT_META = [
+  {
+    id: 'promotores',
+    name: 'ARIUX Promotores',
+    desc: 'Agente separado para promotores con su propio numero de WhatsApp: captura ventas, consulta folios, expedientes y videos internos sin mezclar clientes.',
+    icon: Bot,
+    color: 'cyan',
+    channels: ['WhatsApp Promotores', 'Telegram'],
+    hint: 'Usa el perfil promoter_receptionist, audiencia promotores y WhatsApp account promotores.',
+  },
+  {
+    id: 'clientes',
+    name: 'ARIA Atención Cliente',
+    desc: 'Agente separado para clientes finales con su propio numero de WhatsApp: soporte, seguimiento, pagos y videos de ayuda sin flujos internos de promotores.',
+    icon: User,
+    color: 'blue',
+    channels: ['WhatsApp Clientes'],
+    hint: 'Usa el perfil customer_support_agent, audiencia clientes y WhatsApp account clientes.',
+  },
   {
     id: 'capturista',
     name: 'Agente Capturista',
@@ -206,8 +238,11 @@ export default function AgentHubView() {
   const [agents, setAgents] = useState<AgentState | null>(null);
   const [messages, setMessages] = useState<ChannelMsg[]>([]);
   const [outbox, setOutbox] = useState<AgentOutboxItem[]>([]);
+  const [waPromotores, setWaPromotores] = useState<any>(null);
+  const [waClientes, setWaClientes] = useState<any>(null);
   const [tgStatus, setTgStatus] = useState<TgStatus>({ status: 'disconnected', error: null, botToken: null });
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
+  const [videos, setVideos] = useState<AgentVideoItem[]>([]);
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<HubTab>('agents');
@@ -219,17 +254,21 @@ export default function AgentHubView() {
   const [agentForm, setAgentForm] = useState(emptyAgentForm());
   const [editingAutomationId, setEditingAutomationId] = useState<string | null>(null);
   const [automationForm, setAutomationForm] = useState(emptyAutomationForm());
+  const [videoForm, setVideoForm] = useState({ title: '', topic: '', keywords: '', audience: 'todos' as 'promotores' | 'clientes' | 'todos', file: null as File | null });
 
   const pop = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
 
   const loadAll = useCallback(async () => {
     try {
-      const [ar, mr, tgr, pr, rr] = await Promise.all([
+      const [ar, mr, tgr, pr, rr, vr, wap, wac] = await Promise.all([
         fetch('/api/agents/status'),
         fetch('/api/channels/messages'),
         fetch('/api/telegram/status'),
         fetch('/api/agents/profiles'),
         fetch('/api/automation/rules'),
+        fetch('/api/agents/videos'),
+        fetch('/api/whatsapp/status?account=promotores'),
+        fetch('/api/whatsapp/status?account=clientes'),
       ]);
       const outboxRes = await fetch('/api/agents/outbox').catch(() => null);
       if (ar.ok) setAgents(await ar.json());
@@ -237,9 +276,61 @@ export default function AgentHubView() {
       if (tgr.ok) setTgStatus(await tgr.json());
       if (pr.ok) setProfiles(await pr.json());
       if (rr.ok) setAutomationRules((await rr.json()).map(normalizeAutomationRule));
+      if (vr.ok) setVideos(await vr.json());
+      if (wap.ok) setWaPromotores(await wap.json());
+      if (wac.ok) setWaClientes(await wac.json());
       if (outboxRes?.ok) setOutbox(await outboxRes.json());
     } catch {}
   }, []);
+
+  const uploadVideo = async () => {
+    if (!videoForm.file || !videoForm.topic.trim()) { pop('Selecciona un video y escribe el tema'); return; }
+    setLoading(v => ({ ...v, uploadVideo: true }));
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(videoForm.file as File);
+      });
+      const res = await fetch('/api/agents/videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: videoForm.title || videoForm.topic,
+          topic: videoForm.topic,
+          keywords: videoForm.keywords,
+          audience: videoForm.audience,
+          fileName: videoForm.file.name,
+          mimeType: videoForm.file.type || 'video/mp4',
+          base64,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'No se pudo subir el video');
+      setVideoForm({ title: '', topic: '', keywords: '', audience: 'todos', file: null });
+      await loadAll();
+      pop('Video agregado a la biblioteca de agentes');
+    } catch (err: any) {
+      pop(`Error: ${err.message || 'No se pudo subir el video'}`);
+    } finally {
+      setLoading(v => ({ ...v, uploadVideo: false }));
+    }
+  };
+
+  const removeVideo = async (id: string) => {
+    setLoading(v => ({ ...v, [`video_${id}`]: true }));
+    try {
+      const res = await fetch(`/api/agents/videos/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('No se pudo eliminar el video');
+      await loadAll();
+      pop('Video eliminado');
+    } catch (err: any) {
+      pop(`Error: ${err.message || 'No se pudo eliminar'}`);
+    } finally {
+      setLoading(v => ({ ...v, [`video_${id}`]: false }));
+    }
+  };
 
   useEffect(() => {
     loadAll();
@@ -483,6 +574,7 @@ export default function AgentHubView() {
   const TABS: Array<{ id: HubTab; label: string }> = [
     { id: 'agents', label: 'Agentes' },
     { id: 'builder', label: 'Constructor' },
+    { id: 'videos', label: `Videos (${videos.length})` },
     { id: 'automations', label: `Automatizaciones (${automationRules.length})` },
     { id: 'approvals', label: `Aprobaciones (${outbox.filter(item => item.status === 'pending_approval').length})` },
     { id: 'telegram', label: `Telegram${tgStatus.status === 'polling' ? ' 🟢' : ' ⚪'}` },
@@ -507,6 +599,33 @@ export default function AgentHubView() {
         <button onClick={loadAll} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-all text-xs font-bold uppercase tracking-widest">
           <RefreshCw className="w-3.5 h-3.5" /> Actualizar
         </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {[
+          { title: 'WhatsApp Promotores', agent: 'ARIUX Promotores', number: waPromotores?.externalId || 'Numero 1', status: waPromotores?.status || 'disconnected', tone: 'cyan' },
+          { title: 'WhatsApp Clientes', agent: 'ARIA Atencion Cliente', number: waClientes?.externalId || 'Numero 2', status: waClientes?.status || 'disconnected', tone: 'blue' },
+        ].map(item => (
+          <div key={item.title} className={`rounded-2xl border p-4 ${item.tone === 'cyan' ? 'border-cyan-400/25 bg-cyan-400/5' : 'border-blue-400/25 bg-blue-400/5'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{item.title}</p>
+                <h3 className="mt-1 text-sm font-black text-white">{item.agent}</h3>
+                <p className="mt-1 text-xs text-slate-400">{item.number}</p>
+              </div>
+              <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${
+                item.status === 'connected'
+                  ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                  : 'border-rose-400/30 bg-rose-400/10 text-rose-300'
+              }`}>
+                {item.status === 'connected' ? 'Conectado' : 'Separado'}
+              </span>
+            </div>
+            <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+              Esta linea trabaja independiente; sus conversaciones, respuestas y videos no se mezclan con el otro numero.
+            </p>
+          </div>
+        ))}
       </div>
 
       {/* Tabs */}
@@ -784,6 +903,67 @@ export default function AgentHubView() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── VIDEOS ── */}
+      {tab === 'videos' && (
+        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
+          <div className="bg-[#0a0d14] border border-sky-400/20 rounded-2xl p-5 space-y-4">
+            <div>
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <Video className="w-5 h-5 text-sky-300" /> Biblioteca de videos
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">Sube videos por tema. El agente detecta palabras clave y propone enviarlos al chat correcto.</p>
+            </div>
+            <label className="space-y-1.5 block">
+              <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest">Tema *</span>
+              <input value={videoForm.topic} onChange={e => setVideoForm(v => ({ ...v, topic: e.target.value }))} placeholder="Ej. configurar modem, pago, portabilidad" className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40" />
+            </label>
+            <label className="space-y-1.5 block">
+              <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest">Titulo</span>
+              <input value={videoForm.title} onChange={e => setVideoForm(v => ({ ...v, title: e.target.value }))} placeholder="Titulo visible del video" className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40" />
+            </label>
+            <label className="space-y-1.5 block">
+              <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest">Palabras clave</span>
+              <textarea value={videoForm.keywords} onChange={e => setVideoForm(v => ({ ...v, keywords: e.target.value }))} rows={3} placeholder="modem, wifi, sin internet, recibo" className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40" />
+            </label>
+            <label className="space-y-1.5 block">
+              <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest">Agente</span>
+              <select value={videoForm.audience} onChange={e => setVideoForm(v => ({ ...v, audience: e.target.value as any }))} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40">
+                <option value="todos">Ambos agentes</option>
+                <option value="promotores">Promotores</option>
+                <option value="clientes">Atencion al cliente</option>
+              </select>
+            </label>
+            <label className="space-y-1.5 block">
+              <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-widest">Archivo de video *</span>
+              <input type="file" accept="video/*" onChange={e => setVideoForm(v => ({ ...v, file: e.target.files?.[0] || null }))} className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-500/20 file:px-3 file:py-1.5 file:text-sky-200" />
+            </label>
+            <button onClick={uploadVideo} disabled={loading.uploadVideo} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-200 font-black text-xs uppercase tracking-widest hover:bg-sky-500/25 transition-all disabled:opacity-60">
+              {loading.uploadVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Subir video al agente
+            </button>
+          </div>
+
+          <div className="bg-[#0a0d14] border border-slate-800 rounded-2xl p-5 space-y-3">
+            <h3 className="text-sm font-black text-white uppercase tracking-widest">Videos disponibles</h3>
+            {videos.length === 0 ? (
+              <p className="text-xs text-slate-500">Aun no hay videos. Cuando subas uno, quedara en la carpeta del servidor y se enlazara por tema.</p>
+            ) : videos.map(video => (
+              <div key={video.id} className="rounded-xl border border-white/10 bg-black/20 p-3 grid gap-3 sm:grid-cols-[140px_1fr_auto]">
+                <video src={video.url} controls className="h-24 w-full rounded-lg bg-black object-cover" />
+                <div>
+                  <p className="text-sm font-bold text-white">{video.title}</p>
+                  <p className="text-[10px] uppercase tracking-widest text-sky-300">{video.topic} · {video.audience}</p>
+                  <p className="text-xs text-slate-500 mt-1">{video.keywords?.join(', ') || 'Sin palabras clave'}</p>
+                </div>
+                <button onClick={() => removeVideo(video.id)} disabled={loading[`video_${video.id}`]} className="self-start rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-rose-300 hover:bg-rose-500/20 disabled:opacity-60">
+                  Eliminar
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}

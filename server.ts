@@ -11,6 +11,7 @@ import {
   getWhatsAppStatus,
   getWhatsAppQR,
   sendWhatsAppMessage,
+  sendWhatsAppVideo,
   sendWhatsAppClientMessage,
   logoutWhatsApp,
   getRecentMessages,
@@ -19,7 +20,7 @@ import {
   hasWhatsAppCredentials,
   type WaMessage,
 } from "./server/whatsapp";
-import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
+import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, sendTelegramVideo, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
 import { runIneOcr, runComprobanteOcr, runSiacOcr, checkOcrStatus } from "./server/ocr-service";
 import db, {
   Users, Ventas, SiacRecords, Tickets, AuditLog, Settings,
@@ -92,6 +93,7 @@ import {
 import { registerFinanceEnterpriseRoutes } from "./server/finance-enterprise";
 import { registerDiditRoutes } from "./server/didit";
 import { answerTelmexQuestion, shouldUseTelmexInfo } from "./server/telmex-info-agent";
+import { agentVideoDirectory, deleteAgentVideo, listAgentVideos, uploadAgentVideo } from "./server/agent-video-library";
 import {
   CURP_REGEX,
   CURP_STATE_NAMES,
@@ -530,6 +532,10 @@ async function downloadPublicSiacFromGoogleDrive(input: string) {
 
 async function startServer() {
   const app = createApp();
+  app.use('/agent-videos', express.static(agentVideoDirectory(), {
+    fallthrough: false,
+    maxAge: '1h',
+  }));
   const PORT = Number(process.env.PORT || 3000);
   const HOST = process.env.HOST?.trim();
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
@@ -3027,7 +3033,12 @@ async function startServer() {
     res.json(await sendTelegramMessage(chatId, message));
   }));
 
-  async function sendChannelMessage(channel: string, target: string, message: string) {
+  async function sendChannelMessage(channel: string, target: string, message: string, payload?: any) {
+    if (payload?.video?.storagePath) {
+      const video = payload.video;
+      if (channel === 'whatsapp') return sendWhatsAppVideo(target, video.storagePath, message);
+      if (channel === 'telegram') return sendTelegramVideo(target, video.storagePath, message, video.mimeType || 'video/mp4');
+    }
     if (channel === 'whatsapp') return sendWhatsAppMessage(target, message);
     if (channel === 'telegram') return sendTelegramMessage(target, message);
     throw new Error('Canal no soportado');
@@ -3148,10 +3159,12 @@ async function startServer() {
     consultor:   { active: false, lastRun: null, processed: 0, errors: 0 },
     telmex:      { active: false, lastRun: null, processed: 0, errors: 0 },
     validador:   { active: false, lastRun: null, processed: 0, errors: 0 },
+    promotores:  { active: false, lastRun: null, processed: 0, errors: 0 },
+    clientes:    { active: false, lastRun: null, processed: 0, errors: 0 },
   };
 
   const agentTimers: Record<string, ReturnType<typeof setInterval> | null> = {
-    capturista: null, archivero: null, consultor: null, telmex: null, validador: null,
+    capturista: null, archivero: null, consultor: null, telmex: null, validador: null, promotores: null, clientes: null,
   };
 
   const AGENT_STATE_SETTINGS_KEY = 'agent_runtime_state_v1';
@@ -3310,7 +3323,7 @@ async function startServer() {
   }
 
   async function autoSendAriuxReplies(result: any) {
-    const replies = (result?.outbox || []).filter((item: any) => item?.type === 'reply' && item?.message);
+    const replies = (result?.outbox || []).filter((item: any) => (item?.type === 'reply' && item?.message) || item?.action === 'send_video');
     let lastApproved: any = null;
     for (const item of replies) {
       try {
@@ -3348,7 +3361,7 @@ async function startServer() {
 
   async function autoSendPendingAriuxReplies() {
     const candidates = (AgentOutbox.getAll(250) as any[])
-      .filter(item => item?.type === 'reply' && item?.message)
+      .filter(item => (item?.type === 'reply' && item?.message) || item?.action === 'send_video')
       .filter(item => item.status === 'pending_approval' || isRetryableOutboxFailure(item))
       .filter(isOutboxChannelReady);
 
@@ -3400,16 +3413,23 @@ async function startServer() {
       if (!result || result.duplicate) return;
       await autoSendAriuxReplies(result);
       const intent = result.decision?.intent;
-      if (intent === 'venta') {
+      const audience = result.decision?.extractedFields?.audience || conversation.memory?.audience || (String(conversation.external_chat_id || '').startsWith('clientes:') ? 'clientes' : 'promotores');
+      if (audience === 'clientes') {
+        agentState.clientes.processed++;
+        agentState.clientes.lastRun = new Date().toISOString();
+      } else if (intent === 'venta') {
         agentState.capturista.processed++;
+        agentState.promotores.processed++;
         agentState.capturista.lastRun = new Date().toISOString();
       } else if (intent === 'consulta_folio') {
         agentState.consultor.processed++;
+        agentState.promotores.processed++;
         agentState.consultor.lastRun = new Date().toISOString();
       } else if (intent === 'busqueda_web' && shouldUseTelmexInfo(result.decision?.proposedReply || message.body || '')) {
         agentState.telmex.processed++;
         agentState.telmex.lastRun = new Date().toISOString();
       } else {
+        agentState.promotores.processed++;
         agentState.capturista.lastRun = new Date().toISOString();
       }
       persistAgentState();
@@ -3427,6 +3447,8 @@ async function startServer() {
     capturista: async () => { await runCapturistaAgent(); await autoSendPendingAriuxReplies(); },
     consultor: async () => { await runConsultorAgent(); await autoSendPendingAriuxReplies(); },
     telmex: async () => { await runTelmexAgent(); await autoSendPendingAriuxReplies(); },
+    promotores: async () => { await runCapturistaAgent(); await runConsultorAgent(); await autoSendPendingAriuxReplies(); agentState.promotores.lastRun = new Date().toISOString(); },
+    clientes: async () => { await autoSendPendingAriuxReplies(); agentState.clientes.lastRun = new Date().toISOString(); },
     archivero: async () => { agentState.archivero.lastRun = new Date().toISOString(); },
     validador: async () => { agentState.validador.lastRun = new Date().toISOString(); },
   };
@@ -3472,6 +3494,40 @@ async function startServer() {
     const answer = await answerTelmexQuestion(question);
     recordMetric('agent.telmex.query', 1, { live: answer.info.live ? '1' : '0' });
     res.json(answer);
+  }));
+
+  app.get("/api/agents/videos", chatUserOnly, wrap((_req: any, res: any) => {
+    res.json(listAgentVideos());
+  }));
+
+  app.post("/api/agents/videos", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (req: any, res: any) => {
+    const body = req.body || {};
+    if (!String(body.title || body.topic || '').trim()) return res.status(400).json({ error: 'titulo o tema requerido' });
+    if (!body.base64 || !body.mimeType) return res.status(400).json({ error: 'video base64 y mimeType requeridos' });
+    const item = await uploadAgentVideo({
+      title: String(body.title || body.topic).trim(),
+      topic: String(body.topic || body.title).trim(),
+      keywords: body.keywords || [],
+      audience: body.audience,
+      fileName: body.fileName,
+      mimeType: body.mimeType,
+      base64: body.base64,
+    });
+    AuditLog.insert({
+      accion: 'UPLOAD_AGENT_VIDEO',
+      entidad: 'agent_videos',
+      entidad_id: item.id,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.username || null,
+      detalle: item.topic,
+    });
+    res.json(item);
+  }));
+
+  app.delete("/api/agents/videos/:id", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (req: any, res: any) => {
+    const ok = await deleteAgentVideo(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Video no encontrado' });
+    res.json({ ok: true });
   }));
 
   function agentProfileIdFrom(value: any) {
@@ -3541,7 +3597,7 @@ async function startServer() {
   }));
 
   app.delete("/api/agents/profiles/:id", requireRole('GERENTE', 'ADMINISTRACION'), wrap((req: any, res: any) => {
-    if (req.params.id === 'promoter_receptionist') return res.status(400).json({ error: 'ARIUX base no se puede eliminar' });
+    if (['promoter_receptionist', 'customer_support_agent'].includes(req.params.id)) return res.status(400).json({ error: 'Los agentes base no se pueden eliminar' });
     AgentProfiles.delete(req.params.id);
     AuditLog.insert({
       accion: 'DELETE_AGENT_PROFILE',
