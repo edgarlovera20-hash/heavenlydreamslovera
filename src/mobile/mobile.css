@@ -1777,3 +1777,449 @@
     }
   }
 }
+
+@layer utilities {
+  :root {
+    --theme-electric: #0A84FF;
+    --theme-deep: #071D3B;
+    --theme-dark: #031326;
+    --theme-black: #020A16;
+    --theme-neon: #00C2FF;
+    --theme-matrix: #22D3EE;
+    --theme-text-main: #F7FBFF;
+    --hd-bg: #031326;
+    --hd-bg-soft: #071D3B;
+    --hd-surface: #082A5E;
+    --hd-surface-strong: #0D3D8F;
+    --hd-surface-muted: #061B3A;
+    --hd-border: rgba(0, 194, 255, 0.26);
+    --hd-border-strong: rgba(0, 194, 255, 0.72);
+    --hd-text: #F7FBFF;
+    --hd-text-muted: #A9C4E5;
+    --hd-accent: #0A84FF;
+    --hd-accent-strong: #00C2FF;
+    --hd-success: #2CF5B8;
+    --hd-warning: #FFB86B;
+    --hd-danger: #FF5FA2;
+    --hd-radius-md: 24px;
+    --hd-radius-lg: 28px;
+    --hd-shadow: 0 28px 76px rgba(0, 6, 20, 0.62);
+    --hd-glow: 0 0 0 1px rgba(0, 194, 255, 0.14), 0 0 34px rgba(10, 132, 255, 0.22);
+  }
+
+  html,
+  body,
+  #mobile-root {
+    background: #031326 !important;
+  }
+
+  body {
+    color: var(--hd-text);
+    background:
+      radial-gradient(circle at 16% -8%, rgba(0, 194, 255, 0.18), transparent 18rem),
+      radial-gradient(circle at 88% 12%, rgba(10, 132, 255, 0.2), transparent 20rem),
+      radial-gradient(circle at 50% 100%, rgba(0, 71, 255, 0.13), transparent 22rem),
+      linear-gradient(145deg, #031326 0%, #071D3B 58%, #020A16 100%) !important;
+  }
+
+  .hd-cyber-screen {
+    color: var(--hd-text);
+    background:
+      radial-gradient(circle at 14% -6%, rgba(0, 194, 255, 0.22), transparent 20rem),
+      radial-gradient(circle at 92% 18%, rgba(10, 132, 255, 0.2), transparent 20rem),
+      radial-gradient(circle at 44% 84%, rgba(0, 61, 143, 0.22), transparent 24rem),
+      linear-gradient(145deg, #031326 0%, #071D3B 56%, #020A16 100%) !important;
+    background-size: 140% 140%, 130% 130%, 120% 120%, 220% 220% !important;
+    animation: hd-premium-bg-shift 18s ease-in-out infinite !important;
+  }
+
+  .hd-cyber-screen::before {
+    inset: -14% !important;
+    opacity: 0.48 !important;
+    background:
+      radial-gradient(circle, rgba(210, 246, 255, 0.58) 0 1.1px, transparent 1.5px) 0 0 / 58px 58px,
+      radial-gradient(circle, rgba(0, 194, 255, 0.42) 0 0.95px, transparent 1.35px) 31px 24px / 82px 82px,
+      repeating-linear-gradient(12deg, transparent 0 62px, rgba(0, 194, 255, 0.14) 63px 64px, transparent 65px 128px),
+      repeating-linear-gradient(-9deg, transparent 0 76px, rgba(125, 211, 252, 0.1) 77px 78px, transparent 79px 152px) !important;
+    filter: drop-shadow(0 0 12px rgba(0, 194, 255, 0.2));
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.72) 58%, transparent 100%) !important;
+    animation: hd-neural-network-drift 24s linear infinite !important;
+  }
+
+  .hd-cyber-screen::after {
+    inset: -22% !important;
+    background:
+      radial-gradient(circle at 18% 22%, rgba(0, 194, 255, 0.18), transparent 16rem),
+      radial-gradient(circle at 80% 34%, rgba(10, 132, 255, 0.26), transparent 22rem),
+      radial-gradient(circle at 42% 76%, rgba(0, 71, 255, 0.16), transparent 22rem) !important;
+    filter: blur(20px) saturate(145%) !important;
+    animation: hd-electric-drift 14s ease-in-out infinite alternate !important;
+  }
+
+  .hd-mobile-main {
+    max-width: 30rem;
+    padding: 1.2rem 1.15rem 1.5rem;
+  }
+
+  #mobile-root main > * {
+    content-visibility: visible !important;
+    contain-intrinsic-size: auto !important;
+  }
+
+  :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-cyber-panel,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-neon-card,
+    .hd-neon-action,
+    .hd-neon-metric,
+    .hd-curp-helper,
+    .hd-mobile-topbar,
+    .hd-mobile-bottom-nav
+  ) {
+    border-radius: 28px !important;
+    border: 1px solid rgba(0, 194, 255, 0.24) !important;
+    background:
+      radial-gradient(circle at 16% 0%, rgba(var(--hd-tone-rgb, 0, 194, 255), 0.14), transparent 32%),
+      linear-gradient(135deg, rgba(8, 42, 94, 0.78), rgba(13, 61, 143, 0.62)) !important;
+    box-shadow:
+      0 24px 18px -18px rgba(0, 5, 18, 0.9),
+      0 42px 82px -42px rgba(0, 30, 100, 0.76),
+      0 0 0 1px rgba(247, 251, 255, 0.06),
+      0 0 30px rgba(var(--hd-tone-rgb, 0, 194, 255), 0.11),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -30px 72px rgba(3, 19, 38, 0.36) !important;
+    backdrop-filter: blur(24px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+    transition:
+      transform 250ms cubic-bezier(0.2, 0.9, 0.22, 1),
+      filter 250ms ease,
+      border-color 250ms ease,
+      box-shadow 250ms ease,
+      background 250ms ease !important;
+  }
+
+  :where(.hd-cyber-panel, .glass-panel, .glass-panel-neon, .hd-neon-card) {
+    animation: hd-panel-float 8s ease-in-out infinite;
+  }
+
+  :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-cyber-panel,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-neon-card,
+    .hd-neon-action,
+    .hd-neon-metric,
+    .hd-curp-helper
+  ):hover,
+  :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-cyber-panel,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-neon-card,
+    .hd-neon-action,
+    .hd-neon-metric,
+    .hd-curp-helper
+  ):focus-within,
+  :where(.hd-neon-action, .hd-liquid-button):active {
+    border-color: rgba(0, 194, 255, 0.78) !important;
+    box-shadow:
+      0 28px 22px -20px rgba(0, 4, 16, 0.96),
+      0 48px 96px -38px rgba(0, 28, 110, 0.86),
+      0 0 0 1px rgba(210, 246, 255, 0.16),
+      0 0 36px rgba(0, 194, 255, 0.32),
+      0 0 82px rgba(10, 132, 255, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      inset 0 -34px 86px rgba(10, 132, 255, 0.08) !important;
+    filter: saturate(1.12) brightness(1.08);
+    transform: translateY(-4px) scale(1.018);
+  }
+
+  :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric)::after,
+  :where(.hd-liquid-button, #mobile-root button:not(.hd-no-liquid):not(.absolute))::after {
+    background:
+      radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.16), transparent 24%),
+      radial-gradient(circle at 86% 16%, rgba(var(--hd-tone-rgb, 0, 194, 255), 0.22), transparent 30%),
+      linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.08) 46%, transparent 72%) !important;
+    opacity: 0.22 !important;
+  }
+
+  :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric):hover::after,
+  :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric):focus-within::after,
+  :where(.hd-neon-action, .hd-liquid-button):active::after {
+    opacity: 0.42 !important;
+  }
+
+  .hd-cyber-panel {
+    padding: 1.18rem;
+  }
+
+  .hd-cyber-panel::before {
+    background: linear-gradient(180deg, #00C2FF, #0A84FF) !important;
+    box-shadow: 0 0 18px rgba(0, 194, 255, 0.62), 0 0 42px rgba(10, 132, 255, 0.28) !important;
+  }
+
+  .hd-cyber-input,
+  #mobile-root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+    min-height: 3.45rem;
+    border-radius: 21px !important;
+    border-color: rgba(0, 194, 255, 0.24) !important;
+    background: rgba(3, 19, 38, 0.72) !important;
+    color: #F7FBFF !important;
+    box-shadow:
+      0 14px 24px -22px rgba(0, 5, 18, 0.94),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 0 24px rgba(0, 194, 255, 0.035) !important;
+  }
+
+  .hd-cyber-input::placeholder,
+  #mobile-root :is(input, textarea)::placeholder {
+    color: rgba(169, 196, 229, 0.58) !important;
+  }
+
+  .hd-cyber-input:focus,
+  #mobile-root :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus {
+    border-color: rgba(0, 194, 255, 0.76) !important;
+    box-shadow:
+      0 0 0 3px rgba(0, 194, 255, 0.14),
+      0 0 28px rgba(10, 132, 255, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  }
+
+  .hd-cyber-primary,
+  .hd-cyber-secondary,
+  .hd-liquid-button,
+  #mobile-root button:not(.hd-no-liquid):not(.absolute),
+  .hd-cyber-screen button:not(.hd-no-liquid):not(.absolute) {
+    border-radius: 22px !important;
+    border-color: rgba(0, 194, 255, 0.28) !important;
+    background:
+      linear-gradient(135deg, rgba(8, 42, 94, 0.9), rgba(13, 61, 143, 0.72)) !important;
+    color: #F7FBFF !important;
+    box-shadow:
+      0 18px 34px -22px rgba(0, 5, 18, 0.94),
+      0 0 22px rgba(10, 132, 255, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  }
+
+  .hd-cyber-primary {
+    background:
+      linear-gradient(135deg, #00C2FF 0%, #0A84FF 46%, #0D3D8F 100%) !important;
+    border-color: rgba(210, 246, 255, 0.42) !important;
+    box-shadow:
+      0 20px 42px -20px rgba(0, 5, 18, 0.94),
+      0 0 34px rgba(0, 194, 255, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  }
+
+  .hd-cyber-primary:hover,
+  .hd-cyber-primary:focus-visible,
+  .hd-cyber-primary:active,
+  .hd-cyber-secondary:hover,
+  .hd-cyber-secondary:focus-visible,
+  .hd-cyber-secondary:active,
+  .hd-liquid-button:hover,
+  .hd-liquid-button:focus-visible,
+  .hd-liquid-button:active,
+  #mobile-root button:not(.hd-no-liquid):not(.absolute):hover,
+  #mobile-root button:not(.hd-no-liquid):not(.absolute):focus-visible,
+  #mobile-root button:not(.hd-no-liquid):not(.absolute):active {
+    border-color: rgba(210, 246, 255, 0.68) !important;
+    background:
+      linear-gradient(135deg, #00C2FF 0%, #0A84FF 52%, #071D3B 100%) !important;
+    color: #F7FBFF !important;
+    box-shadow:
+      0 24px 48px -20px rgba(0, 5, 18, 0.98),
+      0 0 36px rgba(0, 194, 255, 0.38),
+      0 0 74px rgba(10, 132, 255, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+    transform: translateY(-2px) scale(1.025);
+  }
+
+  .hd-neon-action {
+    background:
+      radial-gradient(circle at 16% 12%, rgba(var(--hd-tone-rgb, 0, 194, 255), 0.22), transparent 36%),
+      linear-gradient(135deg, rgba(8, 42, 94, 0.9), rgba(13, 61, 143, 0.72)) !important;
+    color: #F7FBFF !important;
+  }
+
+  .hd-mobile-topbar {
+    background:
+      linear-gradient(135deg, rgba(3, 19, 38, 0.86), rgba(7, 29, 59, 0.72)) !important;
+  }
+
+  .hd-mobile-bottom-nav {
+    left: 0.75rem !important;
+    right: 0.75rem !important;
+    bottom: calc(env(safe-area-inset-bottom) + 0.7rem) !important;
+    border-radius: 28px !important;
+    padding: 0.55rem 0.55rem calc(env(safe-area-inset-bottom) + 0.55rem) !important;
+    background:
+      linear-gradient(135deg, rgba(3, 19, 38, 0.82), rgba(7, 29, 59, 0.68)) !important;
+  }
+
+  .hd-mobile-nav-item-active {
+    background:
+      linear-gradient(135deg, rgba(0, 194, 255, 0.28), rgba(10, 132, 255, 0.38)) !important;
+    color: #F7FBFF !important;
+    box-shadow:
+      0 0 0 1px rgba(210, 246, 255, 0.14),
+      0 0 28px rgba(0, 194, 255, 0.26) !important;
+  }
+
+  .hd-mobile-login-screen {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .hd-mobile-login-shell {
+    min-height: auto;
+    justify-content: flex-start;
+    padding-top: clamp(0.25rem, 2dvh, 1.25rem);
+  }
+
+  .hd-mobile-login-brand {
+    margin-bottom: 1.35rem;
+  }
+
+  .hd-mobile-login-logo {
+    width: clamp(5.75rem, 23vw, 8rem);
+    height: clamp(5.75rem, 23vw, 8rem);
+    border-color: rgba(0, 194, 255, 0.42) !important;
+    background: rgba(3, 19, 38, 0.58) !important;
+    box-shadow:
+      0 0 0 1px rgba(247, 251, 255, 0.1),
+      0 0 32px rgba(0, 194, 255, 0.26),
+      0 0 82px rgba(10, 132, 255, 0.18),
+      inset 0 1px 12px rgba(255, 255, 255, 0.16) !important;
+  }
+
+  .hd-mobile-login-logo img,
+  .hd-mobile-login-logo svg {
+    width: 82%;
+    height: 82%;
+  }
+
+  .hd-mobile-login-brand h1 {
+    font-size: clamp(1.72rem, 7.4vw, 2.3rem);
+    line-height: 1.08;
+    font-weight: 900;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+    text-shadow: 0 0 24px rgba(0, 194, 255, 0.26);
+  }
+
+  .hd-mobile-login-brand p {
+    color: rgba(247, 251, 255, 0.86);
+  }
+
+  .hd-mobile-login-card {
+    padding: clamp(1.08rem, 4.8vw, 1.45rem) !important;
+  }
+
+  .hd-mobile-quick-grid {
+    grid-auto-rows: minmax(5.7rem, auto);
+    gap: 0.9rem;
+  }
+
+  .hd-mobile-quick-action {
+    display: flex;
+    min-height: 5.8rem;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .hd-neon-card {
+    min-height: 6.2rem;
+  }
+
+  .hd-neon-iconbox {
+    min-width: 3.1rem;
+    min-height: 3.1rem;
+    border-radius: 20px !important;
+    border-color: rgba(var(--hd-tone-rgb, 0, 194, 255), 0.42) !important;
+    background:
+      radial-gradient(circle at 36% 18%, rgba(255, 255, 255, 0.14), transparent 34%),
+      rgba(var(--hd-tone-rgb, 0, 194, 255), 0.1) !important;
+  }
+
+  .hd-mobile-icon,
+  #mobile-root .lucide {
+    color: currentColor;
+    filter:
+      drop-shadow(0 0 7px rgba(0, 194, 255, 0.48))
+      drop-shadow(0 0 18px rgba(10, 132, 255, 0.24)) !important;
+  }
+
+  #mobile-root .bg-cyan-300,
+  #mobile-root .bg-cyber-electric,
+  #mobile-root .file\:bg-cyan-300::file-selector-button {
+    background-color: #0A84FF !important;
+  }
+
+  #mobile-root .border-cyan-300,
+  #mobile-root .border-cyber-electric {
+    border-color: rgba(0, 194, 255, 0.58) !important;
+  }
+
+  #mobile-root .text-cyan-100,
+  #mobile-root .text-cyan-200,
+  #mobile-root .text-cyber-neon,
+  #mobile-root .text-cyber-electric {
+    color: #D2F6FF !important;
+  }
+
+  #mobile-root .text-slate-300,
+  #mobile-root .text-slate-400,
+  #mobile-root .text-slate-500 {
+    color: rgba(169, 196, 229, 0.78) !important;
+  }
+
+  #mobile-root .bg-amber-200,
+  #mobile-root .bg-orange-300,
+  #mobile-root .bg-orange-400,
+  #mobile-root .bg-orange-500 {
+    background-color: rgba(255, 184, 107, 0.9) !important;
+  }
+
+  #mobile-root .border-orange-300,
+  #mobile-root .border-orange-400 {
+    border-color: rgba(255, 184, 107, 0.42) !important;
+  }
+
+  #mobile-root .text-orange-100,
+  #mobile-root .text-amber-100 {
+    color: #FFE6C8 !important;
+  }
+
+  @media (max-width: 430px) {
+    .hd-mobile-main {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+
+    .hd-cyber-panel {
+      padding: 1.05rem;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .hd-mobile-login-brand h1 {
+      font-size: 1.48rem;
+    }
+
+    .hd-mobile-login-brand p {
+      font-size: 0.76rem;
+    }
+
+    .hd-mobile-quick-action {
+      min-height: 5.25rem;
+    }
+  }
+}
