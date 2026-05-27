@@ -24,19 +24,12 @@ const ShaderBackground = ({ isLightMode = false }: ShaderBackgroundProps) => {
       }
     `;
 
-    // Light-blue palette. bgColor1/bgColor2 control the background gradient,
-    // lineColor controls the plasma streaks. Dark mode shifts toward navy.
-    const palette = isLightMode
-      ? {
-          bg1: 'vec4(0.65, 0.85, 0.98, 1.0)',
-          bg2: 'vec4(0.40, 0.72, 0.96, 1.0)',
-          line: 'vec4(0.10, 0.45, 0.90, 1.0)',
-        }
-      : {
-          bg1: 'vec4(0.05, 0.18, 0.38, 1.0)',
-          bg2: 'vec4(0.10, 0.40, 0.70, 1.0)',
-          line: 'vec4(0.35, 0.75, 1.00, 1.0)',
-        };
+    const palette = {
+      bg0: 'vec4(0.00, 0.00, 0.125, 1.0)',
+      bg1: 'vec4(0.00, 0.00, 0.50, 1.0)',
+      bg2: 'vec4(0.00, 0.47, 0.71, 1.0)',
+      line: 'vec4(0.45, 0.90, 1.00, 1.0)',
+    };
 
     const fsSource = `
       precision highp float;
@@ -84,6 +77,7 @@ const ShaderBackground = ({ isLightMode = false }: ShaderBackgroundProps) => {
         space.x += random(space.y * warpFrequency + iTime * warpSpeed + 2.0) * warpAmplitude * horizontalFade;
 
         vec4 lines = vec4(0.0);
+        vec4 bgColor0 = ${palette.bg0};
         vec4 bgColor1 = ${palette.bg1};
         vec4 bgColor2 = ${palette.bg2};
         vec4 lineColor = ${palette.line};
@@ -98,15 +92,12 @@ const ShaderBackground = ({ isLightMode = false }: ShaderBackgroundProps) => {
           float linePosition = getPlasmaY(space.x, horizontalFade, offset);
           float line = drawSmoothLine(linePosition, halfWidth, space.y) / 2.0 + drawCrispLine(linePosition, halfWidth * 0.15, space.y);
 
-          float circleX = mod(float(l) + iTime * lineSpeed, 25.0) - 12.0;
-          vec2 circlePosition = vec2(circleX, getPlasmaY(circleX, horizontalFade, offset));
-          float circle = drawCircle(circlePosition, 0.01, space) * 4.0;
-
-          line = line + circle;
           lines += line * lineColor * rand;
         }
 
-        vec4 fragColor = mix(bgColor1, bgColor2, uv.x);
+        float cornerFade = (uv.x + uv.y) * 0.5;
+        vec4 fragColor = mix(bgColor0, bgColor1, smoothstep(0.0, 0.54, cornerFade));
+        fragColor = mix(fragColor, bgColor2, smoothstep(0.38, 1.0, cornerFade));
         fragColor *= mix(0.7, 1.0, verticalFade);
         fragColor.a = 1.0;
         fragColor += lines;
@@ -195,9 +186,7 @@ const ShaderBackground = ({ isLightMode = false }: ShaderBackgroundProps) => {
       <div
         className="fixed top-0 left-0 w-full h-full -z-20 transition-colors duration-700"
         style={{
-          background: isLightMode
-            ? 'linear-gradient(to bottom right, #bae6fd, #38bdf8)'
-            : 'linear-gradient(to bottom right, #0c4a6e, #0ea5e9)',
+          background: 'linear-gradient(135deg, #000020 0%, #000080 48%, #0077B6 100%)',
         }}
       />
       <canvas

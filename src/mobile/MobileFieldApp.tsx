@@ -1078,7 +1078,7 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
             <Logo className="h-16 w-16" />
           </div>
           <h1 className="text-center text-3xl font-semibold tracking-[0.08em] text-slate-50">Heavenly Dreams</h1>
-          <p className="mt-3 text-sm font-semibold tracking-[0.08em] text-cyber-electric/80">Tu Dream Team comienza aqui</p>
+          <p className="mt-3 text-sm font-black tracking-[0.1em] text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.42)]">Tu Dream Team comienza aqui</p>
           <p className="mt-2 text-sm leading-6 text-slate-300">App version campo para movil</p>
         </div>
         <form onSubmit={submit} className="glass-panel-neon relative space-y-4 overflow-hidden rounded-3xl p-5">

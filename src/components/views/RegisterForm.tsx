@@ -266,8 +266,8 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
         </button>
 
         <div className="flex justify-center mb-6 relative z-10 pt-4">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center border bg-cyber-neon/10 border-cyber-neon text-cyber-neon shadow-[0_0_20px_rgba(0,229,255,0.3)]">
-            <UserPlus className="w-8 h-8 drop-shadow-md" />
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center border bg-[#0f2f24] border-emerald-300/50 text-emerald-200 shadow-[0_0_18px_rgba(34,197,94,0.24)]">
+            <UserPlus className="w-8 h-8 drop-shadow-[0_0_10px_rgba(34,255,136,0.65)]" />
           </div>
         </div>
 
@@ -489,7 +489,7 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
             <button
               type="submit"
               disabled={isSubmitting || !acceptedTerms}
-              className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 bg-cyber-electric hover:bg-cyber-neon text-cyber-black shadow-[0_0_20px_rgba(3,154,220,0.5)] uppercase tracking-wider text-sm"
+              className="w-full py-4 rounded-xl font-black flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 bg-[#0f5f3f] hover:bg-[#29e67b] text-emerald-50 hover:text-[#04140b] border border-emerald-300/45 hover:border-emerald-100 shadow-[0_0_18px_rgba(34,197,94,0.22)] hover:shadow-[0_0_26px_rgba(34,255,136,0.65),0_0_48px_rgba(34,197,94,0.34)] uppercase tracking-wider text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200/80"
             >
               {isSubmitting ? (
                 <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />

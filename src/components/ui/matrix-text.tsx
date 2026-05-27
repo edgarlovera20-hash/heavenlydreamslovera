@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion } from "motion/react";
 import { cn } from "../../lib/utils";
 
@@ -33,6 +33,7 @@ export const MatrixText = ({
         }))
     );
     const [isAnimating, setIsAnimating] = useState(false);
+    const hasAnimatedRef = useRef(false);
 
     const getRandomChar = useCallback(
         () => (Math.random() > 0.5 ? "1" : "0"),
@@ -93,18 +94,22 @@ export const MatrixText = ({
     }, [animateLetter, text, isAnimating, letterInterval]);
 
     useEffect(() => {
+        if (hasAnimatedRef.current) return;
+        hasAnimatedRef.current = true;
+
         const timer = setTimeout(startAnimation, initialDelay);
         return () => clearTimeout(timer);
-    }, []);
+    }, [initialDelay, startAnimation]);
 
     const motionVariants = useMemo(
         () => ({
             matrix: {
-                color: "#1aff00", // neon green
-                textShadow: "0 0 8px rgba(0, 255, 136, 0.8)",
+                color: "#22ff88",
+                textShadow: "0 0 10px rgba(34, 255, 136, 0.95), 0 0 22px rgba(34, 255, 136, 0.45)",
             },
             normal: {
                 color: "#ffffff",
+                textShadow: "0 0 18px rgba(255, 255, 255, 0.28)",
             }
         }),
         []

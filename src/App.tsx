@@ -8,7 +8,7 @@ import { MatrixInput } from './components/ui/MatrixInput';
 import { MatrixText } from './components/ui/matrix-text';
 import { LoadingOverlay } from './components/ui/LoadingOverlay';
 import { CyberIcon } from './components/ui/CyberIcon';
-import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, ScanFace, Sun, Moon, UserPlus, Fingerprint } from 'lucide-react';
+import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Binoculars, ClipboardList, UserPlus, Fingerprint } from 'lucide-react';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
@@ -38,7 +38,7 @@ export default function App() {
   const [pendingRole, setPendingRole] = useState<Role | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [isLightMode, setIsLightMode] = useState(false);
+  const [isLightMode] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   const [username, setUsername] = useState('');
@@ -109,8 +109,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('light', isLightMode);
-  }, [isLightMode]);
+    document.documentElement.classList.remove('light');
+  }, []);
 
   const applyLogin = (user: any) => {
     const session = saveSession(user);
@@ -284,13 +284,6 @@ export default function App() {
     <div className="hd-screen flex flex-col h-[100dvh] overflow-hidden bg-cyber-black text-[var(--theme-text-main)] font-sans relative transition-colors duration-500">
       <LoadingOverlay visible={isLoading} text="Conectando..." />
 
-      {!role && (
-        <button onClick={() => setIsLightMode(!isLightMode)}
-          className="absolute top-6 right-6 z-50 p-3 rounded-full hover:bg-cyber-electric/10 border border-cyber-electric/30 text-cyber-electric transition-all glass-panel focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50">
-          {isLightMode ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-        </button>
-      )}
-
       {/* Avatar widget */}
       {role && (
         <div className="absolute top-6 right-6 z-50">
@@ -345,20 +338,20 @@ export default function App() {
                 <Logo className="w-24 h-24 md:w-32 md:h-32 relative z-10 drop-shadow-[0_0_12px_rgba(0,229,255,0.35)]" />
               </div>
               <h1 className="mb-4 drop-shadow-md px-4">
-                <MatrixText text="Heavenly Dreams" className="text-2xl sm:text-3xl md:text-5xl font-semibold font-sans tracking-[0.08em] sm:tracking-[0.1em] flex-nowrap" />
+                <MatrixText text="HEAVENLY DREAMS" className="text-2xl sm:text-3xl md:text-5xl font-black font-sans tracking-[0.1em] sm:tracking-[0.14em] flex-nowrap uppercase" />
               </h1>
-              <p className="text-cyber-electric/75 max-w-md mx-auto font-medium tracking-[0.1em] text-xs sm:text-sm px-4">
+              <p className="max-w-md mx-auto font-black tracking-[0.12em] text-xs sm:text-sm px-4 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.45)]">
                 TU DREAM TEAM COMIENZA AQUI
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-700 px-4 sm:px-0">
-              <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} color="yellow" onClick={() => setPendingRole('GERENTE')} />
-              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Shield} color="purple" onClick={() => setPendingRole('SUPERVISOR')} />
-              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ScanFace} color="pink" onClick={() => setPendingRole('ASESOR')} />
+              <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} color="yellow" tone="admin" onClick={() => setPendingRole('GERENTE')} />
+              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} color="orange" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
+              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} color="red" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
             </div>
             <div className="mt-8 sm:mt-12 animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
               <button onClick={() => setIsRegistering(true)}
-                className="px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl border border-cyber-electric/30 text-cyber-electric hover:bg-cyber-matrix/15 hover:border-cyber-matrix hover:text-white transition-all font-semibold text-xs sm:text-sm flex items-center gap-3 backdrop-blur-md group">
+                className="px-7 sm:px-9 py-3 sm:py-3.5 rounded-xl border border-emerald-300/45 bg-[#0f5f3f] text-emerald-50 hover:bg-[#29e67b] hover:text-[#04140b] hover:border-emerald-100 transition-all font-black text-xs sm:text-sm flex items-center gap-3 shadow-[0_0_18px_rgba(34,197,94,0.22)] hover:shadow-[0_0_26px_rgba(34,255,136,0.65),0_0_48px_rgba(34,197,94,0.34)] backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200/80">
                 <UserPlus className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" /> Iniciar Registro
               </button>
             </div>
@@ -528,8 +521,8 @@ export default function App() {
           <div className="flex-1 overflow-hidden">
             <Suspense fallback={<LoadingOverlay visible text="Cargando…" />}>
               {isMobile
-                ? <MobileUserView role={role} onBack={handleLogout} currentUser={currentUser} isLightMode={isLightMode} onToggleTheme={() => setIsLightMode(!isLightMode)} />
-                : <ManagerView role={role} onBack={handleLogout} currentUser={currentUser} isLightMode={isLightMode} onToggleTheme={() => setIsLightMode(!isLightMode)} />}
+                ? <MobileUserView role={role} onBack={handleLogout} currentUser={currentUser} isLightMode={isLightMode} onToggleTheme={() => document.documentElement.classList.remove('light')} />
+                : <ManagerView role={role} onBack={handleLogout} currentUser={currentUser} isLightMode={isLightMode} onToggleTheme={() => document.documentElement.classList.remove('light')} />}
             </Suspense>
           </div>
         </div>
@@ -538,17 +531,45 @@ export default function App() {
   );
 }
 
-const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, color = 'cyan', onClick }: any) {
+const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, color = 'cyan', tone = 'default', onClick }: any) {
+  const styles: Record<string, { card: string; aura: string; title: string; desc: string }> = {
+    admin: {
+      card: 'border-[#123a6a] hover:border-yellow-300/90 focus-visible:border-yellow-300/90 hover:shadow-[0_0_34px_rgba(250,204,21,0.44),0_0_70px_rgba(250,204,21,0.18)] focus-visible:shadow-[0_0_34px_rgba(250,204,21,0.44),0_0_70px_rgba(250,204,21,0.18)]',
+      aura: 'bg-yellow-300/10',
+      title: 'group-hover:text-yellow-100',
+      desc: 'text-yellow-100/78',
+    },
+    supervisor: {
+      card: 'border-[#123a6a] hover:border-orange-300/90 focus-visible:border-orange-300/90 hover:shadow-[0_0_34px_rgba(251,146,60,0.46),0_0_70px_rgba(251,146,60,0.18)] focus-visible:shadow-[0_0_34px_rgba(251,146,60,0.46),0_0_70px_rgba(251,146,60,0.18)]',
+      aura: 'bg-orange-400/10',
+      title: 'group-hover:text-orange-100',
+      desc: 'text-orange-100/78',
+    },
+    advisor: {
+      card: 'border-[#123a6a] hover:border-red-400/90 focus-visible:border-red-400/90 hover:shadow-[0_0_34px_rgba(248,113,113,0.48),0_0_70px_rgba(239,68,68,0.2)] focus-visible:shadow-[0_0_34px_rgba(248,113,113,0.48),0_0_70px_rgba(239,68,68,0.2)]',
+      aura: 'bg-red-500/10',
+      title: 'group-hover:text-red-100',
+      desc: 'text-red-100/78',
+    },
+    default: {
+      card: 'border-[#123a6a] hover:border-cyber-neon/50 hover:shadow-[0_0_34px_rgba(34,211,238,0.35)]',
+      aura: 'bg-cyber-neon/10',
+      title: 'group-hover:text-cyber-neon',
+      desc: 'text-cyber-electric/70',
+    },
+  };
+  const toneStyle = styles[tone] || styles.default;
+
   return (
     <button onClick={onClick}
-      className="group glass-panel rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:bg-cyber-electric/10 hover:-translate-y-1 border-cyber-electric/20 hover:border-cyber-neon/50 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-cyber-electric/0 to-cyber-electric/5 group-hover:to-cyber-neon/10 transition-colors" />
+      className={`group rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 relative overflow-hidden bg-[#061a38] ${toneStyle.card}`}>
+      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300 ${toneStyle.aura}`} />
       <div className="mb-4 sm:mb-6">
         <div className="sm:hidden"><CyberIcon icon={Icon} color={color} size="lg" glowOpacity={0.6} /></div>
         <div className="hidden sm:block"><CyberIcon icon={Icon} color={color} size="xl" glowOpacity={0.6} /></div>
       </div>
-      <h2 className="text-lg sm:text-2xl font-semibold text-[var(--theme-text-main)] mb-1 sm:mb-2 tracking-tight group-hover:text-cyber-neon transition-colors">{title}</h2>
-      <p className="text-xs sm:text-sm font-medium text-cyber-electric/70 tracking-[0.06em] leading-tight">{desc}</p>
+      <h2 className={`relative z-10 text-lg sm:text-2xl font-black text-white mb-1 sm:mb-2 tracking-tight transition-colors ${toneStyle.title}`}>{title}</h2>
+      <p className={`relative z-10 text-xs sm:text-sm font-bold tracking-[0.06em] leading-tight ${toneStyle.desc}`}>{desc}</p>
     </button>
   );
 });
