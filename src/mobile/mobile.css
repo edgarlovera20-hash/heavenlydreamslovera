@@ -78,6 +78,209 @@
   }
 }
 
+#mobile-root .hd-mobile-login-screen {
+  min-height: 100dvh;
+  padding: max(0.75rem, env(safe-area-inset-top)) clamp(1rem, 4vw, 1.25rem) max(1rem, env(safe-area-inset-bottom)) !important;
+}
+
+#mobile-root .hd-mobile-login-shell {
+  min-height: auto !important;
+  max-width: 27rem !important;
+  justify-content: flex-start !important;
+  padding-top: clamp(0.35rem, 1.8dvh, 1rem) !important;
+}
+
+#mobile-root .hd-mobile-login-brand {
+  margin-bottom: clamp(0.9rem, 2.6dvh, 1.35rem) !important;
+}
+
+#mobile-root .hd-mobile-login-logo {
+  width: clamp(4.8rem, 23vw, 6.25rem) !important;
+  height: clamp(4.8rem, 23vw, 6.25rem) !important;
+  margin-bottom: clamp(0.75rem, 2dvh, 1rem) !important;
+  border-radius: 1.55rem !important;
+}
+
+#mobile-root .hd-mobile-login-logo picture {
+  display: flex !important;
+  width: clamp(4rem, 19vw, 5.15rem) !important;
+  height: clamp(4rem, 19vw, 5.15rem) !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 auto !important;
+}
+
+#mobile-root .hd-mobile-login-logo .hd-app-logo,
+#mobile-root .hd-mobile-login-logo img,
+#mobile-root .hd-mobile-login-logo svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+}
+
+#mobile-root .hd-mobile-login-brand h1 {
+  max-width: min(100%, 23rem);
+  font-size: clamp(1.55rem, 6.6vw, 2.05rem) !important;
+  line-height: 1.04 !important;
+  letter-spacing: clamp(0.035em, 0.8vw, 0.075em) !important;
+  text-wrap: balance;
+}
+
+#mobile-root .hd-mobile-login-brand p {
+  margin-top: 0.45rem !important;
+  max-width: 22rem;
+  line-height: 1.25 !important;
+}
+
+#mobile-root .hd-mobile-login-brand p:nth-of-type(1) {
+  font-size: clamp(0.74rem, 3.3vw, 0.9rem) !important;
+  letter-spacing: clamp(0.07em, 0.8vw, 0.11em) !important;
+}
+
+#mobile-root .hd-mobile-login-brand p:nth-of-type(2) {
+  font-size: clamp(0.76rem, 3.15vw, 0.88rem) !important;
+  color: rgba(169, 196, 229, 0.82) !important;
+}
+
+#mobile-root .hd-mobile-login-card {
+  border-radius: 26px !important;
+  padding: clamp(0.95rem, 3.6vw, 1.2rem) !important;
+}
+
+#mobile-root .hd-mobile-login-card > :not([hidden]) ~ :not([hidden]) {
+  margin-top: clamp(0.68rem, 2.1dvh, 0.92rem) !important;
+}
+
+#mobile-root .hd-mobile-login-card .hd-cyber-label,
+#mobile-root .hd-mobile-login-card .hd-label {
+  font-size: clamp(0.78rem, 3.1vw, 0.9rem) !important;
+  letter-spacing: 0.08em !important;
+}
+
+#mobile-root .hd-mobile-login-card .hd-cyber-input,
+#mobile-root .hd-mobile-login-card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+  min-height: clamp(3.05rem, 8.6dvh, 3.35rem) !important;
+  border-radius: 1.2rem !important;
+  font-size: clamp(1rem, 4.3vw, 1.12rem) !important;
+  padding-left: 1rem !important;
+  padding-right: 3rem !important;
+}
+
+#mobile-root .hd-mobile-login-card label.hd-cyber-card-soft {
+  min-height: clamp(3rem, 8dvh, 3.25rem) !important;
+  border-radius: 1.2rem !important;
+  padding: 0.72rem 0.9rem !important;
+  font-size: clamp(0.95rem, 4vw, 1.05rem) !important;
+}
+
+#mobile-root .hd-mobile-login-card label.hd-cyber-card-soft input[type="checkbox"] {
+  width: 1.15rem !important;
+  height: 1.15rem !important;
+  flex: 0 0 auto;
+}
+
+#mobile-root .hd-mobile-login-card :is(.hd-cyber-primary, .hd-cyber-secondary) {
+  min-height: clamp(3.15rem, 8.8dvh, 3.45rem) !important;
+  height: auto !important;
+  border-radius: 1.2rem !important;
+  font-size: clamp(1rem, 4.4vw, 1.15rem) !important;
+  font-weight: 850 !important;
+  gap: 0.65rem !important;
+}
+
+#mobile-root .hd-mobile-login-card :is(.hd-cyber-primary, .hd-cyber-secondary) svg {
+  width: 1.05rem !important;
+  height: 1.05rem !important;
+}
+
+#mobile-root .hd-mobile-login-card button[aria-label] {
+  right: 0.45rem !important;
+  width: 2.35rem !important;
+  height: 2.35rem !important;
+  border-radius: 0.95rem !important;
+}
+
+#mobile-root .hd-mobile-login-card .rounded-full.bg-white {
+  width: 1.9rem !important;
+  height: 1.9rem !important;
+  font-size: 1rem !important;
+}
+
+@media (max-height: 740px) {
+  #mobile-root .hd-mobile-login-screen {
+    padding-top: 0.55rem !important;
+  }
+
+  #mobile-root .hd-mobile-login-logo {
+    width: 4.45rem !important;
+    height: 4.45rem !important;
+    margin-bottom: 0.6rem !important;
+  }
+
+  #mobile-root .hd-mobile-login-logo picture {
+    width: 3.7rem !important;
+    height: 3.7rem !important;
+  }
+
+  #mobile-root .hd-mobile-login-logo .hd-app-logo,
+  #mobile-root .hd-mobile-login-logo img,
+  #mobile-root .hd-mobile-login-logo svg {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  #mobile-root .hd-mobile-login-brand {
+    margin-bottom: 0.75rem !important;
+  }
+
+  #mobile-root .hd-mobile-login-brand h1 {
+    font-size: 1.42rem !important;
+  }
+
+  #mobile-root .hd-mobile-login-brand p:nth-of-type(2) {
+    display: none;
+  }
+
+  #mobile-root .hd-mobile-login-card {
+    padding: 0.85rem !important;
+  }
+
+  #mobile-root .hd-mobile-login-card > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.58rem !important;
+  }
+}
+
+@media (max-width: 380px) {
+  #mobile-root .hd-mobile-login-screen {
+    padding-left: 0.85rem !important;
+    padding-right: 0.85rem !important;
+  }
+
+  #mobile-root .hd-mobile-login-logo {
+    width: 4.35rem !important;
+    height: 4.35rem !important;
+  }
+
+  #mobile-root .hd-mobile-login-logo picture {
+    width: 3.62rem !important;
+    height: 3.62rem !important;
+  }
+
+  #mobile-root .hd-mobile-login-logo .hd-app-logo,
+  #mobile-root .hd-mobile-login-logo img,
+  #mobile-root .hd-mobile-login-logo svg {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  #mobile-root .hd-mobile-login-brand h1 {
+    font-size: 1.35rem !important;
+    letter-spacing: 0.04em !important;
+  }
+}
+
 @layer utilities {
   :root {
     --theme-electric: #0A84FF;
