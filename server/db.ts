@@ -1652,8 +1652,8 @@ function normalizeAgentProfile(row: any) {
 }
 
 const LEGACY_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
-const DEFAULT_ARIUX_MESSAGE = 'Puedo ayudarte con 🔎 consulta de folios, 📁 guardar expedientes e 📝 iniciar capturas. ¿Qué necesitas hoy?';
-const FIRST_CONTACT_ARIUX_MESSAGE = 'Hola, buenos días. Mi nombre es ARIUX 🤖, soy el agente inteligente de Heavenly Dreams. Estoy aquí para ayudarte con consulta de folios 🔎, guardar expedientes 📁 e iniciar capturas 📝. ¿Cuál es tu nombre o cómo te gustaría que me dirija a ti?';
+const DEFAULT_ARIUX_MESSAGE = 'Hola, dime qué necesitas y lo revisamos. Puedo ayudarte con folios, expedientes o una captura nueva.';
+const FIRST_CONTACT_ARIUX_MESSAGE = 'Hola, buen día. Te ayudo con folios, expedientes o capturas. ¿Con qué nombre te registro para ubicarte mejor?';
 const LEGACY_RECEPTIONIST_SELF_KNOWLEDGE = 'Soy ARIUX, el agente de WhatsApp y Telegram para promotores de Heavenly Dreams. Ayudo a consultar datos, iniciar conversaciones y ordenar informacion antes de pasarla al flujo operativo.';
 const LEGACY_RECEPTIONIST_KNOWLEDGE_BASE = 'Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Si falta informacion, hago preguntas cortas y concretas.';
 const DEFAULT_AGENT_FUNCTIONS = [
@@ -1705,7 +1705,7 @@ const DEFAULT_RECEPTIONIST_PROFILE = {
   id: 'promoter_receptionist',
   name: 'ARIUX',
   role: 'Agente de promotores',
-  personality: 'Cordial, claro, rapido y profesional. Habla como apoyo de campo: directo, atento y sin sonar como robot generico.',
+  personality: 'Cordial, claro, rapido y humano. Escribe como alguien del equipo de campo por WhatsApp: natural, atento y sin sonar a bot.',
   self_knowledge: FIRST_CONTACT_ARIUX_MESSAGE,
   knowledge_base: 'Funciones activas: 🔎 consultar folios SIAC, 📁 guardar expedientes, 📝 iniciar captura de venta, 💬 orientar por WhatsApp o Telegram, 🌐 consultar informacion oficial de Telmex Hogar/Negocio/cobertura y 🗺️ crear rutas con Google Maps. Para nuevo cliente debo pedir nombre, telefono, direccion, colonia, paquete de interes y documentos. Para folios debo pedir el folio SIAC y devolver el estatus disponible. Para Telmex puedo responder paquetes, beneficios, precios, promociones, fibra optica y mapas de cobertura desde fuentes oficiales. Para rutas debo pedir origen y destino si falta informacion. Si falta informacion, hago preguntas cortas y concretas.',
   learned_notes: JSON.stringify([]),
@@ -1718,7 +1718,8 @@ const DEFAULT_RECEPTIONIST_PROFILE = {
     firstContactMessage: FIRST_CONTACT_ARIUX_MESSAGE,
     functions: DEFAULT_AGENT_FUNCTIONS,
     humor: 'Ligero y respetuoso; solo usa humor cuando ayuda a bajar tension.',
-    responseStyle: 'Responde breve, claro, accionable y con siguiente paso concreto.',
+    naturalHumanStyle: true,
+    responseStyle: 'Responde como persona: breve, cercano, con frases naturales como "va", "claro", "lo reviso" o "me pasas". No digas que eres bot ni asistente virtual.',
   }),
 };
 
@@ -1726,8 +1727,8 @@ const DEFAULT_CUSTOMER_SUPPORT_PROFILE = {
   id: 'customer_support_agent',
   name: 'ARIA',
   role: 'Agente de atencion al cliente',
-  personality: 'Cordial, empatica, clara y resolutiva. Habla con clientes finales sin mezclar procesos internos de promotores.',
-  self_knowledge: 'Soy ARIA, el agente de atencion al cliente de Heavenly Dreams. Ayudo a clientes con dudas de servicio, soporte, seguimiento, pagos y orientacion general.',
+  personality: 'Cordial, empatica, clara y resolutiva. Escribe como una persona real de atencion al cliente, cercana y sin sonar automatizada.',
+  self_knowledge: 'Soy parte del equipo de atencion al cliente de Heavenly Dreams. Ayudo con dudas de servicio, soporte, seguimiento, pagos y orientacion general.',
   knowledge_base: 'Atiendo clientes finales. No debo iniciar flujos internos de promotores ni pedir datos de captura salvo que sean necesarios para soporte. Si el cliente reporta falla, pago, instalacion, seguimiento o duda de servicio, doy pasos claros y escalo cuando corresponda. Si existe un video de apoyo por tema, puedo recomendarlo para explicar mejor.',
   learned_notes: JSON.stringify([]),
   metadata: JSON.stringify({
@@ -1735,7 +1736,7 @@ const DEFAULT_CUSTOMER_SUPPORT_PROFILE = {
     channel: 'whatsapp_clientes',
     whatsappAccount: 'clientes',
     phonePurpose: 'numero exclusivo para atencion al cliente',
-    defaultMessage: 'Hola, soy ARIA de atencion a clientes. Te ayudo con soporte, seguimiento, pagos o dudas de tu servicio. ¿Que necesitas revisar?',
+    defaultMessage: 'Hola, claro. Cuéntame qué necesitas revisar de tu servicio y te ayudo.',
     functions: [
       {
         id: 'soporte_clientes',
@@ -1759,7 +1760,8 @@ const DEFAULT_CUSTOMER_SUPPORT_PROFILE = {
         enabled: true,
       },
     ],
-    responseStyle: 'Responde breve, amable y orientado a resolver. Evita lenguaje interno de captura o promotores.',
+    naturalHumanStyle: true,
+    responseStyle: 'Responde como persona de atencion: amable, simple y directa. No digas que eres bot ni uses frases corporativas.',
   }),
 };
 
@@ -1945,10 +1947,11 @@ export const AgentProfiles = {
       ));
       const needsDefaultMessage = !metadata.defaultMessage || metadata.defaultMessage === LEGACY_ARIUX_MESSAGE || /hola,\s*soy\s*ariux/i.test(String(metadata.defaultMessage || ''));
       const needsDefaultFunctions = !Array.isArray(metadata.functions) || missingDefaultFunctions.length > 0;
+      const needsHumanStyle = metadata.naturalHumanStyle !== true || /asistente virtual|agente inteligente|soy ariux/i.test(String(metadata.defaultMessage || ''));
       const needsLegacySelfKnowledge = String(existing?.selfKnowledge || '').trim() === LEGACY_RECEPTIONIST_SELF_KNOWLEDGE;
       const needsLegacyKnowledgeBase = String(existing?.knowledgeBase || '').trim() === LEGACY_RECEPTIONIST_KNOWLEDGE_BASE;
       const needsTelmexKnowledge = !/telmex/i.test(String(existing?.knowledgeBase || '')) || !/google maps|rutas/i.test(String(existing?.knowledgeBase || ''));
-      if (needsDefaultMessage || needsDefaultFunctions || needsLegacySelfKnowledge || needsLegacyKnowledgeBase || needsTelmexKnowledge) {
+      if (needsDefaultMessage || needsDefaultFunctions || needsHumanStyle || needsLegacySelfKnowledge || needsLegacyKnowledgeBase || needsTelmexKnowledge) {
         AgentProfiles.upsert({
           id,
           name: existing?.name || DEFAULT_RECEPTIONIST_PROFILE.name,
@@ -1964,9 +1967,38 @@ export const AgentProfiles = {
           metadata: {
             ...parseJson(DEFAULT_RECEPTIONIST_PROFILE.metadata, {}),
             ...metadata,
-            defaultMessage: needsDefaultMessage ? DEFAULT_ARIUX_MESSAGE : metadata.defaultMessage,
+            naturalHumanStyle: true,
+            defaultMessage: needsDefaultMessage || needsHumanStyle ? DEFAULT_ARIUX_MESSAGE : metadata.defaultMessage,
             firstContactMessage: metadata.firstContactMessage || FIRST_CONTACT_ARIUX_MESSAGE,
+            responseStyle: needsHumanStyle ? parseJson(DEFAULT_RECEPTIONIST_PROFILE.metadata, {}).responseStyle : metadata.responseStyle,
             functions: Array.isArray(metadata.functions) ? [...metadata.functions, ...missingDefaultFunctions] : DEFAULT_AGENT_FUNCTIONS,
+          },
+        });
+        row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id) as any;
+      }
+    }
+    if (row && id === DEFAULT_CUSTOMER_SUPPORT_PROFILE.id) {
+      const existing = normalizeAgentProfile(row) as any;
+      const metadata = existing?.metadata || {};
+      const defaultCustomerMetadata = parseJson(DEFAULT_CUSTOMER_SUPPORT_PROFILE.metadata, {});
+      const needsHumanStyle = metadata.naturalHumanStyle !== true || /bot|asistente virtual|soy aria/i.test(String(metadata.defaultMessage || ''));
+      if (needsHumanStyle) {
+        AgentProfiles.upsert({
+          id,
+          name: existing?.name || DEFAULT_CUSTOMER_SUPPORT_PROFILE.name,
+          role: existing?.role || DEFAULT_CUSTOMER_SUPPORT_PROFILE.role,
+          personality: existing?.personality || DEFAULT_CUSTOMER_SUPPORT_PROFILE.personality,
+          selfKnowledge: /bot|agente de atencion/i.test(String(existing?.selfKnowledge || ''))
+            ? DEFAULT_CUSTOMER_SUPPORT_PROFILE.self_knowledge
+            : existing?.selfKnowledge,
+          knowledgeBase: existing?.knowledgeBase || DEFAULT_CUSTOMER_SUPPORT_PROFILE.knowledge_base,
+          learnedNotes: existing?.learnedNotes || [],
+          metadata: {
+            ...defaultCustomerMetadata,
+            ...metadata,
+            naturalHumanStyle: true,
+            defaultMessage: defaultCustomerMetadata.defaultMessage,
+            responseStyle: defaultCustomerMetadata.responseStyle,
           },
         });
         row = db.prepare('SELECT * FROM agent_profiles WHERE id=?').get(id) as any;

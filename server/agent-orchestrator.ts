@@ -31,8 +31,8 @@ type SendChannelMessage = (channel: string, target: string, message: string, pay
 const INTENTS: Intent[] = ['venta', 'consulta_folio', 'soporte', 'morosidad', 'busqueda_web', 'otro'];
 const PROPOSED_ACTIONS: ProposedAction[] = ['create_sale', 'update_lead', 'schedule_followup', 'escalate_human'];
 const LEGACY_ARIUX_MESSAGE = 'Hola, soy ARIUX 🤖 asistente virtual de Heavenly Dreams ✨. Estoy aquí para ayudarte y servirte en consulta de folios 🔎, guardar expedientes 📁 e iniciar flujos de captura 📝. ¿Qué necesitas hoy?';
-const DEFAULT_ARIUX_MESSAGE = 'Puedo ayudarte con 🔎 consulta de folios, 📁 guardar expedientes e 📝 iniciar capturas. ¿Qué necesitas hoy?';
-const FIRST_CONTACT_INTRO = 'Hola, buenos días. Mi nombre es ARIUX 🤖, soy el agente inteligente de Heavenly Dreams. Estoy aquí para ayudarte con consulta de folios 🔎, guardar expedientes 📁 e iniciar capturas 📝. ¿Cuál es tu nombre o cómo te gustaría que me dirija a ti?';
+const DEFAULT_ARIUX_MESSAGE = 'Hola, dime qué necesitas y lo revisamos. Puedo ayudarte con folios, expedientes o una captura nueva.';
+const FIRST_CONTACT_INTRO = 'Hola, buen día. Te ayudo con folios, expedientes o capturas. ¿Con qué nombre te registro para ubicarte mejor?';
 const AI_DECISION_TIMEOUT_MS = Math.max(3000, Number(process.env.AGENT_AI_TIMEOUT_MS || 45000));
 
 function json(value: any) {
@@ -98,7 +98,7 @@ function shouldAskPromoterName(conversation: any, decision: AgentDecision) {
 function appendPromoterNameQuestion(reply: string, intent?: Intent) {
   if (/c[oó]mo te llamas|tu nombre|me dices tu nombre/i.test(reply)) return reply;
   if (!reply || intent === 'otro') return FIRST_CONTACT_INTRO;
-  return `${reply}\n\n${FIRST_CONTACT_INTRO}`.trim();
+  return `${reply}\n\nPara atenderte más personal, ¿con qué nombre te registro?`.trim();
 }
 
 function personalizeReply(reply: any, firstName?: string | null) {
@@ -657,27 +657,27 @@ function extractPromoterName(text: string, conversation: any) {
 function buildAutonomousReply(text: string, profile: any) {
   const lower = String(text || '').toLowerCase();
   const email = extractEmail(text);
-  const baseOptions = 'Puedo ayudarte con 🔎 consulta de folios, 📁 guardar expediente o 📝 iniciar una captura. ¿Qué hacemos primero?';
+  const baseOptions = 'Puedo revisar un folio, guardar un expediente o ayudarte a iniciar una captura. ¿Qué hacemos?';
   if (email) {
-    return `Recibí el correo ${email} 📩. Lo puedo usar para el expediente o seguimiento del cliente. ${baseOptions}`;
+    return `Perfecto, ya tengo el correo ${email}. ¿Lo guardo para expediente o lo usamos para seguimiento?`;
   }
   if (lower.includes('sticker recibido')) {
-    return `Sticker recibido 😄. Me quedo en modo trabajo: ${baseOptions}`;
+    return `Va, te leo. ${baseOptions}`;
   }
   if (lower.includes('imagen recibida')) {
-    return `Imagen recibida 📸. Si es INE, comprobante o documento del expediente, la dejo identificada para el flujo. Dime nombre del cliente o folio para relacionarla.`;
+    return `Ya recibí la imagen. ¿La relaciono con algún cliente o folio?`;
   }
   if (lower.includes('documento recibido')) {
-    return `Documento recibido 📄. Lo puedo guardar en expediente o asociarlo a una captura. ¿Me pasas nombre del cliente, teléfono o folio?`;
+    return `Ya recibí el documento. Pásame nombre del cliente, teléfono o folio para guardarlo donde corresponde.`;
   }
   if (lower.includes('audio recibido')) {
-    return `Audio recibido 🎧. Para avanzar rapido, escríbeme el dato clave: folio, nombre del cliente o qué trámite quieres iniciar.`;
+    return `Recibí tu audio. Para avanzar sin error, escríbeme el dato clave: folio, cliente o trámite.`;
   }
   if (lower.includes('video recibido')) {
-    return `Video recibido 🎥. Si corresponde a evidencia o firma, lo podemos guardar en expediente. ¿A qué cliente o folio lo relaciono?`;
+    return `Ya tengo el video. ¿A qué cliente o folio lo relaciono?`;
   }
   if (/\bine\b|credencial|frente|reverso/i.test(text)) {
-    return `Perfecto, si es INE necesito frente y reverso 🪪. También dime nombre del cliente o folio para guardar bien el expediente.`;
+    return `Perfecto. Si es INE, mándame frente y reverso, y dime el nombre del cliente o folio para guardarlo bien.`;
   }
   return defaultProfileReply(profile);
 }
@@ -719,12 +719,10 @@ function requiredMissing(fields: Record<string, any>) {
 }
 
 function buildSalesReply(fields: Record<string, any>, missing: string[]) {
-  const profile = AgentProfiles.getById('promoter_receptionist') as any;
-  const agentName = profile?.name || 'ARIUX';
   if (missing.length > 0) {
-    return `Hola, soy ${agentName}. Te ayudo a ordenar esta contratacion. Para avanzar necesito: ${missing.join(', ')}.`;
+    return `Va, ya estoy ordenando la contratación. Solo me falta: ${missing.join(', ')}.`;
   }
-  return `Soy ${agentName}. Ya tengo los datos principales de ${fields.nombre}. Voy a pasar la solicitud para revision y seguimiento del equipo.`;
+  return `Listo, ya tengo los datos principales de ${fields.nombre}. La dejo preparada para revisión del equipo.`;
 }
 
 function normalizeStatus(value: any) {
@@ -825,7 +823,7 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
           fileName: matchedVideo.fileName,
         },
       },
-      proposedReply: `Te comparto este video sobre ${matchedVideo.topic}: ${matchedVideo.title}.`,
+      proposedReply: `Tengo un video que te puede ayudar con ${matchedVideo.topic}. Te lo mando para que lo veas rápido.`,
       proposedActions: [],
       requiresApproval: true,
     });
@@ -860,7 +858,7 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
       intent: 'otro',
       confidence: 0.96,
       extractedFields: fields,
-      proposedReply: `Perfecto, ${promoterName.firstName} 🙌. Ya te guardé en mi memoria para hablarte por tu nombre. Puedo ayudarte con 🔎 consulta de folios, 📁 guardar expedientes o 📝 iniciar captura. ¿Qué hacemos primero?`,
+      proposedReply: `Perfecto, ${promoterName.firstName}. Ya te ubico así para esta conversación. ¿Revisamos un folio, expediente o captura?`,
       proposedActions: [],
       requiresApproval: true,
     });
@@ -896,8 +894,8 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
       confidence,
       extractedFields: fields,
       proposedReply: audience === 'clientes'
-        ? 'Recibimos tu mensaje. Te ayudo a revisarlo y, si hace falta, lo escalo a atencion a clientes.'
-        : 'Recibimos tu mensaje. Un asesor revisara tu caso y te dara seguimiento.',
+        ? 'Claro, lo reviso contigo. Cuéntame un poco más qué pasó y vemos el siguiente paso.'
+        : 'Va, lo reviso. Pásame el dato clave para ubicarlo: folio, cliente o teléfono.',
       proposedActions: ['escalate_human'],
       requiresApproval: true,
     });
@@ -1031,18 +1029,22 @@ Analiza el mensaje entrante para Heavenly Dreams CRM.
 
 Reglas:
 - Responde SOLO JSON valido, sin markdown y sin explicaciones.
-- ARIUX debe responder ante cualquier mensaje entrante, aunque sea corto, raro o incompleto.
+- El agente debe responder ante cualquier mensaje entrante, aunque sea corto, raro o incompleto.
 - Hay dos agentes separados: promotores usa ARIUX y clientes usa ARIA. Nunca mezcles instrucciones internas de promotores con clientes finales.
 - Audiencia actual: ${audience}.
-- Tono: social, profesional, rapido, con humor ligero cuando ayude. Usa 1 a 3 emojis utiles, sin saturar.
-- Si hay nombre del promotor registrado, hablale por su nombre de forma natural y personalizada.
-- Si no hay nombre confirmado del promotor, pide su nombre una sola vez con presentacion formal para guardarlo en memoria y personalizar la charla.
+- Tono humano: escribe como una persona del equipo por WhatsApp, no como bot ni call center.
+- Usa frases naturales, cortas y personales: "va", "claro", "lo reviso", "me pasas", "te ayudo".
+- Evita decir "soy un bot", "asistente virtual", "agente inteligente", "procesando", "estimado usuario", "hemos recibido su solicitud".
+- No repitas el nombre del agente en cada mensaje; solo preséntate si es primer contacto.
+- Usa maximo 1 emoji y solo si se siente natural.
+- Si hay nombre registrado, úsalo de vez en cuando, no en cada respuesta.
+- Si no hay nombre confirmado del promotor, pide su nombre una sola vez de forma casual para ubicarlo mejor.
 - Si el promotor dice "me llamo", "soy" o responde solo con su nombre, confirma que lo guardaste y usalo desde ese momento.
 - Si hay captureDraft activo, continua el flujo y pide solo los datos faltantes.
 - Si recibe INE/CURP/comprobante y el usuario acepta iniciar captura, recolecta telefono titular, telefono referencia, correo, direccion, tipo de servicio, segmento, producto y paquete.
 - Si es portabilidad, pide numero a portar, compania actual y NIP de 4 digitos.
 - La captura final siempre queda como borrador pendiente de aprobacion humana.
-- Siempre termina con una pregunta o siguiente paso concreto cuando falte contexto.
+- Siempre termina con una pregunta concreta cuando falte contexto. Si ya tienes lo necesario, confirma el siguiente paso.
 - No inventes folios, telefonos, nombres, paquetes ni direcciones.
 - Todas las acciones requieren aprobacion humana aunque el JSON diga lo contrario.
 - Si pide buscar informacion externa, internet, noticias, datos actuales o verificar una pagina, usa intent "busqueda_web".
@@ -1056,7 +1058,7 @@ Reglas:
 - Si habla de adeudo/pago/promesa de pago, usa intent "morosidad".
 - Si recibe un email, pregunta si debe guardarlo en expediente, usarlo para seguimiento o asociarlo a cliente.
 - Si recibe INE, imagen, PDF o documento, confirma recepcion y pide nombre/folio/telefono para relacionar expediente.
-- Si recibe sticker, audio o video, responde de forma amable y con humor ligero; pide el dato operativo que falta.
+- Si recibe sticker, audio o video, responde natural y pide el dato operativo que falta.
 - Si el mensaje coincide con un macro activo del diseñador, respeta ese macro como respuesta base y conserva su intencion.
 - Si no entiendes el mensaje, ofrece opciones: consultar folio, guardar expediente o iniciar captura.
 - proposedActions solo puede usar: create_sale, update_lead, schedule_followup, escalate_human.
@@ -1113,7 +1115,7 @@ Devuelve exactamente:
     "zona": "",
     "folio": ""
   },
-  "proposedReply": "respuesta breve en espanol para proponer al humano",
+  "proposedReply": "respuesta breve, natural y personal en espanol mexicano",
   "proposedActions": []
 }`;
 }

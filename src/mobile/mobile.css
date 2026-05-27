@@ -82,22 +82,34 @@
 
 @keyframes hd-electric-drift {
   0% {
-    transform: translate3d(-3%, -2%, 0) scale(1);
+    transform: translate3d(-5%, -3%, 0) scale(1);
+    filter: hue-rotate(-18deg) saturate(1.2) brightness(1);
   }
   50% {
-    transform: translate3d(3%, 2%, 0) scale(1.08);
+    transform: translate3d(4%, 3%, 0) scale(1.12);
+    filter: hue-rotate(18deg) saturate(1.75) brightness(1.18);
   }
   100% {
-    transform: translate3d(-3%, -2%, 0) scale(1);
+    transform: translate3d(-2%, 5%, 0) scale(1.05);
+    filter: hue-rotate(34deg) saturate(1.42) brightness(1.06);
   }
 }
 
 @keyframes hd-grid-flow {
   0% {
-    background-position: 0 0, 0 0, 0 0;
+    background-position: 0 0, 0 0, 0 0, 0 0;
+    transform: translate3d(-3%, -2%, 0) scale(1.03);
+    opacity: 0.42;
+  }
+  50% {
+    background-position: 42px 54px, 54px 42px, 24px 24px, 0 0;
+    transform: translate3d(3%, 2.5%, 0) scale(1.08);
+    opacity: 0.68;
   }
   100% {
-    background-position: 0 36px, 36px 0, 0 0;
+    background-position: 108px 144px, 144px 108px, 48px 48px, 0 0;
+    transform: translate3d(-1.5%, 4.5%, 0) scale(1.04);
+    opacity: 0.52;
   }
 }
 
@@ -173,31 +185,32 @@
   .hd-cyber-screen::before {
     content: "";
     position: fixed;
-    inset: 0;
+    inset: -10%;
     z-index: -1;
     pointer-events: none;
-    opacity: 0.5;
+    opacity: 0.64;
     background:
-      linear-gradient(rgba(224, 242, 254, 0.32) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(224, 242, 254, 0.28) 1px, transparent 1px),
-      radial-gradient(circle at 55% 4%, rgba(240, 249, 255, 0.42), transparent 16rem);
-    background-size: 36px 36px, 36px 36px, auto;
-    animation: hd-grid-flow 16s linear infinite;
+      linear-gradient(rgba(224, 242, 254, 0.42) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(224, 242, 254, 0.36) 1px, transparent 1px),
+      radial-gradient(circle at 55% 4%, rgba(240, 249, 255, 0.56), transparent 16rem),
+      linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(14, 165, 233, 0.08));
+    background-size: 42px 42px, 42px 42px, auto, 220% 220%;
+    animation: hd-grid-flow 10s linear infinite;
     mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.78) 54%, transparent 100%);
   }
 
   .hd-cyber-screen::after {
     content: "";
     position: fixed;
-    inset: -18%;
+    inset: -22%;
     z-index: -2;
     pointer-events: none;
     background:
-      radial-gradient(circle at 24% 22%, rgba(224, 242, 254, 0.64), transparent 18rem),
-      radial-gradient(circle at 72% 36%, rgba(56, 189, 248, 0.6), transparent 22rem),
-      radial-gradient(circle at 42% 74%, rgba(2, 132, 199, 0.38), transparent 20rem);
-    filter: blur(18px) saturate(130%);
-    animation: hd-electric-drift 10s ease-in-out infinite;
+      radial-gradient(circle at 24% 22%, rgba(224, 242, 254, 0.76), transparent 18rem),
+      radial-gradient(circle at 72% 36%, rgba(56, 248, 255, 0.62), transparent 22rem),
+      radial-gradient(circle at 42% 74%, rgba(2, 132, 199, 0.44), transparent 20rem);
+    filter: blur(14px) saturate(150%);
+    animation: hd-electric-drift 8s ease-in-out infinite alternate;
   }
 
   .hd-cyber-screen > * {

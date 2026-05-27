@@ -539,6 +539,7 @@ async function startServer() {
   const PORT = Number(process.env.PORT || 3000);
   const HOST = process.env.HOST?.trim();
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
+  const oauthLimiter = rateLimit('oauth', 60, 15 * 60 * 1000);
   const registrationLimiter = rateLimit('registration', 8, 60 * 60 * 1000);
   const authOnly = requireAuth;
   const adminOnly = requireRole('GERENTE', 'ADMINISTRACION');
@@ -1153,11 +1154,11 @@ async function startServer() {
     res.json(oauthStatus());
   }));
 
-  app.get("/api/auth/oauth/:provider/start", loginLimiter, wrap((req: any, res: any) => {
+  app.get("/api/auth/oauth/:provider/start", oauthLimiter, wrap((req: any, res: any) => {
     oauthStart(req, res);
   }));
 
-  app.get("/api/auth/oauth/:provider/callback", loginLimiter, wrap(async (req: any, res: any) => {
+  app.get("/api/auth/oauth/:provider/callback", oauthLimiter, wrap(async (req: any, res: any) => {
     await oauthCallback(req, res);
   }));
 
