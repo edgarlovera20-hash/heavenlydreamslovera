@@ -80,8 +80,6 @@ export const GradientAreaChart = React.memo(function GradientAreaChart<T extends
 
   return (
     <Card className={cn('relative overflow-hidden', className)}>
-      <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-cyan-300/12 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-20 left-12 h-44 w-44 rounded-full bg-blue-500/12 blur-3xl" />
       <CardHeader className={cn(compact && 'p-4 pb-2')}>
         <div className="flex items-start justify-between gap-3">
           <div>

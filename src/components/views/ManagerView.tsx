@@ -341,7 +341,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 </>
              )}
           </div>
-          <div className="flex-1 overflow-y-auto px-8 pb-8 custom-scrollbar">
+          <div className="hd-dashboard-clean flex-1 overflow-y-auto px-8 pb-8 custom-scrollbar">
           {activeSection === 'Dashboard' && (
             <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                <SectionHeader
@@ -416,6 +416,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 conversations={channelSummary.conversations}
                 pendingApprovals={channelSummary.pendingApprovals}
                 inventoryItems={inventoryItems}
+                compact
               />
 
               {/* Quick Actions */}

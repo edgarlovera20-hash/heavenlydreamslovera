@@ -97,13 +97,13 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
       interactive={false}
       showParticles={false}
       showShootingStars={false}
-      className="h-[100dvh] w-full"
+      className="hd-mobile-clean h-[100dvh] w-full"
       contentClassName="flex h-full w-full justify-center"
     >
-    <div className="flex flex-col h-[100dvh] w-full max-w-[420px] mx-auto border-x border-cyber-electric/20 relative z-10 shadow-[0_0_50px_rgba(3,154,220,0.1)] overflow-hidden">
+    <div className="hd-mobile-shell-clean flex flex-col h-[100dvh] w-full max-w-[430px] mx-auto border-x border-cyber-electric/20 relative z-10 shadow-[0_0_50px_rgba(3,154,220,0.1)] overflow-hidden">
       
       {/* Mobile Header */}
-      <header className="px-4 sm:px-6 pt-6 sm:pt-12 pb-3 sm:pb-4 flex justify-between items-center bg-gradient-to-b from-cyber-black to-transparent shrink-0 relative z-20">
+      <header className="hd-mobile-header-clean px-4 sm:px-6 pt-4 sm:pt-8 pb-3 sm:pb-4 flex justify-between items-center shrink-0 relative z-20">
         <div className="flex items-center gap-2 sm:gap-3">
           <button 
             onClick={() => {
@@ -136,7 +136,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
       </header>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto px-4 pb-32 custom-scrollbar relative z-10">
+      <div className="hd-mobile-content-clean flex-1 overflow-y-auto px-4 pb-28 custom-scrollbar relative z-10">
         {/* Render Active Section */}
         <Suspense fallback={<SectionLoader />}>
           {activeSection === 'Perfil' && <Profile />}

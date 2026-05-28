@@ -1,7 +1,7 @@
 import React from 'react';
 import { cn } from '../lib/utils';
 import LiveParticles, { type NeuralActivity, type NeuralMode } from '../components/ui/live-particles';
-import NeuralGrid from '../components/ui/neural-grid';
+import AetherFlowBackground from '../components/ui/aether-flow-background';
 
 type NeuralLayoutProps = {
   children: React.ReactNode;
@@ -10,7 +10,6 @@ type NeuralLayoutProps = {
   className?: string;
   contentClassName?: string;
   interactive?: boolean;
-  showGrid?: boolean;
   showParticles?: boolean;
   showShootingStars?: boolean;
 };
@@ -22,14 +21,17 @@ export default function NeuralLayout({
   className,
   contentClassName,
   interactive = true,
-  showGrid = true,
-  showParticles = mode !== 'mobile',
+  showParticles = false,
   showShootingStars = true,
 }: NeuralLayoutProps) {
   return (
     <div className={cn('hd-neural-layout', `hd-neural-layout--${mode}`, className)}>
       <div className="hd-neural-gradient" aria-hidden="true" />
-      {showGrid && <NeuralGrid variant={mode === 'mobile' ? 'mobile' : mode === 'hero' ? 'hero' : 'dashboard'} />}
+      <AetherFlowBackground
+        className="z-[1]"
+        density={mode === 'mobile' ? 0.58 : 0.82}
+        interactive={interactive}
+      />
       {showParticles && (
         <LiveParticles mode={mode} activity={activity} interactive={interactive} showShootingStars={showShootingStars} />
       )}

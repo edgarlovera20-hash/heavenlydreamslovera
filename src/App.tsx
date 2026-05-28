@@ -2,11 +2,11 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 const ManagerView = lazy(() => import('./components/views/ManagerView'));
 const MobileUserView = lazy(() => import('./components/views/MobileUserView'));
 const RegisterForm = lazy(() => import('./components/views/RegisterForm').then(m => ({ default: m.RegisterForm })));
-const ShaderBackground = lazy(() => import('./components/ui/shader-background'));
 import Logo from './components/ui/Logo';
 import { MatrixInput } from './components/ui/MatrixInput';
 import { MatrixText } from './components/ui/matrix-text';
 import { LoadingOverlay } from './components/ui/LoadingOverlay';
+import AetherFlowBackground from './components/ui/aether-flow-background';
 import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Binoculars, ClipboardList, UserPlus, Fingerprint } from 'lucide-react';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
@@ -305,11 +305,14 @@ export default function App() {
       )}
 
       {!role && (
-        <div className="absolute inset-0 z-0 pointer-events-none">
-          <Suspense fallback={<div className="aether-flow-bg hd-neural-hero-bg" aria-hidden="true" />}>
-            <ShaderBackground isLightMode={isLightMode} />
-          </Suspense>
-        </div>
+        <div className="aether-clean-bg absolute inset-0 z-0 pointer-events-none" aria-hidden="true" />
+      )}
+      {!role && (
+        <AetherFlowBackground
+          className="z-[1]"
+          density={isMobile ? 0.62 : 0.92}
+          interactive={!isMobile}
+        />
       )}
 
       {/* Role Selector */}
@@ -318,7 +321,7 @@ export default function App() {
           <div className="w-full flex flex-col items-center my-auto shrink-0">
             <div className="aether-brand text-center mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="aether-logo-shell flex justify-center mb-6 relative">
-                <div className="absolute inset-0 bg-cyber-electric/15 blur-3xl rounded-full" />
+                <div className="aether-logo-glow absolute inset-0 rounded-full" />
                 <Logo className="aether-logo w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 relative z-10" />
               </div>
               <h1 className="mb-4 drop-shadow-md px-4">

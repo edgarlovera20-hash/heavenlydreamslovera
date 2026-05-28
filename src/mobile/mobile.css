@@ -502,3 +502,323 @@
     font-size: 0.52rem;
   }
 }
+
+/* Mobile deep cleanup: compact layout, clean executive blue, neon-outline icons. */
+#mobile-root .hd-mobile-clean,
+#mobile-root .hd-mobile-clean .hd-neural-layout,
+#mobile-root .hd-mobile-login-screen,
+#mobile-root .hd-cyber-screen {
+  background:
+    radial-gradient(circle at 22% 8%, rgba(18, 223, 255, 0.11), transparent 15rem),
+    linear-gradient(180deg, #061b3a 0%, #071426 52%, #020817 100%) !important;
+}
+
+#mobile-root .hd-mobile-clean .hd-neural-grid {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+#mobile-root .hd-mobile-shell-clean {
+  max-width: 430px;
+  border-color: rgba(18, 223, 255, 0.18) !important;
+  background: transparent !important;
+  box-shadow: 0 0 36px rgba(0, 10, 32, 0.28) !important;
+}
+
+#mobile-root .hd-mobile-header-clean {
+  background:
+    linear-gradient(180deg, rgba(6, 27, 58, 0.96), rgba(6, 27, 58, 0.72) 70%, transparent) !important;
+  border-bottom: 1px solid rgba(18, 223, 255, 0.12);
+}
+
+#mobile-root .hd-mobile-content-clean {
+  padding-inline: 1rem !important;
+  padding-top: 0.75rem;
+}
+
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric, .hd-curp-helper, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-liquid-button) {
+  background:
+    linear-gradient(145deg, rgba(8, 42, 94, 0.94), rgba(6, 27, 58, 0.99)) !important;
+  border-color: rgba(18, 223, 255, 0.28) !important;
+  box-shadow:
+    0 16px 38px rgba(0, 6, 24, 0.42),
+    0 0 20px rgba(18, 223, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric, .hd-curp-helper, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-liquid-button)::before,
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric, .hd-curp-helper, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-liquid-button)::after {
+  content: none !important;
+  display: none !important;
+}
+
+#mobile-root .hd-mobile-bottom-nav {
+  height: 4.55rem !important;
+  border-radius: 1.35rem !important;
+  left: 0.65rem !important;
+  right: 0.65rem !important;
+  bottom: calc(env(safe-area-inset-bottom) + 0.55rem) !important;
+}
+
+#mobile-root .hd-mobile-bottom-nav button {
+  min-height: 3rem !important;
+  width: auto !important;
+  border-radius: 1rem !important;
+}
+
+#mobile-root .hd-mobile-bottom-nav .lucide,
+#mobile-root .hd-mobile-icon,
+#mobile-root .hd-neon-icon,
+#mobile-root .hd-neon-iconbox .lucide,
+#mobile-root .hd-liquid-button .lucide,
+#mobile-root .hd-cyber-panel .lucide,
+#mobile-root .glass-panel .lucide {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: currentColor;
+  stroke: currentColor;
+  opacity: 0.9;
+  filter:
+    drop-shadow(0 0 8px currentColor)
+    drop-shadow(0 0 18px rgba(18, 223, 255, 0.18)) !important;
+}
+
+#mobile-root .hd-neon-iconbox {
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+#mobile-root .hd-mobile-quick-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.8rem !important;
+}
+
+#mobile-root .hd-mobile-quick-action {
+  min-height: 5.2rem !important;
+  padding: 0.85rem 1rem !important;
+  border-radius: 1.35rem !important;
+}
+
+#mobile-root .hd-cyber-input,
+#mobile-root input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+#mobile-root select,
+#mobile-root textarea {
+  background: rgba(2, 14, 34, 0.92) !important;
+  border-color: rgba(18, 223, 255, 0.30) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+#mobile-root :is(.text-slate-300, .text-slate-400, .text-slate-500, .text-gray-400, .text-gray-500) {
+  color: #b9d5f2 !important;
+}
+
+@media (max-width: 390px) {
+  #mobile-root .hd-mobile-content-clean {
+    padding-inline: 0.8rem !important;
+  }
+
+  #mobile-root .hd-mobile-header-clean {
+    padding-inline: 0.85rem !important;
+  }
+}
+
+#mobile-root .hd-neural-grid,
+#mobile-root .hd-live-particles,
+#mobile-root .hd-neural-orbs,
+#mobile-root .aether-flow-lines,
+#mobile-root .aether-flow-canvas,
+#mobile-root .aether-flow-hologram,
+#mobile-root .aether-flow-gradient {
+  display: none !important;
+  opacity: 0 !important;
+  animation: none !important;
+  background: none !important;
+  filter: none !important;
+}
+
+/* Mobile final cleanup: clean executive blue, better spacing and one subtle network layer. */
+#mobile-root .hd-cyber-screen,
+#mobile-root .hd-mobile-login-screen,
+#mobile-root .hd-mobile-main,
+#mobile-root .hd-mobile-clean,
+#mobile-root .hd-neural-layout {
+  background:
+    radial-gradient(circle at 50% -8%, rgba(18, 223, 255, 0.12), transparent 16rem),
+    linear-gradient(180deg, #08264a 0%, #061b3a 48%, #020817 100%) !important;
+  overflow-x: hidden !important;
+}
+
+#mobile-root .hd-cyber-screen::before,
+#mobile-root .hd-mobile-login-screen::before,
+#mobile-root .hd-mobile-clean::before,
+#mobile-root .hd-neural-layout::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  inset: -8% !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  opacity: 0.13 !important;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.32) 0 1px, transparent 1.8px) 18px 20px / 82px 82px,
+    radial-gradient(circle, rgba(18, 223, 255, 0.28) 0 1.2px, transparent 2px) 48px 62px / 118px 118px,
+    linear-gradient(118deg, transparent 0 47.8%, rgba(255, 255, 255, 0.10) 48.2%, transparent 49% 100%),
+    linear-gradient(34deg, transparent 0 47.8%, rgba(18, 223, 255, 0.10) 48.2%, transparent 49% 100%);
+  background-size: 82px 82px, 118px 118px, 440px 440px, 520px 520px !important;
+  mask-image: radial-gradient(circle at center, #000 0%, #000 72%, transparent 100%);
+  animation: hd-mobile-network-drift 42s linear infinite !important;
+}
+
+#mobile-root .hd-cyber-screen::after,
+#mobile-root .hd-mobile-login-screen::after,
+#mobile-root form::before,
+#mobile-root form::after,
+#mobile-root label::before,
+#mobile-root label::after,
+#mobile-root button::before,
+#mobile-root button::after {
+  content: none !important;
+  display: none !important;
+}
+
+#mobile-root .hd-mobile-login-screen > *,
+#mobile-root .hd-mobile-main > *,
+#mobile-root .hd-mobile-clean > *,
+#mobile-root .hd-neural-content {
+  position: relative;
+  z-index: 2;
+}
+
+#mobile-root .hd-mobile-login-shell {
+  width: min(100%, 27rem) !important;
+  padding-top: clamp(0.5rem, 2.5dvh, 1.25rem) !important;
+}
+
+#mobile-root .hd-mobile-login-logo {
+  width: clamp(5.25rem, 18vw, 6.75rem) !important;
+  height: clamp(5.25rem, 18vw, 6.75rem) !important;
+  margin-inline: auto !important;
+  margin-bottom: 0.75rem !important;
+  filter: drop-shadow(0 0 18px rgba(18, 223, 255, 0.32)) !important;
+}
+
+#mobile-root .hd-mobile-login-brand {
+  margin-bottom: 1.15rem !important;
+}
+
+#mobile-root .hd-mobile-login-brand h1 {
+  font-size: clamp(1.55rem, 8vw, 2.05rem) !important;
+  line-height: 1.05 !important;
+  letter-spacing: 0.08em !important;
+}
+
+#mobile-root .hd-mobile-login-card {
+  padding: 1rem !important;
+  border-radius: 1.65rem !important;
+  background:
+    linear-gradient(145deg, rgba(8, 42, 94, 0.94), rgba(6, 27, 58, 0.98)) !important;
+  border-color: rgba(18, 223, 255, 0.30) !important;
+  box-shadow:
+    0 22px 48px rgba(0, 5, 20, 0.46),
+    0 0 24px rgba(18, 223, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  overflow: visible !important;
+}
+
+#mobile-root :where(.hd-cyber-panel, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric, .glass-panel, .glass-panel-neon, .hd-mobile-topbar, .hd-mobile-bottom-nav) {
+  background:
+    linear-gradient(145deg, rgba(8, 42, 94, 0.94), rgba(6, 27, 58, 0.98)) !important;
+  border: 1px solid rgba(18, 223, 255, 0.28) !important;
+  box-shadow:
+    0 16px 36px rgba(0, 5, 20, 0.42),
+    0 0 18px rgba(18, 223, 255, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: visible !important;
+}
+
+#mobile-root :where(.hd-cyber-panel, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric, .glass-panel, .glass-panel-neon, .hd-mobile-topbar, .hd-mobile-bottom-nav)::before,
+#mobile-root :where(.hd-cyber-panel, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric, .glass-panel, .glass-panel-neon, .hd-mobile-topbar, .hd-mobile-bottom-nav)::after {
+  content: none !important;
+  display: none !important;
+}
+
+#mobile-root .hd-mobile-content-clean,
+#mobile-root .hd-mobile-main {
+  padding-inline: clamp(0.9rem, 4vw, 1.15rem) !important;
+}
+
+#mobile-root .hd-mobile-quick-grid {
+  grid-template-columns: 1fr !important;
+  gap: 0.85rem !important;
+}
+
+#mobile-root .hd-mobile-quick-action,
+#mobile-root .hd-neon-card {
+  min-height: 5rem !important;
+  border-radius: 1.45rem !important;
+  padding: 0.95rem 1rem !important;
+}
+
+#mobile-root .hd-neon-iconbox,
+#mobile-root .hd-mobile-icon,
+#mobile-root .hd-neon-icon,
+#mobile-root svg.lucide {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  stroke: currentColor !important;
+  fill: none !important;
+  opacity: 0.92 !important;
+  filter:
+    drop-shadow(0 0 8px currentColor)
+    drop-shadow(0 0 20px rgba(18, 223, 255, 0.18)) !important;
+}
+
+#mobile-root .hd-neon-iconbox {
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+#mobile-root .hd-cyber-input,
+#mobile-root input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+#mobile-root select,
+#mobile-root textarea {
+  border-radius: 1.25rem !important;
+  background: rgba(2, 14, 34, 0.94) !important;
+  border-color: rgba(18, 223, 255, 0.34) !important;
+  color: white !important;
+  min-height: 3.35rem !important;
+}
+
+#mobile-root .hd-mobile-bottom-nav {
+  max-width: 27rem !important;
+  margin-inline: auto !important;
+}
+
+@keyframes hd-mobile-network-drift {
+  0% {
+    transform: translate3d(-1.5%, -1%, 0) scale(1.02);
+    background-position: 0 0, 48px 62px, 0 0, 0 0;
+  }
+  50% {
+    transform: translate3d(1.2%, 1%, 0) scale(1.03);
+    background-position: 42px 26px, 12px 108px, 210px 110px, -180px 130px;
+  }
+  100% {
+    transform: translate3d(-1%, 1.1%, 0) scale(1.02);
+    background-position: 82px 82px, 166px 180px, 420px 220px, -360px 260px;
+  }
+}

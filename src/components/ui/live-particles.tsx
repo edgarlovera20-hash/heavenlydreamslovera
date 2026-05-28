@@ -85,7 +85,7 @@ export default function LiveParticles({
   showShootingStars = true,
 }: LiveParticlesProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pointerRef = useRef({ x: -9999, y: -9999, active: false });
+  const pointerRef = useRef({ x: -9999, y: -9999, active: false, pressed: false, burst: 0 });
   const activityRef = useRef<NeuralActivity>(activity);
   const boostRef = useRef(0.4);
   const accentRef = useRef(activityColor[activity]);
@@ -175,8 +175,43 @@ export default function LiveParticles({
       pointerRef.current.active = true;
     };
 
+    const onPointerDown = (event: PointerEvent) => {
+      if (!interactive) return;
+      pointerRef.current.x = event.clientX;
+      pointerRef.current.y = event.clientY;
+      pointerRef.current.active = true;
+      pointerRef.current.pressed = true;
+      boostRef.current = Math.max(boostRef.current, 1.1);
+    };
+
+    const releaseConstellation = (event?: PointerEvent) => {
+      if (!interactive) return;
+      if (event) {
+        pointerRef.current.x = event.clientX;
+        pointerRef.current.y = event.clientY;
+      }
+      pointerRef.current.pressed = false;
+      pointerRef.current.burst = 1;
+      boostRef.current = Math.max(boostRef.current, 1.75);
+
+      const originX = pointerRef.current.x;
+      const originY = pointerRef.current.y;
+      for (const node of nodes) {
+        const dx = node.x - originX;
+        const dy = node.y - originY;
+        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+        const reach = mode === 'mobile' ? 260 : 360;
+        const strength = Math.max(0, 1 - distance / reach);
+        if (!strength) continue;
+        const blast = (mode === 'mobile' ? 2.2 : 3.2) * strength * node.layer;
+        node.vx += (dx / distance) * blast + (Math.random() - 0.5) * 0.45;
+        node.vy += (dy / distance) * blast + (Math.random() - 0.5) * 0.45;
+      }
+    };
+
     const onPointerLeave = () => {
       pointerRef.current.active = false;
+      pointerRef.current.pressed = false;
     };
 
     const onNeuralEvent = (event: Event) => {
@@ -301,11 +336,11 @@ export default function LiveParticles({
 
     const drawPointerPulse = (time: number) => {
       const pointer = pointerRef.current;
-      if (!pointer.active || mode === 'mobile') return;
-      const radius = 92 + Math.sin(time * 3) * 10;
+      if (!pointer.active) return;
+      const radius = (pointer.pressed ? 118 : 92) + Math.sin(time * 3) * 10;
       const pulse = ctx.createRadialGradient(pointer.x, pointer.y, 0, pointer.x, pointer.y, radius);
-      pulse.addColorStop(0, `rgba(${accentRef.current}, 0.22)`);
-      pulse.addColorStop(0.44, `rgba(${accentRef.current}, 0.08)`);
+      pulse.addColorStop(0, `rgba(${accentRef.current}, ${pointer.pressed ? 0.28 : 0.18})`);
+      pulse.addColorStop(0.44, `rgba(${accentRef.current}, ${pointer.pressed ? 0.12 : 0.06})`);
       pulse.addColorStop(1, `rgba(${accentRef.current}, 0)`);
       ctx.fillStyle = pulse;
       ctx.beginPath();
@@ -341,16 +376,22 @@ export default function LiveParticles({
           node.y += node.vy * (1 + boostRef.current * 0.14) + Math.cos(time * 0.3 + node.phase) * 0.026 * node.layer;
         }
 
-        if (pointer.active && mode !== 'mobile') {
+        if (pointer.active) {
           const dx = pointer.x - node.x;
           const dy = pointer.y - node.y;
           const distSq = dx * dx + dy * dy;
-          if (distSq < 210 * 210) {
+          const influence = pointer.pressed ? 280 : 210;
+          if (distSq < influence * influence) {
             const distance = Math.sqrt(distSq) || 1;
-            const pull = (1 - distance / 210) * 0.026 * node.layer;
+            const pull = (1 - distance / influence) * (pointer.pressed ? 0.046 : 0.026) * node.layer;
             node.x += dx * pull;
             node.y += dy * pull;
           }
+        }
+
+        if (pointer.burst > 0) {
+          node.vx *= 0.986;
+          node.vy *= 0.986;
         }
 
         wrap(node);
@@ -360,14 +401,18 @@ export default function LiveParticles({
       drawNodes(time);
       drawStars(delta);
       drawPointerPulse(time);
+      pointer.burst = Math.max(0, pointer.burst - delta * 1.8);
       ctx.globalCompositeOperation = 'source-over';
       frameId = requestAnimationFrame(animate);
     };
 
     resize();
     window.addEventListener('resize', resize);
-    if (interactive && mode !== 'mobile') {
+    if (interactive) {
       window.addEventListener('pointermove', onPointerMove, { passive: true });
+      window.addEventListener('pointerdown', onPointerDown, { passive: true });
+      window.addEventListener('pointerup', releaseConstellation, { passive: true });
+      window.addEventListener('pointercancel', releaseConstellation, { passive: true });
       window.addEventListener('pointerleave', onPointerLeave);
     }
     window.addEventListener('hd-neural-activity', onNeuralEvent as EventListener);
@@ -378,8 +423,11 @@ export default function LiveParticles({
     return () => {
       cancelAnimationFrame(frameId);
       window.removeEventListener('resize', resize);
-      if (interactive && mode !== 'mobile') {
+      if (interactive) {
         window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerdown', onPointerDown);
+        window.removeEventListener('pointerup', releaseConstellation);
+        window.removeEventListener('pointercancel', releaseConstellation);
         window.removeEventListener('pointerleave', onPointerLeave);
       }
       window.removeEventListener('hd-neural-activity', onNeuralEvent as EventListener);

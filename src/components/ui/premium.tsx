@@ -187,8 +187,8 @@ export function PremiumKpiCard({
           <p className="text-xs font-semibold text-slate-400">{title}</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{value}</p>
         </div>
-        <div className={cn('hd-premium-iconbox hd-floating-icon flex h-14 w-14 items-center justify-center rounded-2xl border', toneClass.soft, toneClass.border, toneClass.text)}>
-          <Icon className="h-8 w-8" />
+        <div className={cn('hd-floating-icon hd-neon-icon flex h-14 w-14 items-center justify-center', toneClass.text)}>
+          <Icon className="h-9 w-9" />
         </div>
       </div>
       {detail && <p className={cn('mt-4 text-xs font-semibold', toneClass.text)}>{detail}</p>}
