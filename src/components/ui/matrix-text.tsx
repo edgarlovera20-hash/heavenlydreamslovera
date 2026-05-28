@@ -104,12 +104,12 @@ export const MatrixText = ({
     const motionVariants = useMemo(
         () => ({
             matrix: {
-                color: "#22ff88",
-                textShadow: "0 0 10px rgba(34, 255, 136, 0.95), 0 0 22px rgba(34, 255, 136, 0.45)",
+                color: "#00FFD5",
+                textShadow: "0 0 12px rgba(0, 255, 213, 0.95), 0 0 28px rgba(0, 229, 255, 0.48)",
             },
             normal: {
                 color: "#ffffff",
-                textShadow: "0 0 18px rgba(255, 255, 255, 0.28)",
+                textShadow: "0 0 18px rgba(125, 249, 255, 0.28), 0 0 36px rgba(31, 81, 255, 0.2)",
             }
         }),
         []

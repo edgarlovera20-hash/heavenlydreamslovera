@@ -2001,3 +2001,419 @@ html.light {
   animation: none !important;
   filter: none !important;
 }
+
+.aether-flow-hero {
+  background: #151B54 !important;
+  color: #FFFFFF;
+  isolation: isolate;
+}
+
+.aether-flow-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 14% 18%, rgba(0, 229, 255, 0.24), transparent 32%),
+    radial-gradient(circle at 84% 24%, rgba(200, 0, 255, 0.2), transparent 36%),
+    radial-gradient(circle at 50% 82%, rgba(31, 81, 255, 0.34), transparent 44%),
+    linear-gradient(135deg, #1F51FF 0%, #0000FF 34%, #0041C2 66%, #151B54 100%);
+}
+
+.aether-flow-gradient,
+.aether-flow-canvas,
+.aether-flow-hologram,
+.aether-flow-vignette {
+  position: absolute;
+  inset: 0;
+}
+
+.aether-flow-gradient {
+  background:
+    radial-gradient(circle at 20% 16%, rgba(125, 249, 255, 0.18), transparent 30%),
+    radial-gradient(circle at 76% 32%, rgba(123, 97, 255, 0.22), transparent 34%),
+    radial-gradient(circle at 52% 58%, rgba(0, 255, 213, 0.11), transparent 38%),
+    linear-gradient(135deg, rgba(31, 81, 255, 0.88), rgba(0, 0, 255, 0.82) 34%, rgba(0, 65, 194, 0.72) 68%, rgba(21, 27, 84, 0.9));
+  background-size: 120% 120%, 140% 140%, 150% 150%, 180% 180%;
+  animation: aether-gradient-flow 18s ease-in-out infinite alternate;
+  filter: saturate(1.3) contrast(1.04);
+}
+
+.aether-flow-canvas {
+  width: 100%;
+  height: 100%;
+  opacity: 0.96;
+  mix-blend-mode: screen;
+}
+
+.aether-flow-hologram {
+  background:
+    linear-gradient(115deg, transparent 0%, rgba(125, 249, 255, 0.08) 18%, transparent 36%),
+    linear-gradient(70deg, transparent 0%, rgba(0, 229, 255, 0.08) 24%, transparent 44%),
+    radial-gradient(ellipse at 50% 58%, rgba(255, 255, 255, 0.12), transparent 34%);
+  opacity: 0.82;
+  filter: blur(0.4px);
+  transform: translate3d(0, 0, 0);
+  animation: aether-hologram-drift 10s linear infinite;
+}
+
+.aether-flow-vignette {
+  background:
+    linear-gradient(180deg, rgba(21, 27, 84, 0.08), rgba(2, 8, 31, 0.38) 100%),
+    radial-gradient(circle at 50% 42%, transparent 0%, transparent 36%, rgba(2, 8, 31, 0.38) 100%);
+}
+
+.aether-entry {
+  perspective: 1400px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 229, 255, 0.45) transparent;
+}
+
+.aether-brand {
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.aether-logo-shell {
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+  filter: drop-shadow(0 0 28px rgba(0, 229, 255, 0.4));
+}
+
+.aether-logo-shell::before,
+.aether-logo-shell::after {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.aether-logo-shell::before {
+  border: 1px solid rgba(125, 249, 255, 0.28);
+  box-shadow:
+    0 0 28px rgba(0, 229, 255, 0.42),
+    inset 0 0 24px rgba(125, 249, 255, 0.16);
+  animation: aether-orbit-pulse 3.8s ease-in-out infinite;
+}
+
+.aether-logo-shell::after {
+  inset: -20%;
+  background: conic-gradient(from 180deg, transparent, rgba(0, 229, 255, 0.32), transparent, rgba(123, 97, 255, 0.26), transparent);
+  filter: blur(18px);
+  opacity: 0.65;
+  animation: aether-slow-spin 12s linear infinite;
+}
+
+.aether-logo {
+  filter:
+    drop-shadow(0 0 18px rgba(125, 249, 255, 0.55))
+    drop-shadow(0 0 42px rgba(31, 81, 255, 0.46)) !important;
+  animation: aether-float 5.8s ease-in-out infinite;
+}
+
+.aether-title {
+  background: linear-gradient(90deg, #FFFFFF 0%, #7DF9FF 32%, #FFFFFF 52%, #00E5FF 76%, #FFFFFF 100%);
+  background-size: 240% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent !important;
+  text-shadow:
+    0 0 22px rgba(125, 249, 255, 0.38),
+    0 0 54px rgba(31, 81, 255, 0.34);
+  animation: aether-title-sheen 6s ease-in-out infinite;
+}
+
+.aether-subtitle {
+  color: #FFFFFF !important;
+  text-shadow:
+    0 0 16px rgba(255, 255, 255, 0.48),
+    0 0 32px rgba(0, 229, 255, 0.38);
+}
+
+.aether-role-grid {
+  transform-style: preserve-3d;
+}
+
+.aether-role-card {
+  --aether-rgb: 0, 229, 255;
+  --aether-rgb-2: 125, 249, 255;
+  --aether-accent: #00E5FF;
+  min-height: 13.5rem;
+  border-radius: 2rem !important;
+  border: 1px solid rgba(var(--aether-rgb), 0.42) !important;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(var(--aether-rgb-2), 0.16), transparent 36%),
+    radial-gradient(circle at 88% 76%, rgba(var(--aether-rgb), 0.12), transparent 42%),
+    linear-gradient(145deg, rgba(8, 42, 94, 0.72), rgba(3, 19, 38, 0.76) 48%, rgba(8, 42, 94, 0.68)) !important;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 255, 0.24),
+    0 0 26px rgba(var(--aether-rgb), 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(var(--aether-rgb), 0.16) !important;
+  backdrop-filter: blur(22px) saturate(1.35);
+  transform-style: preserve-3d;
+}
+
+.aether-role-card[data-tone="admin"] {
+  --aether-rgb: 0, 229, 255;
+  --aether-rgb-2: 125, 249, 255;
+  --aether-accent: #00E5FF;
+}
+
+.aether-role-card[data-tone="supervisor"] {
+  --aether-rgb: 123, 97, 255;
+  --aether-rgb-2: 200, 0, 255;
+  --aether-accent: #7B61FF;
+}
+
+.aether-role-card[data-tone="advisor"] {
+  --aether-rgb: 200, 0, 255;
+  --aether-rgb-2: 0, 255, 213;
+  --aether-accent: #C800FF;
+}
+
+.aether-role-card::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.14), transparent 24%, transparent 66%, rgba(var(--aether-rgb), 0.16)),
+    radial-gradient(circle at 50% 100%, rgba(var(--aether-rgb), 0.22), transparent 42%);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.aether-role-card::after {
+  content: "";
+  position: absolute;
+  inset: -42%;
+  z-index: 1;
+  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.2) 42%, rgba(var(--aether-rgb-2), 0.18) 50%, transparent 61%);
+  opacity: 0;
+  transform: translateX(-38%) rotate(8deg);
+  pointer-events: none;
+}
+
+.aether-role-card:hover,
+.aether-role-card:focus-visible {
+  transform: translateY(-9px) scale(1.025) rotateX(3deg);
+  border-color: rgba(var(--aether-rgb-2), 0.88) !important;
+  box-shadow:
+    0 30px 90px rgba(0, 0, 255, 0.32),
+    0 0 34px rgba(var(--aether-rgb), 0.56),
+    0 0 90px rgba(var(--aether-rgb-2), 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 0 28px rgba(var(--aether-rgb), 0.2) !important;
+}
+
+.aether-role-card:hover::after,
+.aether-role-card:focus-visible::after {
+  opacity: 1;
+  animation: aether-panel-sheen 1.2s ease-out;
+}
+
+.aether-role-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+.aether-role-icon {
+  width: 6rem;
+  height: 6rem;
+  display: grid;
+  place-items: center;
+  border-radius: 1.6rem;
+  background:
+    radial-gradient(circle at 34% 20%, rgba(255, 255, 255, 0.2), transparent 34%),
+    rgba(var(--aether-rgb), 0.1);
+  border: 1px solid rgba(var(--aether-rgb-2), 0.3);
+  box-shadow:
+    0 0 26px rgba(var(--aether-rgb), 0.32),
+    inset 0 0 22px rgba(var(--aether-rgb), 0.12);
+  animation: aether-icon-float 4.4s ease-in-out infinite;
+}
+
+.aether-role-icon svg {
+  stroke: var(--aether-accent) !important;
+  stroke-dasharray: 120;
+  filter:
+    drop-shadow(0 0 10px rgba(var(--aether-rgb), 0.88))
+    drop-shadow(0 0 26px rgba(var(--aether-rgb-2), 0.42)) !important;
+  animation: aether-icon-trace 3.4s ease-in-out infinite;
+}
+
+.aether-role-card:hover .aether-role-icon,
+.aether-role-card:focus-visible .aether-role-icon {
+  animation: aether-icon-float 2.8s ease-in-out infinite, aether-icon-pulse 1.2s ease-in-out infinite;
+}
+
+.aether-role-title {
+  text-shadow:
+    0 0 14px rgba(255, 255, 255, 0.28),
+    0 0 28px rgba(var(--aether-rgb), 0.32);
+}
+
+.aether-role-desc {
+  color: rgba(235, 248, 255, 0.82) !important;
+}
+
+.aether-register-button {
+  color: #151B54 !important;
+  border-color: rgba(255, 255, 255, 0.72) !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(125, 249, 255, 0.9) 42%, rgba(0, 255, 213, 0.82) 100%) !important;
+  box-shadow:
+    0 18px 48px rgba(0, 229, 255, 0.34),
+    0 0 28px rgba(255, 255, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.aether-register-button:hover,
+.aether-register-button:focus-visible {
+  color: #030B1F !important;
+  transform: translateY(-4px) scale(1.035);
+  box-shadow:
+    0 24px 60px rgba(0, 255, 213, 0.48),
+    0 0 42px rgba(125, 249, 255, 0.62),
+    inset 0 0 20px rgba(255, 255, 255, 0.45) !important;
+}
+
+.aether-flow-hero .hd-login-card,
+.aether-flow-hero .glass-panel-neon {
+  border-color: rgba(0, 229, 255, 0.4) !important;
+  background:
+    radial-gradient(circle at 24% 8%, rgba(125, 249, 255, 0.14), transparent 34%),
+    linear-gradient(145deg, rgba(8, 42, 94, 0.7), rgba(3, 19, 38, 0.84)) !important;
+  box-shadow:
+    0 28px 90px rgba(0, 0, 255, 0.28),
+    0 0 34px rgba(0, 229, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+}
+
+.aether-flow-hero :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  background: rgba(3, 19, 38, 0.66) !important;
+  border-color: rgba(0, 229, 255, 0.3) !important;
+  box-shadow:
+    inset 0 0 18px rgba(0, 229, 255, 0.08),
+    0 0 0 rgba(0, 229, 255, 0) !important;
+}
+
+.aether-flow-hero :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus {
+  border-color: rgba(125, 249, 255, 0.92) !important;
+  box-shadow:
+    0 0 0 3px rgba(0, 229, 255, 0.14),
+    0 0 28px rgba(0, 229, 255, 0.34),
+    inset 0 0 22px rgba(0, 229, 255, 0.1) !important;
+}
+
+@keyframes aether-gradient-flow {
+  0% { background-position: 0% 8%, 100% 24%, 48% 92%, 0% 0%; filter: saturate(1.18) brightness(1); }
+  50% { background-position: 42% 30%, 62% 54%, 56% 48%, 72% 44%; filter: saturate(1.42) brightness(1.08); }
+  100% { background-position: 100% 72%, 12% 38%, 52% 18%, 100% 100%; filter: saturate(1.28) brightness(1.02); }
+}
+
+@keyframes aether-hologram-drift {
+  0% { transform: translate3d(-8%, 2%, 0) scale(1.04); opacity: 0.56; }
+  50% { transform: translate3d(6%, -2%, 0) scale(1.08); opacity: 0.86; }
+  100% { transform: translate3d(14%, 2%, 0) scale(1.04); opacity: 0.62; }
+}
+
+@keyframes aether-float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -8px, 0) scale(1.025); }
+}
+
+@keyframes aether-orbit-pulse {
+  0%, 100% { transform: scale(0.98); opacity: 0.62; }
+  50% { transform: scale(1.06); opacity: 0.95; }
+}
+
+@keyframes aether-slow-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes aether-title-sheen {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes aether-panel-sheen {
+  0% { transform: translateX(-52%) rotate(8deg); }
+  100% { transform: translateX(52%) rotate(8deg); }
+}
+
+@keyframes aether-icon-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes aether-icon-pulse {
+  0%, 100% { box-shadow: 0 0 26px rgba(var(--aether-rgb), 0.32), inset 0 0 22px rgba(var(--aether-rgb), 0.12); }
+  50% { box-shadow: 0 0 38px rgba(var(--aether-rgb), 0.62), inset 0 0 28px rgba(var(--aether-rgb-2), 0.22); }
+}
+
+@keyframes aether-icon-trace {
+  0%, 100% { stroke-dashoffset: 0; opacity: 0.92; }
+  50% { stroke-dashoffset: 18; opacity: 1; }
+}
+
+@media (max-width: 767px) {
+  .aether-entry {
+    padding-top: 1.35rem !important;
+    padding-bottom: 1.75rem !important;
+  }
+
+  .aether-brand {
+    margin-bottom: 1.5rem !important;
+  }
+
+  .aether-logo {
+    width: 7.5rem !important;
+    height: 7.5rem !important;
+  }
+
+  .aether-title {
+    font-size: clamp(1.72rem, 8vw, 2.35rem) !important;
+    letter-spacing: 0.08em !important;
+    line-height: 1.04 !important;
+  }
+
+  .aether-subtitle {
+    font-size: 0.72rem !important;
+    letter-spacing: 0.09em !important;
+  }
+
+  .aether-role-grid {
+    gap: 1rem !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .aether-role-card {
+    min-height: 10.75rem;
+    border-radius: 1.7rem !important;
+    padding: 1.1rem !important;
+  }
+
+  .aether-role-icon {
+    width: 4.75rem;
+    height: 4.75rem;
+    border-radius: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aether-flow-gradient,
+  .aether-flow-hologram,
+  .aether-logo,
+  .aether-logo-shell::before,
+  .aether-logo-shell::after,
+  .aether-title,
+  .aether-role-icon,
+  .aether-role-icon svg {
+    animation: none !important;
+  }
+}

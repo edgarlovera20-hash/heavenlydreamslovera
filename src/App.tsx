@@ -297,7 +297,7 @@ export default function App() {
   const cancelLogin = () => { setPendingRole(null); setIsRegistering(false); setUsername(''); setPassword(''); setError(''); };
 
   return (
-    <div className="hd-screen flex flex-col h-[100dvh] overflow-hidden bg-cyber-black text-[var(--theme-text-main)] font-sans relative transition-colors duration-500">
+    <div className={`hd-screen flex flex-col h-[100dvh] overflow-hidden bg-cyber-black text-[var(--theme-text-main)] font-sans relative transition-colors duration-500 ${!role ? 'aether-flow-hero' : ''}`}>
       <LoadingOverlay visible={isLoading} text="Conectando..." />
 
       {/* Avatar widget */}
@@ -341,35 +341,35 @@ export default function App() {
       )}
 
       {!role && (
-        <div className="absolute inset-0 z-0 pointer-events-none opacity-45">
+        <div className="absolute inset-0 z-0 pointer-events-none">
           <ShaderBackground isLightMode={isLightMode} />
         </div>
       )}
 
       {/* Role Selector */}
       {role === null && pendingRole === null && !isRegistering && (
-        <div className="relative z-10 flex flex-col items-center h-full px-6 overflow-y-auto py-12">
+        <div className="aether-entry relative z-10 flex flex-col items-center h-full px-6 overflow-y-auto py-12">
           <div className="w-full flex flex-col items-center my-auto shrink-0">
-            <div className="text-center mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex justify-center mb-6 relative">
+            <div className="aether-brand text-center mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="aether-logo-shell flex justify-center mb-6 relative">
                 <div className="absolute inset-0 bg-cyber-electric/15 blur-3xl rounded-full" />
-                <Logo className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 relative z-10 drop-shadow-[0_0_26px_rgba(34,255,136,0.35)]" />
+                <Logo className="aether-logo w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 relative z-10" />
               </div>
               <h1 className="mb-4 drop-shadow-md px-4">
-                <MatrixText text="HEAVENLY DREAMS" className="text-2xl sm:text-3xl md:text-5xl font-black font-sans tracking-[0.1em] sm:tracking-[0.14em] flex-nowrap uppercase" />
+                <MatrixText text="HEAVENLY DREAMS" className="aether-title text-2xl sm:text-3xl md:text-5xl font-black font-sans tracking-[0.1em] sm:tracking-[0.14em] flex-nowrap uppercase" />
               </h1>
-              <p className="max-w-md mx-auto font-black tracking-[0.12em] text-xs sm:text-sm px-4 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.45)]">
+              <p className="aether-subtitle max-w-md mx-auto font-black tracking-[0.12em] text-xs sm:text-sm px-4 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.45)]">
                 TU DREAM TEAM COMIENZA AQUI
               </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-700 px-4 sm:px-0">
+            <div className="aether-role-grid grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-700 px-4 sm:px-0">
               <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} color="cyan" tone="admin" onClick={() => setPendingRole('GERENTE')} />
-              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} color="blue" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
-              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} color="purple" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
+              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} color="purple" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
+              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} color="pink" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
             </div>
             <div className="mt-8 sm:mt-12 animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
               <button onClick={() => setIsRegistering(true)}
-                className="hd-liquid-button px-7 sm:px-9 py-3 sm:py-3.5 rounded-xl border border-orange-300/45 bg-[#8a3f0f] text-orange-50 hover:bg-[#ff8a1f] hover:text-[#1f1004] hover:border-orange-100 transition-all font-black text-xs sm:text-sm flex items-center gap-3 shadow-[0_0_18px_rgba(249,115,22,0.24)] hover:shadow-[0_0_28px_rgba(255,138,31,0.72),0_0_54px_rgba(249,115,22,0.38)] backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-200/80">
+                className="aether-register-button hd-liquid-button px-7 sm:px-9 py-3 sm:py-3.5 rounded-xl border transition-all font-black text-xs sm:text-sm flex items-center gap-3 backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100/80">
                 <UserPlus className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" /> Iniciar Registro
               </button>
             </div>
@@ -583,14 +583,16 @@ const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, col
 
   return (
     <button onClick={onClick}
-      className={`hd-liquid-button group rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 relative overflow-hidden bg-[#061a38] ${toneStyle.card}`}>
+      data-tone={tone}
+      className={`aether-role-card hd-liquid-button group rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 relative overflow-hidden bg-[#061a38] ${toneStyle.card}`}
+      aria-label={`${title}: ${desc}`}>
       <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300 ${toneStyle.aura}`} />
-      <div className="mb-4 sm:mb-6">
+      <div className="aether-role-icon mb-4 sm:mb-6">
         <div className="sm:hidden"><CyberIcon icon={Icon} color={color} size="lg" glowOpacity={0.6} /></div>
         <div className="hidden sm:block"><CyberIcon icon={Icon} color={color} size="xl" glowOpacity={0.6} /></div>
       </div>
-      <h2 className={`relative z-10 text-lg sm:text-2xl font-black text-white mb-1 sm:mb-2 tracking-tight transition-colors ${toneStyle.title}`}>{title}</h2>
-      <p className={`relative z-10 text-xs sm:text-sm font-bold tracking-[0.06em] leading-tight ${toneStyle.desc}`}>{desc}</p>
+      <h2 className={`aether-role-title relative z-10 text-lg sm:text-2xl font-black text-white mb-1 sm:mb-2 tracking-tight transition-colors ${toneStyle.title}`}>{title}</h2>
+      <p className={`aether-role-desc relative z-10 text-xs sm:text-sm font-bold tracking-[0.06em] leading-tight ${toneStyle.desc}`}>{desc}</p>
     </button>
   );
 });
