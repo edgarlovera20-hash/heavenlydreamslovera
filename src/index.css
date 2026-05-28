@@ -1981,3 +1981,23 @@ html.light {
   50% { background-position: 0 0, 44px 0, 0 44px; opacity: 0.86; }
   100% { background-position: 0 0, 88px 0, 0 88px; opacity: 0.58; }
 }
+
+.hd-screen::before,
+.hd-cyber-screen::before,
+.data-grid-hero::before,
+.data-grid-hero .grid-container,
+.data-grid-hero .grid-container::before,
+.data-grid-hero .grid-container::after,
+.data-grid-hero .grid-cell,
+.hd-module-stage .grid-container,
+.hd-module-stage .grid-container::before,
+.hd-module-stage .grid-container::after,
+.hd-module-stage .grid-cell,
+.neural-command-hero::before {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  animation: none !important;
+  filter: none !important;
+}
