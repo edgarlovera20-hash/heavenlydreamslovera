@@ -1,5 +1,3 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { infraMode, checkInfraConnections } from './infra';
 import { getOllamaUrl } from './ai-config';
 
@@ -26,15 +24,13 @@ function gate(id: string, label: string, status: GateStatus, detail: string, fix
 }
 
 export function getReadinessGates(): ReadinessGate[] {
-  const localVisionFile = existsSync(join(process.cwd(), 'server', 'google-vision-credentials.json'));
   const jwtConfigured = hasEnv('JWT_SECRET') && process.env.JWT_SECRET !== 'dev-heavenly-dreams-change-me';
   const publicRegistrationOpenInProd = isProduction() && process.env.PUBLIC_REGISTRATION_ENABLED === 'true';
   const postgresConfigured = hasEnv('DATABASE_URL');
   const redisConfigured = hasEnv('REDIS_URL');
   const objectStorageConfigured = hasEnv('DOCUMENT_STORAGE_DIR') || (hasEnv('S3_BUCKET') && hasEnv('S3_ENDPOINT'));
   const ollamaUrl = getOllamaUrl();
-  const ocrConfigured = Boolean(ollamaUrl) || hasEnv('GEMINI_API_KEY');
-  const visionConfigured = hasEnv('GOOGLE_APPLICATION_CREDENTIALS_JSON') || hasEnv('GOOGLE_APPLICATION_CREDENTIALS');
+  const ocrConfigured = Boolean(ollamaUrl);
   const webauthnConfigured = hasEnv('WEBAUTHN_RP_ID') && hasEnv('WEBAUTHN_ORIGIN');
   const twilioConfigured = hasEnv('TWILIO_ACCOUNT_SID') && hasEnv('TWILIO_AUTH_TOKEN') && hasEnv('TWILIO_FROM_NUMBER');
   const googleOAuthConfigured = hasEnv('GOOGLE_OAUTH_CLIENT_ID') && hasEnv('GOOGLE_OAUTH_CLIENT_SECRET');
@@ -44,9 +40,9 @@ export function getReadinessGates(): ReadinessGate[] {
     gate(
       'secrets',
       'Secretos fuera del repo',
-      localVisionFile ? 'critical' : 'ok',
-      localVisionFile ? 'Hay credenciales Google Vision dentro de server/.' : 'No se detectó service account local trackeable.',
-      'Rota la llave filtrada y usa GOOGLE_APPLICATION_CREDENTIALS_JSON o GOOGLE_APPLICATION_CREDENTIALS.',
+      'ok',
+      'OCR documental opera con IA local; no requiere service account de Google Vision.',
+      'Mantén OAuth/Drive/Maps por variables de entorno cuando aplique.',
     ),
     gate(
       'jwt',
@@ -85,17 +81,10 @@ export function getReadinessGates(): ReadinessGate[] {
     ),
     gate(
       'ocr_providers',
-      'OCR multi IA',
+      'OCR local privado',
       ocrConfigured ? 'ok' : 'warning',
-      ocrConfigured ? `Ollama local primario: ${ollamaUrl}.` : 'Solo queda Tesseract/local como fallback.',
-      'Instala Ollama en el servidor o configura Gemini como respaldo.',
-    ),
-    gate(
-      'google_vision',
-      'Google Vision seguro',
-      visionConfigured ? 'ok' : 'warning',
-      visionConfigured ? 'Google Vision puede usar credenciales por entorno.' : 'Google Vision no está configurado.',
-      'Usa variable de entorno, no archivo dentro del repo.',
+      ocrConfigured ? `Ollama local primario: ${ollamaUrl}; Tesseract queda como fallback local.` : 'Tesseract local queda disponible, pero falta URL de Ollama.',
+      'Instala Ollama en el servidor y conserva OCR_PRIMARY=ollama.',
     ),
     gate(
       'webauthn',

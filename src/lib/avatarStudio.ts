@@ -1,3 +1,16 @@
+import {
+  DEFAULT_AVATAR_IDENTITY,
+  normalizeAvatarIdentity,
+  randomAvatarIdentity,
+  type AvatarAnimationStyle,
+  type AvatarBackgroundStyle,
+  type AvatarBorderStyle,
+  type AvatarNeonColor,
+  type AvatarRarity,
+  type AvatarRealtimeStatus,
+} from '../features/avatar/avatar-presets';
+import { generateAvatarPrompt } from '../services/avatarPromptEngine';
+
 export type AvatarStudioConfig = {
   seed: string;
   concept: string;
@@ -10,6 +23,14 @@ export type AvatarStudioConfig = {
   background: string;
   phrase: string;
   details: string;
+  borderStyle: AvatarBorderStyle;
+  neonColor: AvatarNeonColor;
+  backgroundStyle: AvatarBackgroundStyle;
+  frameAnimation: AvatarAnimationStyle;
+  glowIntensity: number;
+  rarity: AvatarRarity;
+  statusEffect: AvatarRealtimeStatus;
+  aiGenerated: boolean;
 };
 
 export type AvatarOption = {
@@ -42,6 +63,9 @@ export const AVATAR_STYLES: AvatarOption[] = [
   { value: 'comic', label: 'Comic neon' },
   { value: 'kawaii', label: 'Kawaii' },
   { value: '3d', label: '3D glass' },
+  { value: 'pixar_cyber', label: 'Pixar cyber' },
+  { value: 'toy_premium', label: 'Toy premium' },
+  { value: 'gaming_aaa', label: 'Gaming AAA' },
   { value: 'pixel', label: 'Pixel art' },
   { value: 'executive', label: 'Ejecutivo IA' },
 ];
@@ -68,6 +92,8 @@ export const AVATAR_OUTFITS: AvatarOption[] = [
   { value: 'gala', label: 'Atuendo de gala' },
   { value: 'kimono', label: 'Kimono moderno' },
   { value: 'chef', label: 'Chef creativo' },
+  { value: 'royal_cape', label: 'Capa premium' },
+  { value: 'sales_vest', label: 'Chaleco vendedor' },
 ];
 
 export const AVATAR_ACCESSORIES: AvatarOption[] = [
@@ -80,6 +106,8 @@ export const AVATAR_ACCESSORIES: AvatarOption[] = [
   { value: 'wings', label: 'Alas de energia' },
   { value: 'badge', label: 'Insignia HD' },
   { value: 'mask', label: 'Visor tactico' },
+  { value: 'tablet', label: 'Tablet de ventas' },
+  { value: 'gem', label: 'Gema de rareza' },
 ];
 
 export const AVATAR_BACKGROUNDS: AvatarOption[] = [
@@ -114,6 +142,14 @@ const DEFAULT_CONFIG: AvatarStudioConfig = {
   background: 'neural',
   phrase: '',
   details: '',
+  borderStyle: DEFAULT_AVATAR_IDENTITY.borderStyle,
+  neonColor: DEFAULT_AVATAR_IDENTITY.neonColor,
+  backgroundStyle: DEFAULT_AVATAR_IDENTITY.backgroundStyle,
+  frameAnimation: DEFAULT_AVATAR_IDENTITY.animationStyle,
+  glowIntensity: DEFAULT_AVATAR_IDENTITY.glowIntensity,
+  rarity: DEFAULT_AVATAR_IDENTITY.rarity,
+  statusEffect: DEFAULT_AVATAR_IDENTITY.statusEffect,
+  aiGenerated: DEFAULT_AVATAR_IDENTITY.aiGenerated,
 };
 
 function optionLabel(options: AvatarOption[], value: string) {
@@ -176,12 +212,31 @@ export function defaultAvatarConfig(name = 'Usuario', role = 'ASESOR', phrase = 
 
 export function normalizeAvatarConfig(value: Partial<AvatarStudioConfig> | null | undefined, name = 'Usuario', role = 'ASESOR', phrase = ''): AvatarStudioConfig {
   const base = defaultAvatarConfig(name, role, phrase);
+  const identity = normalizeAvatarIdentity({
+    borderStyle: value?.borderStyle || base.borderStyle,
+    neonColor: value?.neonColor || base.neonColor,
+    backgroundStyle: value?.backgroundStyle || base.backgroundStyle,
+    animationStyle: value?.frameAnimation || base.frameAnimation,
+    glowIntensity: value?.glowIntensity || base.glowIntensity,
+    rarity: value?.rarity || base.rarity,
+    statusEffect: value?.statusEffect || base.statusEffect,
+    aiGenerated: value?.aiGenerated ?? base.aiGenerated,
+    phrase: value?.phrase || phrase,
+  });
   return {
     ...base,
     ...(value || {}),
     seed: String(value?.seed || base.seed),
     phrase: String(value?.phrase || phrase || '').slice(0, 44),
     details: String(value?.details || '').slice(0, 240),
+    borderStyle: identity.borderStyle,
+    neonColor: identity.neonColor,
+    backgroundStyle: identity.backgroundStyle,
+    frameAnimation: identity.animationStyle,
+    glowIntensity: identity.glowIntensity,
+    rarity: identity.rarity,
+    statusEffect: identity.statusEffect,
+    aiGenerated: identity.aiGenerated,
   };
 }
 
@@ -207,6 +262,7 @@ export function saveAvatarConfig(uid: string | undefined, config: AvatarStudioCo
 
 export function randomAvatarConfig(name = 'Usuario', role = 'ASESOR', phrase = ''): AvatarStudioConfig {
   const seed = hashString(`${name}-${role}-${phrase}-${Date.now()}-${Math.random()}`);
+  const identity = randomAvatarIdentity(seed);
   return {
     seed: `hd-${seed.toString(36)}`,
     concept: pick(AVATAR_CONCEPTS, seed, 1).value,
@@ -219,6 +275,14 @@ export function randomAvatarConfig(name = 'Usuario', role = 'ASESOR', phrase = '
     background: pick(AVATAR_BACKGROUNDS, seed, 8).value,
     phrase: phrase.slice(0, 44),
     details: '',
+    borderStyle: identity.borderStyle,
+    neonColor: identity.neonColor,
+    backgroundStyle: identity.backgroundStyle,
+    frameAnimation: identity.animationStyle,
+    glowIntensity: identity.glowIntensity,
+    rarity: identity.rarity,
+    statusEffect: identity.statusEffect,
+    aiGenerated: identity.aiGenerated,
   };
 }
 
@@ -231,18 +295,24 @@ export function buildAvatarPrompt(config: AvatarStudioConfig, name = 'Usuario', 
   const accessory = optionLabel(AVATAR_ACCESSORIES, config.accessory);
   const background = optionLabel(AVATAR_BACKGROUNDS, config.background);
   const palette = paletteFor(config.palette).label;
-  const phrase = config.phrase ? `Frase visible: "${config.phrase}".` : 'Sin texto visible.';
-  const details = config.details ? `Detalles extra: ${config.details}.` : '';
+  const identity = `borde ${config.borderStyle}, glow ${config.neonColor}, fondo ${config.backgroundStyle}, animacion ${config.frameAnimation}, rareza ${config.rarity}`;
 
-  return [
-    `Crea un avatar de perfil premium para ${name}, rol ${role}.`,
-    `Concepto: ${concept}, silueta ${silhouette}, estilo ${style}, actitud ${mood}.`,
-    `Atuendo: ${outfit}. Accesorio principal: ${accessory}.`,
-    `Fondo: ${background}. Paleta: ${palette}.`,
-    phrase,
-    details,
-    'Debe verse como icono de plataforma SaaS futurista, legible en tamano pequeno, fondo limpio, luz neon suave, sin texto pequeno ilegible, composicion centrada, calidad alta.',
-  ].filter(Boolean).join(' ');
+  return generateAvatarPrompt({
+    name,
+    role,
+    concept,
+    silhouette,
+    style,
+    mood,
+    outfit,
+    accessory,
+    background,
+    palette,
+    rarity: config.rarity,
+    identity,
+    phrase: config.phrase,
+    details: config.details,
+  });
 }
 
 export function generateAvatarDataUrl(config: AvatarStudioConfig, name = 'Usuario', role = 'ASESOR') {
@@ -318,6 +388,8 @@ export function generateAvatarDataUrl(config: AvatarStudioConfig, name = 'Usuari
     wings: `<path d="M160 302 C82 286 72 218 148 184 C126 240 160 270 220 292 Z" fill="${accent}" opacity=".32"/><path d="M352 302 C430 286 440 218 364 184 C386 240 352 270 292 292 Z" fill="${accent}" opacity=".32"/>`,
     badge: `<path d="M318 338 L352 352 L348 392 L318 414 L288 392 L284 352 Z" fill="${accent}" opacity=".85"/><text x="318" y="385" fill="${dark}" font-size="24" font-family="Arial" font-weight="900" text-anchor="middle">HD</text>`,
     mask: `<path d="M184 204 H328 C322 252 292 276 256 276 C220 276 190 252 184 204 Z" fill="${dark}" opacity=".82"/><path d="M206 226 H238M274 226 H306" stroke="${accent}" stroke-width="8" stroke-linecap="round"/>`,
+    tablet: `<rect x="314" y="322" width="72" height="92" rx="16" fill="${dark}" stroke="${accent}" stroke-width="6"/><path d="M334 350 H366M334 374 H366M334 398 H358" stroke="${light}" stroke-width="5" stroke-linecap="round" opacity=".72"/>`,
+    gem: `<path d="M256 88 L300 126 L282 178 H230 L212 126 Z" fill="${accent}" stroke="${light}" stroke-width="5" opacity=".9"/>`,
     none: '',
   }[normalized.accessory] || '';
 

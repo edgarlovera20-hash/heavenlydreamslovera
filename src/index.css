@@ -971,12 +971,10 @@ html.light {
   }
 
   :where(.hd-screen, .hd-cyber-screen, .hd-module-stage) :is(
-    form,
     article[class*="rounded"][class*="border"],
     section[class*="rounded"][class*="border"],
     div[class*="rounded-2xl"][class*="border"],
-    div[class*="rounded-3xl"][class*="border"],
-    label[class*="rounded"][class*="border"]
+    div[class*="rounded-3xl"][class*="border"]
   ),
   :where(.hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-liquid-button, .hd-neon-action) {
     box-shadow:
@@ -986,20 +984,16 @@ html.light {
   }
 
   :where(.hd-screen, .hd-cyber-screen, .hd-module-stage) :is(
-    form,
     article[class*="rounded"][class*="border"],
     section[class*="rounded"][class*="border"],
     div[class*="rounded-2xl"][class*="border"],
-    div[class*="rounded-3xl"][class*="border"],
-    label[class*="rounded"][class*="border"]
+    div[class*="rounded-3xl"][class*="border"]
   ):hover,
   :where(.hd-screen, .hd-cyber-screen, .hd-module-stage) :is(
-    form,
     article[class*="rounded"][class*="border"],
     section[class*="rounded"][class*="border"],
     div[class*="rounded-2xl"][class*="border"],
-    div[class*="rounded-3xl"][class*="border"],
-    label[class*="rounded"][class*="border"]
+    div[class*="rounded-3xl"][class*="border"]
   ):focus-within,
   :where(.hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-liquid-button, .hd-neon-action):hover,
   :where(.hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-liquid-button, .hd-neon-action):focus-within {
@@ -1010,12 +1004,10 @@ html.light {
   }
 
   :where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-mobile-topbar, .hd-mobile-bottom-nav) :is(
-    form,
     article[class*="rounded"][class*="border"],
     section[class*="rounded"][class*="border"],
     div[class*="rounded-2xl"][class*="border"],
     div[class*="rounded-3xl"][class*="border"],
-    label[class*="rounded"][class*="border"],
     button
   )::after,
   :where(.hd-mobile-topbar, .hd-mobile-bottom-nav)::after {
@@ -2002,6 +1994,260 @@ html.light {
   filter: none !important;
 }
 
+.hd-neural-layout {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 100%;
+  color: #f8fbff;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(0, 209, 255, 0.2), transparent 30%),
+    radial-gradient(circle at 86% 24%, rgba(123, 97, 255, 0.17), transparent 34%),
+    radial-gradient(circle at 18% 78%, rgba(0, 123, 255, 0.18), transparent 38%),
+    radial-gradient(circle at center, #0A1F44 0%, #020617 42%, #000000 100%);
+}
+
+.hd-neural-layout--hero,
+.hd-neural-hero-bg {
+  background:
+    radial-gradient(circle at 20% 12%, rgba(0, 209, 255, 0.22), transparent 31%),
+    radial-gradient(circle at 80% 24%, rgba(125, 249, 255, 0.18), transparent 32%),
+    radial-gradient(circle at 48% 88%, rgba(123, 97, 255, 0.2), transparent 42%),
+    radial-gradient(circle at center, #0A1F44 0%, #020617 42%, #000000 100%) !important;
+}
+
+.hd-neural-gradient,
+.hd-neural-grid,
+.hd-live-particles,
+.hd-neural-orbs {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hd-neural-gradient {
+  z-index: 0;
+  background:
+    radial-gradient(circle at 16% 22%, rgba(0, 209, 255, 0.2), transparent 26%),
+    radial-gradient(circle at 78% 18%, rgba(0, 123, 255, 0.22), transparent 31%),
+    radial-gradient(circle at 58% 76%, rgba(125, 249, 255, 0.09), transparent 34%),
+    linear-gradient(135deg, rgba(0, 29, 61, 0.34), rgba(2, 6, 23, 0.78));
+  background-size: 140% 140%, 160% 160%, 170% 170%, 220% 220%;
+  animation: hd-neural-gradient-flow 18s ease-in-out infinite alternate;
+  transform: translateZ(0);
+}
+
+.hd-neural-grid {
+  z-index: 1;
+  inset: -12%;
+  opacity: 0.18;
+  background:
+    linear-gradient(112deg, transparent 0 46%, rgba(0, 209, 255, 0.16) 47%, transparent 48% 100%),
+    linear-gradient(32deg, transparent 0 47%, rgba(125, 249, 255, 0.11) 48%, transparent 49% 100%),
+    repeating-linear-gradient(90deg, transparent 0 92px, rgba(0, 209, 255, 0.06) 94px, transparent 96px),
+    repeating-linear-gradient(0deg, transparent 0 92px, rgba(0, 123, 255, 0.05) 94px, transparent 96px);
+  mask-image: radial-gradient(circle at center, #000 0%, #000 62%, transparent 100%);
+  animation: hd-neural-grid-drift 22s linear infinite;
+  will-change: transform;
+}
+
+.hd-neural-grid--hero {
+  opacity: 0.22;
+}
+
+.hd-neural-grid--mobile {
+  opacity: 0.12;
+}
+
+.hd-live-particles {
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  opacity: 0.9;
+  mix-blend-mode: screen;
+  transform: translateZ(0);
+}
+
+.hd-neural-orbs {
+  z-index: 3;
+  opacity: 0.78;
+  background:
+    radial-gradient(circle at 28% 32%, rgba(0, 209, 255, 0.14), transparent 18rem),
+    radial-gradient(circle at 80% 64%, rgba(123, 97, 255, 0.13), transparent 22rem),
+    radial-gradient(circle at 44% 92%, rgba(0, 255, 213, 0.08), transparent 20rem);
+  filter: blur(9px) saturate(1.25);
+  animation: hd-neural-orb-drift 20s ease-in-out infinite alternate;
+}
+
+.hd-neural-content {
+  position: relative;
+  z-index: 4;
+  min-height: 0;
+}
+
+.hd-neural-layout--mobile .hd-neural-gradient {
+  background:
+    radial-gradient(circle at 16% 8%, rgba(0, 209, 255, 0.24), transparent 30%),
+    radial-gradient(circle at 88% 70%, rgba(0, 123, 255, 0.2), transparent 38%),
+    linear-gradient(145deg, #031326 0%, #071D3B 48%, #020617 100%);
+}
+
+.hd-holographic-sidebar {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0, 209, 255, 0.14), transparent 38%),
+    linear-gradient(180deg, rgba(3, 19, 38, 0.94), rgba(2, 8, 23, 0.96)) !important;
+  box-shadow:
+    18px 0 44px rgba(0, 0, 0, 0.28),
+    inset -1px 0 0 rgba(0, 209, 255, 0.18);
+}
+
+.hd-holographic-sidebar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.08), transparent 24%, transparent 76%, rgba(0, 209, 255, 0.08)),
+    radial-gradient(circle at 20% 10%, rgba(125, 249, 255, 0.12), transparent 30%);
+  opacity: 0.8;
+}
+
+.hd-glass-card,
+.hd-floating-panels > * {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.65rem;
+  border: 1px solid rgba(0, 209, 255, 0.28);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(125, 249, 255, 0.13), transparent 34%),
+    linear-gradient(135deg, rgba(8, 42, 94, 0.78), rgba(3, 19, 38, 0.78));
+  box-shadow:
+    0 24px 70px rgba(0, 8, 36, 0.36),
+    0 0 28px rgba(0, 209, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(14px) saturate(1.14);
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms ease,
+    box-shadow 240ms ease,
+    filter 240ms ease;
+}
+
+.hd-glass-card::before,
+.hd-floating-panels > *::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.13), transparent 32%, rgba(0, 209, 255, 0.12));
+  opacity: 0.72;
+}
+
+.hd-glass-card--interactive:hover,
+.hd-glass-card--interactive:focus-within,
+.hd-floating-panels > *:hover,
+.hd-floating-panels > *:focus-within {
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(125, 249, 255, 0.78);
+  box-shadow:
+    0 30px 84px rgba(0, 8, 36, 0.52),
+    0 0 34px rgba(0, 209, 255, 0.34),
+    0 0 80px rgba(0, 123, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.hd-glow-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  border-radius: 1rem;
+  padding: 0.75rem 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms ease,
+    background 180ms ease,
+    color 180ms ease;
+}
+
+.hd-glow-button--solid {
+  color: #031326;
+  border: 1px solid rgba(125, 249, 255, 0.58);
+  background: linear-gradient(135deg, #7DF9FF, #00FFD5);
+  box-shadow: 0 18px 40px rgba(0, 209, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.hd-glow-button--outline,
+.hd-glow-button--ghost {
+  color: #e8fbff;
+  border: 1px solid rgba(0, 209, 255, 0.38);
+  background: rgba(8, 42, 94, 0.46);
+  box-shadow: inset 0 0 18px rgba(0, 209, 255, 0.08);
+}
+
+.hd-glow-button:hover,
+.hd-glow-button:focus-visible {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow:
+    0 22px 54px rgba(0, 209, 255, 0.36),
+    0 0 34px rgba(125, 249, 255, 0.36),
+    inset 0 0 18px rgba(255, 255, 255, 0.2);
+}
+
+@keyframes hd-neural-gradient-flow {
+  0% { background-position: 0% 12%, 100% 0%, 50% 100%, 0% 0%; }
+  50% { background-position: 42% 30%, 62% 36%, 58% 54%, 72% 44%; }
+  100% { background-position: 100% 76%, 8% 44%, 48% 18%, 100% 100%; }
+}
+
+@keyframes hd-neural-grid-drift {
+  0% { transform: translate3d(-2%, -1%, 0) scale(1.04); }
+  50% { transform: translate3d(2.5%, 1.8%, 0) scale(1.08); }
+  100% { transform: translate3d(-1%, 3%, 0) scale(1.04); }
+}
+
+@keyframes hd-neural-orb-drift {
+  0% { transform: translate3d(-2%, -1%, 0) scale(1); }
+  50% { transform: translate3d(2%, 1.4%, 0) scale(1.08); }
+  100% { transform: translate3d(-1%, 2.4%, 0) scale(1.03); }
+}
+
+@media (max-width: 767px) {
+  .hd-neural-layout {
+    background: linear-gradient(145deg, #031326 0%, #071D3B 54%, #020617 100%);
+  }
+
+  .hd-live-particles {
+    opacity: 0.66;
+  }
+
+  .hd-neural-orbs {
+    opacity: 0.48;
+    filter: blur(7px) saturate(1.1);
+  }
+
+  .hd-glass-card,
+  .hd-floating-panels > * {
+    border-radius: 1.4rem;
+    backdrop-filter: blur(8px) saturate(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hd-neural-gradient,
+  .hd-neural-grid,
+  .hd-neural-orbs {
+    animation: none !important;
+  }
+}
+
 .aether-flow-hero {
   background: #151B54 !important;
   color: #FFFFFF;
@@ -2012,6 +2258,7 @@ html.light {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  contain: paint;
   background:
     radial-gradient(circle at 14% 18%, rgba(0, 229, 255, 0.24), transparent 32%),
     radial-gradient(circle at 84% 24%, rgba(200, 0, 255, 0.2), transparent 36%),
@@ -2035,14 +2282,15 @@ html.light {
     linear-gradient(135deg, rgba(31, 81, 255, 0.88), rgba(0, 0, 255, 0.82) 34%, rgba(0, 65, 194, 0.72) 68%, rgba(21, 27, 84, 0.9));
   background-size: 120% 120%, 140% 140%, 150% 150%, 180% 180%;
   animation: aether-gradient-flow 18s ease-in-out infinite alternate;
-  filter: saturate(1.3) contrast(1.04);
+  transform: translateZ(0);
 }
 
 .aether-flow-canvas {
   width: 100%;
   height: 100%;
-  opacity: 0.96;
+  opacity: 0.88;
   mix-blend-mode: screen;
+  transform: translateZ(0);
 }
 
 .aether-flow-hologram {
@@ -2051,9 +2299,9 @@ html.light {
     linear-gradient(70deg, transparent 0%, rgba(0, 229, 255, 0.08) 24%, transparent 44%),
     radial-gradient(ellipse at 50% 58%, rgba(255, 255, 255, 0.12), transparent 34%);
   opacity: 0.82;
-  filter: blur(0.4px);
   transform: translate3d(0, 0, 0);
   animation: aether-hologram-drift 10s linear infinite;
+  will-change: transform, opacity;
 }
 
 .aether-flow-vignette {
@@ -2077,7 +2325,7 @@ html.light {
   width: fit-content;
   margin-left: auto;
   margin-right: auto;
-  filter: drop-shadow(0 0 28px rgba(0, 229, 255, 0.4));
+  filter: drop-shadow(0 0 18px rgba(0, 229, 255, 0.28));
 }
 
 .aether-logo-shell::before,
@@ -2099,10 +2347,8 @@ html.light {
 
 .aether-logo-shell::after {
   inset: -20%;
-  background: conic-gradient(from 180deg, transparent, rgba(0, 229, 255, 0.32), transparent, rgba(123, 97, 255, 0.26), transparent);
-  filter: blur(18px);
-  opacity: 0.65;
-  animation: aether-slow-spin 12s linear infinite;
+  background: radial-gradient(circle, rgba(0, 229, 255, 0.2), rgba(123, 97, 255, 0.12) 42%, transparent 72%);
+  opacity: 0.72;
 }
 
 .aether-logo {
@@ -2151,7 +2397,9 @@ html.light {
     0 0 26px rgba(var(--aether-rgb), 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     inset 0 -1px 0 rgba(var(--aether-rgb), 0.16) !important;
-  backdrop-filter: blur(22px) saturate(1.35);
+  backdrop-filter: blur(8px) saturate(1.12);
+  contain: layout paint;
+  will-change: transform;
   transform-style: preserve-3d;
 }
 
@@ -2233,7 +2481,7 @@ html.light {
   box-shadow:
     0 0 26px rgba(var(--aether-rgb), 0.32),
     inset 0 0 22px rgba(var(--aether-rgb), 0.12);
-  animation: aether-icon-float 4.4s ease-in-out infinite;
+  animation: aether-icon-float 5.6s ease-in-out infinite;
 }
 
 .aether-role-icon svg {
@@ -2242,12 +2490,16 @@ html.light {
   filter:
     drop-shadow(0 0 10px rgba(var(--aether-rgb), 0.88))
     drop-shadow(0 0 26px rgba(var(--aether-rgb-2), 0.42)) !important;
-  animation: aether-icon-trace 3.4s ease-in-out infinite;
 }
 
 .aether-role-card:hover .aether-role-icon,
 .aether-role-card:focus-visible .aether-role-icon {
   animation: aether-icon-float 2.8s ease-in-out infinite, aether-icon-pulse 1.2s ease-in-out infinite;
+}
+
+.aether-role-card:hover .aether-role-icon svg,
+.aether-role-card:focus-visible .aether-role-icon svg {
+  animation: aether-icon-trace 1.6s ease-in-out infinite;
 }
 
 .aether-role-title {
@@ -2310,9 +2562,9 @@ html.light {
 }
 
 @keyframes aether-gradient-flow {
-  0% { background-position: 0% 8%, 100% 24%, 48% 92%, 0% 0%; filter: saturate(1.18) brightness(1); }
-  50% { background-position: 42% 30%, 62% 54%, 56% 48%, 72% 44%; filter: saturate(1.42) brightness(1.08); }
-  100% { background-position: 100% 72%, 12% 38%, 52% 18%, 100% 100%; filter: saturate(1.28) brightness(1.02); }
+  0% { background-position: 0% 8%, 100% 24%, 48% 92%, 0% 0%; }
+  50% { background-position: 42% 30%, 62% 54%, 56% 48%, 72% 44%; }
+  100% { background-position: 100% 72%, 12% 38%, 52% 18%, 100% 100%; }
 }
 
 @keyframes aether-hologram-drift {
@@ -2358,6 +2610,790 @@ html.light {
 @keyframes aether-icon-trace {
   0%, 100% { stroke-dashoffset: 0; opacity: 0.92; }
   50% { stroke-dashoffset: 18; opacity: 1; }
+}
+
+/* Neural Identity System */
+.hd-avatar-lab {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(0, 229, 255, 0.18), transparent 34%),
+    radial-gradient(circle at 85% 8%, rgba(123, 97, 255, 0.15), transparent 32%),
+    linear-gradient(145deg, rgba(6, 27, 58, 0.94), rgba(2, 10, 31, 0.96) 62%, rgba(3, 11, 22, 0.98));
+}
+
+.hd-avatar-lab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(125, 249, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 249, 255, 0.045) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(circle at 50% 12%, black, transparent 74%);
+  opacity: 0.55;
+}
+
+.hd-avatar-viewport {
+  position: relative;
+  overflow: hidden;
+  border-radius: 34px;
+  border: 1px solid rgba(125, 249, 255, 0.18);
+  background:
+    radial-gradient(circle at 50% 12%, rgba(0, 229, 255, 0.20), transparent 42%),
+    radial-gradient(circle at 72% 88%, rgba(168, 85, 247, 0.16), transparent 38%),
+    linear-gradient(180deg, rgba(8, 42, 94, 0.88), rgba(2, 10, 31, 0.92));
+  padding: 1.15rem;
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.34),
+    0 0 48px rgba(0, 229, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.hd-avatar-viewport::before,
+.hd-avatar-viewport::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: 999px;
+}
+
+.hd-avatar-viewport::before {
+  inset: 10% 18%;
+  border: 1px solid rgba(125, 249, 255, 0.16);
+  transform: rotate(-12deg);
+}
+
+.hd-avatar-viewport::after {
+  left: 12%;
+  right: 12%;
+  bottom: -12%;
+  height: 34%;
+  background: radial-gradient(circle, rgba(0, 229, 255, 0.18), transparent 62%);
+  filter: blur(22px);
+}
+
+.hd-avatar-viewport-ring {
+  position: absolute;
+  inset: 18px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+}
+
+.hd-moving-border {
+  --avatar-primary: #00C2FF;
+  --avatar-secondary: #1F51FF;
+  --avatar-soft: rgba(0, 194, 255, 0.18);
+  --avatar-status: #34D399;
+  --avatar-rarity: #38BDF8;
+  --avatar-glow: 20px;
+  --avatar-glow-strong: 46px;
+  --avatar-alpha: 0.46;
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  isolation: isolate;
+  transform: translateZ(0);
+  transition:
+    transform 250ms ease,
+    filter 250ms ease,
+    box-shadow 250ms ease;
+  filter: drop-shadow(0 0 var(--avatar-glow) color-mix(in srgb, var(--avatar-primary) 42%, transparent));
+}
+
+.hd-moving-border::before,
+.hd-moving-border::after {
+  content: "";
+  position: absolute;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.hd-moving-border::before {
+  inset: -4px;
+  z-index: 0;
+  background:
+    conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      var(--avatar-primary) 72deg,
+      var(--avatar-rarity) 138deg,
+      var(--avatar-secondary) 210deg,
+      transparent 300deg,
+      var(--avatar-primary) 360deg
+    );
+  opacity: var(--avatar-alpha);
+  filter: blur(0.5px);
+  animation: hd-avatar-border-spin 6s linear infinite;
+}
+
+.hd-moving-border::after {
+  inset: -13px;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--avatar-primary) 34%, transparent), transparent 62%),
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--avatar-rarity) 18%, transparent), transparent 34%);
+  opacity: 0.72;
+  filter: blur(12px);
+  animation: hd-avatar-aura 3.8s ease-in-out infinite;
+}
+
+.hd-moving-border:hover,
+.hd-moving-border:focus-visible,
+.hd-moving-border[data-avatar-active="true"]:active {
+  transform: translateY(-2px) scale(1.035);
+  filter: drop-shadow(0 0 var(--avatar-glow-strong) color-mix(in srgb, var(--avatar-primary) 58%, transparent));
+}
+
+.hd-moving-border[data-avatar-border="pulse"]::before,
+.hd-moving-border[data-avatar-border="energy"]::before {
+  animation: hd-avatar-border-spin 7s linear infinite, hd-avatar-border-pulse 1.8s ease-in-out infinite;
+}
+
+.hd-moving-border[data-avatar-border="glitch"]::before {
+  animation: hd-avatar-border-spin 3.6s linear infinite, hd-avatar-glitch 1.4s steps(2, end) infinite;
+}
+
+.hd-moving-border[data-avatar-border="orbit"]::after,
+.hd-moving-border[data-avatar-border="neural"]::after {
+  animation: hd-avatar-aura 3.8s ease-in-out infinite, hd-avatar-orbit-haze 7s linear infinite;
+}
+
+.hd-avatar-frame {
+  padding: 6px;
+}
+
+.hd-avatar-core {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 32% 16%, rgba(255, 255, 255, 0.16), transparent 34%),
+    linear-gradient(145deg, rgba(8, 42, 94, 0.95), rgba(2, 12, 32, 0.96));
+  border: 1px solid color-mix(in srgb, var(--avatar-primary) 36%, rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 26px color-mix(in srgb, var(--avatar-primary) 16%, transparent),
+    0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.hd-avatar-initials {
+  color: #EAF8FF;
+  font-size: clamp(1.8rem, 34%, 4rem);
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-shadow:
+    0 0 16px color-mix(in srgb, var(--avatar-primary) 70%, transparent),
+    0 0 34px color-mix(in srgb, var(--avatar-secondary) 44%, transparent);
+}
+
+.hd-avatar-effects {
+  position: absolute;
+  inset: -11px;
+  z-index: 2;
+  border-radius: inherit;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.hd-avatar-orbit {
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--avatar-primary) 40%, transparent);
+  opacity: 0.54;
+}
+
+.hd-avatar-orbit-a {
+  transform: rotate(14deg) scale(1.08);
+  animation: hd-avatar-tilt-orbit 7s linear infinite;
+}
+
+.hd-avatar-orbit-b {
+  transform: rotate(-28deg) scale(1.16);
+  border-color: color-mix(in srgb, var(--avatar-rarity) 36%, transparent);
+  animation: hd-avatar-tilt-orbit 9s linear infinite reverse;
+}
+
+.hd-avatar-scan {
+  position: absolute;
+  inset: 9px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--avatar-primary) 28%, transparent) 48%, transparent 58%);
+  opacity: 0;
+  animation: hd-avatar-scan 4.6s ease-in-out infinite;
+}
+
+.hd-avatar-neural-node {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--avatar-primary);
+  box-shadow: 0 0 14px var(--avatar-primary);
+  animation: hd-avatar-node-pulse 2s ease-in-out infinite;
+}
+
+.hd-avatar-node-a { left: 14%; top: 20%; }
+.hd-avatar-node-b { right: 10%; top: 48%; animation-delay: 0.55s; }
+.hd-avatar-node-c { left: 42%; bottom: 4%; animation-delay: 1.1s; }
+
+.hd-avatar-edit-layer {
+  position: absolute;
+  inset: 9px;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  gap: 0.2rem;
+  border-radius: inherit;
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.58);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.hd-avatar-frame:hover .hd-avatar-edit-layer,
+.hd-avatar-frame:focus-visible .hd-avatar-edit-layer {
+  opacity: 1;
+}
+
+.hd-avatar-status-ring {
+  --status-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--avatar-status);
+}
+
+.hd-avatar-status-dot {
+  width: var(--status-size);
+  height: var(--status-size);
+  border-radius: 999px;
+  background: var(--avatar-status);
+  border: 3px solid rgba(2, 6, 23, 0.92);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--avatar-status) 16%, transparent),
+    0 0 18px color-mix(in srgb, var(--avatar-status) 74%, transparent);
+  animation: hd-avatar-status-pulse 1.8s ease-in-out infinite;
+}
+
+.hd-avatar-status-label {
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hd-avatar-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 270px;
+  margin-inline: auto;
+  padding: 1.25rem;
+  border-radius: 32px;
+  border: 1px solid rgba(125, 249, 255, 0.18);
+  background:
+    radial-gradient(circle at 50% 12%, rgba(125, 249, 255, 0.12), transparent 48%),
+    rgba(3, 19, 38, 0.48);
+  box-shadow:
+    0 26px 70px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.hd-avatar-viewport .hd-avatar-preview {
+  max-width: none;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  padding: 0.4rem 0.25rem 0.8rem;
+}
+
+.hd-avatar-viewport .hd-avatar-preview .hd-moving-border {
+  margin-inline: auto;
+}
+
+.hd-avatar-preview-glow {
+  position: absolute;
+  inset: auto 8% -34% 8%;
+  height: 50%;
+  border-radius: 999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--avatar-primary, #00C2FF) 24%, transparent), transparent 64%);
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+.hd-avatar-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.hd-avatar-engine-compact {
+  gap: 0;
+}
+
+.hd-avatar-editor {
+  border-radius: 26px;
+  border: 1px solid rgba(125, 249, 255, 0.16);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(0, 229, 255, 0.1), transparent 42%),
+    rgba(2, 8, 23, 0.48);
+  padding: 1rem;
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.hd-avatar-editor-chip {
+  --chip-color: #00C2FF;
+  position: relative;
+  display: inline-flex;
+  min-height: 2.55rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--chip-color) 26%, rgba(255, 255, 255, 0.08));
+  background: rgba(8, 24, 54, 0.72);
+  color: rgba(255, 255, 255, 0.82);
+  padding: 0.62rem 0.74rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.hd-avatar-editor-chip:hover,
+.hd-avatar-editor-chip.is-active {
+  transform: translateY(-2px) scale(1.02);
+  border-color: color-mix(in srgb, var(--chip-color) 78%, white);
+  background:
+    radial-gradient(circle at 28% 0%, color-mix(in srgb, var(--chip-color) 24%, transparent), transparent 54%),
+    rgba(8, 24, 54, 0.92);
+  box-shadow:
+    0 0 22px color-mix(in srgb, var(--chip-color) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.hd-avatar-editor-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  background: var(--chip-color);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--chip-color) 80%, transparent);
+}
+
+.hd-avatar-editor-range {
+  width: 100%;
+  accent-color: #00E5FF;
+}
+
+.hd-chart-card {
+  position: relative;
+  isolation: isolate;
+}
+
+.hd-chart-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 30%),
+    radial-gradient(circle at 88% 8%, rgba(0, 217, 255, 0.14), transparent 34%),
+    radial-gradient(circle at 12% 100%, rgba(31, 81, 255, 0.13), transparent 42%);
+  pointer-events: none;
+}
+
+.hd-chart-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.hd-gradient-area-chart {
+  min-height: 190px;
+}
+
+.hd-gradient-area-chart .recharts-surface {
+  overflow: visible;
+}
+
+.hd-gradient-area-chart .hd-chart-area-line {
+  filter:
+    drop-shadow(0 0 8px rgba(0, 217, 255, 0.35))
+    drop-shadow(0 0 18px rgba(0, 94, 255, 0.18));
+}
+
+.hd-gradient-area-chart .recharts-cartesian-grid line {
+  stroke-linecap: round;
+}
+
+.hd-gradient-area-chart .recharts-tooltip-cursor {
+  filter: drop-shadow(0 0 8px rgba(125, 249, 255, 0.42));
+}
+
+/* Executive Neural Theme */
+:root {
+  --hd-exec-bg: #071426;
+  --hd-exec-bg-top: #0A1F3D;
+  --hd-exec-bg-deep: #030B16;
+  --hd-exec-blue: #1E4E8C;
+  --hd-exec-panel: rgba(10, 25, 45, 0.92);
+  --hd-exec-panel-soft: rgba(8, 27, 52, 0.82);
+  --hd-exec-border: rgba(255, 255, 255, 0.08);
+  --hd-exec-border-active: rgba(255, 255, 255, 0.35);
+  --hd-exec-line: rgba(255, 255, 255, 0.18);
+  --hd-exec-glow: rgba(255, 255, 255, 0.35);
+  --hd-exec-ice: #EAF6FF;
+}
+
+html,
+body,
+#root {
+  background: var(--hd-exec-bg-deep);
+}
+
+body,
+.hd-screen,
+.hd-cyber-screen,
+.hd-module-stage,
+.hd-neural-layout,
+.aether-flow-hero {
+  color: #FFFFFF;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(30, 78, 140, 0.34), transparent 34%),
+    linear-gradient(180deg, var(--hd-exec-bg-top) 0%, var(--hd-exec-bg) 45%, var(--hd-exec-bg-deep) 100%) !important;
+}
+
+.hd-neural-layout,
+.hd-neural-layout--hero,
+.hd-neural-hero-bg,
+.aether-flow-bg {
+  background:
+    radial-gradient(circle at 22% 14%, rgba(255, 255, 255, 0.06), transparent 27%),
+    radial-gradient(circle at 84% 24%, rgba(30, 78, 140, 0.24), transparent 36%),
+    radial-gradient(circle at 48% 88%, rgba(255, 255, 255, 0.045), transparent 42%),
+    linear-gradient(180deg, var(--hd-exec-bg-top) 0%, var(--hd-exec-bg) 45%, var(--hd-exec-bg-deep) 100%) !important;
+}
+
+.hd-neural-gradient,
+.aether-flow-gradient {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.08), transparent 28%),
+    radial-gradient(circle at 82% 18%, rgba(30, 78, 140, 0.22), transparent 34%),
+    radial-gradient(circle at 54% 76%, rgba(255, 255, 255, 0.04), transparent 36%),
+    linear-gradient(180deg, rgba(10, 31, 61, 0.9) 0%, rgba(7, 20, 38, 0.84) 45%, rgba(3, 11, 22, 0.96) 100%) !important;
+}
+
+.hd-neural-grid {
+  opacity: 0.1 !important;
+  background:
+    linear-gradient(112deg, transparent 0 46%, rgba(255, 255, 255, 0.055) 47%, transparent 48% 100%),
+    linear-gradient(32deg, transparent 0 47%, rgba(255, 255, 255, 0.04) 48%, transparent 49% 100%) !important;
+}
+
+.hd-neural-grid--hero {
+  opacity: 0.12 !important;
+}
+
+.hd-live-particles {
+  opacity: 0.74 !important;
+  mix-blend-mode: screen;
+}
+
+.hd-neural-orbs,
+.aether-flow-hologram {
+  opacity: 0.46 !important;
+  background:
+    radial-gradient(circle at 28% 32%, rgba(255, 255, 255, 0.07), transparent 18rem),
+    radial-gradient(circle at 78% 62%, rgba(30, 78, 140, 0.18), transparent 22rem),
+    radial-gradient(circle at 44% 92%, rgba(255, 255, 255, 0.035), transparent 20rem) !important;
+  filter: blur(10px) saturate(1.05);
+}
+
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-panel,
+  .hd-card,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-glass-card,
+  .hd-floating-panels > *,
+  .hd-chart-card,
+  .aether-role-card,
+  .hd-login-card,
+  .hd-mobile-topbar,
+  .hd-mobile-bottom-nav
+) {
+  border: 1px solid var(--hd-exec-border) !important;
+  border-radius: 24px !important;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.06), transparent 34%),
+    linear-gradient(135deg, rgba(10, 25, 45, 0.94), rgba(8, 27, 52, 0.88)) !important;
+  box-shadow:
+    0 24px 58px rgba(0, 0, 0, 0.42),
+    0 10px 28px rgba(255, 255, 255, 0.055),
+    0 0 26px rgba(30, 78, 140, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.11) !important;
+  backdrop-filter: blur(13px) saturate(1.05);
+}
+
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-panel,
+  .hd-card,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-glass-card,
+  .hd-floating-panels > *,
+  .hd-chart-card,
+  .aether-role-card
+):hover,
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-panel,
+  .hd-card,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-glass-card,
+  .hd-floating-panels > *,
+  .hd-chart-card,
+  .aether-role-card
+):focus-within,
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-panel,
+  .hd-card,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-glass-card,
+  .hd-floating-panels > *,
+  .hd-chart-card,
+  .aether-role-card
+).is-active {
+  transform: translateY(-3px) scale(1.01);
+  border-color: var(--hd-exec-border-active) !important;
+  box-shadow:
+    0 30px 70px rgba(0, 0, 0, 0.5),
+    0 0 34px rgba(255, 255, 255, 0.14),
+    0 0 56px rgba(30, 78, 140, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+}
+
+:where(.glass-panel, .glass-panel-neon, .hd-panel, .hd-card, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-glass-card, .hd-chart-card, .aether-role-card)::after {
+  background: linear-gradient(115deg, transparent 0%, rgba(255, 255, 255, 0.12) 42%, rgba(255, 255, 255, 0.05) 50%, transparent 62%) !important;
+}
+
+.hd-holographic-sidebar {
+  border-right: 1px solid var(--hd-exec-border);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.075), transparent 36%),
+    linear-gradient(180deg, rgba(7, 20, 38, 0.96), rgba(3, 11, 22, 0.97)) !important;
+  box-shadow:
+    18px 0 44px rgba(0, 0, 0, 0.32),
+    inset -1px 0 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.hd-holographic-sidebar::after {
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.05), transparent 24%, transparent 76%, rgba(255, 255, 255, 0.04)),
+    radial-gradient(circle at 20% 10%, rgba(30, 78, 140, 0.12), transparent 30%) !important;
+}
+
+:where(.glass-panel, .glass-panel-neon, .hd-panel, .hd-card, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-glass-card, .hd-chart-card, .aether-role-card, button) svg.lucide,
+.aether-role-icon svg {
+  color: #FFFFFF !important;
+  stroke: #FFFFFF !important;
+  filter:
+    drop-shadow(0 0 9px rgba(255, 255, 255, 0.34))
+    drop-shadow(0 0 20px rgba(30, 78, 140, 0.32)) !important;
+}
+
+.aether-title {
+  background: linear-gradient(90deg, #FFFFFF 0%, #D9ECFF 38%, #FFFFFF 62%, #BFD8F8 100%) !important;
+  background-size: 180% 100% !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  text-shadow:
+    0 0 18px rgba(255, 255, 255, 0.24),
+    0 0 42px rgba(30, 78, 140, 0.34) !important;
+}
+
+.aether-subtitle,
+.aether-role-desc {
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.aether-role-card {
+  --aether-rgb: 255, 255, 255 !important;
+  --aether-rgb-2: 217, 236, 255 !important;
+  --aether-accent: #FFFFFF !important;
+  min-height: 13rem;
+}
+
+.aether-role-icon {
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  background:
+    radial-gradient(circle at 34% 20%, rgba(255, 255, 255, 0.18), transparent 34%),
+    rgba(255, 255, 255, 0.055) !important;
+  box-shadow:
+    0 0 24px rgba(255, 255, 255, 0.12),
+    inset 0 0 20px rgba(255, 255, 255, 0.08) !important;
+}
+
+.aether-register-button,
+.hd-glow-button--solid,
+:where(button, .hd-glow-button):not(.bg-transparent) {
+  color: #FFFFFF !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  background:
+    radial-gradient(circle at 30% 0%, rgba(255, 255, 255, 0.16), transparent 40%),
+    linear-gradient(135deg, rgba(30, 78, 140, 0.96), rgba(10, 25, 45, 0.96)) !important;
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.32),
+    0 0 20px rgba(255, 255, 255, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+.aether-register-button:hover,
+.aether-register-button:focus-visible,
+.hd-glow-button:hover,
+.hd-glow-button:focus-visible,
+:where(button):hover,
+:where(button):focus-visible {
+  border-color: rgba(255, 255, 255, 0.38) !important;
+  box-shadow:
+    0 22px 50px rgba(0, 0, 0, 0.42),
+    0 0 30px rgba(255, 255, 255, 0.16),
+    0 0 48px rgba(30, 78, 140, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26) !important;
+}
+
+:is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  color: #FFFFFF !important;
+  background: rgba(3, 11, 22, 0.68) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow:
+    inset 0 0 18px rgba(30, 78, 140, 0.1),
+    0 0 0 rgba(255, 255, 255, 0) !important;
+}
+
+:is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus {
+  border-color: rgba(255, 255, 255, 0.42) !important;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.075),
+    0 0 28px rgba(255, 255, 255, 0.13),
+    inset 0 0 22px rgba(30, 78, 140, 0.14) !important;
+}
+
+@media (max-width: 767px) {
+  .hd-gradient-area-chart {
+    min-height: 170px;
+  }
+
+  .hd-chart-card {
+    border-radius: 1.4rem;
+  }
+
+  .hd-neural-grid {
+    opacity: 0.065 !important;
+  }
+
+  .hd-live-particles {
+    opacity: 0.62 !important;
+  }
+
+  :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-panel,
+    .hd-card,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-glass-card,
+    .hd-chart-card,
+    .aether-role-card,
+    .hd-login-card,
+    .hd-mobile-topbar,
+    .hd-mobile-bottom-nav
+  ) {
+    border-radius: 22px !important;
+    box-shadow:
+      0 18px 42px rgba(0, 0, 0, 0.38),
+      0 0 20px rgba(255, 255, 255, 0.07),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
+}
+
+@keyframes hd-avatar-border-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes hd-avatar-aura {
+  0%, 100% { opacity: 0.48; transform: scale(0.98); }
+  50% { opacity: 0.86; transform: scale(1.05); }
+}
+
+@keyframes hd-avatar-border-pulse {
+  0%, 100% { opacity: 0.38; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes hd-avatar-glitch {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  45% { transform: translate3d(1px, -1px, 0) rotate(120deg); }
+  55% { transform: translate3d(-1px, 1px, 0) rotate(150deg); }
+}
+
+@keyframes hd-avatar-orbit-haze {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes hd-avatar-tilt-orbit {
+  to { transform: rotate(374deg) scale(1.08); }
+}
+
+@keyframes hd-avatar-scan {
+  0%, 18%, 100% { opacity: 0; transform: translateY(-42%); }
+  38%, 58% { opacity: 0.48; }
+  78% { opacity: 0; transform: translateY(42%); }
+}
+
+@keyframes hd-avatar-node-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+
+@keyframes hd-avatar-status-pulse {
+  0%, 100% { transform: scale(0.92); }
+  50% { transform: scale(1.08); }
 }
 
 @media (max-width: 767px) {
@@ -2413,7 +3449,1458 @@ html.light {
   .aether-logo-shell::after,
   .aether-title,
   .aether-role-icon,
-  .aether-role-icon svg {
+  .aether-role-icon svg,
+  .hd-moving-border::before,
+  .hd-moving-border::after,
+  .hd-avatar-orbit,
+  .hd-avatar-scan,
+  .hd-avatar-neural-node,
+  .hd-avatar-status-dot {
     animation: none !important;
   }
+}
+
+/* Premium visual reset: a single clean theme layer that wins the legacy cascade. */
+:root {
+  --hd-bg: #020A1F;
+  --hd-bg-soft: #0437F2;
+  --hd-surface: #061B3A;
+  --hd-surface-strong: #082A5E;
+  --hd-surface-muted: #0B2B58;
+  --hd-border: rgba(0, 217, 255, 0.22);
+  --hd-border-strong: rgba(0, 217, 255, 0.58);
+  --hd-text: #FFFFFF;
+  --hd-text-muted: #B9D8F6;
+  --hd-accent: #00D9FF;
+  --hd-accent-strong: #18B6FF;
+  --hd-success: #2CF5B8;
+  --hd-warning: #FFB86B;
+  --hd-danger: #FF4D7D;
+  --hd-radius-md: 18px;
+  --hd-radius-lg: 26px;
+  --hd-shadow: 0 22px 54px rgba(0, 6, 28, 0.42);
+  --hd-glow: 0 0 0 1px rgba(0, 217, 255, 0.12), 0 0 28px rgba(0, 115, 207, 0.22);
+}
+
+html,
+body,
+#root {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(4, 55, 242, 0.42), transparent 32%),
+    radial-gradient(circle at 86% 10%, rgba(0, 119, 182, 0.36), transparent 34%),
+    linear-gradient(135deg, #020A1F 0%, #0437F2 48%, #0077B6 100%) !important;
+  color: var(--hd-text) !important;
+}
+
+.hd-premium-surface,
+.hd-premium-card,
+.glass-panel,
+.glass-panel-neon,
+.hd-panel,
+.hd-card,
+.hd-cyber-panel,
+.hd-cyber-card,
+.hd-cyber-card-soft,
+.hd-glass-card,
+.hd-chart-card,
+.hd-login-card,
+.aether-role-card,
+.hd-mobile-topbar,
+.hd-mobile-bottom-nav {
+  color: var(--hd-text) !important;
+  border-color: var(--hd-border) !important;
+  background:
+    linear-gradient(135deg, rgba(6, 27, 58, 0.96), rgba(8, 42, 94, 0.92)) !important;
+  box-shadow:
+    0 22px 56px rgba(0, 8, 36, 0.46),
+    0 0 0 1px rgba(0, 217, 255, 0.08),
+    0 0 30px rgba(0, 115, 207, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.hd-premium-card,
+.hd-card,
+.hd-panel,
+.hd-cyber-card,
+.hd-chart-card,
+.aether-role-card {
+  transition:
+    transform 220ms ease,
+    border-color 240ms ease,
+    box-shadow 260ms ease,
+    background 260ms ease,
+    filter 260ms ease;
+}
+
+.hd-premium-card:hover,
+.hd-premium-card:focus-within,
+.hd-card:hover,
+.hd-card:focus-within,
+.hd-panel:hover,
+.hd-panel:focus-within,
+.hd-cyber-card:hover,
+.hd-cyber-card:focus-within,
+.hd-chart-card:hover,
+.hd-chart-card:focus-within,
+.aether-role-card:hover,
+.aether-role-card:focus-within,
+.hd-card.is-active,
+.hd-panel.is-active,
+.aether-role-card.is-active {
+  transform: translateY(-2px);
+  border-color: var(--hd-border-strong) !important;
+  background:
+    linear-gradient(135deg, rgba(8, 42, 94, 0.98), rgba(4, 55, 242, 0.34)) !important;
+  box-shadow:
+    0 28px 68px rgba(0, 8, 36, 0.54),
+    0 0 0 1px rgba(0, 217, 255, 0.18),
+    0 0 38px rgba(0, 217, 255, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+}
+
+.hd-premium-button,
+.hd-liquid-button,
+.hd-neon-action,
+button:not(.hd-no-liquid),
+a.hd-premium-button {
+  color: #FFFFFF !important;
+  border-color: rgba(0, 217, 255, 0.32) !important;
+  background:
+    linear-gradient(135deg, rgba(0, 115, 207, 0.78), rgba(4, 55, 242, 0.82)) !important;
+  box-shadow:
+    0 14px 34px rgba(0, 39, 132, 0.32),
+    0 0 22px rgba(0, 217, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+  transition:
+    transform 180ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease,
+    filter 220ms ease;
+}
+
+.hd-premium-button:hover,
+.hd-premium-button:focus-visible,
+.hd-liquid-button:hover,
+.hd-liquid-button:focus-visible,
+.hd-neon-action:hover,
+.hd-neon-action:focus-visible,
+button:not(.hd-no-liquid):hover,
+button:not(.hd-no-liquid):focus-visible,
+a.hd-premium-button:hover,
+a.hd-premium-button:focus-visible {
+  transform: translateY(-1px) scale(1.01);
+  border-color: rgba(0, 217, 255, 0.74) !important;
+  filter: brightness(1.08);
+  box-shadow:
+    0 18px 42px rgba(0, 39, 132, 0.38),
+    0 0 34px rgba(0, 217, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+}
+
+.hd-premium-input,
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select,
+textarea {
+  color: #FFFFFF !important;
+  background: rgba(2, 10, 31, 0.78) !important;
+  border-color: rgba(0, 217, 255, 0.22) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025) !important;
+  backdrop-filter: none !important;
+}
+
+.hd-premium-input:focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(0, 217, 255, 0.72) !important;
+  box-shadow:
+    0 0 0 3px rgba(0, 217, 255, 0.14),
+    0 0 28px rgba(0, 217, 255, 0.18) !important;
+}
+
+.hd-premium-title,
+h1,
+h2,
+h3 {
+  color: #FFFFFF !important;
+  text-shadow: 0 0 18px rgba(0, 217, 255, 0.16);
+}
+
+.hd-premium-muted,
+.text-slate-300,
+.text-slate-400,
+.text-slate-500,
+.text-slate-600,
+.text-cyber-electric\/50,
+.text-cyber-electric\/70,
+.text-cyber-electric\/80 {
+  color: var(--hd-text-muted) !important;
+}
+
+.text-cyan-100,
+.text-cyan-200,
+.text-cyber-neon,
+.text-cyber-electric {
+  color: #DDFBFF !important;
+}
+
+.aether-role-card[data-tone="admin"] {
+  --aether-rgb: 255, 215, 0 !important;
+  --aether-rgb-2: 255, 184, 107 !important;
+  --aether-accent: #FFD700 !important;
+}
+
+.aether-role-card[data-tone="supervisor"] {
+  --aether-rgb: 255, 77, 255 !important;
+  --aether-rgb-2: 123, 97, 255 !important;
+  --aether-accent: #FF4DFF !important;
+}
+
+.aether-role-card[data-tone="advisor"] {
+  --aether-rgb: 255, 140, 0 !important;
+  --aether-rgb-2: 255, 77, 125 !important;
+  --aether-accent: #FF8C00 !important;
+}
+
+.aether-role-card[data-tone="admin"] .aether-role-icon,
+.aether-role-card[data-tone="admin"] .aether-role-icon svg {
+  color: #FFD700 !important;
+  stroke: #FFD700 !important;
+  filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.72)) drop-shadow(0 0 28px rgba(255, 184, 107, 0.36)) !important;
+}
+
+.aether-role-card[data-tone="supervisor"] .aether-role-icon,
+.aether-role-card[data-tone="supervisor"] .aether-role-icon svg {
+  color: #FF4DFF !important;
+  stroke: #FF4DFF !important;
+  filter: drop-shadow(0 0 10px rgba(255, 77, 255, 0.68)) drop-shadow(0 0 28px rgba(123, 97, 255, 0.34)) !important;
+}
+
+.aether-role-card[data-tone="advisor"] .aether-role-icon,
+.aether-role-card[data-tone="advisor"] .aether-role-icon svg {
+  color: #FF8C00 !important;
+  stroke: #FF8C00 !important;
+  filter: drop-shadow(0 0 10px rgba(255, 140, 0, 0.68)) drop-shadow(0 0 28px rgba(255, 77, 125, 0.32)) !important;
+}
+
+.aether-role-card::before,
+.hd-chart-card::before,
+.hd-card::before {
+  background: none !important;
+}
+
+.aether-role-card::after,
+.hd-liquid-button::after {
+  opacity: 0 !important;
+  animation: none !important;
+}
+
+/* Aether landing cleanup: calmer logo, cleaner icon tiles, mobile-first spacing. */
+.aether-logo-shell::before,
+.aether-logo-shell::after {
+  content: none !important;
+  display: none !important;
+  animation: none !important;
+}
+
+.aether-logo-shell {
+  filter:
+    drop-shadow(0 0 24px rgba(0, 217, 255, 0.38))
+    drop-shadow(0 0 62px rgba(4, 55, 242, 0.26)) !important;
+}
+
+.aether-logo {
+  animation: none !important;
+  filter:
+    drop-shadow(0 0 18px rgba(0, 217, 255, 0.42))
+    drop-shadow(0 0 46px rgba(0, 115, 207, 0.28)) !important;
+}
+
+.aether-role-card {
+  overflow: visible !important;
+  border-radius: 28px !important;
+}
+
+.aether-role-card::before,
+.aether-role-card::after {
+  content: none !important;
+  display: none !important;
+  animation: none !important;
+}
+
+.aether-role-icon {
+  width: clamp(5.15rem, 10vw, 7.2rem) !important;
+  height: clamp(5.15rem, 10vw, 7.2rem) !important;
+  border-radius: 30px !important;
+  border: 0 !important;
+  background:
+    radial-gradient(circle at 26% 16%, rgba(255, 255, 255, 0.2), transparent 30%),
+    radial-gradient(circle at 62% 58%, rgba(var(--aether-rgb), 0.2), transparent 46%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.035)) !important;
+  box-shadow:
+    0 22px 46px rgba(0, 8, 36, 0.34),
+    0 0 34px rgba(var(--aether-rgb), 0.22),
+    inset 0 1px 1px rgba(255, 255, 255, 0.24),
+    inset 0 -18px 36px rgba(2, 10, 31, 0.2) !important;
+  animation: none !important;
+}
+
+.aether-role-icon svg {
+  animation: none !important;
+  stroke-width: 1.9 !important;
+  transform: none !important;
+}
+
+.aether-role-card:hover .aether-role-icon,
+.aether-role-card:focus-visible .aether-role-icon {
+  animation: none !important;
+  transform: translateY(-2px) scale(1.035);
+  box-shadow:
+    0 26px 54px rgba(0, 8, 36, 0.4),
+    0 0 42px rgba(var(--aether-rgb), 0.32),
+    inset 0 1px 1px rgba(255, 255, 255, 0.28),
+    inset 0 -18px 36px rgba(2, 10, 31, 0.16) !important;
+}
+
+.aether-role-card:hover .aether-role-icon svg,
+.aether-role-card:focus-visible .aether-role-icon svg {
+  animation: none !important;
+}
+
+.aether-role-card[data-tone="admin"] .aether-role-icon,
+.aether-role-card[data-tone="admin"] .aether-role-icon svg {
+  color: #FFD700 !important;
+  stroke: #FFD700 !important;
+  filter:
+    drop-shadow(0 0 9px rgba(255, 215, 0, 0.76))
+    drop-shadow(0 0 28px rgba(255, 215, 0, 0.38)) !important;
+}
+
+.aether-role-card[data-tone="supervisor"] .aether-role-icon,
+.aether-role-card[data-tone="supervisor"] .aether-role-icon svg {
+  color: #FF4DFF !important;
+  stroke: #FF4DFF !important;
+  filter:
+    drop-shadow(0 0 9px rgba(255, 77, 255, 0.72))
+    drop-shadow(0 0 28px rgba(255, 77, 255, 0.34)) !important;
+}
+
+.aether-role-card[data-tone="advisor"] .aether-role-icon,
+.aether-role-card[data-tone="advisor"] .aether-role-icon svg {
+  color: #FF8C00 !important;
+  stroke: #FF8C00 !important;
+  filter:
+    drop-shadow(0 0 9px rgba(255, 140, 0, 0.76))
+    drop-shadow(0 0 28px rgba(255, 140, 0, 0.36)) !important;
+}
+
+.aether-role-card[data-tone="admin"] .aether-role-icon :where(svg, .lucide, [class*="text-"]) {
+  color: #FFD700 !important;
+  stroke: #FFD700 !important;
+}
+
+.aether-role-card[data-tone="supervisor"] .aether-role-icon :where(svg, .lucide, [class*="text-"]) {
+  color: #FF4DFF !important;
+  stroke: #FF4DFF !important;
+}
+
+.aether-role-card[data-tone="advisor"] .aether-role-icon :where(svg, .lucide, [class*="text-"]) {
+  color: #FF8C00 !important;
+  stroke: #FF8C00 !important;
+}
+
+/* Heavenly Dreams 2026 visual system: crisp enterprise AI, inspired by the provided reference. */
+:root {
+  --hd-ref-bg: #001B7A;
+  --hd-ref-bg-deep: #061B3A;
+  --hd-ref-bg-ink: #020A1F;
+  --hd-ref-panel: rgba(6, 27, 58, 0.9);
+  --hd-ref-panel-strong: rgba(8, 42, 94, 0.88);
+  --hd-ref-border: rgba(0, 217, 255, 0.28);
+  --hd-ref-border-hot: rgba(0, 229, 255, 0.72);
+  --hd-ref-cyan: #00E5FF;
+  --hd-ref-ice: #F7FBFF;
+  --hd-ref-muted: #C6D8EF;
+  --hd-ref-yellow: #FFD700;
+  --hd-ref-pink: #FF4DFF;
+  --hd-ref-orange: #FF8C00;
+}
+
+html,
+body,
+#root,
+.hd-screen,
+.hd-cyber-screen,
+.hd-module-stage {
+  background:
+    radial-gradient(circle at 52% 0%, rgba(0, 229, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 84% 18%, rgba(0, 94, 255, 0.22), transparent 34%),
+    linear-gradient(135deg, #001B7A 0%, #071B34 48%, #020A1F 100%) !important;
+}
+
+.aether-title {
+  color: #FFFFFF !important;
+  background:
+    linear-gradient(180deg, #FFFFFF 0%, #F7FBFF 30%, #A7D8FF 52%, #FFFFFF 74%, #6EB9FF 100%) !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  text-shadow:
+    0 2px 0 rgba(50, 121, 255, 0.95),
+    0 6px 0 rgba(8, 42, 94, 0.56),
+    0 0 14px rgba(255, 255, 255, 0.72),
+    0 0 34px rgba(0, 229, 255, 0.48),
+    0 18px 44px rgba(0, 0, 0, 0.52) !important;
+  animation: hd-title-float-premium 4.2s ease-in-out infinite !important;
+}
+
+.aether-subtitle {
+  color: #FFFFFF !important;
+  text-shadow:
+    0 0 12px rgba(255, 255, 255, 0.62),
+    0 0 28px rgba(0, 229, 255, 0.36) !important;
+}
+
+.aether-role-card {
+  border-radius: 28px !important;
+  border: 1px solid rgba(0, 229, 255, 0.28) !important;
+  background:
+    radial-gradient(circle at 50% 8%, rgba(var(--aether-rgb), 0.14), transparent 34%),
+    linear-gradient(145deg, rgba(8, 42, 94, 0.9), rgba(3, 19, 38, 0.94)) !important;
+  box-shadow:
+    0 26px 68px rgba(0, 8, 36, 0.52),
+    0 0 0 1px rgba(0, 229, 255, 0.08),
+    0 0 34px rgba(0, 229, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
+}
+
+.aether-role-card:hover,
+.aether-role-card:focus-visible,
+.aether-role-card.is-active {
+  transform: translateY(-6px) scale(1.018) !important;
+  border-color: rgba(var(--aether-rgb), 0.9) !important;
+  box-shadow:
+    0 34px 88px rgba(0, 8, 36, 0.62),
+    0 0 0 1px rgba(var(--aether-rgb), 0.22),
+    0 0 38px rgba(var(--aether-rgb), 0.48),
+    0 0 78px rgba(var(--aether-rgb-2), 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+.aether-role-card[data-tone="admin"] {
+  --aether-rgb: 255, 215, 0 !important;
+  --aether-rgb-2: 255, 184, 107 !important;
+}
+
+.aether-role-card[data-tone="supervisor"] {
+  --aether-rgb: 255, 77, 255 !important;
+  --aether-rgb-2: 200, 0, 255 !important;
+}
+
+.aether-role-card[data-tone="advisor"] {
+  --aether-rgb: 255, 140, 0 !important;
+  --aether-rgb-2: 255, 77, 125 !important;
+}
+
+.aether-role-icon {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.aether-role-icon > div {
+  width: 100%;
+  height: 100%;
+}
+
+.aether-role-icon :where(svg, .lucide) {
+  opacity: 0.94 !important;
+  stroke-width: 1.85 !important;
+}
+
+.aether-role-title {
+  color: #FFFFFF !important;
+  text-shadow:
+    0 0 12px rgba(255, 255, 255, 0.4),
+    0 0 28px rgba(var(--aether-rgb), 0.22) !important;
+}
+
+.aether-role-desc,
+.hd-premium-muted {
+  color: var(--hd-ref-muted) !important;
+}
+
+.aether-register-button,
+.hd-premium-button,
+.hd-liquid-button,
+.hd-neon-action {
+  border-color: rgba(0, 229, 255, 0.44) !important;
+  background:
+    linear-gradient(135deg, rgba(0, 94, 255, 0.72), rgba(8, 42, 94, 0.92)) !important;
+  box-shadow:
+    0 18px 46px rgba(0, 8, 36, 0.46),
+    0 0 28px rgba(0, 229, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+.aether-register-button:hover,
+.aether-register-button:focus-visible,
+.hd-premium-button:hover,
+.hd-premium-button:focus-visible,
+.hd-liquid-button:hover,
+.hd-liquid-button:focus-visible,
+.hd-neon-action:hover,
+.hd-neon-action:focus-visible {
+  border-color: rgba(0, 229, 255, 0.86) !important;
+  box-shadow:
+    0 24px 58px rgba(0, 8, 36, 0.56),
+    0 0 38px rgba(0, 229, 255, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+}
+
+.glass-panel,
+.glass-panel-neon,
+.hd-panel,
+.hd-card,
+.hd-cyber-panel,
+.hd-cyber-card,
+.hd-cyber-card-soft,
+.hd-glass-card,
+.hd-chart-card,
+.hd-login-card,
+.hd-mobile-topbar,
+.hd-mobile-bottom-nav {
+  border-color: var(--hd-ref-border) !important;
+  background:
+    linear-gradient(145deg, rgba(8, 42, 94, 0.88), rgba(3, 19, 38, 0.94)) !important;
+  box-shadow:
+    0 22px 58px rgba(0, 8, 36, 0.48),
+    0 0 0 1px rgba(0, 229, 255, 0.06),
+    0 0 26px rgba(0, 229, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+@keyframes hd-title-float-premium {
+  0%, 100% { transform: translateY(0); filter: brightness(1); }
+  50% { transform: translateY(-7px); filter: brightness(1.08); }
+}
+
+@media (max-width: 767px) {
+  html,
+  body,
+  #root,
+  .aether-entry,
+  .hd-screen,
+  .hd-cyber-screen,
+  .hd-module-stage {
+    background: #071426 !important;
+    background-image: none !important;
+  }
+
+  body::before,
+  body::after,
+  .aether-entry::before,
+  .aether-entry::after,
+  .hd-screen::before,
+  .hd-screen::after,
+  .hd-cyber-screen::before,
+  .hd-cyber-screen::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+    animation: none !important;
+  }
+
+  .aether-entry {
+    padding: 1.15rem 1rem 1.35rem !important;
+  }
+
+  .aether-brand {
+    margin-bottom: 1.05rem !important;
+  }
+
+  .aether-logo-shell {
+    margin-bottom: 0.72rem !important;
+  }
+
+  .aether-logo {
+    width: clamp(5.35rem, 24vw, 6.85rem) !important;
+    height: clamp(5.35rem, 24vw, 6.85rem) !important;
+  }
+
+  .aether-title {
+    font-size: clamp(1.58rem, 7.2vw, 2.02rem) !important;
+    letter-spacing: 0.045em !important;
+    line-height: 1.03 !important;
+    white-space: nowrap !important;
+    text-shadow:
+      0 0 14px rgba(255, 255, 255, 0.36),
+      0 0 30px rgba(0, 217, 255, 0.25) !important;
+  }
+
+  .aether-subtitle {
+    font-size: 0.68rem !important;
+    letter-spacing: 0.075em !important;
+    margin-top: -0.25rem !important;
+  }
+
+  .aether-role-grid {
+    gap: 0.85rem !important;
+    width: 100% !important;
+    max-width: 23rem !important;
+  }
+
+  .aether-role-card {
+    min-height: 9.5rem !important;
+    padding: 1rem !important;
+    border-radius: 1.55rem !important;
+  }
+
+  .aether-role-icon {
+    width: 4.65rem !important;
+    height: 4.65rem !important;
+    border-radius: 1.35rem !important;
+    margin-bottom: 0.7rem !important;
+  }
+
+  .aether-role-title {
+    font-size: 1.05rem !important;
+    line-height: 1.08 !important;
+  }
+
+  .aether-role-desc {
+    font-size: 0.72rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .aether-register-button {
+    margin-top: -0.45rem !important;
+    min-height: 2.9rem !important;
+  }
+}
+
+/* Premium CRM dashboard cleanup: off/on glow system and fixed password toggles. */
+:root {
+  --hd-ai-bg-a: #020617;
+  --hd-ai-bg-b: #001B4D;
+  --hd-ai-bg-c: #002D85;
+  --hd-ai-surface: rgba(3, 18, 43, 0.86);
+  --hd-ai-surface-hot: rgba(4, 34, 78, 0.94);
+  --hd-ai-border: rgba(0, 229, 255, 0.24);
+  --hd-ai-cyan: #00E5FF;
+  --hd-ai-blue: #0066FF;
+  --hd-ai-pink: #FF4DFF;
+  --hd-ai-purple: #8B5CF6;
+  --hd-ai-yellow: #FFD700;
+  --hd-ai-green: #00FF99;
+  --hd-ai-orange: #FF8C00;
+  --hd-ai-red: #FF3366;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) {
+  background:
+    radial-gradient(circle at 78% 6%, rgba(0, 229, 255, 0.18), transparent 28rem),
+    radial-gradient(circle at 28% 34%, rgba(0, 102, 255, 0.15), transparent 34rem),
+    linear-gradient(145deg, var(--hd-ai-bg-a) 0%, var(--hd-ai-bg-b) 48%, #00122B 100%) !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen) button.hd-password-toggle,
+:where(.hd-screen, .hd-cyber-screen) button.hd-no-liquid.hd-password-toggle {
+  position: absolute !important;
+  inset-inline-end: 0.75rem !important;
+  top: 50% !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  min-width: 2rem !important;
+  min-height: 2rem !important;
+  max-width: 2rem !important;
+  max-height: 2rem !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(0, 229, 255, 0.28) !important;
+  background: rgba(2, 12, 31, 0.92) !important;
+  color: rgba(247, 251, 255, 0.92) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 255, 0.08),
+    0 0 18px rgba(0, 229, 255, 0.16) !important;
+  transform: translateY(-50%) !important;
+  z-index: 8 !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen) button.hd-password-toggle::before,
+:where(.hd-screen, .hd-cyber-screen) button.hd-password-toggle::after,
+:where(.hd-screen, .hd-cyber-screen) button.hd-no-liquid.hd-password-toggle::before,
+:where(.hd-screen, .hd-cyber-screen) button.hd-no-liquid.hd-password-toggle::after {
+  content: none !important;
+  display: none !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen) button.hd-password-toggle:hover,
+:where(.hd-screen, .hd-cyber-screen) button.hd-password-toggle:focus-visible {
+  color: #FFFFFF !important;
+  border-color: rgba(0, 229, 255, 0.76) !important;
+  background: rgba(6, 27, 58, 0.98) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 255, 0.24),
+    0 0 24px rgba(0, 229, 255, 0.38) !important;
+  transform: translateY(-50%) scale(1.05) !important;
+}
+
+/* Login cleanup: keep utility controls inside fields and remove noisy overlaps. */
+.hd-login-card {
+  overflow: visible !important;
+}
+
+.hd-login-password-field {
+  isolation: isolate;
+}
+
+.hd-login-password-control {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(0, 229, 255, 0.32);
+  border-radius: 1.15rem;
+  background: linear-gradient(135deg, rgba(1, 12, 33, 0.96), rgba(3, 29, 66, 0.88));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(0, 229, 255, 0.05),
+    0 12px 28px rgba(0, 10, 32, 0.22);
+}
+
+.hd-login-password-control .hd-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 3.3rem !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 0 0 1rem !important;
+}
+
+.hd-login-password-control button.hd-login-eye-button,
+.hd-login-password-control button.hd-password-toggle {
+  position: static !important;
+  inset: auto !important;
+  flex: 0 0 2.25rem !important;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  min-width: 2.25rem !important;
+  min-height: 2.25rem !important;
+  max-width: 2.25rem !important;
+  max-height: 2.25rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  background: linear-gradient(145deg, rgba(4, 18, 42, 0.98), rgba(5, 36, 78, 0.92)) !important;
+  transform: none !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen) .hd-login-card .hd-login-password-control > button.hd-no-liquid.hd-login-eye-button,
+:where(.hd-screen, .hd-cyber-screen) .hd-login-card .hd-login-password-control > button.hd-no-liquid.hd-password-toggle {
+  position: static !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+}
+
+.hd-login-password-control button.hd-login-eye-button:hover,
+.hd-login-password-control button.hd-login-eye-button:focus-visible,
+.hd-login-password-control button.hd-password-toggle:hover,
+.hd-login-password-control button.hd-password-toggle:focus-visible {
+  transform: scale(1.04) !important;
+}
+
+.hd-login-password-control button.hd-login-eye-button svg,
+.hd-login-password-control button.hd-password-toggle svg {
+  width: 1rem !important;
+  height: 1rem !important;
+  flex: 0 0 auto !important;
+}
+
+.hd-login-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 51, 102, 0.54);
+  background: linear-gradient(135deg, rgba(92, 15, 45, 0.78), rgba(24, 8, 30, 0.94));
+  color: rgba(255, 235, 241, 0.96);
+  box-shadow: 0 16px 34px rgba(255, 51, 102, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding: 0.8rem 0.9rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.hd-login-alert span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hd-login-options {
+  align-items: center;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.hd-login-options button {
+  text-align: right;
+  line-height: 1.2;
+  max-width: 12rem;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+@media (max-width: 420px) {
+  .hd-login-card {
+    padding-inline: 1rem !important;
+  }
+
+  .hd-login-options {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .hd-login-options button {
+    max-width: 100%;
+    text-align: left;
+  }
+}
+
+.hd-holographic-sidebar {
+  background:
+    linear-gradient(180deg, rgba(3, 18, 43, 0.94), rgba(2, 6, 23, 0.98)) !important;
+  border-color: rgba(0, 229, 255, 0.24) !important;
+  box-shadow:
+    18px 0 60px rgba(0, 18, 72, 0.44),
+    inset -1px 0 0 rgba(0, 229, 255, 0.12) !important;
+}
+
+.hd-holographic-sidebar img,
+.hd-holographic-sidebar picture {
+  filter:
+    drop-shadow(0 0 14px rgba(0, 229, 255, 0.56))
+    drop-shadow(0 0 42px rgba(0, 102, 255, 0.32));
+}
+
+.hd-nav-item {
+  opacity: 0.72;
+  background: transparent !important;
+  box-shadow: none !important;
+  transition:
+    opacity 240ms ease,
+    transform 260ms ease,
+    background 260ms ease,
+    border-color 260ms ease,
+    box-shadow 260ms ease !important;
+}
+
+.hd-nav-item .hd-nav-item-icon {
+  opacity: 0.42;
+  filter: none !important;
+}
+
+.hd-nav-item:hover,
+.hd-nav-item:focus-visible,
+.hd-nav-item.is-active {
+  opacity: 1;
+  transform: translateX(3px);
+  background:
+    linear-gradient(90deg, rgba(0, 229, 255, 0.16), rgba(0, 102, 255, 0.06)) !important;
+  border-color: rgba(0, 229, 255, 0.34) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 255, 0.08),
+    0 0 24px rgba(0, 229, 255, 0.14) !important;
+}
+
+.hd-nav-item:hover .hd-nav-item-icon,
+.hd-nav-item:focus-visible .hd-nav-item-icon,
+.hd-nav-item.is-active .hd-nav-item-icon {
+  opacity: 1;
+  filter: drop-shadow(0 0 10px currentColor) !important;
+}
+
+.hd-card,
+.hd-panel,
+.glass-panel,
+.glass-panel-neon,
+.hd-cyber-panel,
+.hd-cyber-card,
+.hd-cyber-card-soft {
+  border-color: var(--hd-ai-border) !important;
+  background:
+    radial-gradient(circle at 82% 14%, rgba(0, 229, 255, 0.085), transparent 38%),
+    linear-gradient(145deg, rgba(6, 27, 58, 0.9), rgba(2, 10, 31, 0.94)) !important;
+  box-shadow:
+    0 26px 70px rgba(0, 6, 24, 0.52),
+    0 0 0 1px rgba(0, 229, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(14px) saturate(125%) !important;
+}
+
+.hd-card:hover,
+.hd-card:focus-within,
+.hd-panel:hover,
+.hd-panel:focus-within,
+.glass-panel:hover,
+.glass-panel:focus-within,
+.glass-panel-neon:hover,
+.glass-panel-neon:focus-within,
+.hd-cyber-panel:hover,
+.hd-cyber-panel:focus-within,
+.hd-cyber-card:hover,
+.hd-cyber-card:focus-within {
+  transform: translateY(-3px);
+  border-color: rgba(0, 229, 255, 0.58) !important;
+  box-shadow:
+    0 34px 86px rgba(0, 6, 24, 0.64),
+    0 0 0 1px rgba(0, 229, 255, 0.16),
+    0 0 42px rgba(0, 229, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+}
+
+.hd-floating-icon,
+.hd-premium-iconbox {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  opacity: 0.48;
+  filter: saturate(0.72) brightness(0.86) !important;
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease,
+    filter 260ms ease !important;
+}
+
+.hd-card:hover .hd-floating-icon,
+.hd-card:focus-within .hd-floating-icon,
+.hd-card:hover .hd-premium-iconbox,
+.hd-card:focus-within .hd-premium-iconbox {
+  opacity: 1;
+  transform: translateY(-2px) scale(1.06);
+  filter:
+    saturate(1.15)
+    brightness(1.14)
+    drop-shadow(0 0 12px currentColor)
+    drop-shadow(0 0 30px currentColor) !important;
+}
+
+.hd-quick-action {
+  min-height: 7.2rem;
+  opacity: 0.86;
+}
+
+.hd-quick-action .hd-quick-action-icon {
+  opacity: 0.38;
+  filter: saturate(0.65) brightness(0.8) !important;
+  transition: opacity 260ms ease, transform 260ms ease, filter 260ms ease;
+}
+
+.hd-quick-action:hover,
+.hd-quick-action:focus-visible {
+  opacity: 1;
+  transform: translateY(-5px) scale(1.02) !important;
+}
+
+.hd-quick-action:hover .hd-quick-action-icon,
+.hd-quick-action:focus-visible .hd-quick-action-icon {
+  opacity: 1;
+  transform: scale(1.12);
+  filter:
+    drop-shadow(0 0 10px currentColor)
+    drop-shadow(0 0 28px currentColor) !important;
+}
+
+.hd-tone-cyan { --hd-tone-glow: 0, 229, 255; }
+.hd-tone-blue { --hd-tone-glow: 0, 102, 255; }
+.hd-tone-emerald { --hd-tone-glow: 0, 255, 153; }
+.hd-tone-violet { --hd-tone-glow: 139, 92, 246; }
+.hd-tone-pink { --hd-tone-glow: 255, 51, 102; }
+.hd-tone-amber { --hd-tone-glow: 255, 215, 0; }
+
+.hd-card[class*="hd-tone-"],
+.hd-panel[class*="hd-tone-"],
+.hd-quick-action[class*="hd-tone-"] {
+  box-shadow:
+    0 26px 70px rgba(0, 6, 24, 0.52),
+    0 0 28px rgba(var(--hd-tone-glow, 0, 229, 255), 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+.hd-card[class*="hd-tone-"]:hover,
+.hd-panel[class*="hd-tone-"]:hover,
+.hd-quick-action[class*="hd-tone-"]:hover {
+  border-color: rgba(var(--hd-tone-glow, 0, 229, 255), 0.62) !important;
+  box-shadow:
+    0 34px 86px rgba(0, 6, 24, 0.64),
+    0 0 44px rgba(var(--hd-tone-glow, 0, 229, 255), 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 229, 255, 0.65) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.28), rgba(0, 102, 255, 0.62));
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.32);
+}
+
+/* Reference landing polish: dark glass cards, frameless idle icons, neon only on intent. */
+.aether-entry .aether-role-card.hd-no-liquid {
+  min-height: clamp(13.5rem, 24vw, 17.5rem);
+  overflow: visible !important;
+  border: 1px solid rgba(0, 229, 255, 0.24) !important;
+  border-radius: 28px !important;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(var(--aether-rgb), 0.055), transparent 34%),
+    linear-gradient(145deg, rgba(8, 35, 78, 0.84), rgba(2, 13, 31, 0.96)) !important;
+  box-shadow:
+    0 28px 70px rgba(0, 6, 28, 0.54),
+    0 0 0 1px rgba(0, 229, 255, 0.06),
+    0 0 28px rgba(0, 125, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: translateZ(0);
+}
+
+.aether-entry .aether-role-card.hd-no-liquid:hover,
+.aether-entry .aether-role-card.hd-no-liquid:focus-visible,
+.aether-entry .aether-role-card.hd-no-liquid.is-active {
+  border-color: rgba(var(--aether-rgb), 0.78) !important;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(var(--aether-rgb), 0.12), transparent 36%),
+    linear-gradient(145deg, rgba(9, 45, 98, 0.88), rgba(3, 16, 38, 0.98)) !important;
+  box-shadow:
+    0 34px 88px rgba(0, 6, 28, 0.66),
+    0 0 0 1px rgba(var(--aether-rgb), 0.22),
+    0 0 36px rgba(var(--aether-rgb), 0.36),
+    0 0 76px rgba(var(--aether-rgb-2), 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+  transform: translateY(-6px) scale(1.018) !important;
+}
+
+.aether-entry .aether-role-card.hd-no-liquid::before,
+.aether-entry .aether-role-card.hd-no-liquid::after,
+.aether-entry .aether-role-card.hd-no-liquid .absolute.inset-0 {
+  content: none !important;
+  display: none !important;
+}
+
+.aether-entry .aether-role-icon {
+  width: auto !important;
+  height: auto !important;
+  margin-bottom: clamp(1.2rem, 2.8vw, 2rem) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  opacity: 0.38 !important;
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease,
+    filter 260ms ease !important;
+}
+
+.aether-entry .aether-role-icon > div {
+  width: auto !important;
+  height: auto !important;
+}
+
+.aether-entry .aether-role-icon :where(svg, .lucide) {
+  width: clamp(4rem, 7vw, 5.4rem) !important;
+  height: clamp(4rem, 7vw, 5.4rem) !important;
+  stroke-width: 1.7 !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.aether-entry .aether-role-card.hd-no-liquid:hover .aether-role-icon,
+.aether-entry .aether-role-card.hd-no-liquid:focus-visible .aether-role-icon,
+.aether-entry .aether-role-card.hd-no-liquid.is-active .aether-role-icon {
+  opacity: 1 !important;
+  transform: translateY(-3px) scale(1.06) !important;
+  filter:
+    drop-shadow(0 0 10px rgba(var(--aether-rgb), 0.92))
+    drop-shadow(0 0 32px rgba(var(--aether-rgb), 0.48))
+    drop-shadow(0 0 58px rgba(var(--aether-rgb-2), 0.24)) !important;
+}
+
+.aether-entry .aether-role-card[data-tone="admin"] .aether-role-icon :where(svg, .lucide) {
+  color: #FFD700 !important;
+  stroke: #FFD700 !important;
+  filter: none !important;
+}
+
+.aether-entry .aether-role-card[data-tone="supervisor"] .aether-role-icon :where(svg, .lucide) {
+  color: #FF4DFF !important;
+  stroke: #FF4DFF !important;
+  filter: none !important;
+}
+
+.aether-entry .aether-role-card[data-tone="advisor"] .aether-role-icon :where(svg, .lucide) {
+  color: #FF8C00 !important;
+  stroke: #FF8C00 !important;
+  filter: none !important;
+}
+
+.aether-entry button.aether-role-card[data-tone="admin"] .aether-role-icon :where(svg, .lucide, [class*="text-"]) {
+  color: #FFD700 !important;
+  stroke: #FFD700 !important;
+  filter: none !important;
+}
+
+.aether-entry button.aether-role-card[data-tone="supervisor"] .aether-role-icon :where(svg, .lucide, [class*="text-"]) {
+  color: #FF4DFF !important;
+  stroke: #FF4DFF !important;
+  filter: none !important;
+}
+
+.aether-entry button.aether-role-card[data-tone="advisor"] .aether-role-icon :where(svg, .lucide, [class*="text-"]) {
+  color: #FF8C00 !important;
+  stroke: #FF8C00 !important;
+  filter: none !important;
+}
+
+.aether-entry .aether-role-title {
+  color: rgba(255, 255, 255, 0.92) !important;
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 0.28),
+    0 0 24px rgba(0, 229, 255, 0.2) !important;
+}
+
+.aether-entry .aether-role-desc {
+  color: rgba(218, 234, 255, 0.78) !important;
+}
+
+.aether-entry .aether-role-card.hd-no-liquid:hover .aether-role-title,
+.aether-entry .aether-role-card.hd-no-liquid:focus-visible .aether-role-title {
+  color: #FFFFFF !important;
+  text-shadow:
+    0 0 13px rgba(255, 255, 255, 0.58),
+    0 0 34px rgba(var(--aether-rgb), 0.3) !important;
+}
+
+@media (max-width: 767px) {
+  .aether-entry .aether-role-card.hd-no-liquid {
+    min-height: 12.75rem;
+  }
+
+  .aether-entry .aether-role-icon :where(svg, .lucide) {
+    width: 4rem !important;
+    height: 4rem !important;
+  }
+}
+
+/* Final landing card cleanup: icons must float, never look like pasted patches. */
+.aether-entry .aether-role-card.hd-no-liquid {
+  border-radius: 22px !important;
+  background:
+    linear-gradient(145deg, rgba(8, 45, 98, 0.62), rgba(2, 14, 34, 0.98)) !important;
+  border-color: rgba(0, 174, 255, 0.28) !important;
+  box-shadow:
+    0 24px 62px rgba(0, 6, 28, 0.56),
+    0 0 22px rgba(0, 157, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+.aether-entry .aether-role-icon,
+.aether-entry .aether-role-icon *,
+.aether-entry .aether-role-icon > div,
+.aether-entry .aether-role-icon > div > div {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.aether-entry .aether-role-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: clamp(5.4rem, 8vw, 6.7rem) !important;
+  height: clamp(5.4rem, 8vw, 6.7rem) !important;
+  margin-bottom: clamp(1rem, 2.3vw, 1.65rem) !important;
+  opacity: 1 !important;
+}
+
+.aether-entry .aether-role-icon > div,
+.aether-entry .aether-role-icon > div > div {
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+}
+
+.aether-entry .aether-role-icon :where(svg, .lucide) {
+  width: 100% !important;
+  height: 100% !important;
+  fill: none !important;
+  stroke-width: 1.8 !important;
+  opacity: 0.72 !important;
+}
+
+.aether-entry .aether-role-card[data-tone="admin"] .aether-role-icon {
+  filter:
+    drop-shadow(0 0 10px rgba(255, 215, 0, 0.7))
+    drop-shadow(0 0 30px rgba(255, 215, 0, 0.35)) !important;
+}
+
+.aether-entry .aether-role-card[data-tone="supervisor"] .aether-role-icon {
+  filter:
+    drop-shadow(0 0 10px rgba(255, 77, 255, 0.72))
+    drop-shadow(0 0 30px rgba(255, 77, 255, 0.36)) !important;
+}
+
+.aether-entry .aether-role-card[data-tone="advisor"] .aether-role-icon {
+  filter:
+    drop-shadow(0 0 10px rgba(255, 140, 0, 0.72))
+    drop-shadow(0 0 30px rgba(255, 140, 0, 0.36)) !important;
+}
+
+.aether-entry .aether-role-card.hd-no-liquid:hover .aether-role-icon,
+.aether-entry .aether-role-card.hd-no-liquid:focus-visible .aether-role-icon,
+.aether-entry .aether-role-card.hd-no-liquid.is-active .aether-role-icon {
+  transform: translateY(-2px) scale(1.055) !important;
+}
+
+.aether-entry .aether-role-card.hd-no-liquid:hover .aether-role-icon :where(svg, .lucide),
+.aether-entry .aether-role-card.hd-no-liquid:focus-visible .aether-role-icon :where(svg, .lucide),
+.aether-entry .aether-role-card.hd-no-liquid.is-active .aether-role-icon :where(svg, .lucide) {
+  opacity: 1 !important;
+}
+
+.aether-entry .aether-role-title {
+  font-weight: 900 !important;
+  line-height: 1.08 !important;
+}
+
+.aether-entry .aether-role-desc {
+  font-weight: 700 !important;
+}
+
+/* Deep cleanup after removing the old icon wrapper component from role cards. */
+.aether-entry button.aether-role-card.hd-no-liquid > svg.aether-role-icon {
+  position: relative !important;
+  z-index: 10 !important;
+  display: block !important;
+  width: clamp(4.7rem, 7vw, 5.6rem) !important;
+  height: clamp(4.7rem, 7vw, 5.6rem) !important;
+  padding: 0 !important;
+  margin-inline: auto !important;
+  margin-bottom: clamp(1rem, 2.4vw, 1.55rem) !important;
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  fill: none !important;
+  stroke-width: 1.75 !important;
+  opacity: 0.82 !important;
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease,
+    filter 260ms ease !important;
+}
+
+.aether-entry button.aether-role-card[data-tone="admin"] > svg.aether-role-icon {
+  color: #FFD700 !important;
+  stroke: #FFD700 !important;
+  filter:
+    drop-shadow(0 0 8px rgba(255, 215, 0, 0.72))
+    drop-shadow(0 0 24px rgba(255, 215, 0, 0.38)) !important;
+}
+
+.aether-entry button.aether-role-card[data-tone="supervisor"] > svg.aether-role-icon {
+  color: #FF4DFF !important;
+  stroke: #FF4DFF !important;
+  filter:
+    drop-shadow(0 0 8px rgba(255, 77, 255, 0.72))
+    drop-shadow(0 0 24px rgba(255, 77, 255, 0.38)) !important;
+}
+
+.aether-entry button.aether-role-card[data-tone="advisor"] > svg.aether-role-icon {
+  color: #FF8C00 !important;
+  stroke: #FF8C00 !important;
+  filter:
+    drop-shadow(0 0 8px rgba(255, 140, 0, 0.72))
+    drop-shadow(0 0 24px rgba(255, 140, 0, 0.38)) !important;
+}
+
+.aether-entry button.aether-role-card.hd-no-liquid:hover > svg.aether-role-icon,
+.aether-entry button.aether-role-card.hd-no-liquid:focus-visible > svg.aether-role-icon,
+.aether-entry button.aether-role-card.hd-no-liquid.is-active > svg.aether-role-icon {
+  opacity: 1 !important;
+  transform: translateY(-2px) scale(1.06) !important;
+}
+
+@media (max-width: 767px) {
+  .aether-entry button.aether-role-card.hd-no-liquid > svg.aether-role-icon {
+    width: 4.15rem !important;
+    height: 4.15rem !important;
+  }
+}
+
+/* Performance pass: keep the premium look, remove constant expensive paint work. */
+.hd-matrix-text {
+  color: #fff !important;
+  text-shadow:
+    0 0 14px rgba(255, 255, 255, 0.46),
+    0 0 32px rgba(0, 194, 255, 0.34),
+    0 12px 30px rgba(0, 0, 0, 0.45) !important;
+}
+
+.aether-flow-gradient,
+.aether-flow-hologram,
+.aether-logo-shell::before,
+.aether-logo-shell::after,
+.aether-logo,
+.aether-title,
+.aether-role-card,
+.aether-role-icon {
+  animation: none !important;
+  will-change: auto !important;
+}
+
+.aether-flow-gradient,
+.aether-flow-hologram {
+  filter: none !important;
+}
+
+.aether-role-card,
+.glass-panel,
+.glass-panel-neon,
+.hd-card,
+.hd-panel,
+.hd-cyber-card,
+.hd-cyber-panel {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+@media (max-width: 767px) {
+.hd-neural-grid,
+.aether-flow-hologram {
+  display: none !important;
+}
+}
+
+/* Deep UI cleanup pass: remove accumulated "patch" overlays from forms and icon controls. */
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) form:not(.glass-panel):not(.glass-panel-neon):not(.hd-panel):not(.hd-card) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) form::before,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) form::after,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) label::before,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) label::after,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button.hd-no-liquid::before,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button.hd-no-liquid::after,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button.hd-password-toggle::before,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button.hd-password-toggle::after,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button.hd-login-eye-button::before,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button.hd-login-eye-button::after {
+  content: none !important;
+  display: none !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-login-card form,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-login-card .hd-login-options,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-login-card label,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .glass-panel-neon form,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .glass-panel-neon label {
+  isolation: auto !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-login-card label[class*="rounded"],
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .glass-panel-neon label[class*="rounded"],
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-auth-clean-block {
+  background: linear-gradient(145deg, rgba(4, 21, 48, 0.72), rgba(5, 35, 77, 0.56)) !important;
+  border-color: rgba(0, 229, 255, 0.18) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-password-toggle,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-login-eye-button,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button[aria-label*="contraseña"],
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button[aria-label*="contrasena"] {
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  min-width: 2.25rem !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: rgba(218, 246, 255, 0.82) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  outline: none !important;
+  filter: none !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-password-toggle:hover,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-password-toggle:focus-visible,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-login-eye-button:hover,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-login-eye-button:focus-visible,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button[aria-label*="contraseña"]:hover,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button[aria-label*="contraseña"]:focus-visible,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button[aria-label*="contrasena"]:hover,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) button[aria-label*="contrasena"]:focus-visible {
+  color: #ffffff !important;
+  background: rgba(0, 229, 255, 0.08) !important;
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.18) !important;
+  transform: none !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) .hd-login-password-control {
+  background: linear-gradient(145deg, rgba(2, 14, 32, 0.96), rgba(4, 30, 68, 0.9)) !important;
+  border: 1px solid rgba(0, 229, 255, 0.26) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 16px 34px rgba(0, 8, 28, 0.28) !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage) ::selection {
+  background: rgba(0, 229, 255, 0.28);
+  color: #ffffff;
 }

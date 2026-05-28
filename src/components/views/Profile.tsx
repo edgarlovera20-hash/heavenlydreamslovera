@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
-  Camera, Crown, Flame, Trophy, Target, TrendingUp,
+  Crown, Flame, Trophy, Target, TrendingUp,
   Award, Star, Zap, ChevronRight, Medal, Clock,
   BarChart2, Shield, Sparkles, DollarSign, Edit3, Save
 } from 'lucide-react';
@@ -9,6 +9,13 @@ import { auth } from '../../lib/firebase';
 import { UsersAPI, VentasAPI } from '../../services/db';
 import { sendPushNotification } from '../../lib/notifications';
 import AvatarStudio from '../ui/AvatarStudio';
+import { AvatarFrame } from '../ui/avatar-frame';
+import { fetchAvatarIdentity, upsertAvatarIdentity } from '../../features/avatar/avatar-api';
+import {
+  AVATAR_IDENTITY_EVENT,
+  loadAvatarIdentity,
+  saveAvatarIdentity,
+} from '../../features/avatar/avatar-store';
 
 interface Sale {
   id?: string;
@@ -66,6 +73,7 @@ export default function Profile() {
   const [avatar, setAvatar] = useState<string | null>(
     session?.uid ? localStorage.getItem(`hd_avatar_${session.uid}`) : null
   );
+  const [avatarIdentity, setAvatarIdentity] = useState(() => loadAvatarIdentity(session?.uid));
   const [profilePhrase, setProfilePhrase] = useState(() => (
     phraseKey ? localStorage.getItem(phraseKey) || '' : ''
   ));
@@ -85,6 +93,30 @@ export default function Profile() {
     setPhraseDraft(stored);
     setEditingPhrase(!stored);
   }, [phraseKey]);
+
+  useEffect(() => {
+    if (!session?.uid) return;
+    const uid = session.uid;
+    setAvatar(localStorage.getItem(`hd_avatar_${uid}`));
+    setAvatarIdentity(loadAvatarIdentity(uid));
+    void fetchAvatarIdentity(uid).then(setAvatarIdentity);
+
+    const onIdentity = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      if (!detail.uid || detail.uid === uid) setAvatarIdentity(loadAvatarIdentity(uid));
+      if (detail.identity && (!detail.uid || detail.uid === uid)) setAvatarIdentity(detail.identity);
+    };
+    const onAvatar = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      if ((!detail.uid || detail.uid === uid) && detail.url) setAvatar(detail.url);
+    };
+    window.addEventListener(AVATAR_IDENTITY_EVENT, onIdentity);
+    window.addEventListener('hd-avatar-updated', onAvatar);
+    return () => {
+      window.removeEventListener(AVATAR_IDENTITY_EVENT, onIdentity);
+      window.removeEventListener('hd-avatar-updated', onAvatar);
+    };
+  }, [session?.uid]);
 
   useEffect(() => {
     const load = () => {
@@ -272,6 +304,13 @@ export default function Profile() {
       const url = reader.result as string;
       persistAvatar(url);
       if (session?.uid) {
+        const nextIdentity = saveAvatarIdentity(session.uid, {
+          ...avatarIdentity,
+          avatarUrl: url,
+          aiGenerated: false,
+        });
+        setAvatarIdentity(nextIdentity);
+        void upsertAvatarIdentity(session.uid, nextIdentity);
         window.dispatchEvent(new CustomEvent('hd-avatar-updated', { detail: { uid: session.uid, url } }));
       }
     };
@@ -321,23 +360,18 @@ export default function Profile() {
 
             <div className="relative z-10 flex flex-col items-center text-center">
               <div className="relative mb-4 group">
-                <div className={cn(
-                  "w-28 h-28 rounded-full bg-slate-800 border-4 flex items-center justify-center overflow-hidden transition-all duration-300",
-                  isTop3 ? "border-yellow-400/80" : "border-slate-700",
-                  hasFireStreak && "shadow-[0_0_25px_rgba(249,115,22,0.5)]"
-                )}>
-                  {avatar ? (
-                    <img src={avatar} alt={`Avatar de ${userName}`} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-4xl font-bold text-slate-500">{userName.charAt(0).toUpperCase()}</span>
+                <AvatarFrame
+                  identity={avatarIdentity}
+                  avatarUrl={avatar}
+                  name={userName}
+                  size="lg"
+                  editable
+                  className={cn(
+                    isTop3 && "ring-2 ring-yellow-300/40",
+                    hasFireStreak && "shadow-[0_0_34px_rgba(249,115,22,0.36)]"
                   )}
-
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                  >
-                    <Camera className="w-6 h-6 text-white" />
-                  </div>
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <input
                     type="file"
                     accept="image/*"
@@ -346,7 +380,7 @@ export default function Profile() {
                     onChange={handleImageUpload}
                     aria-label="Subir avatar"
                   />
-                </div>
+                </AvatarFrame>
 
                 {isManager && (
                   <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-tr from-yellow-500 to-yellow-300 rounded-full flex items-center justify-center shadow-lg border-2 border-[#020617]" title="Gerente">

@@ -8,7 +8,6 @@ async function hashPassword(plain: string): Promise<string> {
 
 interface RegisterFormProps {
   onBack: () => void;
-  pendingRole: 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'ASESOR' | null;
 }
 
 const TERMS_VERSION = '1.0';
@@ -75,7 +74,7 @@ Cualquier duda relacionada con estos Términos puede dirigirse al área de Recur
 
 Al marcar la casilla "Acepto los Términos y Condiciones" el usuario manifiesta haber leído, comprendido y aceptado el presente documento en su totalidad.`;
 
-export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
+export function RegisterForm({ onBack }: RegisterFormProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [formData, setFormData] = useState({
     nombre: '',
@@ -100,7 +99,6 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
   const [rememberMe, setRememberMe] = useState(true);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
-  const [googleOAuthAvailable, setGoogleOAuthAvailable] = useState(false);
 
   useEffect(() => {
     // Prefill from previous "remember me" session
@@ -110,19 +108,6 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
         setFormData(prev => ({ ...prev, username: remembered.username, email: remembered.email || '' }));
       }
     } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/auth/oauth/status')
-      .then(r => r.ok ? r.json() : null)
-      .then(status => {
-        if (!cancelled) setGoogleOAuthAvailable(Boolean(status?.google));
-      })
-      .catch(() => {
-        if (!cancelled) setGoogleOAuthAvailable(false);
-      });
-    return () => { cancelled = true; };
   }, []);
 
   const zones = [
@@ -201,32 +186,6 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
     }
   };
 
-  const startOAuthRegistration = async (provider: 'google') => {
-    const providerLabel = 'Google';
-    if (!acceptedTerms) {
-      setErrorMsg('Debes aceptar los Términos y Condiciones para registrarte con Google.');
-      return;
-    }
-    setErrorMsg('');
-    try {
-      const statusRes = await fetch('/api/auth/oauth/status');
-      const status = await statusRes.json();
-      if (!statusRes.ok || !status?.[provider]) {
-        setErrorMsg('');
-        return;
-      }
-    } catch {
-      setErrorMsg('No se pudo validar OAuth con el servidor. Reinicia la app y revisa que /api/auth/oauth/status responda JSON.');
-      return;
-    }
-    const params = new URLSearchParams({
-      mode: 'register',
-      role: pendingRole || 'ASESOR',
-      termsAccepted: 'true',
-    });
-    window.location.href = `/api/auth/oauth/${provider}/start?${params.toString()}`;
-  };
-
   if (step === 2) {
     return (
       <div className="w-full max-w-md glass-panel-neon rounded-3xl p-8 animate-in zoom-in-95 duration-300 relative text-center my-auto shrink-0">
@@ -283,32 +242,6 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
             {errorMsg}
           </div>
         )}
-
-        <div className="relative z-10 mb-6 rounded-2xl border border-cyber-electric/20 bg-cyber-dark/30 p-4">
-          <p className="text-[10px] font-bold text-cyber-electric/70 uppercase tracking-[0.16em] text-center mb-3">
-            Registro rápido con cuenta Google
-          </p>
-          <div className="grid grid-cols-1 gap-3">
-            <button
-              type="button"
-              disabled={!acceptedTerms || !googleOAuthAvailable}
-              onClick={() => startOAuthRegistration('google')}
-              className="py-3 rounded-xl border border-cyber-electric/30 bg-white/5 hover:bg-white/10 text-white font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/5"
-              title={!acceptedTerms ? 'Acepta términos para continuar' : googleOAuthAvailable ? 'Registrarse con Google' : 'Faltan credenciales OAuth de Google en el servidor'}
-            >
-              <span className="w-5 h-5 rounded-full bg-white text-slate-900 flex items-center justify-center font-black">G</span>
-              Google
-            </button>
-            {!googleOAuthAvailable && (
-              <p className="text-center text-[10px] text-cyber-electric/50 font-bold uppercase tracking-widest">
-                Google pendiente de configurar
-              </p>
-            )}
-          </div>
-          <p className="mt-3 text-center text-[11px] text-cyber-electric/60">
-            Puedes usar una cuenta Google normal. El alta queda pendiente de aprobación por gerencia igual que el registro manual.
-          </p>
-        </div>
 
         <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-2 gap-5 relative z-10">
 
@@ -449,8 +382,8 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
           </div>
 
           {/* OPTIONS BLOCK */}
-          <div className="md:col-span-2 mt-2 space-y-3 bg-cyber-dark/30 border border-cyber-electric/20 rounded-xl p-4">
-            <label className="flex items-start gap-3 cursor-pointer group">
+          <div className="md:col-span-2 mt-2 space-y-3">
+            <label className="hd-auth-clean-block flex items-start gap-3 cursor-pointer group rounded-xl border p-4">
               <input
                 type="checkbox"
                 checked={rememberMe}

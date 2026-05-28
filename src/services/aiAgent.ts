@@ -56,9 +56,9 @@ const MOCK_RESPONSES: Record<EventType, (c: CustomerData) => string> = {
 };
 
 // ─────────────────────────────────────────────
-// GOOGLE CLOUD VISION — DOCUMENT_TEXT_DETECTION
-// Llama al endpoint del servidor /api/vision/ocr
-// que autentica con la cuenta de servicio.
+// OCR LOCAL PRIVADO — OLLAMA + TESSERACT
+// Llama al endpoint compatible /api/vision/ocr.
+// El backend conserva el nombre de ruta, pero procesa documentos sin Google Vision.
 // ─────────────────────────────────────────────
 export interface VisionOCRResponse {
   text: string;
@@ -70,7 +70,7 @@ export interface VisionOCRResponse {
 function friendlyOcrError(status: number, msg: string) {
   const lower = msg.toLowerCase();
   if (lower.includes('sin api key') || lower.includes('sin url configurada') || lower.includes('proveedores ocr fallaron')) {
-    return 'OCR sin proveedores IA configurados o sin lectura local confiable. Configura Ollama/Gemini en Ajustes > Integraciones o completa los campos manualmente.';
+    return 'OCR local privado sin lectura confiable. Verifica Ollama en el servidor; si no está disponible, el sistema usará Tesseract o podrás completar los campos manualmente.';
   }
   if (lower.includes('payload') || lower.includes('too large') || status === 413) {
     return 'La imagen es demasiado pesada para OCR. Toma otra foto más cercana o sube una imagen más ligera.';

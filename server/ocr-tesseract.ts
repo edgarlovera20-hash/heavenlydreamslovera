@@ -1,9 +1,9 @@
 /**
  * Fallback OCR 100% local con Tesseract.js + parsers regex.
- * Se usa solo si Ollama y Gemini fallan (sin red / sin API key / timeout).
+ * Se usa si Ollama no está disponible o devuelve una lectura poco confiable.
  *
  * Tesseract extrae texto crudo — los parsers heurísticos intentan mapear ese texto
- * a los mismos campos que devuelven los proveedores LLM (nombres, CURP, dirección…).
+ * a los mismos campos que devuelve el motor local Ollama (nombres, CURP, dirección…).
  *
  * Nota: tesseract.js descarga el language pack 'spa' (~10MB) la primera vez que se
  * invoca y lo cachea localmente.

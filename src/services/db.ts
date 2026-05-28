@@ -164,6 +164,16 @@ export const SettingsAPI = {
   set: (key: string, value: any) => api('PUT', `/api/settings/${key}`, { value }),
 };
 
+export const EmailSyncAPI = {
+  status: () => api('GET', '/api/email-sync/status'),
+  accounts: () => api('GET', '/api/email-sync/accounts'),
+  saveAccount: (data: any) => api('POST', '/api/email-sync/accounts', data),
+  jobs: (limit = 100) => api('GET', `/api/email-sync/jobs?limit=${limit}`),
+  run: (data: any = {}) => api('POST', '/api/email-sync/run', data),
+  upload: (data: { fileName: string; contentBase64: string; mimeType?: string; replace?: boolean }) =>
+    api('POST', '/api/email-sync/upload', data),
+};
+
 // ── Audit Log ────────────────────────────────────────────────
 export const AuditAPI = {
   getAll: (limit = 200) => api('GET', `/api/audit?limit=${limit}`),

@@ -31,8 +31,8 @@ const SUPPORTED_FILE_EXTENSIONS = new Set([
   'mp4', 'mov', 'webm', '3gp', 'mkv', 'avi', 'mpeg', 'mpg', 'wmv',
 ]);
 
-type IconName = 'badge' | 'camera' | 'check' | 'chevron-left' | 'chevron-right' | 'clipboard' | 'cloud-off' | 'folder' | 'home' | 'id' | 'loader' | 'logout' | 'map' | 'message' | 'phone' | 'refresh' | 'save' | 'search' | 'send' | 'settings' | 'shield' | 'smartphone' | 'user' | 'users' | 'wallet' | 'wifi' | 'wifi-off';
-type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'usuarios' | 'aprobaciones' | 'perfil' | 'ajustes';
+type IconName = 'badge' | 'camera' | 'check' | 'chevron-left' | 'chevron-right' | 'clipboard' | 'cloud-off' | 'eye' | 'eye-off' | 'folder' | 'home' | 'id' | 'loader' | 'logout' | 'map' | 'message' | 'phone' | 'refresh' | 'save' | 'search' | 'send' | 'settings' | 'shield' | 'smartphone' | 'sparkles' | 'user' | 'users' | 'wallet' | 'wifi' | 'wifi-off';
+type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'usuarios' | 'aprobaciones' | 'perfil' | 'avatar' | 'ajustes';
 type DraftSaveState = 'idle' | 'saving' | 'saved';
 type Notice = { kind: 'success' | 'error'; message: string } | null;
 type QueueStatus = 'queued' | 'syncing' | 'failed';
@@ -189,6 +189,8 @@ function MobileIcon({ name, className = '' }: { name: IconName; className?: stri
     'chevron-right': <path {...common} d="M9 18l6-6-6-6" />,
     clipboard: <><path {...common} d="M9 4h6l1 2h3v15H5V6h3l1-2z" /><path {...common} d="M9 10h6M9 14h6M9 18h4" /></>,
     'cloud-off': <><path {...common} d="M3 3l18 18" /><path {...common} d="M17.5 17H8a4 4 0 0 1-.8-7.9A6 6 0 0 1 16 6.5" /></>,
+    eye: <><path {...common} d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle {...common} cx="12" cy="12" r="3" /></>,
+    'eye-off': <><path {...common} d="M3 3l18 18" /><path {...common} d="M10.6 10.6A3 3 0 0 0 12 15a3 3 0 0 0 2.4-1.2" /><path {...common} d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17.8 17.8 0 0 1-3.1 4.2" /><path {...common} d="M6.6 6.7C3.7 8.5 2 12 2 12s3.5 7 10 7a10.8 10.8 0 0 0 4.1-.8" /></>,
     folder: <path {...common} d="M3 7h7l2 2h9v10H3V7z" />,
     home: <><path {...common} d="M4 11l8-7 8 7" /><path {...common} d="M6 10v10h12V10" /></>,
     id: <><rect {...common} x="4" y="5" width="16" height="14" rx="2" /><path {...common} d="M8 10h4M8 14h8" /></>,
@@ -204,6 +206,7 @@ function MobileIcon({ name, className = '' }: { name: IconName; className?: stri
     settings: <><circle {...common} cx="12" cy="12" r="3" /><path {...common} d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.3 3a7 7 0 0 0-1.7 1L5.1 6l-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.3 3h5l.3-3a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5c.1-.3.1-.7.1-1z" /></>,
     shield: <><path {...common} d="M12 3l7 4v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V7l7-4z" /><path {...common} d="M9 12l2 2 4-4" /></>,
     smartphone: <><rect {...common} x="7" y="3" width="10" height="18" rx="2" /><path {...common} d="M11 18h2" /></>,
+    sparkles: <><path {...common} d="M12 3l1.6 4.5L18 9l-4.4 1.5L12 15l-1.6-4.5L6 9l4.4-1.5L12 3z" /><path {...common} d="M19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14z" /><path {...common} d="M5 15l.7 1.5L7 17l-1.3.5L5 19l-.7-1.5L3 17l1.3-.5L5 15z" /></>,
     user: <><circle {...common} cx="12" cy="8" r="4" /><path {...common} d="M4 21a8 8 0 0 1 16 0" /></>,
     users: <><circle {...common} cx="9" cy="8" r="3" /><path {...common} d="M3 20a6 6 0 0 1 12 0" /><path {...common} d="M16 11a3 3 0 0 0 0-6M17 20a6 6 0 0 0-3-5" /></>,
     wallet: <><rect {...common} x="3" y="6" width="18" height="13" rx="2" /><path {...common} d="M16 12h5v4h-5a2 2 0 0 1 0-4z" /></>,
@@ -297,24 +300,21 @@ const DOCUMENT_TYPES = [
 ];
 
 const PRIMARY_NAV: Array<{ id: MobileSection; label: string; icon: IconName }> = [
-  { id: 'inicio', label: 'Inicio', icon: 'home' },
-  { id: 'venta', label: 'Venta', icon: 'clipboard' },
-  { id: 'folios', label: 'Folios', icon: 'search' },
-  { id: 'clientes', label: 'Clientes', icon: 'users' },
   { id: 'perfil', label: 'Perfil', icon: 'user' },
+  { id: 'venta', label: 'Venta', icon: 'clipboard' },
+  { id: 'folios', label: 'Consulta', icon: 'search' },
+  { id: 'avatar', label: 'Avatar', icon: 'sparkles' },
+  { id: 'nominas', label: 'Nóminas', icon: 'wallet' },
+  { id: 'documentos', label: 'Expedientes', icon: 'folder' },
 ];
 
 const MODULES: Array<{ id: MobileSection; label: string; icon: IconName; caption: string }> = [
-  { id: 'venta', label: 'Iniciar nueva venta', icon: 'clipboard', caption: 'Flujo completo con INE, CURP, mapa y firma' },
-  { id: 'folios', label: 'Consultar folio', icon: 'search', caption: 'SIAC y estatus operativo' },
-  { id: 'clientes', label: 'Mi CRM', icon: 'users', caption: 'Clientes propios y próximos contactos' },
-  { id: 'documentos', label: 'Expediente', icon: 'folder', caption: 'Documentos por captura' },
-  { id: 'seguimiento', label: 'Seguimiento', icon: 'badge', caption: 'Avance, pendientes y próximos pasos' },
+  { id: 'perfil', label: 'Mi perfil', icon: 'user', caption: 'Datos personales, nivel, frase y progreso' },
+  { id: 'venta', label: 'Captura venta nueva', icon: 'clipboard', caption: 'Flujo completo con INE, CURP, mapa, PDF y firma' },
+  { id: 'folios', label: 'Consulta y seguimiento', icon: 'search', caption: 'SIAC, estatus operativo y seguimiento 360' },
+  { id: 'avatar', label: 'Crear avatar', icon: 'sparkles', caption: 'Avatar IA, frase, color, estilo y efecto visual' },
   { id: 'nominas', label: 'Nóminas', icon: 'wallet', caption: 'Pagos y comisiones propias' },
-  { id: 'chats', label: 'Chats', icon: 'message', caption: 'WhatsApp y Telegram con apoyo de agentes' },
-  { id: 'usuarios', label: 'Usuarios nuevos', icon: 'users', caption: 'Aprobar o rechazar cuentas pendientes' },
-  { id: 'aprobaciones', label: 'Aprobaciones IA', icon: 'shield', caption: 'Autorizar respuestas y acciones de agentes' },
-  { id: 'ajustes', label: 'Ajustes', icon: 'settings', caption: 'Cache, sesión y modo campo' },
+  { id: 'documentos', label: 'Expedientes', icon: 'folder', caption: 'Documentos, evidencias y archivos por captura' },
 ];
 
 const MOBILE_SECTIONS = new Set<MobileSection>(['inicio', 'perfil', ...MODULES.map((module) => module.id)]);
@@ -955,26 +955,9 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(Boolean(remembered));
   const [loading, setLoading] = useState(false);
-  const [googleOAuthAvailable, setGoogleOAuthAvailable] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [passkeySupported, setPasskeySupported] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/auth/oauth/status')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((status) => {
-        if (!cancelled) setGoogleOAuthAvailable(Boolean(status?.google));
-      })
-      .catch(() => {
-        if (!cancelled) setGoogleOAuthAvailable(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const supported = typeof window !== 'undefined' && Boolean(window.PublicKeyCredential) && window.isSecureContext;
@@ -1015,24 +998,6 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
       setError(err?.message || 'No se pudo conectar al servidor.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const startGoogleLogin = async () => {
-    setError('');
-    setGoogleLoading(true);
-    try {
-      const status = await apiJson<{ google?: boolean }>('/api/auth/oauth/status');
-      if (!status.google) {
-        setError('Google no esta configurado en el servidor.');
-        return;
-      }
-      const params = new URLSearchParams({ mode: 'login', role: 'ASESOR', mobile: 'true' });
-      window.location.href = `/api/auth/oauth/google/start?${params.toString()}`;
-    } catch (err: any) {
-      setError(err?.message || 'No se pudo iniciar Google.');
-    } finally {
-      setGoogleLoading(false);
     }
   };
 
@@ -1087,7 +1052,7 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
           <Field label="Usuario" value={username} onChange={setUsername} placeholder="edgar" />
           <div className="space-y-2">
             <span className="hd-cyber-label pl-1">Contrasena</span>
-            <div className="relative">
+            <div className="hd-mobile-password-field relative">
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -1098,10 +1063,10 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
               <button
                 type="button"
                 onClick={() => setShowPassword((current) => !current)}
-                className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-cyber-electric/60 transition hover:bg-cyber-neon/10 hover:text-cyber-neon"
+                className="hd-no-liquid hd-password-toggle absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-cyber-electric/60 transition hover:bg-cyber-neon/10 hover:text-cyber-neon"
                 aria-label={showPassword ? 'Ocultar contrasena' : 'Ver contrasena'}
               >
-                <MobileIcon name={showPassword ? 'shield' : 'search'} className="h-4 w-4" />
+                <MobileIcon name={showPassword ? 'eye-off' : 'eye'} className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -1109,7 +1074,7 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
             <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="h-4 w-4 accent-cyan-300" />
             Recordar usuario
           </label>
-          {error && <p className="rounded-2xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
+          {error && <p className="hd-mobile-login-alert">{error}</p>}
           <button type="submit" disabled={loading} className="hd-cyber-primary flex h-13 w-full items-center justify-center gap-2">
             <MobileIcon name={loading ? 'loader' : 'shield'} className={cx('h-4 w-4', loading && 'animate-spin')} />
             Entrar
@@ -1124,26 +1089,6 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
             <MobileIcon name={passkeyLoading ? 'loader' : 'id'} className={cx('h-4 w-4', passkeyLoading && 'animate-spin')} />
             Huella digital
           </button>
-          <div className="flex items-center gap-3 py-1">
-            <span className="h-px flex-1 bg-cyber-electric/20" />
-            <span className="text-[10px] font-semibold tracking-[0.08em] text-cyber-electric/60">o</span>
-            <span className="h-px flex-1 bg-cyber-electric/20" />
-          </div>
-          <button
-            type="button"
-            disabled={!googleOAuthAvailable || googleLoading}
-            onClick={startGoogleLogin}
-            className="hd-cyber-secondary flex h-13 w-full items-center justify-center gap-3 disabled:cursor-not-allowed"
-            title={googleOAuthAvailable ? 'Entrar con cuenta Google' : 'Faltan credenciales OAuth de Google en el servidor'}
-          >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-sm font-black text-slate-950">G</span>
-            {googleLoading ? 'Abriendo Google...' : 'Cuenta Google'}
-          </button>
-          {!googleOAuthAvailable && (
-            <p className="text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
-              Google pendiente de configurar
-            </p>
-          )}
         </form>
       </div>
     </main>
@@ -2345,7 +2290,7 @@ export default function MobileFieldApp() {
     if (draft.savedCaptureId) {
       await clearDraft(false);
       await refreshBootstrap();
-      setActive('seguimiento');
+      setActive('folios');
       notify('success', 'Expediente y validacion ya guardados.');
       return;
     }
@@ -2385,7 +2330,7 @@ export default function MobileFieldApp() {
 
       await clearDraft(false);
       await refreshBootstrap();
-      setActive('seguimiento');
+      setActive('folios');
       notify('success', 'Venta movil registrada.');
     } catch (err: any) {
       notify('error', err?.message || 'No se pudo guardar la venta.');
@@ -2719,14 +2664,8 @@ export default function MobileFieldApp() {
     );
   }
 
-  const primaryNav = canUseMobileChats
-    ? PRIMARY_NAV.map((item) => item.id === 'clientes' ? { id: 'chats' as MobileSection, label: 'Chats', icon: 'message' as IconName } : item)
-    : PRIMARY_NAV;
-  const visibleModules = MODULES.filter((module) => {
-    if (module.id === 'chats') return canUseMobileChats;
-    if (module.id === 'usuarios' || module.id === 'aprobaciones') return canApproveMobile;
-    return true;
-  });
+  const primaryNav = PRIMARY_NAV;
+  const visibleModules = MODULES;
 
   const renderContent = () => {
     if (active === 'inicio') {
@@ -2761,32 +2700,30 @@ export default function MobileFieldApp() {
           </Panel>
 
           <div className="hd-mobile-quick-grid grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button onClick={() => setActive('perfil')} className="hd-neon-action hd-mobile-quick-action hd-tone-blue min-h-20 px-4 py-4 text-left">
+              <MobileIcon name="user" className="h-6 w-6" />
+              <span className="block text-sm font-black uppercase tracking-[0.08em]">Mi perfil</span>
+            </button>
             <button onClick={() => setActive('venta')} className="hd-neon-action hd-mobile-quick-action hd-tone-cyan min-h-20 px-4 py-4 text-left">
               <MobileIcon name="clipboard" className="h-6 w-6" />
               <span className="block text-sm font-black uppercase tracking-[0.08em]">Nueva venta</span>
             </button>
             <button onClick={() => setActive('folios')} className="hd-neon-action hd-mobile-quick-action hd-tone-blue min-h-20 px-4 py-4 text-left">
               <MobileIcon name="search" className="h-6 w-6" />
-              <span className="block text-sm font-black uppercase tracking-[0.08em]">Folios</span>
+              <span className="block text-sm font-black uppercase tracking-[0.08em]">Consulta</span>
             </button>
-            {canUseMobileChats && (
-              <button onClick={() => setActive('chats')} className="hd-neon-action hd-mobile-quick-action hd-tone-violet min-h-20 px-4 py-4 text-left">
-                <MobileIcon name="message" className="h-6 w-6" />
-                <span className="block text-sm font-black uppercase tracking-[0.08em]">Chats</span>
-              </button>
-            )}
-            {canApproveMobile && (
-              <button onClick={() => setActive('usuarios')} className="hd-neon-action hd-mobile-quick-action hd-tone-emerald min-h-20 px-4 py-4 text-left">
-                <MobileIcon name="users" className="h-6 w-6" />
-                <span className="block text-sm font-black uppercase tracking-[0.08em]">Usuarios</span>
-              </button>
-            )}
-            {canApproveMobile && (
-              <button onClick={() => setActive('aprobaciones')} className="hd-neon-action hd-mobile-quick-action hd-tone-amber min-h-20 px-4 py-4 text-left">
-                <MobileIcon name="shield" className="h-6 w-6" />
-                <span className="block text-sm font-black uppercase tracking-[0.08em]">Aprobaciones</span>
-              </button>
-            )}
+            <button onClick={() => setActive('avatar')} className="hd-neon-action hd-mobile-quick-action hd-tone-violet min-h-20 px-4 py-4 text-left">
+              <MobileIcon name="sparkles" className="h-6 w-6" />
+              <span className="block text-sm font-black uppercase tracking-[0.08em]">Crear avatar</span>
+            </button>
+            <button onClick={() => setActive('nominas')} className="hd-neon-action hd-mobile-quick-action hd-tone-amber min-h-20 px-4 py-4 text-left">
+              <MobileIcon name="wallet" className="h-6 w-6" />
+              <span className="block text-sm font-black uppercase tracking-[0.08em]">Nóminas</span>
+            </button>
+            <button onClick={() => setActive('documentos')} className="hd-neon-action hd-mobile-quick-action hd-tone-violet min-h-20 px-4 py-4 text-left">
+              <MobileIcon name="folder" className="h-6 w-6" />
+              <span className="block text-sm font-black uppercase tracking-[0.08em]">Expedientes</span>
+            </button>
           </div>
 
           {(offlineQueue.length > 0 || hasDraftData(draft)) && (
@@ -2845,6 +2782,7 @@ export default function MobileFieldApp() {
     if (active === 'usuarios') return canApproveMobile ? renderUserApprovals() : renderSettings();
     if (active === 'aprobaciones') return canApproveMobile ? renderAgentApprovals() : renderSettings();
     if (active === 'perfil') return renderProfile();
+    if (active === 'avatar') return renderAvatarStudio();
     return renderSettings();
   };
 
@@ -2870,7 +2808,7 @@ export default function MobileFieldApp() {
       </main>
 
       <nav className="hd-mobile-bottom-nav fixed inset-x-0 bottom-0 z-30 border-t border-cyber-electric/20 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 backdrop-blur-xl">
-        <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
+        <div className="mx-auto grid max-w-lg grid-cols-6 gap-1">
           {primaryNav.map((item) => {
             const selected = active === item.id;
             return (
@@ -4006,6 +3944,43 @@ export default function MobileFieldApp() {
             })}
           </div>
         </Panel>
+      </div>
+    );
+  }
+
+  function renderAvatarStudio() {
+    return (
+      <div className="space-y-4 pb-4">
+        <Panel className="border-cyan-300/25 bg-cyan-300/8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/25 bg-cyan-300/10 text-cyan-100">
+              <MobileIcon name="sparkles" className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-base font-black text-white">Crear avatar IA</p>
+              <p className="mt-1 text-xs leading-5 text-slate-300">
+                Personaliza tu identidad visual, frase, colores, atuendo y estilo.
+              </p>
+            </div>
+          </div>
+        </Panel>
+        <Suspense fallback={
+          <Panel>
+            <div className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+          </Panel>
+        }>
+          <AvatarStudio
+            uid={profileUid}
+            name={profileName}
+            role={profileRoleLabel}
+            currentAvatar={profileAvatarUrl}
+            phrase={profilePhrase}
+            compact
+            onAvatarChange={persistGeneratedProfileAvatar}
+            onPhraseChange={saveProfilePhraseLocal}
+            onUploadClick={() => profileFileInputRef.current?.click()}
+          />
+        </Suspense>
       </div>
     );
   }

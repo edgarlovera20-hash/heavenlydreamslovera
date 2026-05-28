@@ -67,6 +67,22 @@ db.exec(`
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS user_avatars (
+    id              TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL UNIQUE,
+    avatar_url      TEXT,
+    border_style    TEXT NOT NULL DEFAULT 'neural',
+    colors          TEXT,
+    effects         TEXT,
+    animation_speed REAL NOT NULL DEFAULT 1,
+    rarity          TEXT NOT NULL DEFAULT 'rare',
+    ai_generated    INTEGER NOT NULL DEFAULT 1,
+    status_effect   TEXT NOT NULL DEFAULT 'online',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE
+  );
+
   -- Ventas / Folios
   CREATE TABLE IF NOT EXISTS ventas (
     id            TEXT PRIMARY KEY,
@@ -236,6 +252,112 @@ db.exec(`
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL,
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- CRM operativo para Consulta y Seguimiento
+  CREATE TABLE IF NOT EXISTS crm_followups (
+    id             TEXT PRIMARY KEY,
+    folio_siac     TEXT NOT NULL,
+    action         TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'pendiente',
+    next_at        TEXT,
+    responsible_id TEXT,
+    responsible_name TEXT,
+    comment        TEXT,
+    metadata       TEXT,
+    created_by     TEXT,
+    created_by_name TEXT,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS crm_notes (
+    id              TEXT PRIMARY KEY,
+    folio_siac      TEXT NOT NULL,
+    note            TEXT NOT NULL,
+    priority        TEXT NOT NULL DEFAULT 'media',
+    visibility      TEXT NOT NULL DEFAULT 'equipo',
+    attachments     TEXT,
+    created_by      TEXT,
+    created_by_name TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS crm_visibility_rules (
+    id          TEXT PRIMARY KEY,
+    scope_type  TEXT NOT NULL DEFAULT 'role',
+    scope_id    TEXT NOT NULL,
+    field       TEXT NOT NULL,
+    visible     INTEGER NOT NULL DEFAULT 1,
+    updated_by  TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(scope_type, scope_id, field)
+  );
+
+  CREATE TABLE IF NOT EXISTS crm_saved_searches (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    filters     TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Automatizacion Email -> CSV/XLSX -> CRM
+  CREATE TABLE IF NOT EXISTS email_sync_accounts (
+    id              TEXT PRIMARY KEY,
+    provider        TEXT NOT NULL DEFAULT 'gmail',
+    label           TEXT NOT NULL,
+    email           TEXT,
+    query           TEXT,
+    client_id       TEXT,
+    client_secret   TEXT,
+    refresh_token   TEXT,
+    enabled         INTEGER NOT NULL DEFAULT 0,
+    last_run_at     TEXT,
+    last_error      TEXT,
+    created_by      TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS email_sync_jobs (
+    id               TEXT PRIMARY KEY,
+    account_id       TEXT,
+    provider         TEXT NOT NULL DEFAULT 'gmail',
+    source           TEXT NOT NULL DEFAULT 'manual',
+    message_id       TEXT,
+    sender           TEXT,
+    subject          TEXT,
+    file_name        TEXT,
+    file_type        TEXT,
+    detected_type    TEXT,
+    status           TEXT NOT NULL DEFAULT 'queued',
+    imported         INTEGER NOT NULL DEFAULT 0,
+    skipped          INTEGER NOT NULL DEFAULT 0,
+    errors           TEXT,
+    warnings         TEXT,
+    metadata         TEXT,
+    fingerprint      TEXT,
+    started_at       TEXT,
+    finished_at      TEXT,
+    created_by       TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(message_id, file_name)
+  );
+
+  CREATE TABLE IF NOT EXISTS email_sync_attachments (
+    id          TEXT PRIMARY KEY,
+    job_id      TEXT NOT NULL,
+    file_name   TEXT NOT NULL,
+    mime_type   TEXT,
+    size_bytes  INTEGER DEFAULT 0,
+    fingerprint TEXT,
+    storage_ref TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (job_id) REFERENCES email_sync_jobs(id) ON DELETE CASCADE
   );
 
   -- Nóminas
@@ -897,6 +1019,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_created    ON audit_log (created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_audit_user       ON audit_log (user_id);
   CREATE INDEX IF NOT EXISTS idx_audit_entidad    ON audit_log (entidad, entidad_id);
+  CREATE INDEX IF NOT EXISTS idx_crm_followups_folio ON crm_followups (folio_siac, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_crm_followups_status ON crm_followups (status, next_at);
+  CREATE INDEX IF NOT EXISTS idx_crm_notes_folio ON crm_notes (folio_siac, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_crm_visibility_scope ON crm_visibility_rules (scope_type, scope_id);
+  CREATE INDEX IF NOT EXISTS idx_crm_saved_user ON crm_saved_searches (user_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_email_sync_jobs_created ON email_sync_jobs (created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_email_sync_jobs_status ON email_sync_jobs (status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_email_sync_jobs_type ON email_sync_jobs (detected_type, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_email_sync_accounts_enabled ON email_sync_accounts (enabled, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_tickets_status   ON tickets (status);
   CREATE INDEX IF NOT EXISTS idx_tickets_asesor   ON tickets (asesor_id);
   CREATE INDEX IF NOT EXISTS idx_nominas_asesor   ON nominas (asesor_id);
@@ -947,6 +1078,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_didit_checks_kind ON didit_checks (kind, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_didit_checks_capture ON didit_checks (capture_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_didit_checks_status ON didit_checks (status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_user_avatars_user ON user_avatars (user_id);
 `);
 
 function passwordForStorage(value: any) {
@@ -1009,6 +1141,77 @@ export const Users = {
   delete: (uid: string) => db.prepare("DELETE FROM users WHERE uid=?").run(uid),
 };
 
+function normalizeUserAvatar(row: any) {
+  if (!row) return null;
+  const colors = parseJson(row.colors, {});
+  const effects = parseJson(row.effects, {});
+  return {
+    ...row,
+    avatarUrl: row.avatar_url,
+    borderStyle: row.border_style,
+    neonColor: colors.neonColor || 'electric_blue',
+    backgroundStyle: effects.backgroundStyle || 'neural',
+    animationStyle: effects.animationStyle || 'float',
+    glowIntensity: Number(effects.glowIntensity || 72),
+    animationSpeed: Number(row.animation_speed || 1),
+    rarity: row.rarity || 'rare',
+    aiGenerated: Boolean(row.ai_generated),
+    statusEffect: row.status_effect || 'online',
+    phrase: effects.phrase || '',
+    colors,
+    effects,
+  };
+}
+
+export const UserAvatars = {
+  getByUserId: (userId: string) => normalizeUserAvatar(db.prepare('SELECT * FROM user_avatars WHERE user_id=?').get(userId)),
+  upsert: (userId: string, data: any) => {
+    const existing = UserAvatars.getByUserId(userId) as any;
+    const colors = {
+      ...(existing?.colors || {}),
+      ...(typeof data.colors === 'object' ? data.colors : {}),
+      neonColor: data.neonColor || data.colors?.neonColor || existing?.neonColor || 'electric_blue',
+    };
+    const effects = {
+      ...(existing?.effects || {}),
+      ...(typeof data.effects === 'object' ? data.effects : {}),
+      backgroundStyle: data.backgroundStyle || data.effects?.backgroundStyle || existing?.backgroundStyle || 'neural',
+      animationStyle: data.animationStyle || data.effects?.animationStyle || existing?.animationStyle || 'float',
+      glowIntensity: Number(data.glowIntensity || data.effects?.glowIntensity || existing?.glowIntensity || 72),
+      phrase: String(data.phrase || data.effects?.phrase || existing?.phrase || '').slice(0, 44),
+    };
+    db.prepare(`
+      INSERT INTO user_avatars
+        (id,user_id,avatar_url,border_style,colors,effects,animation_speed,rarity,ai_generated,status_effect)
+      VALUES
+        (@id,@user_id,@avatar_url,@border_style,@colors,@effects,@animation_speed,@rarity,@ai_generated,@status_effect)
+      ON CONFLICT(user_id) DO UPDATE SET
+        avatar_url=excluded.avatar_url,
+        border_style=excluded.border_style,
+        colors=excluded.colors,
+        effects=excluded.effects,
+        animation_speed=excluded.animation_speed,
+        rarity=excluded.rarity,
+        ai_generated=excluded.ai_generated,
+        status_effect=excluded.status_effect,
+        updated_at=datetime('now')
+    `).run({
+      id: existing?.id || data.id || randomUUID(),
+      user_id: userId,
+      avatar_url: data.avatarUrl || data.avatar_url || existing?.avatarUrl || null,
+      border_style: data.borderStyle || data.border_style || existing?.borderStyle || 'neural',
+      colors: JSON.stringify(colors),
+      effects: JSON.stringify(effects),
+      animation_speed: Number(data.animationSpeed || data.animation_speed || existing?.animationSpeed || 1),
+      rarity: data.rarity || existing?.rarity || 'rare',
+      ai_generated: data.aiGenerated === false || data.ai_generated === 0 ? 0 : 1,
+      status_effect: data.statusEffect || data.status_effect || existing?.statusEffect || 'online',
+    });
+    return UserAvatars.getByUserId(userId);
+  },
+  delete: (userId: string) => db.prepare('DELETE FROM user_avatars WHERE user_id=?').run(userId),
+};
+
 export const Ventas = {
   getAll: () => db.prepare('SELECT * FROM ventas ORDER BY created_at DESC').all(),
   getByAsesor: (id: string) => db.prepare('SELECT * FROM ventas WHERE asesor_id=? ORDER BY created_at DESC').all(id),
@@ -1034,14 +1237,15 @@ const siacDateOrder = `
 
 export const SiacRecords = {
   getAll: () => db.prepare(`SELECT * FROM siac_records ORDER BY ${siacDateOrder}`).all(),
-  getPage: ({ limit = 200, offset = 0, q = '', updatedSince = '' }: { limit?: number; offset?: number; q?: string; updatedSince?: string }) => {
+  getPage: ({ limit = 200, offset = 0, q = '', updatedSince = '', filters = {}, auth = null }: { limit?: number; offset?: number; q?: string; updatedSince?: string; filters?: Record<string, any>; auth?: any }) => {
     const where: string[] = [];
     const params: Record<string, any> = { limit, offset };
     if (q) {
       where.push(`(
         folio_siac LIKE @q OR telefono_asignado LIKE @q OR telefono_portado LIKE @q
         OR telefono_referencia LIKE @q OR os_alta LIKE @q OR tienda LIKE @q
-        OR zona LIKE @q OR distrito LIKE @q OR colonia LIKE @q
+        OR zona LIKE @q OR distrito LIKE @q OR colonia LIKE @q OR correo LIKE @q
+        OR paquete LIKE @q OR usuario LIKE @q OR promotor LIKE @q
       )`);
       params.q = `%${q}%`;
     }
@@ -1049,12 +1253,40 @@ export const SiacRecords = {
       where.push('datetime(created_at) >= datetime(@updatedSince)');
       params.updatedSince = updatedSince;
     }
+    const allowedFilters = ['estatus_siac', 'usuario', 'zona', 'tienda', 'estrategia', 'morosidad', 'tipo_linea', 'paquete', 'area', 'colonia'];
+    for (const key of allowedFilters) {
+      const value = filters?.[key];
+      if (value != null && String(value).trim() !== '') {
+        where.push(`${key} = @${key}`);
+        params[key] = String(value).trim();
+      }
+    }
+    const dateFrom = String(filters?.dateFrom || '').trim();
+    const dateTo = String(filters?.dateTo || '').trim();
+    if (dateFrom) {
+      where.push(`date(CASE WHEN fecha_captura LIKE '__/__/____' THEN substr(fecha_captura, 7, 4) || '-' || substr(fecha_captura, 4, 2) || '-' || substr(fecha_captura, 1, 2) ELSE fecha_captura END) >= date(@dateFrom)`);
+      params.dateFrom = dateFrom;
+    }
+    if (dateTo) {
+      where.push(`date(CASE WHEN fecha_captura LIKE '__/__/____' THEN substr(fecha_captura, 7, 4) || '-' || substr(fecha_captura, 4, 2) || '-' || substr(fecha_captura, 1, 2) ELSE fecha_captura END) <= date(@dateTo)`);
+      params.dateTo = dateTo;
+    }
+    const role = String(auth?.role || '').toUpperCase();
+    if (role === 'ASESOR' || role === 'PROMOTOR') {
+      where.push('(usuario = @authName OR promotor = @authName OR usuario = @authUsername OR promotor = @authUsername)');
+      params.authName = String(auth?.name || '');
+      params.authUsername = String(auth?.username || auth?.sub || '');
+    }
     return db.prepare(`
       SELECT * FROM siac_records
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY ${siacDateOrder}
       LIMIT @limit OFFSET @offset
     `).all(params);
+  },
+  countPage: ({ q = '', updatedSince = '', filters = {}, auth = null }: { q?: string; updatedSince?: string; filters?: Record<string, any>; auth?: any }) => {
+    const rows = SiacRecords.getPage({ limit: 1000000, offset: 0, q, updatedSince, filters, auth });
+    return rows.length;
   },
   search: (folio: string) => db.prepare(
     `SELECT * FROM siac_records
@@ -1125,6 +1357,212 @@ export const SiacRecords = {
   `).run({ source_id: null, usuario: null, morosidad: null, ...data }),
   deleteAll: () => db.prepare('DELETE FROM siac_records').run(),
   count: () => (db.prepare('SELECT COUNT(*) as c FROM siac_records').get() as any).c,
+};
+
+export const CrmFollowups = {
+  getByFolio: (folio: string) => db.prepare('SELECT * FROM crm_followups WHERE folio_siac=? ORDER BY created_at DESC').all(folio).map((row: any) => ({ ...row, metadata: parseJson(row.metadata, {}) })),
+  create: (data: any) => db.prepare(`
+    INSERT INTO crm_followups
+      (id,folio_siac,action,status,next_at,responsible_id,responsible_name,comment,metadata,created_by,created_by_name)
+    VALUES
+      (@id,@folio_siac,@action,@status,@next_at,@responsible_id,@responsible_name,@comment,@metadata,@created_by,@created_by_name)
+  `).run({
+    id: data.id || randomUUID(),
+    folio_siac: data.folio_siac,
+    action: data.action,
+    status: data.status || 'pendiente',
+    next_at: data.next_at || null,
+    responsible_id: data.responsible_id || null,
+    responsible_name: data.responsible_name || null,
+    comment: data.comment || null,
+    metadata: JSON.stringify(data.metadata || {}),
+    created_by: data.created_by || null,
+    created_by_name: data.created_by_name || null,
+  }),
+};
+
+export const CrmNotes = {
+  getByFolio: (folio: string, includePrivate = false) => db.prepare(`
+    SELECT * FROM crm_notes
+    WHERE folio_siac=? ${includePrivate ? '' : "AND visibility != 'gerencia'"}
+    ORDER BY created_at DESC
+  `).all(folio).map((row: any) => ({ ...row, attachments: parseJson(row.attachments, []) })),
+  create: (data: any) => db.prepare(`
+    INSERT INTO crm_notes
+      (id,folio_siac,note,priority,visibility,attachments,created_by,created_by_name)
+    VALUES
+      (@id,@folio_siac,@note,@priority,@visibility,@attachments,@created_by,@created_by_name)
+  `).run({
+    id: data.id || randomUUID(),
+    folio_siac: data.folio_siac,
+    note: data.note,
+    priority: data.priority || 'media',
+    visibility: data.visibility || 'equipo',
+    attachments: JSON.stringify(data.attachments || []),
+    created_by: data.created_by || null,
+    created_by_name: data.created_by_name || null,
+  }),
+};
+
+export const CrmVisibilityRules = {
+  getAll: () => db.prepare('SELECT * FROM crm_visibility_rules ORDER BY scope_type, scope_id, field').all().map((row: any) => ({ ...row, visible: row.visible === 1 })),
+  getForScope: (scopeType: string, scopeId: string) => db.prepare('SELECT * FROM crm_visibility_rules WHERE scope_type=? AND scope_id=?').all(scopeType, scopeId).map((row: any) => ({ ...row, visible: row.visible === 1 })),
+  setMany: (rules: any[], updatedBy: string | null) => {
+    const stmt = db.prepare(`
+      INSERT INTO crm_visibility_rules (id,scope_type,scope_id,field,visible,updated_by,updated_at)
+      VALUES (@id,@scope_type,@scope_id,@field,@visible,@updated_by,datetime('now'))
+      ON CONFLICT(scope_type,scope_id,field) DO UPDATE SET
+        visible=excluded.visible,
+        updated_by=excluded.updated_by,
+        updated_at=datetime('now')
+    `);
+    const tx = db.transaction((items: any[]) => {
+      for (const rule of items) {
+        stmt.run({
+          id: rule.id || randomUUID(),
+          scope_type: rule.scope_type || 'role',
+          scope_id: String(rule.scope_id || '').toUpperCase(),
+          field: rule.field,
+          visible: rule.visible === false || rule.visible === 0 ? 0 : 1,
+          updated_by: updatedBy,
+        });
+      }
+    });
+    tx(rules);
+  },
+};
+
+export const CrmSavedSearches = {
+  getByUser: (userId: string) => db.prepare('SELECT * FROM crm_saved_searches WHERE user_id=? ORDER BY updated_at DESC').all(userId).map((row: any) => ({ ...row, filters: parseJson(row.filters, {}) })),
+  create: (data: any) => db.prepare(`
+    INSERT INTO crm_saved_searches (id,user_id,name,filters)
+    VALUES (@id,@user_id,@name,@filters)
+  `).run({
+    id: data.id || randomUUID(),
+    user_id: data.user_id,
+    name: data.name,
+    filters: JSON.stringify(data.filters || {}),
+  }),
+};
+
+export const EmailSync = {
+  listAccounts: () => db.prepare(`
+    SELECT id,provider,label,email,query,enabled,last_run_at,last_error,created_by,created_at,updated_at
+    FROM email_sync_accounts
+    ORDER BY updated_at DESC
+  `).all(),
+  getAccount: (id: string) => db.prepare('SELECT * FROM email_sync_accounts WHERE id=?').get(id),
+  getDefaultAccount: () => db.prepare('SELECT * FROM email_sync_accounts WHERE enabled=1 ORDER BY updated_at DESC LIMIT 1').get(),
+  upsertAccount: (data: any) => db.prepare(`
+    INSERT INTO email_sync_accounts
+      (id,provider,label,email,query,client_id,client_secret,refresh_token,enabled,created_by,updated_at)
+    VALUES
+      (@id,@provider,@label,@email,@query,@client_id,@client_secret,@refresh_token,@enabled,@created_by,datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      provider=excluded.provider,
+      label=excluded.label,
+      email=excluded.email,
+      query=excluded.query,
+      client_id=COALESCE(excluded.client_id, email_sync_accounts.client_id),
+      client_secret=COALESCE(excluded.client_secret, email_sync_accounts.client_secret),
+      refresh_token=COALESCE(excluded.refresh_token, email_sync_accounts.refresh_token),
+      enabled=excluded.enabled,
+      last_error=NULL,
+      updated_at=datetime('now')
+  `).run({
+    id: data.id || 'gmail-primary',
+    provider: data.provider || 'gmail',
+    label: data.label || 'Gmail principal',
+    email: data.email || null,
+    query: data.query || null,
+    client_id: data.client_id || null,
+    client_secret: data.client_secret || null,
+    refresh_token: data.refresh_token || null,
+    enabled: data.enabled ? 1 : 0,
+    created_by: data.created_by || null,
+  }),
+  markAccountRun: (id: string, error: any = null) => db.prepare(`
+    UPDATE email_sync_accounts
+    SET last_run_at=datetime('now'), last_error=@last_error, updated_at=datetime('now')
+    WHERE id=@id
+  `).run({ id, last_error: error ? String(error).slice(0, 1000) : null }),
+  listJobs: (limit = 100) => db.prepare(`
+    SELECT * FROM email_sync_jobs ORDER BY created_at DESC LIMIT ?
+  `).all(limit).map((row: any) => ({
+    ...row,
+    errors: parseJson(row.errors, []),
+    warnings: parseJson(row.warnings, []),
+    metadata: parseJson(row.metadata, {}),
+  })),
+  findJobByMessageFile: (messageId: string, fileName: string) => db.prepare(`
+    SELECT * FROM email_sync_jobs WHERE message_id=? AND file_name=?
+  `).get(messageId, fileName),
+  createJob: (data: any) => {
+    const job = {
+      id: data.id || randomUUID(),
+      account_id: data.account_id || null,
+      provider: data.provider || 'gmail',
+      source: data.source || 'manual',
+      message_id: data.message_id || null,
+      sender: data.sender || null,
+      subject: data.subject || null,
+      file_name: data.file_name || null,
+      file_type: data.file_type || null,
+      detected_type: data.detected_type || null,
+      status: data.status || 'queued',
+      imported: Number(data.imported || 0),
+      skipped: Number(data.skipped || 0),
+      errors: JSON.stringify(data.errors || []),
+      warnings: JSON.stringify(data.warnings || []),
+      metadata: JSON.stringify(data.metadata || {}),
+      fingerprint: data.fingerprint || null,
+      started_at: data.started_at || null,
+      finished_at: data.finished_at || null,
+      created_by: data.created_by || null,
+    };
+    db.prepare(`
+      INSERT INTO email_sync_jobs
+        (id,account_id,provider,source,message_id,sender,subject,file_name,file_type,detected_type,status,imported,skipped,errors,warnings,metadata,fingerprint,started_at,finished_at,created_by)
+      VALUES
+        (@id,@account_id,@provider,@source,@message_id,@sender,@subject,@file_name,@file_type,@detected_type,@status,@imported,@skipped,@errors,@warnings,@metadata,@fingerprint,@started_at,@finished_at,@created_by)
+    `).run(job);
+    return job;
+  },
+  updateJob: (id: string, data: any) => {
+    const clean = { ...data };
+    if (Array.isArray(clean.errors)) clean.errors = JSON.stringify(clean.errors);
+    if (Array.isArray(clean.warnings)) clean.warnings = JSON.stringify(clean.warnings);
+    if (clean.metadata && typeof clean.metadata !== 'string') clean.metadata = JSON.stringify(clean.metadata);
+    return updateById('email_sync_jobs', 'id', id, clean, [
+      'detected_type', 'status', 'imported', 'skipped', 'errors', 'warnings', 'metadata',
+      'fingerprint', 'started_at', 'finished_at',
+    ]);
+  },
+  addAttachment: (data: any) => db.prepare(`
+    INSERT INTO email_sync_attachments (id,job_id,file_name,mime_type,size_bytes,fingerprint,storage_ref)
+    VALUES (@id,@job_id,@file_name,@mime_type,@size_bytes,@fingerprint,@storage_ref)
+  `).run({
+    id: data.id || randomUUID(),
+    job_id: data.job_id,
+    file_name: data.file_name,
+    mime_type: data.mime_type || null,
+    size_bytes: Number(data.size_bytes || 0),
+    fingerprint: data.fingerprint || null,
+    storage_ref: data.storage_ref || null,
+  }),
+  summary: () => ({
+    accounts: db.prepare('SELECT COUNT(*) AS c FROM email_sync_accounts').get(),
+    jobs: db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed,
+        SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed,
+        SUM(imported) AS imported,
+        SUM(skipped) AS skipped
+      FROM email_sync_jobs
+    `).get(),
+    recent: EmailSync.listJobs(8),
+  }),
 };
 
 export const Tickets = {

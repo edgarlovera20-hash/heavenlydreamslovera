@@ -10,7 +10,7 @@ export const DEFAULT_SIAC_SOURCE = process.env.SIAC_PRIMARY_SOURCE
 export const DEFAULT_MOROSOS_SOURCE = process.env.MOROSOS_PRIMARY_SOURCE || 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\MOROSOS APP.csv';
 export const SIAC_IMPORTER_VERSION = 'siac-ppies-v2';
 
-type SourceInput = { sourcePath?: string; buffer?: Buffer; fileName?: string; replace?: boolean };
+export type SourceInput = { sourcePath?: string; buffer?: Buffer; fileName?: string; replace?: boolean };
 
 function fingerprintBuffer(buffer: Buffer) {
   return createHash('sha256').update(buffer).digest('hex');
@@ -172,7 +172,7 @@ function dateValue(row: Record<string, any>, aliases: string[]) {
   return value ? excelSerialDate(value) : null;
 }
 
-async function rowsFromSource(input: SourceInput) {
+export async function rowsFromSource(input: SourceInput) {
   const sourcePath = input.sourcePath;
   const buffer = input.buffer || (sourcePath ? readFileSync(sourcePath) : null);
   if (!buffer) throw new Error('No se proporciono archivo');

@@ -56,8 +56,8 @@ const AVAILABLE_INTEGRATIONS: Integration[] = [
   },
   {
     id: 'ollama',
-    name: 'Ollama / Gemini',
-    description: 'Motor de inteligencia artificial para validación de capturas y agentes.',
+    name: 'Ollama local',
+    description: 'Motor privado para OCR documental, validación de capturas y agentes.',
     icon: Cpu,
     color: 'green',
     status: 'connected',

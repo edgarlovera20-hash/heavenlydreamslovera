@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Bot, Smartphone, Download, Upload, Plus, Edit2, Power, AlertTriangle, FileText, BrainCircuit, Trash2, Key, Lock, Eye, EyeOff, BellRing, Loader2, CheckCircle2, QrCode, MessageCircle, Send, X, RefreshCw } from 'lucide-react';
+import { Users, Bot, Smartphone, Download, Upload, Plus, Edit2, Power, AlertTriangle, FileText, BrainCircuit, Trash2, Key, Lock, BellRing, Loader2, CheckCircle2, QrCode, MessageCircle, Send, X, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { sendPushNotification, requestNotificationPermission } from '../../lib/notifications';
 import { AgentDesigner } from './AgentDesigner';
 import UserManagementView from './UserManagementView';
 import { toast } from 'sonner';
 import { ChannelKey as MessagingChannelKey, getChannels, refreshChannels, setChannel } from '../../lib/channels';
+import { EmailSyncAPI } from '../../services/db';
 
-type Tab = 'usuarios' | 'bot' | 'canales' | 'import_export' | 'integraciones' | 'notificaciones';
+type Tab = 'usuarios' | 'bot' | 'canales' | 'email_sync' | 'import_export' | 'integraciones' | 'notificaciones';
 
 type OcrStatus = {
   primary?: string;
@@ -15,7 +16,7 @@ type OcrStatus = {
   order?: string[];
   orders?: Record<string, string[]>;
   cache?: { entries?: number; ttlMs?: number; maxEntries?: number };
-  providers?: Record<string, { configured?: boolean; model?: string; url?: string }>;
+  providers?: Record<string, { configured?: boolean; reachable?: boolean; model?: string; url?: string }>;
 };
 
 function currentSessionRole() {
@@ -36,6 +37,7 @@ export default function Settings() {
     { id: 'usuarios', label: 'Gestión de Usuarios', icon: Users },
     { id: 'bot', label: 'Agentes Inteligentes', icon: Bot },
     ...(canManageChannels ? [{ id: 'canales' as const, label: 'Cuentas de mensajería', icon: Smartphone }] : []),
+    { id: 'email_sync', label: 'Email Sync', icon: Upload },
     { id: 'notificaciones', label: 'Notificaciones Push', icon: BellRing },
     { id: 'integraciones', label: 'Integraciones y APIs', icon: Key },
     { id: 'import_export', label: 'Importar / Exportar', icon: Download },
@@ -72,6 +74,7 @@ export default function Settings() {
         {activeTab === 'usuarios' && <UsuariosTab />}
         {activeTab === 'bot' && <BotTab />}
         {activeTab === 'canales' && <CanalesTab />}
+        {activeTab === 'email_sync' && <EmailSyncTab />}
         {activeTab === 'notificaciones' && <NotificacionesTab />}
         {activeTab === 'integraciones' && <IntegracionesTab />}
         {activeTab === 'import_export' && <ImportExportTab />}
@@ -172,12 +175,6 @@ function IntegracionesTab() {
 
   const [keys, setKeys] = useState<any[]>([]);
 
-  // Google Vision OCR key
-  const [visionKey, setVisionKey] = useState('');
-  const [visionKeySaved, setVisionKeySaved] = useState('');
-  const [showVisionKey, setShowVisionKey] = useState(false);
-  const [visionTesting, setVisionTesting] = useState(false);
-  const [visionTestResult, setVisionTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [ocrStatus, setOcrStatus] = useState<OcrStatus | null>(null);
 
   useEffect(() => {
@@ -185,20 +182,13 @@ function IntegracionesTab() {
     const loadSettings = async () => {
       setIsLoading(true);
       try {
-        const [keysRes, visionRes, ocrRes] = await Promise.all([
+        const [keysRes, ocrRes] = await Promise.all([
           fetch('/api/settings/integration_keys'),
-          fetch('/api/settings/google_vision_key'),
           fetch('/api/vision/status'),
         ]);
         if (keysRes.ok) {
           const data = await keysRes.json();
           setKeys(Array.isArray(data.value) ? data.value : []);
-        }
-        if (visionRes.ok) {
-          const data = await visionRes.json();
-          const vk = typeof data.value === 'string' ? data.value : '';
-          setVisionKeySaved(vk);
-          setVisionKey(vk);
         }
         if (ocrRes.ok) {
           setOcrStatus(await ocrRes.json());
@@ -210,52 +200,10 @@ function IntegracionesTab() {
     loadSettings();
   }, [isUnlocked]);
 
-  const handleSaveVisionKey = async () => {
-    const trimmed = visionKey.trim();
-    const res = await fetch('/api/settings/google_vision_key', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value: trimmed }),
-    });
-    if (!res.ok) {
-      toast.error('No se pudo guardar la API key en el servidor.');
-      return;
-    }
-    setVisionKeySaved(trimmed);
-    setVisionTestResult(null);
-    toast.success(trimmed ? 'API key de Google Vision guardada en servidor.' : 'API key eliminada.');
-  };
-
-  const handleTestVisionKey = async () => {
-    const key = visionKey.trim();
-    if (!key) return;
-    setVisionTesting(true);
-    setVisionTestResult(null);
-    try {
-      // Imagen mínima 1×1 px en PNG base64 — solo para verificar que la key es válida
-      const tiny = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-      const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requests: [{ image: { content: tiny }, features: [{ type: 'LABEL_DETECTION', maxResults: 1 }] }] }),
-      });
-      if (res.ok) {
-        setVisionTestResult({ ok: true, msg: 'Conexión exitosa ✓ La API key es válida.' });
-      } else {
-        const err = await res.json().catch(() => ({})) as any;
-        setVisionTestResult({ ok: false, msg: err?.error?.message || `Error ${res.status}` });
-      }
-    } catch (e: any) {
-      setVisionTestResult({ ok: false, msg: e?.message || 'Error de red' });
-    } finally {
-      setVisionTesting(false);
-    }
-  };
-
   const appsDirectory = [
     { id: 'hubspot', name: 'HubSpot CRM', desc: 'Sincroniza contactos y ventas', icon: 'HubSpot', status: 'connected' },
     { id: 'slack', name: 'Slack', desc: 'Recibe alertas en tus canales', icon: 'Slack', status: 'available' },
-    { id: 'whatsapp', name: 'WhatsApp Business', desc: 'API Oficial para atención', icon: 'WhatsApp', status: 'connected' },
+    { id: 'whatsapp', name: 'WhatsApp / Baileys', desc: 'Chats operativos y enlaces nativos sin API Meta oficial', icon: 'WhatsApp', status: 'connected' },
     { id: 'sendgrid', name: 'SendGrid', desc: 'Campañas de email masivo', icon: 'SendGrid', status: 'available' },
     { id: 'zapier', name: 'Zapier', desc: 'Automatiza con más de 5000 apps', icon: 'Zapier', status: 'available' },
   ];
@@ -353,7 +301,7 @@ function IntegracionesTab() {
         </button>
       </div>
 
-      {/* ── OCR multi-modelo ─────────────────────── */}
+      {/* ── OCR local privado ─────────────────────── */}
       <div className="bg-gradient-to-br from-blue-950/40 to-slate-900/60 border border-blue-500/20 rounded-2xl p-6 space-y-4">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
@@ -361,59 +309,31 @@ function IntegracionesTab() {
           </div>
           <div className="flex-1 min-w-0">
             <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              OCR multi-modelo
+              OCR local privado
               {configuredOcrProviders > 0
                 ? <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">{configuredOcrProviders} activos</span>
                 : <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">Solo local</span>}
             </h4>
             <p className="text-xs text-slate-400 mt-1">
-              Orquestador con Ollama como primario, Gemini como respaldo y Tesseract local. Al capturar documentos extrae CURP, nombre, domicilio y SIAC con fallback automático. Puedes conservar una API key de{' '}
-              <a href="https://console.cloud.google.com/apis/library/vision.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">
-                Google Cloud Console
-              </a>.
+              Orquestador privado con Ollama como primario y Tesseract local como respaldo. Las INE, comprobantes, capturas SIAC y documentos financieros no se envían a Google Vision ni Gemini.
             </p>
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <input
-              type={showVisionKey ? 'text' : 'password'}
-              value={visionKey}
-              onChange={e => { setVisionKey(e.target.value); setVisionTestResult(null); }}
-              placeholder="AIza…"
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl p-3 pr-10 text-slate-100 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-slate-600"
-            />
-            <button
-              type="button"
-              onClick={() => setShowVisionKey(v => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-            >
-              {showVisionKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-xl border border-cyan-400/15 bg-slate-950/50 p-4">
+            <p className="text-[10px] uppercase tracking-wider text-cyan-300 font-bold">Ollama</p>
+            <p className="text-sm text-slate-100 font-semibold mt-1">{ocrStatus?.providers?.ollama?.model || 'glm-ocr / llava / qwen2-vl'}</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {ocrStatus?.providers?.ollama?.reachable ? 'Disponible para OCR privado.' : 'Si no responde, el sistema usa Tesseract o captura manual.'}
+            </p>
           </div>
-          <button
-            onClick={handleTestVisionKey}
-            disabled={!visionKey.trim() || visionTesting}
-            className="px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 rounded-xl border border-white/5 transition-colors whitespace-nowrap"
-          >
-            {visionTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Probar'}
-          </button>
-          <button
-            onClick={handleSaveVisionKey}
-            disabled={visionKey.trim() === visionKeySaved}
-            className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition-colors whitespace-nowrap"
-          >
-            Guardar
-          </button>
+          <div className="rounded-xl border border-emerald-400/15 bg-slate-950/50 p-4">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">Fallback local</p>
+            <p className="text-sm text-slate-100 font-semibold mt-1">{ocrStatus?.providers?.tesseract?.model || 'tesseract-spa (local)'}</p>
+            <p className="text-xs text-slate-400 mt-1">No requiere red ni APIs externas; puede pedir revisión manual si la lectura no es confiable.</p>
+          </div>
         </div>
-
-        {visionTestResult && (
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border ${visionTestResult.ok ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
-            {visionTestResult.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
-            {visionTestResult.msg}
-          </div>
-        )}
 
         {ocrStatus && (
           <div className="rounded-xl border border-white/10 bg-slate-950/50 p-4 space-y-4">
@@ -1033,6 +953,233 @@ function StatusPill({ label, connected, accent }: { label: string; connected: bo
       <span className={cn('w-1.5 h-1.5 rounded-full', connected ? (accent === 'emerald' ? 'bg-emerald-400' : 'bg-sky-400') : 'bg-slate-500')} />
       {label} · {connected ? 'on' : 'off'}
     </span>
+  );
+}
+
+function EmailSyncTab() {
+  const [status, setStatus] = useState<any>(null);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    id: 'gmail-primary',
+    label: 'Gmail principal',
+    email: '',
+    query: 'has:attachment (filename:csv OR filename:xlsx OR filename:xls) newer_than:14d',
+    clientId: '',
+    clientSecret: '',
+    refreshToken: '',
+    enabled: true,
+  });
+
+  const load = async () => {
+    const [nextStatus, nextJobs, nextAccounts] = await Promise.all([
+      EmailSyncAPI.status(),
+      EmailSyncAPI.jobs(50),
+      EmailSyncAPI.accounts(),
+    ]);
+    setStatus(nextStatus);
+    setJobs(Array.isArray(nextJobs) ? nextJobs : []);
+    setAccounts(Array.isArray(nextAccounts) ? nextAccounts : []);
+    const first = Array.isArray(nextAccounts) ? nextAccounts[0] : null;
+    if (first) {
+      setForm(prev => ({
+        ...prev,
+        id: first.id || prev.id,
+        label: first.label || prev.label,
+        email: first.email || '',
+        query: first.query || prev.query,
+        enabled: first.enabled !== 0,
+      }));
+    }
+  };
+
+  useEffect(() => {
+    load().catch(err => toast.error(err?.message || 'No se pudo cargar Email Sync.'));
+  }, []);
+
+  const saveAccount = async () => {
+    setBusy('save');
+    try {
+      await EmailSyncAPI.saveAccount(form);
+      toast.success('Configuración Gmail guardada.');
+      await load();
+      setForm(prev => ({ ...prev, clientSecret: '', refreshToken: '' }));
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo guardar Gmail Sync.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runGmail = async () => {
+    setBusy('run');
+    try {
+      const result = await EmailSyncAPI.run({ accountId: form.id, limit: 10 });
+      toast.success(`Gmail revisado: ${result?.processed?.length || 0} archivo(s) procesado(s).`);
+      await load();
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo ejecutar Gmail Sync.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const uploadFile = async (file: File | null) => {
+    if (!file) return;
+    setBusy('upload');
+    try {
+      const contentBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || '').split(',').pop() || '');
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const result = await EmailSyncAPI.upload({ fileName: file.name, contentBase64, mimeType: file.type });
+      toast.success(`Archivo procesado: ${result?.result?.imported ?? 0} registros actualizados.`);
+      await load();
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo procesar el archivo.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const totals = status?.jobs || {};
+  const recent = jobs.slice(0, 8);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+            <Upload className="w-5 h-5 text-cyan-300" />
+            Automatización Email → CSV/XLSX → CRM
+          </h3>
+          <p className="text-sm text-slate-300 mt-1">
+            Monitorea Gmail, descarga adjuntos, clasifica archivos y actualiza SIAC, morosidad y seguimientos.
+          </p>
+        </div>
+        <button
+          onClick={runGmail}
+          disabled={busy === 'run'}
+          className="hd-premium-button px-5 py-3 rounded-2xl text-sm font-black text-white flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          {busy === 'run' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          Revisar Gmail ahora
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          ['Procesados', totals.completed || 0, 'text-emerald-300'],
+          ['Errores', totals.failed || 0, 'text-rose-300'],
+          ['Importados', totals.imported || 0, 'text-cyan-300'],
+          ['Omitidos', totals.skipped || 0, 'text-orange-300'],
+        ].map(([label, value, color]) => (
+          <div key={String(label)} className="hd-premium-card rounded-2xl p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400 font-black">{label}</p>
+            <p className={cn('text-3xl font-black mt-1', String(color))}>{String(value)}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[0.95fr_1.05fr] gap-5">
+        <section className="hd-premium-card rounded-3xl p-5 space-y-4">
+          <div>
+            <h4 className="text-white font-black">Conector Gmail OAuth2</h4>
+            <p className="text-xs text-slate-400 mt-1">
+              Usa refresh token seguro. No se guarda contraseña de Gmail.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-widest font-black text-cyan-300">Etiqueta</span>
+              <input className="hd-premium-input w-full rounded-xl px-3 py-2.5 text-sm" value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-widest font-black text-cyan-300">Correo origen</span>
+              <input className="hd-premium-input w-full rounded-xl px-3 py-2.5 text-sm" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="reportes@empresa.com" />
+            </label>
+            <label className="md:col-span-2 space-y-1">
+              <span className="text-[10px] uppercase tracking-widest font-black text-cyan-300">Query Gmail</span>
+              <input className="hd-premium-input w-full rounded-xl px-3 py-2.5 text-sm" value={form.query} onChange={e => setForm({ ...form, query: e.target.value })} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-widest font-black text-cyan-300">Client ID</span>
+              <input className="hd-premium-input w-full rounded-xl px-3 py-2.5 text-sm" value={form.clientId} onChange={e => setForm({ ...form, clientId: e.target.value })} placeholder="Opcional si está en .env" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-widest font-black text-cyan-300">Client Secret</span>
+              <input className="hd-premium-input w-full rounded-xl px-3 py-2.5 text-sm" type="password" value={form.clientSecret} onChange={e => setForm({ ...form, clientSecret: e.target.value })} placeholder="No se muestra al cargar" />
+            </label>
+            <label className="md:col-span-2 space-y-1">
+              <span className="text-[10px] uppercase tracking-widest font-black text-cyan-300">Refresh Token</span>
+              <input className="hd-premium-input w-full rounded-xl px-3 py-2.5 text-sm" type="password" value={form.refreshToken} onChange={e => setForm({ ...form, refreshToken: e.target.value })} placeholder="Pegar token OAuth2 con scope Gmail readonly" />
+            </label>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button onClick={saveAccount} disabled={busy === 'save'} className="hd-premium-button rounded-2xl px-4 py-3 text-sm font-black text-white flex items-center justify-center gap-2 disabled:opacity-60">
+              {busy === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Guardar conector
+            </button>
+            <label className="cursor-pointer rounded-2xl px-4 py-3 text-sm font-black text-cyan-100 border border-cyan-300/25 bg-cyan-400/10 hover:bg-cyan-400/20 transition flex items-center justify-center gap-2">
+              <Upload className="w-4 h-4" />
+              Subir CSV/XLSX manual
+              <input className="hidden" type="file" accept=".csv,.xlsx,.xlsm" onChange={e => uploadFile(e.target.files?.[0] || null)} />
+            </label>
+          </div>
+          <div className="rounded-2xl border border-cyan-300/15 bg-cyan-950/20 p-3 text-xs text-slate-300">
+            Estado: {status?.configured ? <b className="text-emerald-300">configurado</b> : <b className="text-orange-300">pendiente de token</b>}
+            {accounts.length > 0 && <span> · {accounts.length} cuenta(s) registradas</span>}
+          </div>
+        </section>
+
+        <section className="hd-premium-card rounded-3xl p-5">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h4 className="text-white font-black">Historial de sincronización</h4>
+              <p className="text-xs text-slate-400">Clasificación local IA v1 + validación básica.</p>
+            </div>
+            <button onClick={load} className="p-2 rounded-xl bg-cyan-400/10 border border-cyan-300/20 text-cyan-200 hover:bg-cyan-400/20">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+            {recent.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm text-slate-400">
+                Aún no hay archivos procesados.
+              </div>
+            ) : recent.map(job => (
+              <div key={job.id} className="rounded-2xl border border-cyan-300/15 bg-[#061b3a]/85 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-white truncate">{job.file_name || job.subject || 'Archivo'}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{job.sender || job.source} · {job.detected_type || 'sin clasificar'}</p>
+                  </div>
+                  <span className={cn(
+                    'shrink-0 px-2 py-1 rounded-full text-[10px] uppercase font-black border',
+                    job.status === 'completed' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/25' :
+                    job.status === 'failed' ? 'bg-rose-500/10 text-rose-300 border-rose-400/25' :
+                    'bg-cyan-500/10 text-cyan-300 border-cyan-400/25'
+                  )}>
+                    {job.status}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                  <div className="rounded-xl bg-black/20 p-2"><b className="text-cyan-200">{job.imported || 0}</b> importados</div>
+                  <div className="rounded-xl bg-black/20 p-2"><b className="text-orange-200">{job.skipped || 0}</b> omitidos</div>
+                </div>
+                {job.metadata?.summary && <p className="mt-2 text-xs text-slate-300 leading-relaxed">{job.metadata.summary}</p>}
+                {Array.isArray(job.errors) && job.errors.length > 0 && (
+                  <p className="mt-2 text-xs text-rose-300 flex gap-1"><AlertTriangle className="w-3 h-3 mt-0.5" />{job.errors[0]}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }
 

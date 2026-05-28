@@ -1,13 +1,12 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
-import ShaderBackground from './components/ui/shader-background';
 const ManagerView = lazy(() => import('./components/views/ManagerView'));
 const MobileUserView = lazy(() => import('./components/views/MobileUserView'));
 const RegisterForm = lazy(() => import('./components/views/RegisterForm').then(m => ({ default: m.RegisterForm })));
+const ShaderBackground = lazy(() => import('./components/ui/shader-background'));
 import Logo from './components/ui/Logo';
 import { MatrixInput } from './components/ui/MatrixInput';
 import { MatrixText } from './components/ui/matrix-text';
 import { LoadingOverlay } from './components/ui/LoadingOverlay';
-import { CyberIcon } from './components/ui/CyberIcon';
 import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Binoculars, ClipboardList, UserPlus, Fingerprint } from 'lucide-react';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
@@ -49,7 +48,6 @@ export default function App() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loggingIn, setLoggingIn] = useState(false);
-  const [googleOAuthAvailable, setGoogleOAuthAvailable] = useState(false);
   const [continuingWithoutPasskey, setContinuingWithoutPasskey] = useState(false);
   const [passkeyUserId, setPasskeyUserId] = useState<string | null>(null);
   const [passkeyEnrollmentRequired, setPasskeyEnrollmentRequired] = useState(false);
@@ -92,19 +90,6 @@ export default function App() {
     const h = () => setIsMobile(window.innerWidth < 768);
     h(); window.addEventListener('resize', h);
     return () => window.removeEventListener('resize', h);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/auth/oauth/status')
-      .then(r => r.ok ? r.json() : null)
-      .then(status => {
-        if (!cancelled) setGoogleOAuthAvailable(Boolean(status?.google));
-      })
-      .catch(() => {
-        if (!cancelled) setGoogleOAuthAvailable(false);
-      });
-    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -257,27 +242,6 @@ export default function App() {
     else { setUsername(''); setPassword(''); setRememberMe(false); }
   };
 
-  const startOAuthLogin = async (provider: 'google') => {
-    const providerLabel = 'Google';
-    setError('');
-    try {
-      const statusRes = await fetch('/api/auth/oauth/status');
-      const status = await statusRes.json();
-      if (!statusRes.ok || !status?.[provider]) {
-        setError('');
-        return;
-      }
-    } catch {
-      setError('No se pudo validar OAuth con el servidor. Reinicia la app y revisa que /api/auth/oauth/status responda JSON.');
-      return;
-    }
-    const params = new URLSearchParams({
-      mode: 'login',
-      role: pendingRole || 'ASESOR',
-    });
-    window.location.href = `/api/auth/oauth/${provider}/start?${params.toString()}`;
-  };
-
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     setAvatarUploading(true);
@@ -342,7 +306,9 @@ export default function App() {
 
       {!role && (
         <div className="absolute inset-0 z-0 pointer-events-none">
-          <ShaderBackground isLightMode={isLightMode} />
+          <Suspense fallback={<div className="aether-flow-bg hd-neural-hero-bg" aria-hidden="true" />}>
+            <ShaderBackground isLightMode={isLightMode} />
+          </Suspense>
         </div>
       )}
 
@@ -363,9 +329,9 @@ export default function App() {
               </p>
             </div>
             <div className="aether-role-grid grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-700 px-4 sm:px-0">
-              <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} color="cyan" tone="admin" onClick={() => setPendingRole('GERENTE')} />
-              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} color="purple" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
-              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} color="pink" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
+              <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} color="yellow" tone="admin" onClick={() => setPendingRole('GERENTE')} />
+              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} color="pink" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
+              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} color="orange" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
             </div>
             <div className="mt-8 sm:mt-12 animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
               <button onClick={() => setIsRegistering(true)}
@@ -406,21 +372,29 @@ export default function App() {
               </div>
               <div className="space-y-1">
                 <label className="hd-label pl-1">Contraseña</label>
-                <div className="relative group">
-                  <MatrixInput className="pr-12" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+                <div className="hd-login-password-field hd-login-password-control group">
+                  <input
+                    className="hd-input"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                  />
                   <button type="button" onClick={() => setShowPassword(!showPassword)}
-                    className="hd-no-liquid hd-password-toggle absolute right-3 top-1/2 -translate-y-1/2 p-2 text-cyber-electric/70 hover:text-cyber-neon transition-colors">
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="hd-no-liquid hd-login-eye-button p-2 text-cyber-electric/70 hover:text-cyber-neon transition-colors">
                     {showPassword ? <EyeOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                   </button>
                 </div>
               </div>
               {error && (
-                <div className="p-2 sm:p-3 rounded-xl bg-red-900/30 border border-red-500/50 text-red-400 text-xs flex items-center gap-2 animate-in slide-in-from-top-2">
-                  <Lock className="w-3.5 h-3.5 shrink-0" />
-                  <span className="font-medium tracking-wide text-[10px] sm:text-xs">{error}</span>
+                <div className="hd-login-alert animate-in slide-in-from-top-2">
+                  <Lock className="w-4 h-4 shrink-0" />
+                  <span>{error}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between w-full gap-3">
+              <div className="hd-login-options flex items-center justify-between w-full gap-3">
                 <label className="flex items-center gap-2 cursor-pointer group">
                   <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="w-3.5 h-3.5 accent-cyber-neon cursor-pointer" />
                   <span className="text-xs text-cyber-electric/80 group-hover:text-cyber-neon font-semibold transition-colors">Recordar usuario</span>
@@ -436,28 +410,6 @@ export default function App() {
                   ? <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />
                   : <><Lock className="w-4 h-4" /> Entrar</>}
               </button>
-              <div className="flex items-center gap-3 my-3">
-                <div className="flex-1 h-px bg-cyber-electric/20" />
-                <span className="text-[11px] tracking-[0.08em] text-cyber-electric/60 font-semibold">o entra con</span>
-                <div className="flex-1 h-px bg-cyber-electric/20" />
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                <button
-                  type="button"
-                  disabled={!googleOAuthAvailable}
-                  onClick={() => startOAuthLogin('google')}
-                  className="hd-liquid-button py-3 rounded-xl border border-orange-300/30 bg-white/5 hover:bg-orange-300/10 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/5"
-                  title={googleOAuthAvailable ? 'Entrar con cuenta Google' : 'Faltan credenciales OAuth de Google en el servidor'}
-                >
-                  <span className="w-5 h-5 rounded-full bg-white text-slate-900 flex items-center justify-center font-black">G</span>
-                  Cuenta Google
-                </button>
-                {!googleOAuthAvailable && (
-                  <p className="text-center text-[10px] text-cyber-electric/50 font-bold uppercase tracking-widest">
-                    Google pendiente de configurar
-                  </p>
-                )}
-              </div>
               {biometricAvailable && (
                 <>
                   <div className="flex items-center gap-3 my-3">
@@ -531,7 +483,7 @@ export default function App() {
       {role === null && isRegistering && (
         <div className="relative z-10 flex flex-col items-center h-full px-6 overflow-y-auto py-12">
           <Suspense fallback={<LoadingOverlay visible text="Cargando…" />}>
-            <RegisterForm onBack={() => setIsRegistering(false)} pendingRole={pendingRole} />
+            <RegisterForm onBack={() => setIsRegistering(false)} />
           </Suspense>
         </div>
       )}
@@ -552,29 +504,25 @@ export default function App() {
   );
 }
 
-const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, color = 'cyan', tone = 'default', onClick }: any) {
-  const styles: Record<string, { card: string; aura: string; title: string; desc: string }> = {
+const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, tone = 'default', onClick }: any) {
+  const styles: Record<string, { card: string; title: string; desc: string }> = {
     admin: {
       card: 'border-[#123a6a] hover:border-cyan-200/90 focus-visible:border-cyan-200/90 hover:shadow-[0_0_34px_rgba(0,194,255,0.44),0_0_70px_rgba(10,132,255,0.18)] focus-visible:shadow-[0_0_34px_rgba(0,194,255,0.44),0_0_70px_rgba(10,132,255,0.18)]',
-      aura: 'bg-cyan-300/10',
       title: 'group-hover:text-cyan-100',
       desc: 'text-cyan-100/78',
     },
     supervisor: {
       card: 'border-[#123a6a] hover:border-sky-300/90 focus-visible:border-sky-300/90 hover:shadow-[0_0_34px_rgba(10,132,255,0.46),0_0_70px_rgba(0,194,255,0.18)] focus-visible:shadow-[0_0_34px_rgba(10,132,255,0.46),0_0_70px_rgba(0,194,255,0.18)]',
-      aura: 'bg-sky-400/10',
       title: 'group-hover:text-sky-100',
       desc: 'text-sky-100/78',
     },
     advisor: {
       card: 'border-[#123a6a] hover:border-violet-300/80 focus-visible:border-violet-300/80 hover:shadow-[0_0_34px_rgba(116,110,255,0.34),0_0_70px_rgba(0,194,255,0.14)] focus-visible:shadow-[0_0_34px_rgba(116,110,255,0.34),0_0_70px_rgba(0,194,255,0.14)]',
-      aura: 'bg-violet-400/10',
       title: 'group-hover:text-violet-100',
       desc: 'text-violet-100/78',
     },
     default: {
       card: 'border-[#123a6a] hover:border-cyber-neon/50 hover:shadow-[0_0_34px_rgba(34,211,238,0.35)]',
-      aura: 'bg-cyber-neon/10',
       title: 'group-hover:text-cyber-neon',
       desc: 'text-cyber-electric/70',
     },
@@ -584,13 +532,9 @@ const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, col
   return (
     <button onClick={onClick}
       data-tone={tone}
-      className={`aether-role-card hd-liquid-button group rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 relative overflow-hidden bg-[#061a38] ${toneStyle.card}`}
+      className={`aether-role-card hd-no-liquid group rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 relative overflow-hidden bg-[#061a38] ${toneStyle.card}`}
       aria-label={`${title}: ${desc}`}>
-      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300 ${toneStyle.aura}`} />
-      <div className="aether-role-icon mb-4 sm:mb-6">
-        <div className="sm:hidden"><CyberIcon icon={Icon} color={color} size="lg" glowOpacity={0.6} /></div>
-        <div className="hidden sm:block"><CyberIcon icon={Icon} color={color} size="xl" glowOpacity={0.6} /></div>
-      </div>
+      <Icon className="aether-role-icon mb-4 sm:mb-6" aria-hidden="true" />
       <h2 className={`aether-role-title relative z-10 text-lg sm:text-2xl font-black text-white mb-1 sm:mb-2 tracking-tight transition-colors ${toneStyle.title}`}>{title}</h2>
       <p className={`aether-role-desc relative z-10 text-xs sm:text-sm font-bold tracking-[0.06em] leading-tight ${toneStyle.desc}`}>{desc}</p>
     </button>

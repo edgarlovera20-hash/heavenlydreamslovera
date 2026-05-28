@@ -7,6 +7,7 @@ import {
 import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
 import { Role } from '../../App';
+import NeuralLayout from '../../layouts/neural-layout';
 
 const Profile = lazy(() => import('./Profile'));
 const Game = lazy(() => import('./Game'));
@@ -90,6 +91,15 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
   };
 
   return (
+    <NeuralLayout
+      mode="mobile"
+      activity="active"
+      interactive={false}
+      showParticles={false}
+      showShootingStars={false}
+      className="h-[100dvh] w-full"
+      contentClassName="flex h-full w-full justify-center"
+    >
     <div className="flex flex-col h-[100dvh] w-full max-w-[420px] mx-auto border-x border-cyber-electric/20 relative z-10 shadow-[0_0_50px_rgba(3,154,220,0.1)] overflow-hidden">
       
       {/* Mobile Header */}
@@ -211,6 +221,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
       </nav>
 
     </div>
+    </NeuralLayout>
   );
 }
 

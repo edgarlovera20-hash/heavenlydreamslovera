@@ -12,8 +12,9 @@ import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
 import { OfflineBanner } from '../ui/OfflineBanner';
 import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
-import DataGridHero from '../ui/data-grid-hero';
 import { PremiumBadge, PremiumCard, PremiumKpiCard, SectionHeader } from '../ui/premium';
+import DashboardLayout from '../../layouts/dashboard-layout';
+import { DashboardGradientCharts } from '../dashboard/dashboard-gradient-charts';
 
 const Settings = lazy(() => import('./Settings'));
 const Payroll = lazy(() => import('./Payroll'));
@@ -112,6 +113,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
   const [channelSummary, setChannelSummary] = useState({ conversations: 0, pendingApprovals: 0 });
   const [pendingUsers, setPendingUsers] = useState(0);
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
 
   const loadStats = async () => {
     if (!OPS_ROLES.includes(role)) return;
@@ -134,12 +136,13 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
     const loadChannels = async () => {
       if (!OPS_ROLES.includes(role)) return;
       try {
-        const [ws, tgs, msgs, conversations, outbox] = await Promise.all([
+        const [ws, tgs, msgs, conversations, outbox, inventory] = await Promise.all([
           fetch('/api/whatsapp/status?account=promotores', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
           fetch('/api/telegram/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
           fetch('/api/channels/messages', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
           fetch('/api/channels/conversations', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
           fetch('/api/agents/outbox', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch('/api/inventory', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
         ]);
         if (ws) setWaStatus(normalizeWhatsAppStatus(ws).status || 'disconnected');
         if (tgs) setTgStatus(tgs.status);
@@ -148,6 +151,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           conversations: (conversations as any[]).filter(c => c.channel === 'whatsapp').length,
           pendingApprovals: (outbox as any[]).filter(item => item.status === 'pending_approval').length,
         });
+        setInventoryItems(Array.isArray(inventory) ? inventory : []);
       } catch {}
     };
     loadChannels();
@@ -155,6 +159,19 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
     const channelTimer = OPS_ROLES.includes(role) ? setInterval(loadChannels, 30000) : undefined;
     return () => { clearInterval(statsTimer); clearInterval(channelTimer); };
   }, [role]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !OPS_ROLES.includes(role)) return;
+    const activityType = rejectedSales > 0
+      ? 'error'
+      : todaySales > 0
+        ? 'sale'
+        : pendingSales + pendingUsers + recentMessages.length > 0
+          ? 'message'
+          : 'active';
+    const intensity = Math.min(1.8, 0.45 + (pendingSales + pendingUsers + recentMessages.length + todaySales) * 0.08);
+    window.dispatchEvent(new CustomEvent('hd-neural-activity', { detail: { type: activityType, intensity } }));
+  }, [pendingSales, pendingUsers, recentMessages.length, rejectedSales, role, todaySales]);
 
   const userName = currentUser?.displayName || 'Usuario';
   const userRoleLabel = (currentUser?.role || role) === 'GERENTE'
@@ -167,7 +184,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   return (
     <div className="hd-screen flex h-[100dvh] w-full text-white relative z-10 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-72 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col relative z-20">
+      <aside className="hd-holographic-sidebar w-72 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col relative z-20">
         
         <div className="h-36 flex flex-col items-center justify-center px-6 relative overflow-hidden border-b border-white/5 gap-3 z-10">
           <Logo className="w-20 h-20 drop-shadow-[0_0_22px_rgba(34,255,136,0.32)] hover:scale-110 transition-transform duration-500" />
@@ -300,18 +317,8 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <DataGridHero
-          rows={26}
-          cols={38}
-          spacing={5}
-          duration={5.4}
-          color="hsl(var(--blue))"
-          animationType="wave"
-          pulseEffect
-          mouseGlow
-          opacityMin={0.035}
-          opacityMax={0.34}
-          background="radial-gradient(circle at 22% 12%, rgba(0,194,255,0.28), transparent 30rem), radial-gradient(circle at 78% 24%, rgba(10,132,255,0.22), transparent 34rem), radial-gradient(circle at 52% 82%, rgba(88,80,255,0.14), transparent 32rem), linear-gradient(145deg, #020A16 0%, #031326 34%, #071D3B 68%, #020A16 100%)"
+        <DashboardLayout
+          activity={pendingSales > 0 || pendingUsers > 0 ? 'message' : waStatus === 'connected' || tgStatus === 'polling' ? 'active' : 'idle'}
           className="hd-module-stage flex min-h-0 flex-1 flex-col"
           contentClassName="flex min-h-0 flex-1 flex-col"
         >
@@ -398,6 +405,18 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   <p className="text-xs text-slate-500 mt-2">No procedieron</p>
                 </PremiumCard>
               </div>
+
+              <DashboardGradientCharts
+                userCount={userCount}
+                saleCount={saleCount}
+                approvedSales={approvedSales}
+                pendingSales={pendingSales}
+                rejectedSales={rejectedSales}
+                todaySales={todaySales}
+                conversations={channelSummary.conversations}
+                pendingApprovals={channelSummary.pendingApprovals}
+                inventoryItems={inventoryItems}
+              />
 
               {/* Quick Actions */}
               <PremiumCard className="p-6" tone="cyan">
@@ -566,7 +585,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           )}
         </div>
         </div>
-        </DataGridHero>
+        </DashboardLayout>
       </main>
 
       {/* Agent Designer Modal */}
@@ -593,9 +612,10 @@ function QuickAction({ icon: Icon, label, color, onClick }: { icon: any; label: 
   return (
     <button
       onClick={onClick}
-      className={`hd-liquid-button hd-card hd-card-interactive flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all ${colors[color] || colors.cyan}`}
+      className={`hd-liquid-button hd-card hd-card-interactive hd-quick-action flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all ${colors[color] || colors.cyan}`}
+      data-tone={color}
     >
-      <Icon className="w-8 h-8" />
+      <Icon className="hd-quick-action-icon w-8 h-8" />
       <span className="text-xs font-semibold">{label}</span>
     </button>
   );
@@ -618,9 +638,10 @@ function NavItem({ icon: Icon, label, color, active = false, onClick, badge }: {
   return (
     <button 
       onClick={onClick} 
-      className={`hd-liquid-button w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all relative overflow-hidden group border border-transparent ${active ? 'hd-liquid-selected' : ''} ${colorClasses}`}
+      className={`hd-liquid-button hd-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all relative overflow-hidden group border border-transparent ${active ? 'hd-liquid-selected is-active' : ''} ${colorClasses}`}
+      data-tone={color}
     >
-      <Icon className={`w-4 h-4 transition-transform group-hover:scale-110`} />
+      <Icon className={`hd-nav-item-icon w-4 h-4 transition-transform group-hover:scale-110`} />
       <span className="text-[13px] font-semibold flex-1">{label}</span>
       {badge !== undefined && badge > 0 && (
         <span className="min-w-[18px] h-[18px] px-1 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-black">

@@ -15,7 +15,7 @@ View your app in AI Studio: https://ai.studio/apps/0e792da5-346b-4f41-8caf-6eec4
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Instala Ollama local y configura `OLLAMA_URL=http://127.0.0.1:11434` para OCR documental privado.
 3. Run the app:
    `npm run dev`
 

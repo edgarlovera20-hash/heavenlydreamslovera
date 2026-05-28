@@ -52,11 +52,10 @@ OCR_LLM_TIMEOUT_MS="30000"
 OCR_TESSERACT_TIMEOUT_MS="25000"
 OCR_MAX_OUTPUT_TOKENS="900"
 OCR_PRIMARY="ollama"
-OCR_STRATEGY="adaptive"
-GEMINI_API_KEY=""
+OCR_STRATEGY="local"
 ```
 
-Gemini queda como respaldo opcional. Si no quieres usar ningun servicio de pago, deja `GEMINI_API_KEY` vacio.
+El OCR documental queda local: Ollama como primario y Tesseract como fallback. No requiere Gemini ni Google Vision.
 
 ## Reiniciar la app
 

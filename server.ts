@@ -28,7 +28,8 @@ import db, {
   Nominas, Territories, ValidationRequests, Announcements,
   InventoryItems, AutomationRules, AiJobs, Metrics, Sessions,
   Capturas, DocumentosCliente, DocumentFiles, ClientesCrm, EstatusFolios, LogsSistema,
-  AgentOutbox, AgentProfiles,
+  AgentOutbox, AgentProfiles, CrmFollowups, CrmNotes, CrmVisibilityRules, CrmSavedSearches,
+  EmailSync,
 } from "./server/db";
 import { getSiacCSVFingerprint, importSiacCSV } from "./server/siac-importer";
 import {
@@ -72,6 +73,7 @@ import {
   syncValidationWithProvider,
 } from "./server/voice-providers";
 import { oauthCallback, oauthStart, oauthStatus } from "./server/oauth";
+import { emailSyncStatus, processSyncAttachment, runGmailSync } from "./server/email-sync";
 import { createTelmexAutomationJob, getTelmexJob, listTelmexJobs, updateTelmexAutomationJob } from "./server/telmex-automation";
 import {
   assignConversation,
@@ -92,6 +94,7 @@ import {
 } from "./server/agent-orchestrator";
 import { registerFinanceEnterpriseRoutes } from "./server/finance-enterprise";
 import { registerDiditRoutes } from "./server/didit";
+import { registerAvatarRoutes } from "./server/avatar/avatar.service";
 import { answerTelmexQuestion, shouldUseTelmexInfo } from "./server/telmex-info-agent";
 import { agentVideoDirectory, deleteAgentVideo, listAgentVideos, uploadAgentVideo } from "./server/agent-video-library";
 import {
@@ -151,6 +154,7 @@ const ALLOWED_TABLES = [
   'weekly_financial_cycles', 'financial_movements', 'financial_alerts',
   'financial_invoices', 'financial_deposits', 'financial_predictions',
   'financial_audit_logs', 'financial_files', 'didit_checks',
+  'user_avatars',
 ];
 
 const DOCUMENT_TYPES = [
@@ -559,6 +563,117 @@ async function startServer() {
   function canAccessVenta(auth: any, venta: any) {
     if (!auth || !venta) return false;
     return canManage(auth) || venta.asesor_id === auth.sub;
+  }
+
+  function crmRole(auth: any) {
+    return String(auth?.role || '').toUpperCase();
+  }
+
+  function crmCanManage(auth: any) {
+    return ['GERENTE', 'ADMINISTRACION'].includes(crmRole(auth));
+  }
+
+  function crmCanOperate(auth: any) {
+    return ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'].includes(crmRole(auth));
+  }
+
+  const CRM_SENSITIVE_FIELDS = new Set([
+    'telefono_asignado',
+    'telefono_portado',
+    'telefono_referencia',
+    'correo',
+    'morosidad',
+    'observaciones',
+    'respuesta_telmex',
+    'motivo_rechazo',
+  ]);
+
+  function maskPhone(value: any) {
+    const raw = String(value || '').trim();
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length < 7) return raw ? '***' : raw;
+    return `${digits.slice(0, 4)}******${digits.slice(-2)}`;
+  }
+
+  function crmVisibility(auth: any) {
+    const role = crmRole(auth);
+    const defaults: Record<string, boolean> = {};
+    CRM_SENSITIVE_FIELDS.forEach(field => {
+      defaults[field] = crmCanManage(auth) || role === 'SUPERVISOR';
+    });
+    if (role === 'SUPERVISOR') {
+      defaults.morosidad = true;
+      defaults.observaciones = true;
+      defaults.respuesta_telmex = false;
+      defaults.motivo_rechazo = false;
+    }
+    if (crmCanManage(auth)) {
+      CRM_SENSITIVE_FIELDS.forEach(field => { defaults[field] = true; });
+    }
+    for (const rule of CrmVisibilityRules.getForScope('role', role) as any[]) {
+      defaults[rule.field] = rule.visible === true;
+    }
+    for (const rule of CrmVisibilityRules.getForScope('user', auth?.sub || '') as any[]) {
+      defaults[rule.field] = rule.visible === true;
+    }
+    return defaults;
+  }
+
+  function maskSiacRecord(record: any, auth: any) {
+    if (!record) return record;
+    const visible = crmVisibility(auth);
+    const out = { ...record };
+    for (const field of CRM_SENSITIVE_FIELDS) {
+      if (visible[field]) continue;
+      if (field.startsWith('telefono_')) out[field] = maskPhone(out[field]);
+      else if (field === 'correo') out[field] = out[field] ? 'correo restringido' : out[field];
+      else if (field === 'morosidad') out[field] = out[field] ? 'restringido' : out[field];
+      else out[field] = out[field] ? 'Información restringida' : out[field];
+    }
+    out.permisos = {
+      canExport: crmCanOperate(auth),
+      canEditStatus: crmCanOperate(auth),
+      canViewSensitive: crmCanManage(auth),
+      visibleFields: visible,
+    };
+    return out;
+  }
+
+  function crmCanAccessRecord(auth: any, record: any) {
+    if (!auth || !record) return false;
+    const role = crmRole(auth);
+    if (crmCanOperate(auth)) return true;
+    const name = String(auth.name || '').toLowerCase();
+    const sub = String(auth.sub || '').toLowerCase();
+    return [record.usuario, record.promotor].some((value: any) => {
+      const raw = String(value || '').toLowerCase();
+      return raw && (raw === name || raw === sub);
+    });
+  }
+
+  function crmRisk(record: any, followups: any[] = []) {
+    const alerts: string[] = [];
+    const missing: string[] = [];
+    const status = String(record?.estatus_siac || record?.estatus_pisa || '').toLowerCase();
+    if (record?.morosidad) alerts.push('Cliente con morosidad registrada.');
+    if (status.includes('cancel') || status.includes('rechaz')) alerts.push('Estatus con riesgo operativo.');
+    if (!record?.telefono_asignado && !record?.telefono_referencia) missing.push('teléfono');
+    if (!record?.correo) missing.push('correo');
+    if (!record?.zona && !record?.tienda) missing.push('zona/tienda');
+    if (missing.length) alerts.push(`Datos incompletos: ${missing.join(', ')}.`);
+    const openFollowups = followups.filter(item => String(item.status || '').toLowerCase() !== 'cerrado').length;
+    if (openFollowups) alerts.push(`${openFollowups} seguimiento(s) pendiente(s).`);
+    const priority = record?.morosidad || status.includes('cancel') || status.includes('rechaz') ? 'alta' : missing.length || openFollowups ? 'media' : 'normal';
+    return {
+      priority,
+      alerts,
+      summary: alerts.length ? alerts.join(' ') : 'Registro estable. No hay riesgos operativos evidentes.',
+      suggestions: [
+        record?.morosidad ? 'Priorizar contacto y promesa de pago.' : null,
+        missing.length ? 'Completar datos faltantes antes de avanzar.' : null,
+        openFollowups ? 'Cerrar o reagendar seguimientos pendientes.' : null,
+      ].filter(Boolean),
+    };
   }
 
   function logSystem(req: any, accion: string, entidad?: string, entidadId?: string | null, detalle?: string, metadata?: any) {
@@ -1487,6 +1602,7 @@ async function startServer() {
 
   registerFinanceEnterpriseRoutes(app);
   registerDiditRoutes(app);
+  registerAvatarRoutes(app, { authOnly, wrap, createHttpError });
 
   // ── MOBILE PWA: endpoints compactos para asesores en campo ───────────────
   function mobileUser(auth: any) {
@@ -2262,26 +2378,209 @@ async function startServer() {
     const folio = (req.query.folio as string || '').trim();
     if (!folio) return res.json([]);
     const exact = SiacRecords.getByFolio(folio);
-    if (exact) return res.json([exact]);
-    res.json(SiacRecords.search(folio));
+    const records = exact ? [exact] : SiacRecords.search(folio);
+    const allowed = (records as any[]).filter(record => crmCanAccessRecord(req.auth, record));
+    AuditLog.insert({
+      accion: 'CRM_SEARCH_SIAC',
+      entidad: 'siac_records',
+      entidad_id: folio || null,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: `resultados:${allowed.length}`,
+    });
+    res.json(allowed.map(record => maskSiacRecord(record, req.auth)));
+  }));
+
+  app.get("/api/siac/:folio/360", authOnly, wrap((req: any, res: any) => {
+    const record = SiacRecords.getByFolio(req.params.folio) as any;
+    if (!record) return res.status(404).json({ error: 'Folio no encontrado' });
+    if (!crmCanAccessRecord(req.auth, record)) return res.status(403).json({ error: 'No tienes permiso para ver este folio' });
+    const followups = CrmFollowups.getByFolio(record.folio_siac) as any[];
+    const notes = CrmNotes.getByFolio(record.folio_siac, crmCanManage(req.auth)) as any[];
+    const ai = crmRisk(record, followups);
+    AuditLog.insert({
+      accion: 'CRM_VIEW_360',
+      entidad: 'siac_records',
+      entidad_id: record.folio_siac,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: ai.priority,
+    });
+    res.json({
+      record: maskSiacRecord(record, req.auth),
+      followups,
+      notes,
+      ai,
+      links: {
+        whatsapp: record.telefono_asignado ? `https://wa.me/521${String(record.telefono_asignado).replace(/\D/g, '')}` : null,
+        maps: record.colonia ? `https://maps.google.com/?q=${encodeURIComponent([record.colonia, record.distrito, record.zona].filter(Boolean).join(' '))}` : null,
+      },
+      permissions: {
+        canAddFollowup: crmCanOperate(req.auth),
+        canAddNote: true,
+        canManageVisibility: crmCanManage(req.auth),
+      },
+    });
   }));
 
   app.get("/api/siac/:folio", authOnly, wrap((req: any, res: any) => {
     const record = SiacRecords.getByFolio(req.params.folio);
     if (!record) return res.status(404).json({ error: 'Folio no encontrado' });
-    res.json(record);
+    if (!crmCanAccessRecord(req.auth, record)) return res.status(403).json({ error: 'No tienes permiso para ver este folio' });
+    res.json(maskSiacRecord(record, req.auth));
   }));
 
   app.get("/api/siac", authOnly, wrap((req: any, res: any) => {
     if (hasPagingQuery(req.query as any)) {
-      return res.json(SiacRecords.getPage({
-        limit: parseLimit(req.query.limit, 200, 1000),
-        offset: parseOffset(req.query.offset),
-        q: queryString(req.query.q),
+      const filters = {
+        estatus_siac: queryString(req.query.estatus),
+        usuario: queryString(req.query.usuario),
+        zona: queryString(req.query.zona),
+        tienda: queryString(req.query.tienda),
+        estrategia: queryString(req.query.estrategia),
+        morosidad: queryString(req.query.morosidad),
+        tipo_linea: queryString(req.query.tipoLinea),
+        paquete: queryString(req.query.paquete),
+        area: queryString(req.query.area),
+        colonia: queryString(req.query.colonia),
+        dateFrom: queryString(req.query.dateFrom),
+        dateTo: queryString(req.query.dateTo),
+      };
+      const limit = parseLimit(req.query.limit, 50, 500);
+      const offset = parseOffset(req.query.offset);
+      const q = queryString(req.query.q);
+      const rows = SiacRecords.getPage({
+        limit,
+        offset,
+        q,
         updatedSince: queryString(req.query.updatedSince),
-      }));
+        filters,
+        auth: req.auth,
+      }) as any[];
+      const total = SiacRecords.countPage({ q, updatedSince: queryString(req.query.updatedSince), filters, auth: req.auth });
+      return res.json({
+        rows: rows.map(record => maskSiacRecord(record, req.auth)),
+        total,
+        limit,
+        offset,
+        permissions: {
+          canExport: crmCanOperate(req.auth),
+          canEditStatus: crmCanOperate(req.auth),
+          canManageVisibility: crmCanManage(req.auth),
+        },
+      });
     }
-    res.json(SiacRecords.getAll());
+    const rows = (SiacRecords.getAll() as any[]).filter(record => crmCanAccessRecord(req.auth, record));
+    res.json(rows.map(record => maskSiacRecord(record, req.auth)));
+  }));
+
+  app.get("/api/crm/visibility-rules", managerOnly, wrap((_req: any, res: any) => {
+    res.json(CrmVisibilityRules.getAll());
+  }));
+
+  app.put("/api/crm/visibility-rules", managerOnly, wrap((req: any, res: any) => {
+    const rules = Array.isArray(req.body?.rules) ? req.body.rules : [];
+    CrmVisibilityRules.setMany(rules, req.auth?.sub || null);
+    AuditLog.insert({
+      accion: 'CRM_UPDATE_VISIBILITY',
+      entidad: 'crm_visibility_rules',
+      entidad_id: null,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: `rules:${rules.length}`,
+    });
+    res.json({ ok: true, rules: CrmVisibilityRules.getAll() });
+  }));
+
+  app.get("/api/crm/saved-searches", authOnly, wrap((req: any, res: any) => {
+    res.json(CrmSavedSearches.getByUser(req.auth.sub));
+  }));
+
+  app.post("/api/crm/saved-searches", authOnly, wrap((req: any, res: any) => {
+    const name = String(req.body?.name || '').trim().slice(0, 80);
+    if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+    CrmSavedSearches.create({ user_id: req.auth.sub, name, filters: req.body?.filters || {} });
+    AuditLog.insert({
+      accion: 'CRM_SAVE_SEARCH',
+      entidad: 'crm_saved_searches',
+      entidad_id: null,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: name,
+    });
+    res.json({ ok: true, searches: CrmSavedSearches.getByUser(req.auth.sub) });
+  }));
+
+  app.post("/api/crm/followups", authOnly, wrap((req: any, res: any) => {
+    const folio = String(req.body?.folio_siac || req.body?.folio || '').trim();
+    const record = SiacRecords.getByFolio(folio) as any;
+    if (!record) return res.status(404).json({ error: 'Folio no encontrado' });
+    if (!crmCanOperate(req.auth) || !crmCanAccessRecord(req.auth, record)) return res.status(403).json({ error: 'Permisos insuficientes' });
+    const action = String(req.body?.action || '').trim().slice(0, 120);
+    if (!action) return res.status(400).json({ error: 'Acción requerida' });
+    CrmFollowups.create({
+      folio_siac: record.folio_siac,
+      action,
+      status: String(req.body?.status || 'pendiente').trim().slice(0, 40),
+      next_at: req.body?.next_at || null,
+      responsible_id: req.body?.responsible_id || req.auth.sub,
+      responsible_name: req.body?.responsible_name || req.auth.name,
+      comment: String(req.body?.comment || '').trim().slice(0, 2000),
+      metadata: req.body?.metadata || {},
+      created_by: req.auth.sub,
+      created_by_name: req.auth.name,
+    });
+    AuditLog.insert({
+      accion: 'CRM_CREATE_FOLLOWUP',
+      entidad: 'siac_records',
+      entidad_id: record.folio_siac,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: action,
+    });
+    res.json({ ok: true, followups: CrmFollowups.getByFolio(record.folio_siac), ai: crmRisk(record, CrmFollowups.getByFolio(record.folio_siac) as any[]) });
+  }));
+
+  app.post("/api/crm/notes", authOnly, wrap((req: any, res: any) => {
+    const folio = String(req.body?.folio_siac || req.body?.folio || '').trim();
+    const record = SiacRecords.getByFolio(folio) as any;
+    if (!record) return res.status(404).json({ error: 'Folio no encontrado' });
+    if (!crmCanAccessRecord(req.auth, record)) return res.status(403).json({ error: 'Permisos insuficientes' });
+    const note = String(req.body?.note || '').trim().slice(0, 3000);
+    if (!note) return res.status(400).json({ error: 'Nota requerida' });
+    const requestedVisibility = String(req.body?.visibility || 'equipo').trim();
+    const visibility = requestedVisibility === 'gerencia' && !crmCanManage(req.auth) ? 'equipo' : requestedVisibility;
+    CrmNotes.create({
+      folio_siac: record.folio_siac,
+      note,
+      priority: String(req.body?.priority || 'media').trim().slice(0, 30),
+      visibility,
+      attachments: Array.isArray(req.body?.attachments) ? req.body.attachments : [],
+      created_by: req.auth.sub,
+      created_by_name: req.auth.name,
+    });
+    AuditLog.insert({
+      accion: 'CRM_CREATE_NOTE',
+      entidad: 'siac_records',
+      entidad_id: record.folio_siac,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: visibility,
+    });
+    res.json({ ok: true, notes: CrmNotes.getByFolio(record.folio_siac, crmCanManage(req.auth)) });
+  }));
+
+  app.post("/api/crm/export-audit", authOnly, wrap((req: any, res: any) => {
+    if (!crmCanOperate(req.auth)) return res.status(403).json({ error: 'No tienes permiso para exportar' });
+    AuditLog.insert({
+      accion: 'CRM_EXPORT_SIAC',
+      entidad: 'siac_records',
+      entidad_id: null,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: JSON.stringify(req.body?.filters || {}),
+    });
+    res.json({ ok: true });
   }));
 
   app.post("/api/siac/import-source", managerOnly, wrap(async (req: any, res: any) => {
@@ -2667,6 +2966,79 @@ async function startServer() {
   app.put("/api/settings/:key", managerOnly, wrap((req: any, res: any) => {
     Settings.set(req.params.key, req.body.value);
     res.json({ ok: true });
+  }));
+
+  // ── EMAIL SYNC: Gmail/CSV/XLSX -> CRM ─────────────────────
+  app.get("/api/email-sync/status", managerOnly, wrap((_req: any, res: any) => {
+    res.json(emailSyncStatus());
+  }));
+
+  app.get("/api/email-sync/accounts", managerOnly, wrap((_req: any, res: any) => {
+    res.json(EmailSync.listAccounts());
+  }));
+
+  app.post("/api/email-sync/accounts", managerOnly, wrap((req: any, res: any) => {
+    const body = req.body || {};
+    EmailSync.upsertAccount({
+      id: body.id || 'gmail-primary',
+      provider: 'gmail',
+      label: String(body.label || 'Gmail principal').trim(),
+      email: String(body.email || '').trim().toLowerCase() || null,
+      query: String(body.query || '').trim() || null,
+      client_id: String(body.clientId || body.client_id || '').trim() || null,
+      client_secret: String(body.clientSecret || body.client_secret || '').trim() || null,
+      refresh_token: String(body.refreshToken || body.refresh_token || '').trim() || null,
+      enabled: body.enabled !== false,
+      created_by: req.auth?.sub || null,
+    });
+    AuditLog.insert({
+      accion: 'EMAIL_SYNC_CONFIG',
+      entidad: 'email_sync_accounts',
+      entidad_id: body.id || 'gmail-primary',
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.nombre || req.auth?.username || null,
+      detalle: `gmail:${body.email || ''};query:${body.query || ''}`.slice(0, 2000),
+    });
+    res.json({ ok: true, accounts: EmailSync.listAccounts() });
+  }));
+
+  app.get("/api/email-sync/jobs", managerOnly, wrap((req: any, res: any) => {
+    res.json(EmailSync.listJobs(parseLimit(req.query.limit, 100, 500)));
+  }));
+
+  app.post("/api/email-sync/run", managerOnly, wrap(async (req: any, res: any) => {
+    const result = await runGmailSync({
+      accountId: req.body?.accountId || req.body?.account_id || undefined,
+      limit: Number(req.body?.limit || 10),
+      actor: req.auth,
+    });
+    AuditLog.insert({
+      accion: 'EMAIL_SYNC_RUN_GMAIL',
+      entidad: 'email_sync_jobs',
+      entidad_id: null,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.nombre || req.auth?.username || null,
+      detalle: `processed:${result.processed.length};query:${result.query}`.slice(0, 2000),
+    });
+    res.json(result);
+  }));
+
+  app.post("/api/email-sync/upload", managerOnly, wrap(async (req: any, res: any) => {
+    const fileName = String(req.body?.fileName || req.body?.filename || '').trim();
+    const contentBase64 = String(req.body?.contentBase64 || req.body?.content || '').trim();
+    if (!fileName || !contentBase64) return res.status(400).json({ error: 'fileName y contentBase64 son requeridos.' });
+    const raw = contentBase64.includes(',') ? contentBase64.split(',').pop() || '' : contentBase64;
+    const buffer = Buffer.from(raw, 'base64');
+    const result = await processSyncAttachment({
+      source: 'manual',
+      sender: req.auth?.email || req.auth?.username || null,
+      subject: 'Carga manual desde Sync Center',
+      fileName,
+      mimeType: req.body?.mimeType || req.body?.type || null,
+      buffer,
+      actor: req.auth,
+    });
+    res.json({ ok: true, result });
   }));
 
   // ── AUDIT LOG ──────────────────────────────────────────────
@@ -4101,6 +4473,9 @@ async function startServer() {
         images: normalizedImgs.length,
         manualRequired: Boolean(result.manualRequired),
         warning: result.warning,
+        quality: result.quality,
+        documentType: result.documentType,
+        fraudSignals: result.fraudSignals || [],
       };
       console.log(`[OCR-${docType}]`, result.provider, result.model, `${result.durationMs}ms`, `total=${totalDurationMs}ms`, `${normalizedImgs.length}img`, JSON.stringify(result.fields));
       recordOcrTelemetry(req, 'completed', docType, payload);
@@ -4119,6 +4494,9 @@ async function startServer() {
         fieldsCount,
         manualRequired: Boolean(result.manualRequired),
         warning: result.warning,
+        quality: result.quality,
+        documentType: result.documentType,
+        fraudSignals: result.fraudSignals || [],
       });
     } catch (err: any) {
       recordOcrTelemetry(req, 'failed', docType, { error: err?.message || String(err), images: normalizedImgs.length });
@@ -4126,7 +4504,7 @@ async function startServer() {
     }
   }
 
-  // ── OCR MULTI-MODELO Y AUTOMATIZABLE ──────────────────────────────────────
+  // ── OCR LOCAL PRIVADO (rutas /api/vision/* mantenidas por compatibilidad) ──
   // Acepta { image: "..." } o { images: ["frente","reverso"] } — múltiples mejoran precisión.
   app.post("/api/vision/ocr", authOnly, wrap(async (req: any, res: any) => {
     return runOcrEndpoint(req, res, 'ine', runIneOcr);
@@ -4143,6 +4521,15 @@ async function startServer() {
   app.get("/api/vision/status", authOnly, wrap(async (_req: any, res: any) => {
     const status = await checkOcrStatus();
     res.json(status);
+  }));
+
+  app.post("/api/vision/face-match", authOnly, wrap(async (_req: any, res: any) => {
+    res.json({
+      status: 'pending_local_review',
+      provider: 'local',
+      manualRequired: true,
+      message: 'Comparación rostro/video firma pendiente de modelo facial local instalado. No se llamó a APIs externas.',
+    });
   }));
 
   // ── EMAIL DOMAIN VALIDATION (DNS MX check, no email sent) ──
