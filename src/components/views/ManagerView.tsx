@@ -167,7 +167,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   return (
     <div className="hd-screen flex h-[100dvh] w-full text-white relative z-10 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-72 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col relative z-20">
+      <aside className="w-72 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col relative z-20">
         
         <div className="h-36 flex flex-col items-center justify-center px-6 relative overflow-hidden border-b border-white/5 gap-3 z-10">
           <Logo className="w-20 h-20 drop-shadow-[0_0_22px_rgba(34,255,136,0.32)] hover:scale-110 transition-transform duration-500" />
@@ -194,14 +194,14 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 <button
                   onClick={onToggleTheme}
                   aria-label={isLightMode ? 'Activar modo oscuro' : 'Activar modo claro'}
-                  className="text-slate-400 hover:text-white transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded p-1"
+                  className="hd-no-liquid text-slate-400 hover:text-white transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded p-1"
                   title="Cambiar tema"
                 >
                   {isLightMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
                 </button>
                 <div className="relative">
                   <button
-                    className="text-slate-400 hover:text-white transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded p-1"
+                    className="hd-no-liquid text-slate-400 hover:text-white transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded p-1"
                     aria-label={`${notificationCount} ventas pendientes por validar`}
                     title={`${notificationCount} ventas pendientes`}
                   >
@@ -289,7 +289,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
         <div className="p-4 border-t border-white/5 relative z-10">
           <button 
             onClick={onBack}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/60 transition-all group text-rose-500"
+            className="hd-no-liquid w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/60 transition-all group text-rose-500"
           >
             <LogOut className="w-5 h-5 group-hover:rotate-12 transition-transform" />
             <span className="text-xs font-black uppercase tracking-[0.2em] group-hover:drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]">Cerrar Sesión</span>
@@ -322,7 +322,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           <div className="pt-5 px-8 flex items-center gap-2 mb-2 w-full">
              <button
                onClick={() => activeSection !== 'Dashboard' ? setActiveSection('Dashboard') : null}
-               className="text-slate-500 hover:text-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded p-1"
+               className="hd-no-liquid text-slate-500 hover:text-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded p-1"
                aria-label="Ir al dashboard"
              >
                <Home className="w-4 h-4" />
@@ -440,7 +440,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                       </div>
                       <button
                         onClick={() => setActiveSection('Integraciones')}
-                        className="text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
+                        className="hd-no-liquid text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
                       >
                         Gestionar <ChevronRight className="w-3 h-3" />
                       </button>
@@ -494,7 +494,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                       </div>
                       <button
                         onClick={() => setActiveSection('Hub de Agentes')}
-                        className="text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
+                        className="hd-no-liquid text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
                       >
                         {tgStatus === 'polling' ? 'Ver mensajes' : 'Configurar'} <ChevronRight className="w-3 h-3" />
                       </button>

@@ -1786,6 +1786,152 @@ html.light {
   :where(.hd-screen, .hd-cyber-screen) :is(.text-slate-400, .text-slate-500, .text-cyber-electric\/50, .text-cyber-electric\/70, .text-cyber-electric\/80) {
     color: rgba(169, 196, 229, 0.82) !important;
   }
+
+  :where(.hd-screen, .hd-cyber-screen) button.hd-no-liquid::after,
+  button.hd-no-liquid::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  :where(.hd-screen, .hd-cyber-screen) button.hd-no-liquid {
+    will-change: auto !important;
+  }
+
+  :where(.hd-screen, .hd-cyber-screen) button.hd-login-back {
+    position: absolute !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+    min-width: 2.75rem !important;
+    border-radius: 999px !important;
+    background: rgba(8, 42, 94, 0.62) !important;
+    border-color: rgba(102, 232, 255, 0.26) !important;
+    box-shadow:
+      0 18px 34px -22px rgba(0, 0, 0, 0.95),
+      0 0 20px rgba(0, 194, 255, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+    backdrop-filter: blur(16px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
+    transform: none !important;
+  }
+
+  :where(.hd-screen, .hd-cyber-screen) button.hd-login-back:hover,
+  :where(.hd-screen, .hd-cyber-screen) button.hd-login-back:focus-visible {
+    color: #F7FBFF !important;
+    border-color: rgba(102, 232, 255, 0.68) !important;
+    background: rgba(10, 132, 255, 0.22) !important;
+    box-shadow:
+      0 20px 42px -24px rgba(0, 0, 0, 0.98),
+      0 0 26px rgba(0, 194, 255, 0.34) !important;
+    transform: translateX(-2px) scale(1.04) !important;
+  }
+
+  :where(.hd-screen, .hd-cyber-screen) button.hd-password-toggle {
+    position: absolute !important;
+    top: 50% !important;
+    right: 0.75rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 2.35rem !important;
+    height: 2.35rem !important;
+    min-width: 2.35rem !important;
+    padding: 0 !important;
+    border-radius: 0.95rem !important;
+    background: rgba(3, 19, 38, 0.72) !important;
+    border: 1px solid rgba(0, 194, 255, 0.2) !important;
+    box-shadow:
+      0 12px 24px -18px rgba(0, 0, 0, 0.9),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+    transform: translateY(-50%) !important;
+    z-index: 4 !important;
+  }
+
+  :where(.hd-screen, .hd-cyber-screen) button.hd-password-toggle:hover,
+  :where(.hd-screen, .hd-cyber-screen) button.hd-password-toggle:focus-visible {
+    color: #66E8FF !important;
+    border-color: rgba(102, 232, 255, 0.64) !important;
+    background: rgba(8, 42, 94, 0.82) !important;
+    box-shadow:
+      0 0 0 1px rgba(210, 246, 255, 0.08),
+      0 0 22px rgba(0, 194, 255, 0.28) !important;
+    transform: translateY(-50%) scale(1.05) !important;
+  }
+
+  .hd-login-shell {
+    background:
+      radial-gradient(circle at 50% 0%, rgba(0, 194, 255, 0.13), transparent 23rem),
+      linear-gradient(180deg, rgba(2, 10, 22, 0.08), rgba(2, 10, 22, 0.3));
+  }
+
+  .hd-login-card {
+    box-shadow:
+      0 34px 94px -44px rgba(0, 0, 0, 0.98),
+      0 0 0 1px rgba(210, 246, 255, 0.08),
+      0 0 46px rgba(0, 194, 255, 0.13),
+      inset 0 1px 0 rgba(255, 255, 255, 0.13) !important;
+  }
+
+  .hd-screen > aside {
+    width: 18rem !important;
+    min-width: 18rem !important;
+    max-width: 18rem !important;
+    overflow: hidden !important;
+  }
+
+  .hd-screen > main {
+    min-width: 0 !important;
+    background: #020A16 !important;
+  }
+
+  .hd-module-stage .grid-container {
+    opacity: 0.46 !important;
+    filter: drop-shadow(0 0 7px rgba(0, 194, 255, 0.18)) !important;
+  }
+
+  .hd-module-stage .grid-container::before {
+    opacity: 0.34 !important;
+  }
+
+  .hd-module-stage .grid-container::after {
+    opacity: 0.32 !important;
+    filter: drop-shadow(0 0 6px rgba(0, 194, 255, 0.42)) !important;
+  }
+
+  .hd-module-stage .grid-cell {
+    box-shadow:
+      0 0 8px rgba(210, 246, 255, 0.48),
+      0 0 18px rgba(0, 194, 255, 0.24) !important;
+  }
+
+  .hd-module-stage::after {
+    background:
+      linear-gradient(90deg, rgba(2, 10, 22, 0.9), rgba(3, 19, 38, 0.46) 24%, rgba(3, 19, 38, 0.36) 72%, rgba(2, 10, 22, 0.86)),
+      linear-gradient(180deg, rgba(2, 10, 22, 0.28), rgba(2, 10, 22, 0.62)) !important;
+  }
+
+  @media (max-width: 767px) {
+    .hd-login-shell {
+      padding-top: 1.25rem !important;
+      padding-bottom: 1.5rem !important;
+    }
+
+    .hd-login-card {
+      max-width: min(100%, 30rem) !important;
+      padding: 1.5rem !important;
+      border-radius: 1.75rem !important;
+    }
+
+    :where(.hd-screen, .hd-cyber-screen) button.hd-login-back {
+      top: 1rem !important;
+      left: 1rem !important;
+      width: 2.5rem !important;
+      height: 2.5rem !important;
+      min-width: 2.5rem !important;
+    }
+  }
 }
 
 @keyframes neural-ai-bg-shift {

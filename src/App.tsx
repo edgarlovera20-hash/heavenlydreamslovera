@@ -304,7 +304,7 @@ export default function App() {
       {role && (
         <div className="absolute top-6 right-6 z-50">
           <button onClick={() => setShowProfileWidget(!showProfileWidget)}
-            className="w-11 h-11 rounded-full border border-cyber-electric/50 overflow-hidden shadow-[0_0_15px_rgba(3,154,220,0.3)] hover:shadow-cyan-400/50 transition-all focus:outline-none">
+            className="hd-no-liquid w-11 h-11 rounded-full border border-cyber-electric/50 overflow-hidden shadow-[0_0_15px_rgba(3,154,220,0.3)] hover:shadow-cyan-400/50 transition-all focus:outline-none">
             {avatarUrl
               ? <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
               : <div className="w-full h-full bg-cyber-dark flex items-center justify-center text-cyber-neon font-bold text-sm">
@@ -313,7 +313,7 @@ export default function App() {
           </button>
           {showProfileWidget && (
             <div className="absolute right-0 mt-3 w-64 glass-panel rounded-2xl p-4 shadow-2xl border border-cyber-electric/30 animate-in fade-in slide-in-from-top-4">
-              <button onClick={() => setShowProfileWidget(false)} className="absolute top-2 right-2 p-1 text-cyber-electric/50 hover:text-white"><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowProfileWidget(false)} className="hd-no-liquid absolute top-2 right-2 p-1 text-cyber-electric/50 hover:text-white"><X className="w-4 h-4" /></button>
               <div className="flex flex-col items-center mt-2 group relative">
                 <div className="w-20 h-20 rounded-full border-2 border-cyber-electric overflow-hidden mb-3 relative">
                   {avatarUrl
@@ -340,9 +340,11 @@ export default function App() {
         </div>
       )}
 
-      <div className="absolute inset-0 z-0 pointer-events-none opacity-60">
-        <ShaderBackground isLightMode={isLightMode} />
-      </div>
+      {!role && (
+        <div className="absolute inset-0 z-0 pointer-events-none opacity-45">
+          <ShaderBackground isLightMode={isLightMode} />
+        </div>
+      )}
 
       {/* Role Selector */}
       {role === null && pendingRole === null && !isRegistering && (
@@ -377,12 +379,12 @@ export default function App() {
 
       {/* Login Screen */}
       {role === null && pendingRole !== null && !isRegistering && (
-        <div className="relative z-10 flex flex-col items-center h-[100dvh] px-4 sm:px-6 overflow-y-auto py-8 sm:py-12">
+        <div className="hd-login-shell relative z-10 flex flex-col items-center h-[100dvh] px-4 sm:px-6 overflow-y-auto py-8 sm:py-12">
           <button onClick={cancelLogin}
-            className="absolute top-6 left-6 sm:top-8 sm:left-8 p-2 sm:p-3 rounded-full hover:bg-cyber-electric/10 border border-cyber-electric/30 text-cyber-electric hover:text-white transition-all backdrop-blur-md group z-50">
+            className="hd-no-liquid hd-login-back absolute top-6 left-6 sm:top-8 sm:left-8 p-2 sm:p-3 rounded-full hover:bg-cyber-electric/10 border border-cyber-electric/30 text-cyber-electric hover:text-white transition-all backdrop-blur-md group z-50">
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" />
           </button>
-          <div className="w-full max-w-md glass-panel-neon rounded-3xl p-6 sm:p-8 animate-in zoom-in-95 duration-300 relative overflow-hidden my-auto shrink-0">
+          <div className="hd-login-card w-full max-w-md glass-panel-neon rounded-3xl p-6 sm:p-8 animate-in zoom-in-95 duration-300 relative overflow-hidden my-auto shrink-0">
             <div className="absolute top-0 right-0 w-24 h-24 bg-cyber-electric/12 blur-3xl rounded-full" />
             <div className="absolute -left-2 top-10 w-1 h-12 bg-cyber-neon/80 rounded-r-md" />
             <div className="flex justify-center mb-4 sm:mb-6 relative z-10">
@@ -400,14 +402,14 @@ export default function App() {
             <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5 relative z-10">
               <div className="space-y-1">
                 <label className="hd-label pl-1">Usuario</label>
-                <MatrixInput type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="usuario o email" />
+                <MatrixInput type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="usuario o email" autoComplete="username" />
               </div>
               <div className="space-y-1">
                 <label className="hd-label pl-1">Contraseña</label>
                 <div className="relative group">
-                  <MatrixInput type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+                  <MatrixInput className="pr-12" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
                   <button type="button" onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-cyber-electric/50 hover:text-cyber-neon transition-colors">
+                    className="hd-no-liquid hd-password-toggle absolute right-3 top-1/2 -translate-y-1/2 p-2 text-cyber-electric/70 hover:text-cyber-neon transition-colors">
                     {showPassword ? <EyeOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                   </button>
                 </div>
@@ -424,7 +426,7 @@ export default function App() {
                   <span className="text-xs text-cyber-electric/80 group-hover:text-cyber-neon font-semibold transition-colors">Recordar usuario</span>
                 </label>
                 <button type="button" onClick={() => setError('Contacta al administrador para restablecer tu contraseña.')}
-                  className="text-xs text-cyber-electric/70 hover:text-cyber-neon font-semibold transition-colors">
+                  className="hd-no-liquid text-xs text-cyber-electric/70 hover:text-cyber-neon font-semibold transition-colors">
                   ¿Olvidaste tu contraseña?
                 </button>
               </div>

@@ -258,7 +258,7 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
       <div className="w-full max-w-2xl glass-panel-neon rounded-3xl p-6 sm:p-8 animate-in zoom-in-95 duration-300 relative overflow-hidden my-auto shrink-0">
         <button
           onClick={onBack}
-          className="absolute top-6 left-6 p-2 rounded-full hover:bg-cyber-electric/10 text-cyber-electric hover:text-white transition-all z-20 group focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+          className="hd-no-liquid hd-login-back absolute top-6 left-6 p-2 rounded-full hover:bg-cyber-electric/10 text-cyber-electric hover:text-white transition-all z-20 group focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
           title="Volver"
           aria-label="Volver"
         >
@@ -314,17 +314,17 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
 
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-cyber-electric/80 uppercase tracking-widest pl-1">Nombre(s)</label>
-            <MatrixInput required value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} placeholder="Ej. Juan" />
+            <MatrixInput required value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} placeholder="Ej. Juan" autoComplete="given-name" />
           </div>
 
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-cyber-electric/80 uppercase tracking-widest pl-1">Apellido Paterno</label>
-            <MatrixInput required value={formData.apellidoPaterno} onChange={e => setFormData({ ...formData, apellidoPaterno: e.target.value })} placeholder="Pérez" />
+            <MatrixInput required value={formData.apellidoPaterno} onChange={e => setFormData({ ...formData, apellidoPaterno: e.target.value })} placeholder="Pérez" autoComplete="family-name" />
           </div>
 
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-cyber-electric/80 uppercase tracking-widest pl-1">Apellido Materno</label>
-            <MatrixInput required value={formData.apellidoMaterno} onChange={e => setFormData({ ...formData, apellidoMaterno: e.target.value })} placeholder="García" />
+            <MatrixInput required value={formData.apellidoMaterno} onChange={e => setFormData({ ...formData, apellidoMaterno: e.target.value })} placeholder="García" autoComplete="additional-name" />
           </div>
 
           <div className="space-y-1">
@@ -334,6 +334,7 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
               required
               value={formData.fechaNacimiento}
               onChange={e => setFormData({ ...formData, fechaNacimiento: e.target.value })}
+              autoComplete="bday"
               className="w-full bg-cyber-dark/40 border border-cyber-electric/30 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyber-neon/50 uppercase text-sm"
             />
           </div>
@@ -345,12 +346,12 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
 
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-cyber-electric/80 uppercase tracking-widest pl-1">Teléfono</label>
-            <MatrixInput required type="tel" value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} placeholder="55 1234 5678" />
+            <MatrixInput required type="tel" value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} placeholder="55 1234 5678" autoComplete="tel" />
           </div>
 
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-cyber-electric/80 uppercase tracking-widest pl-1">Email</label>
-            <MatrixInput required type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} placeholder="correo@ejemplo.com" />
+            <MatrixInput required type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} placeholder="correo@ejemplo.com" autoComplete="email" />
           </div>
 
           <div className="space-y-1">
@@ -397,7 +398,7 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
 
           <div className="space-y-1 md:col-span-2">
             <label className="text-[10px] font-bold text-cyber-matrix/80 uppercase tracking-widest pl-1">Crear Usuario</label>
-            <MatrixInput required value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} placeholder="usuario123" />
+            <MatrixInput required value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} placeholder="usuario123" autoComplete="username" />
           </div>
 
           {/* PASSWORD with show/hide */}
@@ -405,17 +406,19 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
             <label className="text-[10px] font-bold text-cyber-matrix/80 uppercase tracking-widest pl-1">Crear Contraseña</label>
             <div className="relative">
               <MatrixInput
+                className="pr-12"
                 required
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={e => setFormData({ ...formData, password: e.target.value })}
                 placeholder="Mínimo 8 caracteres"
+                autoComplete="new-password"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(v => !v)}
                 aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-cyber-electric/60 hover:text-cyber-neon transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded"
+                className="hd-no-liquid hd-password-toggle absolute right-3 top-1/2 -translate-y-1/2 p-2 text-cyber-electric/70 hover:text-cyber-neon transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -426,17 +429,19 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
             <label className="text-[10px] font-bold text-cyber-matrix/80 uppercase tracking-widest pl-1">Confirmar Contraseña</label>
             <div className="relative">
               <MatrixInput
+                className="pr-12"
                 required
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={formData.confirmPassword}
                 onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
                 placeholder="••••••••"
+                autoComplete="new-password"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(v => !v)}
                 aria-label={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-cyber-electric/60 hover:text-cyber-neon transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded"
+                className="hd-no-liquid hd-password-toggle absolute right-3 top-1/2 -translate-y-1/2 p-2 text-cyber-electric/70 hover:text-cyber-neon transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded"
               >
                 {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -476,7 +481,7 @@ export function RegisterForm({ onBack, pendingRole }: RegisterFormProps) {
                 <button
                   type="button"
                   onClick={() => setShowTerms(true)}
-                  className="text-cyber-neon font-bold underline underline-offset-2 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded"
+                  className="hd-no-liquid text-cyber-neon font-bold underline underline-offset-2 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded"
                 >
                   Términos y Condiciones de Uso
                 </button>
