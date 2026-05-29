@@ -5433,3 +5433,66 @@ body,
       inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   }
 }
+
+/* HD super sweep: remove old visual remnants and patch-like inherited layers. */
+.data-grid-hero,
+.data-grid-hero *,
+.hd-aether-flow-bg,
+.hd-aether-flow-bg * {
+  display: none !important;
+}
+
+.hd-login-card,
+.hd-login-card.glass-panel-neon {
+  background: linear-gradient(145deg, rgba(8, 42, 94, 0.96), rgba(3, 19, 42, 0.99)) !important;
+  border: 1px solid rgba(18, 223, 255, 0.24) !important;
+  box-shadow:
+    0 24px 58px rgba(0, 5, 20, 0.44),
+    0 0 28px rgba(18, 223, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.hd-login-card :where(form, fieldset, label, .space-y-1, .hd-login-options) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.hd-login-card :where(form, fieldset, label, .space-y-1, .hd-login-options)::before,
+.hd-login-card :where(form, fieldset, label, .space-y-1, .hd-login-options)::after {
+  content: none !important;
+  display: none !important;
+}
+
+.hd-login-card .hd-login-alert {
+  background: rgba(255, 51, 102, 0.12) !important;
+  border: 1px solid rgba(255, 51, 102, 0.34) !important;
+  box-shadow: 0 14px 32px rgba(0, 5, 20, 0.28) !important;
+}
+
+.hd-login-card .hd-login-password-control {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.hd-login-card .hd-login-eye-button {
+  background: rgba(3, 19, 42, 0.92) !important;
+  border: 1px solid rgba(18, 223, 255, 0.28) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 14px rgba(18, 223, 255, 0.12) !important;
+}
+
+.aether-entry .aether-role-card.hd-no-liquid :where(.aether-role-icon, .hd-neon-icon, .hd-premium-iconbox),
+.aether-entry .aether-role-card.hd-no-liquid :where(.aether-role-icon, .hd-neon-icon, .hd-premium-iconbox)::before,
+.aether-entry .aether-role-card.hd-no-liquid :where(.aether-role-icon, .hd-neon-icon, .hd-premium-iconbox)::after {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.aether-entry .aether-role-card.hd-no-liquid {
+  background: linear-gradient(145deg, rgba(8, 42, 94, 0.92), rgba(3, 19, 42, 0.98)) !important;
+}

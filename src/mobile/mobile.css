@@ -822,3 +822,27 @@
     background-position: 82px 82px, 166px 180px, 420px 220px, -360px 260px;
   }
 }
+
+/* Mobile super sweep: keep the app clean, solid and patch-free. */
+#mobile-root :where(form, fieldset, label):not(.glass-panel):not(.glass-panel-neon):not(.hd-cyber-panel):not(.hd-neon-card) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#mobile-root :where(form, fieldset, label, button.hd-no-liquid)::before,
+#mobile-root :where(form, fieldset, label, button.hd-no-liquid)::after {
+  content: none !important;
+  display: none !important;
+}
+
+#mobile-root :where(.hd-neon-iconbox, .hd-mobile-icon, .hd-neon-icon, .hd-premium-iconbox)::before,
+#mobile-root :where(.hd-neon-iconbox, .hd-mobile-icon, .hd-neon-icon, .hd-premium-iconbox)::after {
+  content: none !important;
+  display: none !important;
+}
+
+#mobile-root :where(.blur-3xl, .blur-2xl) {
+  filter: none !important;
+  opacity: 0 !important;
+}

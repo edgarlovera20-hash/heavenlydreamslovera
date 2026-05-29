@@ -43,7 +43,7 @@ function ChartTooltip({
 }: any & { valueFormatter?: (value: number, key: string) => string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-2xl border border-cyan-200/20 bg-slate-950/88 px-4 py-3 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.45),0_0_28px_rgba(0,217,255,0.16)] backdrop-blur-xl">
+    <div className="rounded-2xl border border-cyan-200/24 bg-[#061b3a] px-4 py-3 text-xs shadow-[0_16px_34px_rgba(0,5,20,0.36),0_0_18px_rgba(18,223,255,0.12)]">
       <p className="mb-2 font-black uppercase tracking-[0.18em] text-cyan-100/80">{label}</p>
       <div className="space-y-1.5">
         {payload.map((item: any) => (

@@ -6,7 +6,6 @@ import Logo from './components/ui/Logo';
 import { MatrixInput } from './components/ui/MatrixInput';
 import { MatrixText } from './components/ui/matrix-text';
 import { LoadingOverlay } from './components/ui/LoadingOverlay';
-import AetherFlowBackground from './components/ui/aether-flow-background';
 import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Binoculars, ClipboardList, UserPlus, Fingerprint } from 'lucide-react';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
@@ -307,14 +306,6 @@ export default function App() {
       {!role && (
         <div className="aether-clean-bg absolute inset-0 z-0 pointer-events-none" aria-hidden="true" />
       )}
-      {!role && (
-        <AetherFlowBackground
-          className="z-[1]"
-          density={isMobile ? 0.62 : 0.92}
-          interactive={!isMobile}
-        />
-      )}
-
       {/* Role Selector */}
       {role === null && pendingRole === null && !isRegistering && (
         <div className="aether-entry relative z-10 flex flex-col items-center h-full px-6 overflow-y-auto py-12">
@@ -354,8 +345,6 @@ export default function App() {
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" />
           </button>
           <div className="hd-login-card w-full max-w-md glass-panel-neon rounded-3xl p-6 sm:p-8 animate-in zoom-in-95 duration-300 relative overflow-hidden my-auto shrink-0">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-cyber-electric/12 blur-3xl rounded-full" />
-            <div className="absolute -left-2 top-10 w-1 h-12 bg-cyber-neon/80 rounded-r-md" />
             <div className="flex justify-center mb-4 sm:mb-6 relative z-10">
               <div className={pendingRole === 'GERENTE'
                 ? "hd-liquid-selected w-14 h-14 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl flex items-center justify-center border bg-yellow-300/10 border-yellow-200/70 text-yellow-300 shadow-[0_0_28px_rgba(250,204,21,0.72),0_0_58px_rgba(250,204,21,0.26)]"
