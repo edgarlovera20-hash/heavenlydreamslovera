@@ -2391,6 +2391,60 @@ async function startServer() {
     res.json(allowed.map(record => maskSiacRecord(record, req.auth)));
   }));
 
+  app.get("/api/siac/analytics", authOnly, wrap((req: any, res: any) => {
+    const filters = {
+      estatus_siac: queryString(req.query.estatus),
+      usuario: queryString(req.query.usuario),
+      zona: queryString(req.query.zona),
+      tienda: queryString(req.query.tienda),
+      estrategia: queryString(req.query.estrategia),
+      morosidad: queryString(req.query.morosidad),
+      tipo_linea: queryString(req.query.tipoLinea),
+      paquete: queryString(req.query.paquete),
+      area: queryString(req.query.area),
+      colonia: queryString(req.query.colonia),
+      dateFrom: queryString(req.query.dateFrom),
+      dateTo: queryString(req.query.dateTo),
+    };
+    const rows = SiacRecords.getPage({
+      limit: 1000000,
+      offset: 0,
+      q: queryString(req.query.q),
+      updatedSince: queryString(req.query.updatedSince),
+      filters,
+      auth: req.auth,
+    }) as any[];
+    const isEffective = (record: any) => {
+      const status = String(record.estatus_siac || '').toUpperCase();
+      const etapa = String(record.estatus_pisa || record.estatus_etapa || '').toUpperCase();
+      return status.includes('POSTEA') || status.includes('PAGADO') || etapa.includes('POSTEA') || etapa === 'PF';
+    };
+    const group = (field: string) => Object.values(rows.reduce((acc: any, row: any) => {
+      const key = String(row[field] || 'Sin dato').trim() || 'Sin dato';
+      if (!acc[key]) acc[key] = { name: key, total: 0, efectivas: 0, efectividad: 0 };
+      acc[key].total += 1;
+      if (isEffective(row)) acc[key].efectivas += 1;
+      acc[key].efectividad = Math.round((acc[key].efectivas / acc[key].total) * 1000) / 10;
+      return acc;
+    }, {})).sort((a: any, b: any) => b.efectivas - a.efectivas || b.total - a.total).slice(0, 12);
+    const total = rows.length;
+    const efectivas = rows.filter(isEffective).length;
+    res.json({
+      total,
+      efectivas,
+      efectividad: total ? Math.round((efectivas / total) * 1000) / 10 : 0,
+      byStatus: group('estatus_siac'),
+      byZona: group('zona'),
+      byTienda: group('tienda'),
+      byPromotor: group('promotor'),
+      byUsuario: group('usuario'),
+      byEstrategia: group('estrategia'),
+      byArea: group('area'),
+      byPaquete: group('paquete'),
+      byTipoLinea: group('tipo_linea'),
+    });
+  }));
+
   app.get("/api/siac/:folio/360", authOnly, wrap((req: any, res: any) => {
     const record = SiacRecords.getByFolio(req.params.folio) as any;
     if (!record) return res.status(404).json({ error: 'Folio no encontrado' });

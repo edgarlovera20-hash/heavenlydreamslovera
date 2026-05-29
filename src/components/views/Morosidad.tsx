@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Filter, AlertTriangle, Bot, Send, Loader2, X, DollarSign, Calendar, Phone, MessageCircle, CheckCircle2, Download, Upload, RefreshCw } from 'lucide-react';
+import { Search, Filter, AlertTriangle, Bot, Send, Loader2, X, DollarSign, Calendar, Phone, MessageCircle, CheckCircle2, Download, Upload, RefreshCw, Copy, ClipboardCheck, Sparkles, MapPin, User, Mail, FileText } from 'lucide-react';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { cn } from '../../lib/utils';
 import { aiAgent, CustomerData, EventType } from '../../services/aiAgent';
@@ -13,6 +13,9 @@ interface Moroso {
   id: string;
   cliente: string;
   telefono: string;
+  whatsapp?: string;
+  correo?: string;
+  direccion?: string;
   deuda: number;
   diasAtraso: number;
   estado: string;
@@ -28,6 +31,15 @@ interface Moroso {
   zona?: string;
   tienda?: string;
   estrategia?: string;
+  ciudad?: string;
+  categoria?: string;
+  tipoServicio?: string;
+  mesesAdeudo?: number;
+  importePagos?: number;
+  diaVencimiento?: string;
+  telContacto?: string;
+  telCelular?: string;
+  observaciones?: string;
 }
 
 interface MorosidadApiRow {
@@ -42,6 +54,9 @@ interface MorosidadApiRow {
   fecha_vencimiento?: string;
   ultimo_pago?: string;
   status_cobranza?: string;
+  observaciones?: string;
+  correo?: string;
+  direccion?: string;
   metadata?: string;
   cliente_metadata?: string;
   created_at?: string;
@@ -75,6 +90,9 @@ function buildMorososFromApi(rows: MorosidadApiRow[]): Moroso[] {
       id: row.folio || row.id || 'SIN-FOLIO',
       cliente: row.cliente || row.nombre || 'Cliente sin nombre',
       telefono: row.whatsapp || row.telefono || '—',
+      whatsapp: row.whatsapp || row.telefono || '',
+      correo: row.correo || metadata.correo || '',
+      direccion: row.direccion || metadata.direccion || metadata.raw?.DIRECCION || '',
       deuda: Number(row.monto_adeudo) || 0,
       diasAtraso: Number(row.dias_atraso) || 0,
       estado: row.status_cobranza || 'Sin contactar',
@@ -90,6 +108,15 @@ function buildMorososFromApi(rows: MorosidadApiRow[]): Moroso[] {
       zona: metadata.zona,
       tienda: metadata.tienda,
       estrategia: metadata.estrategia,
+      ciudad: metadata.ciudad,
+      categoria: metadata.categoria,
+      tipoServicio: metadata.tipoServicio,
+      mesesAdeudo: Number(metadata.mesesAdeudo) || 0,
+      importePagos: Number(metadata.importePagos) || 0,
+      diaVencimiento: metadata.diaVencimiento,
+      telContacto: metadata.telContacto,
+      telCelular: metadata.telCelular,
+      observaciones: row.observaciones,
     };
   });
 }
@@ -151,6 +178,55 @@ function buildMonthlyMorosidad(rows: Moroso[]): AnalyticsBucket[] {
     .slice(-12);
 }
 
+type TemplateKind = 'recordatorio' | 'promesa' | 'domiciliacion' | 'regularizacion' | 'visita';
+
+const TEMPLATE_LABELS: Record<TemplateKind, string> = {
+  recordatorio: 'Recordatorio amable',
+  promesa: 'Promesa de pago',
+  domiciliacion: 'Domiciliacion',
+  regularizacion: 'Regularizacion',
+  visita: 'Visita / llamada',
+};
+
+function riskLevel(item: Moroso) {
+  if (item.mesesAdeudo && item.mesesAdeudo >= 4) return 'CRITICA';
+  if (item.deuda >= 3000 || (item.mesesAdeudo || 0) >= 3) return 'ALTA';
+  if (item.deuda >= 1500 || (item.mesesAdeudo || 0) >= 2) return 'MEDIA';
+  return 'PREVENTIVA';
+}
+
+function morosidadTags(item: Moroso) {
+  const tags = [riskLevel(item)];
+  if (item.mesesAdeudo) tags.push(`${item.mesesAdeudo} mes${item.mesesAdeudo === 1 ? '' : 'es'}`);
+  if (item.importePagos && item.importePagos > 0) tags.push('Pago parcial');
+  if (item.whatsapp || item.telCelular || item.telefono) tags.push('WhatsApp listo');
+  if (item.diaVencimiento) tags.push(`Recibo dia ${item.diaVencimiento}`);
+  if (item.categoria) tags.push(item.categoria);
+  if (item.ciudad) tags.push(item.ciudad);
+  return tags.slice(0, 7);
+}
+
+function buildTemplateMessage(item: Moroso, kind: TemplateKind) {
+  const name = item.cliente || 'cliente';
+  const amount = `$${Number(item.deuda || 0).toLocaleString('es-MX')}`;
+  const folio = item.id || 'sin folio';
+  const vencimiento = item.diaVencimiento ? ` Tu recibo vence normalmente el dia ${item.diaVencimiento}.` : '';
+  const base = `Hola ${name}, te contactamos de Heavenly Dreams por tu folio ${folio}.`;
+  if (kind === 'promesa') {
+    return `${base} Tenemos registrado un saldo pendiente de ${amount}. Para apoyarte, podemos dejar una promesa de pago con fecha y monto. ¿Que dia te queda comodo regularizarlo?`;
+  }
+  if (kind === 'domiciliacion') {
+    return `${base} Para evitar atrasos futuros, podemos ayudarte a activar domiciliacion o recordatorio automatico de pago.${vencimiento} ¿Te comparto los pasos?`;
+  }
+  if (kind === 'regularizacion') {
+    return `${base} Tu cuenta aparece con ${item.mesesAdeudo || Math.max(1, Math.round(item.diasAtraso / 30))} mes(es) de adeudo por ${amount}. Si liquidas hoy o haces un pago parcial, podemos registrar el avance y dar seguimiento inmediato.`;
+  }
+  if (kind === 'visita') {
+    return `${base} Queremos confirmar datos para resolver tu adeudo de ${amount}. ¿Podemos llamarte o agendar seguimiento en tu domicilio registrado?`;
+  }
+  return `${base} Detectamos un saldo pendiente de ${amount}.${vencimiento} Queremos ayudarte a mantener activo tu servicio. ¿Nos confirmas si puedes realizar el pago o necesitas apoyo con opciones?`;
+}
+
 export default function Morosidad() {
   const [allMorosos, setAllMorosos] = useState<Moroso[]>([]);
   const [analytics, setAnalytics] = useState<MorosidadAnalytics | null>(null);
@@ -200,6 +276,9 @@ export default function Morosidad() {
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'ai', content: string}[]>([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [activeTemplate, setActiveTemplate] = useState<TemplateKind>('recordatorio');
+  const [templateText, setTemplateText] = useState('');
+  const [copiedTemplate, setCopiedTemplate] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkChannels, setLinkChannels] = useState<ChannelKey[]>([]);
   const [channelState, setChannelState] = useState<ChannelsState>(getChannels());
@@ -280,6 +359,12 @@ export default function Morosidad() {
         item.zona,
         item.tienda,
         item.estrategia,
+        item.correo,
+        item.direccion,
+        item.ciudad,
+        item.categoria,
+        item.tipoServicio,
+        item.mesesAdeudo,
       ]);
       const matchEstado = e === "" || item.estado === e;
       const activeMonth = periodMode === 'month' || periodMode === 'day' ? chartMonth : '';
@@ -305,6 +390,11 @@ export default function Morosidad() {
 
   const chartAnalytics = useMemo(() => buildMorosidadAnalytics(chartRows), [chartRows]);
   const monthlyAnalytics = useMemo(() => buildMonthlyMorosidad(allMorosos), [allMorosos]);
+  const priorityClients = useMemo(() => (
+    [...filteredData]
+      .sort((a, b) => (b.mesesAdeudo || 0) - (a.mesesAdeudo || 0) || b.deuda - a.deuda || b.diasAtraso - a.diasAtraso)
+      .slice(0, 4)
+  ), [filteredData]);
 
   const chartFilterLabel = periodMode === 'day' && chartDay
     ? `Dia ${chartDay}`
@@ -327,12 +417,45 @@ export default function Morosidad() {
     setSelectedClient(client);
     setChatHistory([]);
     setChatMessage('');
+    setActiveTemplate('recordatorio');
+    setTemplateText(buildTemplateMessage(client, 'recordatorio'));
+    setCopiedTemplate(false);
+  };
+
+  const startTemplate = (client: Moroso, kind: TemplateKind = 'recordatorio') => {
+    setSelectedClient(client);
+    setChatHistory([]);
+    setChatMessage('');
+    setActiveTemplate(kind);
+    setTemplateText(buildTemplateMessage(client, kind));
+    setCopiedTemplate(false);
+  };
+
+  const chooseTemplate = (kind: TemplateKind) => {
+    if (!selectedClient) return;
+    setActiveTemplate(kind);
+    setTemplateText(buildTemplateMessage(selectedClient, kind));
+    setCopiedTemplate(false);
+  };
+
+  const copyTemplate = async () => {
+    if (!templateText.trim()) return;
+    try {
+      await navigator.clipboard?.writeText(templateText);
+      setCopiedTemplate(true);
+      toast.success('Plantilla copiada para enviar.');
+      setTimeout(() => setCopiedTemplate(false), 1600);
+    } catch {
+      toast.error('No se pudo copiar automaticamente.');
+    }
   };
 
   const closeAiChat = () => {
     setSelectedClient(null);
     setChatHistory([]);
     setChatMessage('');
+    setTemplateText('');
+    setCopiedTemplate(false);
   };
 
   const handleSendAiMessage = async () => {
@@ -392,7 +515,7 @@ export default function Morosidad() {
           <p className="text-slate-400 text-sm">Seguimiento de cuentas por cobrar, importación MOROSOS APP y análisis por usuario, zona, tienda y estrategia.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <input ref={fileRef} type="file" accept=".csv" onChange={importFile} className="hidden" />
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xlsm" onChange={importFile} className="hidden" />
           <button onClick={importPrincipal} disabled={loadingData}
             className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/30 text-red-300 rounded-xl text-xs font-bold hover:bg-red-500/20 transition-colors disabled:opacity-50">
             {loadingData ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
@@ -400,7 +523,7 @@ export default function Morosidad() {
           </button>
           <button onClick={() => fileRef.current?.click()} disabled={loadingData}
             className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 text-blue-300 rounded-xl text-xs font-bold hover:bg-blue-500/20 transition-colors disabled:opacity-50">
-            <Upload className="w-3.5 h-3.5" /> Importar CSV
+            <Upload className="w-3.5 h-3.5" /> Importar Excel/CSV
           </button>
           <button onClick={() => { window.location.href = '/api/export/morosidad?format=csv'; }}
             className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-bold hover:bg-emerald-500/20 transition-colors">
@@ -567,6 +690,85 @@ export default function Morosidad() {
         </div>
       </div>
 
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="hd-morosidad-panel rounded-2xl p-5">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">CRM interactivo</p>
+              <h2 className="mt-1 text-xl font-black text-white">Prioridad de cobranza</h2>
+              <p className="mt-1 text-sm text-slate-400">Etiquetas generadas desde el Excel: adeudo, meses, paquete, zona y contacto.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => priorityClients[0] && startTemplate(priorityClients[0], 'recordatorio')}
+              disabled={!priorityClients.length}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-100 transition-colors hover:bg-cyan-400/20 disabled:opacity-50"
+            >
+              <Sparkles className="h-4 w-4" />
+              Iniciar plantilla
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {priorityClients.length ? priorityClients.map(client => (
+              <button
+                key={client.id}
+                type="button"
+                onClick={() => startTemplate(client)}
+                className="rounded-2xl border border-cyan-300/12 bg-[#061b3a]/70 p-4 text-left transition-colors hover:border-cyan-300/35 hover:bg-[#082a5e]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-black text-white">{client.cliente}</p>
+                    <p className="mt-1 text-xs text-slate-400">{client.id} · {client.paquete}</p>
+                  </div>
+                  <span className={cn(
+                    'shrink-0 rounded-full border px-2 py-1 text-[10px] font-black',
+                    riskLevel(client) === 'CRITICA' ? 'border-red-300/40 bg-red-500/15 text-red-200' :
+                    riskLevel(client) === 'ALTA' ? 'border-orange-300/40 bg-orange-500/15 text-orange-200' :
+                    riskLevel(client) === 'MEDIA' ? 'border-amber-300/40 bg-amber-500/15 text-amber-200' :
+                    'border-cyan-300/35 bg-cyan-400/10 text-cyan-100'
+                  )}>{riskLevel(client)}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <span className="rounded-xl bg-black/20 px-3 py-2 text-red-200">{money(client.deuda)}</span>
+                  <span className="rounded-xl bg-black/20 px-3 py-2 text-amber-200">{client.mesesAdeudo || Math.round(client.diasAtraso / 30) || 0} meses</span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {morosidadTags(client).map(tag => (
+                    <span key={tag} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold text-slate-300">{tag}</span>
+                  ))}
+                </div>
+              </button>
+            )) : (
+              <div className="col-span-full rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-sm text-slate-500">
+                No hay cuentas para mostrar con los filtros actuales.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <aside className="hd-morosidad-panel rounded-2xl p-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300">Plantillas rapidas</p>
+          <h3 className="mt-1 text-lg font-black text-white">Iniciar contacto</h3>
+          <p className="mt-1 text-sm text-slate-400">Selecciona una cuenta y arranca el mensaje con tono de cobranza correcto.</p>
+          <div className="mt-4 space-y-2">
+            {(Object.keys(TEMPLATE_LABELS) as TemplateKind[]).map(kind => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => priorityClients[0] && startTemplate(priorityClients[0], kind)}
+                disabled={!priorityClients.length}
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-left text-sm font-bold text-slate-200 transition-colors hover:border-emerald-300/35 hover:bg-emerald-400/10 disabled:opacity-50"
+              >
+                <span>{TEMPLATE_LABELS[kind]}</span>
+                <FileText className="h-4 w-4 text-emerald-300" />
+              </button>
+            ))}
+          </div>
+        </aside>
+      </section>
+
       {/* Filter Container */}
       <div className="hd-morosidad-panel rounded-2xl p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -625,17 +827,18 @@ export default function Morosidad() {
       {/* Table Wrapper */}
       <div className="hd-morosidad-panel rounded-2xl overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[500px] custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="w-full text-left border-collapse min-w-[1220px]">
             <thead className="sticky top-0 z-20 bg-[#061b3a]">
               <tr>
                 <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">ID</th>
                 <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">CLIENTE</th>
                 <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">TELÉFONO</th>
                 <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">PAQUETE</th>
+                <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">ETIQUETAS</th>
                 <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">DEUDA</th>
                 <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">DÍAS ATRASO</th>
                 <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">ESTADO</th>
-                <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10 text-right">ACCIONES IA</th>
+                <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10 text-right">CRM</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -647,18 +850,31 @@ export default function Morosidad() {
                   >
                     <td className="p-4 text-sm font-medium text-slate-400 whitespace-nowrap">{item.id}</td>
                     <td className="p-4 text-sm text-slate-200 font-medium whitespace-nowrap">{item.cliente}</td>
-                    <td className="p-4 text-sm text-slate-300 whitespace-nowrap flex items-center gap-2">
+                    <td className="p-4 text-sm text-slate-300 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
                       <Phone className="w-3 h-3 text-slate-500" />
-                      {item.telefono}
+                      {item.whatsapp || item.telCelular || item.telefono}
+                      </div>
                     </td>
                     <td className="p-4 text-sm text-slate-400 whitespace-nowrap">{item.paquete}</td>
-                    <td className="p-4 text-sm font-bold text-red-400 whitespace-nowrap flex items-center">
+                    <td className="p-4 whitespace-nowrap">
+                      <div className="flex max-w-[300px] flex-wrap gap-1.5">
+                        {morosidadTags(item).slice(0, 4).map(tag => (
+                          <span key={tag} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold text-slate-300">{tag}</span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-4 text-sm font-bold text-red-400 whitespace-nowrap">
+                      <div className="flex items-center">
                       <DollarSign className="w-4 h-4" />
                       {item.deuda.toLocaleString('es-MX')}
+                      </div>
                     </td>
-                    <td className="p-4 text-sm text-amber-400 font-medium whitespace-nowrap flex items-center gap-1.5">
+                    <td className="p-4 text-sm text-amber-400 font-medium whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
                       <Calendar className="w-4 h-4" />
                       {item.diasAtraso} días
+                      </div>
                     </td>
                     <td className="p-4 whitespace-nowrap">
                       <span className={cn(
@@ -669,9 +885,16 @@ export default function Morosidad() {
                       </span>
                     </td>
                     <td className="p-4 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => startTemplate(item)}
+                        className="mr-2 inline-flex items-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-200 transition-colors hover:bg-emerald-400/20"
+                      >
+                        <ClipboardCheck className="w-4 h-4" />
+                        Plantilla
+                      </button>
                       <button 
                         onClick={() => openAiChat(item)}
-                        className="p-2 bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-colors group/btn relative"
+                        className="p-2 bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-colors group/btn relative align-middle"
                       >
                         <Bot className="w-4 h-4" />
                         <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#082a5e] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity whitespace-nowrap">
@@ -683,7 +906,7 @@ export default function Morosidad() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
+                  <td colSpan={9} className="p-8 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <AlertTriangle className="w-8 h-8 text-slate-600" />
                       <p>
@@ -746,7 +969,7 @@ export default function Morosidad() {
       {/* AI Chat Modal */}
       {selectedClient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col h-[600px] max-h-[90vh] animate-in zoom-in-95 duration-200">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-5xl shadow-2xl flex flex-col h-[760px] max-h-[92vh] animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-white/10 bg-slate-900/90 rounded-t-2xl">
               <div className="flex items-center gap-3">
@@ -755,7 +978,7 @@ export default function Morosidad() {
                 </div>
                 <div>
                   <h3 className="text-white font-bold text-sm">Agente de Cobranza IA</h3>
-                  <p className="text-xs text-slate-400">Cliente: {selectedClient.cliente} | Deuda: ${selectedClient.deuda}</p>
+                  <p className="text-xs text-slate-400">Cliente: {selectedClient.cliente} | Deuda: {money(selectedClient.deuda)}</p>
                 </div>
               </div>
               <button onClick={closeAiChat} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
@@ -765,8 +988,97 @@ export default function Morosidad() {
 
             {/* Chat History */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+                <aside className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Ficha CRM</p>
+                  <h3 className="mt-1 text-lg font-black text-white">{selectedClient.cliente}</h3>
+                  <div className="mt-3 space-y-2 text-sm text-slate-300">
+                    <p className="flex items-center gap-2"><User className="h-4 w-4 text-cyan-300" /> Folio {selectedClient.id}</p>
+                    <p className="flex items-center gap-2"><Phone className="h-4 w-4 text-emerald-300" /> {selectedClient.whatsapp || selectedClient.telCelular || selectedClient.telefono}</p>
+                    {selectedClient.correo && <p className="flex items-center gap-2 truncate"><Mail className="h-4 w-4 text-purple-300" /> {selectedClient.correo}</p>}
+                    {selectedClient.direccion && <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" /> <span>{selectedClient.direccion}</span></p>}
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-xl border border-red-300/15 bg-red-500/10 p-3">
+                      <p className="font-black text-red-200">{money(selectedClient.deuda)}</p>
+                      <p className="mt-1 text-slate-400">Adeudo</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-300/15 bg-amber-500/10 p-3">
+                      <p className="font-black text-amber-200">{selectedClient.mesesAdeudo || Math.round(selectedClient.diasAtraso / 30) || 0}</p>
+                      <p className="mt-1 text-slate-400">Meses</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {morosidadTags(selectedClient).map(tag => (
+                      <span key={tag} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold text-slate-300">{tag}</span>
+                    ))}
+                  </div>
+                </aside>
+
+                <section className="rounded-2xl border border-emerald-300/15 bg-black/20 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300">Plantillas de cobranza</p>
+                      <h3 className="mt-1 text-lg font-black text-white">Iniciar mensaje</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyTemplate}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-400/20"
+                    >
+                      {copiedTemplate ? <ClipboardCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      {copiedTemplate ? 'Copiado' : 'Copiar'}
+                    </button>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+                    {(Object.keys(TEMPLATE_LABELS) as TemplateKind[]).map(kind => (
+                      <button
+                        key={kind}
+                        type="button"
+                        onClick={() => chooseTemplate(kind)}
+                        className={cn(
+                          'rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-colors',
+                          activeTemplate === kind
+                            ? 'border-emerald-300/50 bg-emerald-400/15 text-emerald-100'
+                            : 'border-white/10 bg-black/20 text-slate-400 hover:text-white'
+                        )}
+                      >
+                        {TEMPLATE_LABELS[kind]}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    value={templateText}
+                    onChange={event => setTemplateText(event.target.value)}
+                    rows={6}
+                    className="mt-4 w-full resize-none rounded-2xl border border-white/10 bg-[#061b3a] p-4 text-sm leading-relaxed text-white outline-none focus:border-emerald-300/50"
+                  />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(selectedClient.whatsapp || selectedClient.telCelular || selectedClient.telefono) && (
+                      <a
+                        href={`https://wa.me/52${String(selectedClient.whatsapp || selectedClient.telCelular || selectedClient.telefono).replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(templateText)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-400/20"
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        Abrir WhatsApp
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setChatMessage(`Mejora esta plantilla manteniendo tono humano y firme: ${templateText}`)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-100 hover:bg-cyan-400/20"
+                    >
+                      <Bot className="h-4 w-4" />
+                      Pasar a IA
+                    </button>
+                  </div>
+                </section>
+              </div>
+
               {chatHistory.length === 0 && (
-                <div className="text-center text-slate-500 mt-10">
+                <div className="text-center text-slate-500 mt-4">
                   <Bot className="w-12 h-12 mx-auto mb-3 opacity-20" />
                   <p className="text-sm">Genera un mensaje de cobranza persuasivo para WhatsApp.</p>
                   <p className="text-xs mt-1">El cliente tiene {selectedClient.diasAtraso} días de atraso.</p>

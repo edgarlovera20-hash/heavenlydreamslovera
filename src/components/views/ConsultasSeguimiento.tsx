@@ -101,6 +101,21 @@ type Detail360 = {
 };
 
 type SavedSearch = { id: string; name: string; filters: Record<string, string> };
+type EffectivenessBucket = { name: string; total: number; efectivas: number; efectividad: number };
+type SiacAnalytics = {
+  total: number;
+  efectivas: number;
+  efectividad: number;
+  byStatus: EffectivenessBucket[];
+  byZona: EffectivenessBucket[];
+  byTienda: EffectivenessBucket[];
+  byPromotor: EffectivenessBucket[];
+  byUsuario: EffectivenessBucket[];
+  byEstrategia: EffectivenessBucket[];
+  byArea: EffectivenessBucket[];
+  byPaquete: EffectivenessBucket[];
+  byTipoLinea: EffectivenessBucket[];
+};
 
 const columnsConfig = [
   { id: 'folio_siac', label: 'Folio' },
@@ -108,6 +123,8 @@ const columnsConfig = [
   { id: 'estatus_siac', label: 'Estatus' },
   { id: 'fecha_captura', label: 'Captura' },
   { id: 'usuario', label: 'Usuario' },
+  { id: 'promotor', label: 'Promotor nombre' },
+  { id: 'estrategia', label: 'Estrategia' },
   { id: 'telefono_asignado', label: 'Tel. titular' },
   { id: 'telefono_referencia', label: 'Referencia' },
   { id: 'correo', label: 'Correo' },
@@ -215,6 +232,14 @@ function encodeFilters(filters: Record<string, string>, page: number) {
   return params.toString();
 }
 
+function encodeAnalyticsFilters(filters: Record<string, string>) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return params.toString();
+}
+
 function getCellValue(item: SiacRecord, colId: string) {
   if (colId === 'calidad') return recordQualityLabel(item);
   return (item as any)[colId] ?? '--';
@@ -255,12 +280,39 @@ function MiniBarChart({ title, data }: { title: string; data: { name: string; to
   );
 }
 
+function EffectivenessChart({ title, data }: { title: string; data: EffectivenessBucket[] }) {
+  return (
+    <div className={cn(premiumPanel, 'p-4')}>
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-white">
+        <BarChart3 className="h-4 w-4 text-cyan-200" />
+        {title}
+      </h3>
+      <ResponsiveContainer width="100%" height={235}>
+        <BarChart data={(data || []).slice(0, 10)} margin={{ left: 0, right: 4, top: 8, bottom: 44 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.11)" />
+          <XAxis dataKey="name" angle={-24} textAnchor="end" interval={0} tick={{ fill: '#cbd5e1', fontSize: 10 }} height={66} />
+          <YAxis yAxisId="left" allowDecimals={false} tick={{ fill: '#cbd5e1', fontSize: 10 }} />
+          <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tickFormatter={value => `${value}%`} tick={{ fill: '#bae6fd', fontSize: 10 }} />
+          <Tooltip
+            formatter={(value: any, name: string) => name === 'efectividad' ? `${value}%` : value}
+            contentStyle={{ background: '#061B3A', border: '1px solid rgba(0,217,255,.28)', borderRadius: 14, color: '#fff' }}
+          />
+          <Bar yAxisId="left" dataKey="total" name="Total" fill="#334155" radius={[8, 8, 0, 0]} />
+          <Bar yAxisId="left" dataKey="efectivas" name="Efectivas" fill="#22d3ee" radius={[8, 8, 0, 0]} />
+          <Bar yAxisId="right" dataKey="efectividad" name="Efectividad" fill="#34d399" radius={[8, 8, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export default function ConsultasSeguimiento() {
   const session = useMemo(currentSession, []);
   const canManage = ['GERENTE', 'ADMINISTRACION'].includes(String(session.role || '').toUpperCase());
   const [filters, setFilters] = useState<Record<string, string>>({ q: '', estatus: '', usuario: '', zona: '', tienda: '', estrategia: '', morosidad: '', dateFrom: '', dateTo: '' });
   const [records, setRecords] = useState<SiacRecord[]>([]);
   const [total, setTotal] = useState(0);
+  const [siacAnalytics, setSiacAnalytics] = useState<SiacAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [importingPrincipal, setImportingPrincipal] = useState(false);
   const [page, setPage] = useState(1);
@@ -287,14 +339,19 @@ export default function ConsultasSeguimiento() {
   const loadRecords = useCallback(async (targetPage = page, targetFilters = filters) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/siac?${encodeFilters(targetFilters, targetPage)}`, { cache: 'no-store' });
+      const [res, analyticsRes] = await Promise.all([
+        fetch(`/api/siac?${encodeFilters(targetFilters, targetPage)}`, { cache: 'no-store' }),
+        fetch(`/api/siac/analytics?${encodeAnalyticsFilters(targetFilters)}`, { cache: 'no-store' }).catch(() => null),
+      ]);
       const data = await res.json();
       setRecords(Array.isArray(data) ? data : data.rows || []);
       setTotal(Array.isArray(data) ? data.length : Number(data.total || 0));
+      if (analyticsRes?.ok) setSiacAnalytics(await analyticsRes.json());
     } catch (err) {
       console.error(err);
       setRecords([]);
       setTotal(0);
+      setSiacAnalytics(null);
     } finally {
       setLoading(false);
     }
@@ -353,6 +410,21 @@ export default function ConsultasSeguimiento() {
       byUsuario: buildBuckets(records, recordUser, 6),
     };
   }, [records]);
+
+  const effectiveness = siacAnalytics || {
+    total,
+    efectivas: analytics.posteadas,
+    efectividad: total ? Math.round((analytics.posteadas / total) * 1000) / 10 : 0,
+    byStatus: [],
+    byZona: [],
+    byTienda: [],
+    byPromotor: [],
+    byUsuario: [],
+    byEstrategia: [],
+    byArea: [],
+    byPaquete: [],
+    byTipoLinea: [],
+  };
 
   const updateFilter = (key: string, value: string) => setFilters(prev => ({ ...prev, [key]: value }));
 
@@ -561,10 +633,10 @@ export default function ConsultasSeguimiento() {
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
         <MetricCard label="Registros filtrados" value={total.toLocaleString('es-MX')} />
-        <MetricCard label="Posteadas" value={analytics.posteadas.toLocaleString('es-MX')} tone="green" />
+        <MetricCard label="Posteadas" value={effectiveness.efectivas.toLocaleString('es-MX')} tone="green" />
+        <MetricCard label="% efectividad" value={`${effectiveness.efectividad}%`} tone="green" />
         <MetricCard label="Abiertas" value={analytics.abiertas.toLocaleString('es-MX')} tone="amber" />
         <MetricCard label="Datos completos" value={analytics.calidadCompleta.toLocaleString('es-MX')} tone="green" />
-        <MetricCard label="Con morosidad" value={analytics.conMorosidad.toLocaleString('es-MX')} tone="red" />
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -584,6 +656,15 @@ export default function ConsultasSeguimiento() {
         </div>
         <MiniBarChart title="Estatus SIAC" data={analytics.byStatus} />
         <MiniBarChart title="Usuarios" data={analytics.byUsuario} />
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <EffectivenessChart title="Efectividad por zona" data={effectiveness.byZona} />
+        <EffectivenessChart title="Efectividad por tienda" data={effectiveness.byTienda} />
+        <EffectivenessChart title="Efectividad por promotor nombre" data={effectiveness.byPromotor} />
+        <EffectivenessChart title="Efectividad por estrategia" data={effectiveness.byEstrategia} />
+        <EffectivenessChart title="Efectividad por estatus" data={effectiveness.byStatus} />
+        <EffectivenessChart title="Efectividad por paquete / tipo de linea" data={[...(effectiveness.byPaquete || []).slice(0, 6), ...(effectiveness.byTipoLinea || []).slice(0, 6)]} />
       </section>
 
       <section className={cn(premiumPanel, 'p-5')}>

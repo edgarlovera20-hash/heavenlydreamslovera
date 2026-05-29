@@ -191,22 +191,22 @@ export async function importSiacSource(input: SourceInput = {}) {
   let skipped = 0;
   for (const row of rows) {
     const folio = headerValue(row, ['Folio SIAC']);
-    const osAlta = headerValue(row, ['Orden de Servicio', 'Orrden de Servicio', 'OS de Pago']);
-    const telefono = digits10(headerValue(row, ['Telefono']));
-    const telefonoAsignado = digits10(headerValue(row, ['Telefono Asignado', 'Telfono Asignado', 'Tel Pago'])) || null;
-    const telefonoPortado = digits10(headerValue(row, ['Telefono de Portabilidad', 'Telefono Portado', 'Numero a Portar']));
-    const zona = headerValue(row, ['Zona']);
-    if (!folio && !osAlta && !telefono && !zona) { skipped++; continue; }
-    try {
-      const sourceId = headerValue(row, ['ID']) || String(imported + skipped + 1);
-      const estatusSecundario = headerValueAt(row, ['Estatus'], 1);
-      const tipoLinea = headerValue(row, ['Tipo de Linea', 'Linea Contratada']);
-      const tipoCliente = headerValue(row, ['Tipo de Cliente', 'Tipo Cliente', 'Segmento']);
-      const segmentoLinea = headerValue(row, ['Segmento']) || tipoCliente || headerValueLast(row, ['Tipo de Linea']) || tipoLinea;
-      const tipoServicio = headerValue(row, ['Tipo de Servicio']) || headerValueAt(row, ['Tipo de Cliente', 'Tipo Cliente'], 1);
+      const osAlta = headerValue(row, ['Orden de Servicio', 'Orrden de Servicio', 'OS de Pago', 'OS de Servicio', 'OS']);
+      const telefono = digits10(headerValue(row, ['Telefono']));
+      const telefonoAsignado = digits10(headerValue(row, ['Telefono Asignado', 'Telfono Asignado', 'Tel Pago', 'Telefono Pago'])) || null;
+      const telefonoPortado = digits10(headerValue(row, ['Telefono de Portabilidad', 'Telefono Portado', 'Numero a Portar']));
+      const zona = headerValue(row, ['Zona']);
+      if (!folio && !osAlta && !telefono && !zona) { skipped++; continue; }
+      try {
+        const sourceId = headerValue(row, ['ID']) || String(imported + skipped + 1);
+        const estatusSecundario = headerValueAt(row, ['Estatus'], 1);
+        const tipoLinea = headerValue(row, ['Tipo de Linea', 'Linea Contratada']);
+        const tipoCliente = headerValue(row, ['Tipo de Cliente', 'Tipo Cliente', 'Segmento']);
+        const segmentoLinea = headerValue(row, ['Segmento']) || tipoCliente || headerValueLast(row, ['Tipo de Linea']) || tipoLinea;
+      const tipoServicio = headerValue(row, ['Tipo de Servicio', 'Tipo Serv']) || headerValueAt(row, ['Tipo de Cliente', 'Tipo Cliente'], 1);
       const usuario = headerValue(row, ['Usuario', 'Promotor']);
-      const promotor = headerValue(row, ['Nombre Promotor']) || usuario;
-      const etapaPisa = estatusSecundario || headerValue(row, ['Etapa PISA', 'Estatus Elaborada', 'Estatus Etapa']);
+      const promotor = headerValue(row, ['Nombre Promotor', 'Nombre']) || usuario;
+      const etapaPisa = headerValue(row, ['Etapa PISA']) || headerValue(row, ['Elaborada', 'Estatus Elaborada', 'Estatus Etapa']) || estatusSecundario;
       SiacRecords.upsert({
         id: randomUUID(),
         source_id: sourceId,
@@ -229,7 +229,7 @@ export async function importSiacSource(input: SourceInput = {}) {
         telefono_asignado: telefonoAsignado,
         telefono_portado: telefonoPortado,
         os_alta: osAlta,
-        fecha_os_alta: dateValue(row, ['Fecha Posteo', 'Fecha OS Alta']),
+        fecha_os_alta: dateValue(row, ['Fecha Posteo', 'Fecha de Posteo', 'Fecha OS Alta']),
         estatus_pisa: etapaPisa,
         fecha_cambio_estatus: dateValue(row, ['Fecha cambio estatus', 'Fecha Posteo']),
         tipo_cliente: tipoCliente,
@@ -250,7 +250,10 @@ export async function importSiacSource(input: SourceInput = {}) {
   return { imported, skipped, source, fingerprint };
 }
 
-function morosityLevel(amount: number) {
+function morosityLevel(amount: number, months = 0) {
+  if (months >= 4) return 'CRITICA';
+  if (months >= 3) return 'ALTA';
+  if (months >= 2) return 'MEDIA';
   if (amount >= 3000) return 'CRITICA';
   if (amount >= 2000) return 'ALTA';
   if (amount >= 1000) return 'MEDIA';
@@ -267,24 +270,41 @@ export async function importMorososSource(input: SourceInput = {}) {
   for (const row of rows) {
     const folio = headerValue(row, ['Folio SIAC', 'Folio']);
     if (!folio) { skipped++; continue; }
-    const telefono = digits10(headerValue(row, ['Telefono']));
-    const celular = digits10(headerValue(row, ['Celular', 'Celular 1']));
+    const telefono = digits10(headerValue(row, ['Telefono', 'Tel Contacto', 'Telcontacto']));
+    const celular = digits10(headerValue(row, ['Celular', 'Celular 1', 'Tel Celular', 'Telcelular']));
     const correo = headerValue(row, ['Correo']);
-    const saldo = Number(String(headerValue(row, ['Saldo Total']) || '0').replace(/[^0-9.-]/g, '')) || 0;
+    const saldo = Number(String(headerValue(row, ['Saldo Total', 'Adeudo', 'Monto Adeudo']) || '0').replace(/[^0-9.-]/g, '')) || 0;
+    const mesesAdeudo = Number(String(headerValue(row, ['Meses Adeudo', 'Meses de Adeudo']) || '0').replace(/[^0-9.-]/g, '')) || 0;
+    const importePagos = Number(String(headerValue(row, ['Importe Pagos', 'Pagos']) || '0').replace(/[^0-9.-]/g, '')) || 0;
+    const diaVencimiento = headerValue(row, ['Dia Vencimiento Recibo', 'Dia de Vencimiento', 'Vencimiento Recibo']);
     const existingClient = (db as any).prepare('SELECT id FROM clientes_crm WHERE folio=?').get(folio) as any;
     const clienteId = existingClient?.id || `MOR-CLI-${folio}`;
     const metadata = {
       paquete: headerValue(row, ['Paq Ofic C', 'Paquete']),
       promotor: headerValue(row, ['Promotor']),
-      usuario: headerValue(row, ['Folioprom']),
+      usuario: headerValue(row, ['Folioprom', 'Estrategia']),
       area: headerValue(row, ['Area']),
-      mercado: headerValue(row, ['Mercado C']),
+      mercado: headerValue(row, ['Mercado C', 'Ciudad', 'Cat']),
+      ciudad: headerValue(row, ['Ciudad']),
+      categoria: headerValue(row, ['Cat']),
+      estrategia: headerValue(row, ['Estrategia']),
+      tipoServicio: headerValue(row, ['Tipo Serv', 'Tipo Servicio']),
+      estatusPromotor: headerValue(row, ['Estatus Promotor']),
+      os: headerValue(row, ['OS', 'Orden de Servicio']),
+      fechaPosteo: dateValue(row, ['Fecha Posteo']),
       celular,
+      telContacto: digits10(headerValue(row, ['Tel Contacto', 'Telcontacto'])),
+      telCelular: celular,
       correo2: headerValue(row, ['Correo 2']),
+      mesesAdeudo,
+      importePagos,
+      diaVencimiento,
       saldos: {
         telecom: headerValue(row, ['Saldo Telecom']),
         tercero: headerValue(row, ['Saldo Tercero']),
         venfin: headerValue(row, ['Saldo Venfin']),
+        adeudo: saldo,
+        pagos: importePagos,
       },
     };
     try {
@@ -292,11 +312,11 @@ export async function importMorososSource(input: SourceInput = {}) {
         id: clienteId,
         captura_id: null,
         folio,
-        nombre: headerValue(row, ['Nombre Fact']) || 'Cliente sin nombre',
+        nombre: headerValue(row, ['Nombre Fact', 'Nombre Cliente', 'Cliente', 'Nombre']) || 'Cliente sin nombre',
         telefono,
         whatsapp: celular || telefono,
         correo,
-        direccion: [headerValue(row, ['Direccion 1']), headerValue(row, ['Direccion 2']), headerValue(row, ['Direccion 3'])].filter(Boolean).join(' '),
+        direccion: headerValue(row, ['Direccion']) || [headerValue(row, ['Direccion 1']), headerValue(row, ['Direccion 2']), headerValue(row, ['Direccion 3'])].filter(Boolean).join(' '),
         fecha_alta: null,
         status_cliente: 'MOROSO',
         ultimo_contacto: null,
@@ -311,13 +331,13 @@ export async function importMorososSource(input: SourceInput = {}) {
         folio,
         cliente_id: clienteId,
         monto_adeudo: saldo,
-        dias_atraso: Math.max(1, Math.ceil(saldo / 100)),
+        dias_atraso: Math.max(1, mesesAdeudo ? Math.round(mesesAdeudo * 30) : Math.ceil(saldo / 100)),
         fecha_vencimiento: null,
         ultimo_pago: null,
-        status_cobranza: morosityLevel(saldo),
+        status_cobranza: morosityLevel(saldo, mesesAdeudo),
         gestor_asignado: null,
         convenio: 0,
-        observaciones: `Importado de MOROSOS APP. Promotor: ${metadata.promotor || 'N/D'}`,
+        observaciones: `Importado de MOROSOS APP. Meses adeudo: ${mesesAdeudo || 'N/D'}. Dia vencimiento: ${diaVencimiento || 'N/D'}. Promotor: ${metadata.promotor || 'N/D'}`,
         metadata: JSON.stringify(metadata),
       });
       imported++;
