@@ -299,6 +299,20 @@ const DOCUMENT_TYPES = [
   { type: 'AUDIO_LLAMADA', label: 'Audio llamada', mode: 'ine' as const },
 ];
 
+const EXPEDIENTE_UPLOAD_DOCS = [
+  { type: 'INE_FRONTAL', label: 'INE 1', accept: IMAGE_PDF_ACCEPT },
+  { type: 'INE_REVERSO', label: 'INE 2', accept: IMAGE_PDF_ACCEPT },
+  { type: 'CURP', label: 'CURP', accept: IMAGE_PDF_ACCEPT },
+  { type: 'COMPROBANTE_DOMICILIO', label: 'Comprobante', accept: IMAGE_PDF_ACCEPT },
+  { type: 'CAPTURA_SIAC', label: 'Captura SIAC', accept: IMAGE_PDF_ACCEPT },
+  { type: 'AUDIO_LLAMADA', label: 'Audio', accept: AUDIO_ACCEPT },
+  { type: 'VIDEO_FIRMA', label: 'Video firma', accept: VIDEO_ACCEPT },
+  { type: 'SOLICITUD_FIRMADA', label: 'PDF firmado', accept: 'application/pdf,.pdf' },
+  { type: 'CONTRATO', label: 'Contrato', accept: IMAGE_PDF_ACCEPT },
+  { type: 'ANEXO_PORTABILIDAD_1', label: 'Anexo 1', accept: IMAGE_PDF_ACCEPT },
+  { type: 'ANEXO_PORTABILIDAD_2', label: 'Anexo 2', accept: IMAGE_PDF_ACCEPT },
+];
+
 const PRIMARY_NAV: Array<{ id: MobileSection; label: string; icon: IconName }> = [
   { id: 'perfil', label: 'Perfil', icon: 'user' },
   { id: 'venta', label: 'Venta', icon: 'clipboard' },
@@ -315,6 +329,14 @@ const MODULES: Array<{ id: MobileSection; label: string; icon: IconName; caption
   { id: 'avatar', label: 'Crear avatar', icon: 'sparkles', caption: 'Avatar IA, frase, color, estilo y efecto visual' },
   { id: 'nominas', label: 'Nóminas', icon: 'wallet', caption: 'Pagos y comisiones propias' },
   { id: 'documentos', label: 'Expedientes', icon: 'folder', caption: 'Documentos, evidencias y archivos por captura' },
+];
+
+const MOBILE_MOTIVATIONAL_PHRASES = [
+  'Hoy cada captura clara te acerca a la meta.',
+  'Un seguimiento a tiempo puede cambiar todo el dia.',
+  'Avanza cliente por cliente: el resultado se construye en campo.',
+  'Orden, enfoque y constancia: esa es la ruta de una buena venta.',
+  'Tu siguiente accion puede abrir la siguiente oportunidad.',
 ];
 
 const MOBILE_SECTIONS = new Set<MobileSection>(['inicio', 'perfil', ...MODULES.map((module) => module.id)]);
@@ -349,6 +371,38 @@ function metricTone(label: string) {
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
+}
+
+function mobileMotivationalPhrase() {
+  const dayIndex = Math.floor(Date.now() / 86400000) % MOBILE_MOTIVATIONAL_PHRASES.length;
+  return MOBILE_MOTIVATIONAL_PHRASES[dayIndex];
+}
+
+function safeFileName(value: any) {
+  const clean = String(value || 'archivo')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return clean || 'archivo';
+}
+
+function captureIdValue(capture: any) {
+  return String(capture?.id || capture?.captura_id || capture?.saleId || '');
+}
+
+function captureFolioValue(capture: any) {
+  return String(capture?.folio || capture?.folio_siac || capture?.cliente_nombre || capture?.telefono || captureIdValue(capture) || 'expediente');
+}
+
+function documentStatusLabel(capture: any, docType: string) {
+  const found = (capture?.documentos || []).find((doc: any) => String(doc.tipo_documento || doc.docType || '').toUpperCase() === docType);
+  return String(found?.status_documento || found?.review_status || (found?.archivo_url ? 'SUBIDO' : 'PENDIENTE')).toUpperCase();
+}
+
+function hasUploadedDocument(capture: any, docType: string) {
+  const status = documentStatusLabel(capture, docType);
+  return ['SUBIDO', 'VALIDADO', 'APROBADO', 'OK'].includes(status);
 }
 
 function initialMobileSection(): MobileSection {
@@ -1151,6 +1205,7 @@ export default function MobileFieldApp() {
   const [messageText, setMessageText] = useState('');
   const [moduleLoading, setModuleLoading] = useState(false);
   const [managerActionBusy, setManagerActionBusy] = useState<string | null>(null);
+  const [expedienteBusy, setExpedienteBusy] = useState<string | null>(null);
   const [offlineQueue, setOfflineQueue] = useState<OfflineQueueItem[]>([]);
   const [syncingQueue, setSyncingQueue] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
@@ -2222,6 +2277,130 @@ export default function MobileFieldApp() {
     }
   };
 
+  const mergeUploadedDocument = useCallback((captureId: string, docType: string, fileName: string) => {
+    setDocuments((current) => current.map((capture) => {
+      if (captureIdValue(capture) !== captureId) return capture;
+      const nextDocs = Array.isArray(capture.documentos) ? [...capture.documentos] : [];
+      const existingIndex = nextDocs.findIndex((doc: any) => String(doc.tipo_documento || '').toUpperCase() === docType);
+      const nextDoc = {
+        ...(existingIndex >= 0 ? nextDocs[existingIndex] : {}),
+        tipo_documento: docType,
+        archivo_nombre: fileName,
+        status_documento: 'SUBIDO',
+      };
+      if (existingIndex >= 0) nextDocs[existingIndex] = nextDoc;
+      else nextDocs.push(nextDoc);
+      return {
+        ...capture,
+        documentos: nextDocs,
+        status_documentos: nextDocs.every((doc: any) => ['SUBIDO', 'VALIDADO', 'APROBADO', 'OK'].includes(String(doc.status_documento || '').toUpperCase()))
+          ? 'SUBIDO'
+          : 'PARCIAL',
+      };
+    }));
+  }, []);
+
+  const uploadExpedienteDocument = async (capture: any, docType: string, file: File | null) => {
+    if (!file) return;
+    if (!online) {
+      notify('error', 'Necesitas conexion para subir documentos al expediente.');
+      return;
+    }
+    if (!isSupportedExpedienteFile(file)) {
+      notify('error', 'Formato no soportado. Sube imagen, PDF, audio o video.');
+      return;
+    }
+    const captureId = captureIdValue(capture);
+    if (!captureId) {
+      notify('error', 'No se encontro el ID de la captura.');
+      return;
+    }
+    const busyKey = `${captureId}:${docType}`;
+    setExpedienteBusy(busyKey);
+    try {
+      const prepared = await compressImageFile(file).catch(() => file);
+      const contentBase64 = await fileToBase64(prepared);
+      await apiJson('/api/document-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          captureId,
+          saleId: captureId,
+          docType,
+          fileName: prepared.name || file.name,
+          mimeType: prepared.type || file.type || 'application/octet-stream',
+          contentBase64,
+        }),
+      });
+      mergeUploadedDocument(captureId, docType, prepared.name || file.name);
+      notify('success', `${docType.replaceAll('_', ' ')} subido al expediente.`);
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo subir el documento.');
+    } finally {
+      setExpedienteBusy(null);
+    }
+  };
+
+  const downloadExpedienteFolder = async (capture: any) => {
+    const captureId = captureIdValue(capture);
+    if (!captureId) {
+      notify('error', 'No se encontro el ID de la captura.');
+      return;
+    }
+    setExpedienteBusy(`${captureId}:download`);
+    try {
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+      const folio = captureFolioValue(capture);
+      const folder = zip.folder(safeFileName(folio)) || zip;
+      const files = await apiJson<any[]>(`/api/document-files?capture_id=${encodeURIComponent(captureId)}`);
+      folder.file('manifest.json', JSON.stringify({
+        folio,
+        captureId,
+        cliente: capture.cliente_nombre || '',
+        telefono: capture.telefono || '',
+        generado: new Date().toISOString(),
+        documentos: files.map((file: any) => ({
+          tipo: file.tipo_documento,
+          nombre: file.archivo_nombre,
+          mime: file.mime_type,
+          bytes: file.size_bytes,
+          revision: file.review_status,
+        })),
+      }, null, 2));
+
+      for (const file of files) {
+        const downloadUrl = file.archivo_url || file.downloadUrl || (file.id ? `/api/document-files/${file.id}/download` : '');
+        if (!downloadUrl) continue;
+        const res = await fetch(downloadUrl);
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        const baseName = `${safeFileName(file.tipo_documento)}-${safeFileName(file.archivo_nombre || file.id)}`;
+        folder.file(baseName, blob);
+      }
+
+      if (files.length === 0) {
+        notify('error', 'Este expediente aun no tiene archivos para descargar.');
+        return;
+      }
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${safeFileName(folio)}_expediente.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      notify('success', 'Expediente descargado en ZIP.');
+    } catch (err: any) {
+      notify('error', err?.message || 'No se pudo descargar el expediente.');
+    } finally {
+      setExpedienteBusy(null);
+    }
+  };
+
   const buildExpedienteFiles = async (captureId?: string) => {
     const signedPdf = await buildSignedPdfFile(captureId);
     return [
@@ -2677,6 +2856,7 @@ export default function MobileFieldApp() {
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-cyber-electric/80">Campo</p>
                 <h1 className="mt-1 text-2xl font-black tracking-tight text-white">Hola, {displayName(session)}</h1>
                 <p className="mt-1 text-sm text-slate-400">{session.puesto || session.role || 'Asesor'}{session.zona ? ` - ${session.zona}` : ''}</p>
+                <p className="mt-3 max-w-sm text-xs font-bold leading-5 text-cyan-100/80">{mobileMotivationalPhrase()}</p>
               </div>
           <button onClick={refreshBootstrap} className="hd-liquid-button flex h-11 w-11 items-center justify-center rounded-xl border border-orange-300/35 bg-orange-300/10 text-orange-100 transition hover:bg-orange-300/15">
                 <MobileIcon name={bootLoading ? 'loader' : 'refresh'} className={cx('h-5 w-5', bootLoading && 'animate-spin')} />
@@ -3374,6 +3554,60 @@ export default function MobileFieldApp() {
                     <p className="mt-1 text-slate-500">{doc.status_documento || 'PENDIENTE'}</p>
                   </div>
                 ))}
+              </div>
+              <div className="mt-4 rounded-2xl border border-cyan-300/10 bg-cyan-300/[0.04] p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100">Completar expediente</p>
+                    <p className="mt-1 text-[11px] font-semibold text-slate-400">Sube aqui los documentos que faltaron en captura.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => downloadExpedienteFolder(capture)}
+                    disabled={expedienteBusy === `${captureIdValue(capture)}:download`}
+                    className="flex h-10 min-w-10 items-center justify-center rounded-xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-50 disabled:opacity-50"
+                    title="Descargar carpeta ZIP"
+                  >
+                    <Download className={cx('h-4 w-4', expedienteBusy === `${captureIdValue(capture)}:download` && 'animate-pulse')} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {EXPEDIENTE_UPLOAD_DOCS.map((doc) => {
+                    const captureId = captureIdValue(capture);
+                    const busyKey = `${captureId}:${doc.type}`;
+                    const uploaded = hasUploadedDocument(capture, doc.type);
+                    return (
+                      <label
+                        key={doc.type}
+                        className={cx(
+                          'flex min-h-14 cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition active:scale-[0.98]',
+                          uploaded
+                            ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-50'
+                            : 'border-cyan-300/15 bg-slate-950/25 text-slate-100',
+                          expedienteBusy === busyKey && 'pointer-events-none opacity-60',
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-[12px] font-black uppercase tracking-[0.08em]">{doc.label}</span>
+                          <span className={cx('mt-1 block text-[10px] font-bold uppercase tracking-[0.08em]', uploaded ? 'text-emerald-200' : 'text-slate-500')}>
+                            {uploaded ? 'Subido' : 'Subir'}
+                          </span>
+                        </span>
+                        <Upload className={cx('h-4 w-4 shrink-0', uploaded ? 'text-emerald-200' : 'text-cyan-200', expedienteBusy === busyKey && 'animate-pulse')} />
+                        <input
+                          type="file"
+                          accept={doc.accept}
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.currentTarget.files?.[0] || null;
+                            uploadExpedienteDocument(capture, doc.type, file);
+                            event.currentTarget.value = '';
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           ))}

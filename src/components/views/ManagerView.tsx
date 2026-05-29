@@ -49,6 +49,15 @@ const FinancesEnterpriseView = lazy(() => import('./FinancesEnterpriseView'));
 const CommissionsView = lazy(() => import('./CommissionsView'));
 const OPS_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'];
 const ADMIN_ROLES = ['GERENTE', 'ADMINISTRACION'];
+const MOTIVATIONAL_PHRASES = [
+  'Hoy cada seguimiento puede convertirse en una venta cerrada.',
+  'La constancia gana: una captura clara hoy evita retrabajo manana.',
+  'Tu energia mueve al equipo; enfocate en el siguiente cliente.',
+  'Las metas grandes se cumplen con acciones pequenas, bien hechas.',
+  'Vende con orden, valida con calma y avanza con confianza.',
+  'Cada folio atendido a tiempo mejora la experiencia del cliente.',
+  'El mejor resultado empieza con una buena captura.',
+];
 
 const SectionLoader = () => (
   <div className="flex flex-col items-center justify-center h-48 gap-4" role="status" aria-live="polite">
@@ -81,6 +90,18 @@ function ClockText() {
   return <>{time}</>;
 }
 
+function getLoginGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Buenos dias';
+  if (hour < 19) return 'Buenas tardes';
+  return 'Buenas noches';
+}
+
+function getMotivationalPhrase() {
+  const dayIndex = Math.floor(Date.now() / 86400000) % MOTIVATIONAL_PHRASES.length;
+  return MOTIVATIONAL_PHRASES[dayIndex];
+}
+
 import { Role } from '../../App';
 
 interface ManagerViewProps {
@@ -98,6 +119,7 @@ function normalizeWhatsAppStatus(data: any) {
 export default function ManagerView({ role, onBack, currentUser, isLightMode, onToggleTheme }: ManagerViewProps) {
   const [activeSection, setActiveSection] = useState(OPS_ROLES.includes(role) ? 'Dashboard' : 'Perfil');
   const [showAgentDesigner, setShowAgentDesigner] = useState(false);
+  const [captureInitialView, setCaptureInitialView] = useState<'menu' | 'new_sale'>('menu');
   const { isOnline, pendingCount, syncing, syncNow } = useOfflineSync();
   useFollowUpReminders();
 
@@ -180,6 +202,16 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       ? 'ADMINISTRACION'
     : (currentUser?.role || role);
   const notificationCount = pendingSales + pendingUsers;
+  const greeting = getLoginGreeting();
+  const motivationalPhrase = getMotivationalPhrase();
+  const openCaptureMenu = () => {
+    setCaptureInitialView('menu');
+    setActiveSection('Captura y Validación');
+  };
+  const startSaleCapture = () => {
+    setCaptureInitialView('new_sale');
+    setActiveSection('Captura y Validación');
+  };
 
   return (
     <div className="hd-screen flex h-[100dvh] w-full text-white relative z-10 overflow-hidden">
@@ -242,7 +274,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           )}
 
           <NavGroup label="Operativo">
-            <NavItem icon={ClipboardCheck} color="green" label="Captura y Validación" active={activeSection === 'Captura y Validación'} onClick={() => setActiveSection('Captura y Validación')} />
+            <NavItem icon={ClipboardCheck} color="green" label="Captura y Validación" active={activeSection === 'Captura y Validación'} onClick={openCaptureMenu} />
             <NavItem icon={FileSearch} color="cyan" label="Consulta y Seguimiento" active={activeSection === 'Consulta y Seguimiento'} onClick={() => setActiveSection('Consulta y Seguimiento')} />
             <NavItem icon={MessageSquare} color="green" label="Chats" active={activeSection === 'Chats'} onClick={() => setActiveSection('Chats')} />
             <NavItem icon={FolderOpen} color="purple" label="Documentación" active={activeSection === 'Documentación'} onClick={() => setActiveSection('Documentación')} />
@@ -376,6 +408,30 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 />
               </div>
 
+              <PremiumCard className="p-6 overflow-hidden" tone="cyan">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-3xl">
+                    <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-100">
+                      <Zap className="h-3.5 w-3.5" />
+                      Inicio de sesion activo
+                    </div>
+                    <h2 className="text-2xl font-semibold text-white">
+                      {greeting}, {userName}. Listo para avanzar.
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">
+                      {motivationalPhrase}
+                    </p>
+                  </div>
+                  <button
+                    onClick={startSaleCapture}
+                    className="hd-liquid-button hd-card-interactive flex min-h-[58px] items-center justify-center gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-400/10 px-5 text-sm font-semibold text-emerald-100 transition-all hover:border-emerald-300/50 hover:bg-emerald-400/15"
+                  >
+                    <ClipboardCheck className="h-5 w-5" />
+                    Iniciar captura de venta
+                  </button>
+                </div>
+              </PremiumCard>
+
               {/* Secondary Stats Row */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <PremiumCard className="p-5" tone="blue">
@@ -426,7 +482,8 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   <h3 className="text-sm font-semibold text-slate-300">Accesos rápidos</h3>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <QuickAction icon={ClipboardCheck} label="Nueva Captura" color="green" onClick={() => setActiveSection('Captura y Validación')} />
+                  <QuickAction icon={ClipboardCheck} label="Capturar venta" color="green" onClick={startSaleCapture} />
+                  <QuickAction icon={Zap} label="Menu captura" color="cyan" onClick={openCaptureMenu} />
                   <QuickAction icon={FileSearch} label="Consultas" color="cyan" onClick={() => setActiveSection('Consulta y Seguimiento')} />
                   <QuickAction icon={MessageSquare} label="Chats" color="green" onClick={() => setActiveSection('Chats')} />
                   <QuickAction icon={MapPin} label="Por Zona" color="cyan" onClick={() => setActiveSection('Historial por Zona')} />
@@ -541,7 +598,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Nóminas' && <Payroll />}
             {activeSection === 'Comisiones' && <CommissionsView />}
             {activeSection === 'Anuncios' && <Announcements />}
-            {activeSection === 'Captura y Validación' && <CaptureValidation />}
+            {activeSection === 'Captura y Validación' && <CaptureValidation key={captureInitialView} initialView={captureInitialView} />}
             {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
             {activeSection === 'Soporte a Clientes' && <CustomerSupport />}
             {activeSection === 'Chat para Clientes' && <ClientChatCrmView />}

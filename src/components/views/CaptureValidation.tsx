@@ -14,8 +14,10 @@ function ViewLoader() {
   );
 }
 
-export default function CaptureValidation() {
-  const [activeView, setActiveView] = useState<'menu' | 'new_sale' | 'my_clients' | 'direct_validation'>('menu');
+type CaptureValidationView = 'menu' | 'new_sale' | 'my_clients' | 'direct_validation';
+
+export default function CaptureValidation({ initialView = 'menu' }: { initialView?: CaptureValidationView }) {
+  const [activeView, setActiveView] = useState<CaptureValidationView>(initialView);
 
   const options: { id: number, actionId: string, title: string, description: string, icon: any, color: CyberColor, disabled?: boolean }[] = [
     { 

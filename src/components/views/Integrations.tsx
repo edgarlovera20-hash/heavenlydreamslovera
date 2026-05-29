@@ -88,12 +88,9 @@ export default function Integrations() {
   });
 
   return (
-    <div className="relative w-full space-y-8 overflow-hidden rounded-[22px] p-1 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="pointer-events-none absolute inset-0 -z-10 rounded-[22px] bg-[radial-gradient(circle_at_18%_8%,rgba(14,165,233,0.16),transparent_28%),radial-gradient(circle_at_82%_0%,rgba(34,211,238,0.08),transparent_26%),linear-gradient(180deg,rgba(8,15,28,0.96),rgba(3,8,16,0.99))]" />
-      <div className="pointer-events-none absolute inset-0 -z-10 rounded-[22px] opacity-[0.16] [background-image:linear-gradient(rgba(125,211,252,0.18)_1px,transparent_1px),linear-gradient(90deg,rgba(125,211,252,0.18)_1px,transparent_1px)] [background-size:42px_42px]" />
-      <div className="pointer-events-none absolute inset-x-8 top-0 -z-10 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent" />
+    <div className="hd-clean-module hd-integrations-clean relative w-full space-y-8 overflow-visible rounded-[22px] p-1 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
-      <div className="relative z-10 rounded-[20px] border border-cyan-300/10 bg-slate-950/35 p-5 backdrop-blur-sm">
+      <div className="hd-module-panel relative z-10 rounded-[20px] p-5">
         <SectionHeader
           eyebrow="Integraciones"
           title={<>Centro de <span className="text-cyan-300">protocolos</span></>}
@@ -101,7 +98,7 @@ export default function Integrations() {
           action={<PremiumBadge tone="cyan" dot>{filteredIntegrations.length} visibles</PremiumBadge>}
         />
         
-        <div className="mt-5 flex w-full flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5 sm:w-fit">
+        <div className="mt-5 flex w-full flex-wrap items-center gap-2 rounded-2xl border border-cyan-300/16 bg-[#061b3a] p-1.5 sm:w-fit">
           {['All', 'Connected', 'Communication', 'AI'].map((f) => (
             <button
               key={f}
@@ -128,7 +125,7 @@ export default function Integrations() {
         ))}
         
         {/* Add New Integration Card */}
-        <button className="hd-card hd-card-interactive hd-tone-amber group flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-cyan-300/18 p-8 transition-all hover:border-cyan-300/45">
+        <button className="hd-module-panel group flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-cyan-300/22 p-8 transition-all hover:border-cyan-300/45">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-500 transition-all group-hover:border-cyan-300/45 group-hover:text-cyan-300">
             <Plus className="w-8 h-8" />
           </div>
@@ -140,9 +137,7 @@ export default function Integrations() {
       </div>
 
       {/* System Logs / Integration Activity */}
-      <PremiumCard className="relative z-10 overflow-hidden p-6" tone="purple">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(14,165,233,0.12),transparent_34%)]" />
-        <div className="absolute top-0 left-0 w-1 h-full bg-cyber-electric/30"></div>
+      <PremiumCard className="hd-module-panel relative z-10 overflow-hidden p-6" tone="purple">
         <div className="relative z-10 flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-cyber-electric/25 bg-cyber-electric/10 text-cyber-electric">
@@ -184,19 +179,14 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
   };
 
   return (
-    <div className={`hd-card hd-card-interactive ${toneClass[integration.color] || 'hd-tone-cyan'} relative group overflow-hidden transition-all duration-300 p-6 rounded-2xl border backdrop-blur-sm ${
+    <div className={`hd-module-panel hd-integration-card ${toneClass[integration.color] || 'hd-tone-cyan'} relative group overflow-hidden transition-all duration-300 p-6 rounded-2xl border ${
       isConnected 
-      ? 'bg-slate-950/78 border-cyber-electric/28 hover:border-cyber-electric/48' 
-      : 'bg-slate-950/48 border-white/10 hover:border-white/18'
+      ? 'border-cyber-electric/28 hover:border-cyber-electric/48' 
+      : 'border-cyan-300/14 hover:border-cyan-300/26'
     }`}>
-      {/* Glow Effect */}
-      {isConnected && (
-        <div className="absolute -top-10 -right-10 w-28 h-28 bg-cyber-electric/8 blur-3xl rounded-full group-hover:bg-cyber-electric/12 transition-colors"></div>
-      )}
-
       <div className="flex justify-between items-start mb-6">
-        <div className={`p-3 rounded-xl bg-white/[0.035] border flex items-center justify-center ${
-          isConnected ? 'border-cyber-electric/50 text-cyber-electric' : 'border-slate-800 text-slate-500'
+        <div className={`p-3 rounded-xl bg-[#082a5e] border flex items-center justify-center ${
+          isConnected ? 'border-cyber-electric/42 text-cyber-electric' : 'border-cyan-300/12 text-slate-400'
         }`}>
           <integration.icon className="w-6 h-6" />
         </div>
@@ -205,7 +195,7 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
           <span className={`text-[10px] font-semibold px-2 py-1 rounded-md mb-2 ${
             isConnected ? 'bg-cyber-electric/10 text-cyber-electric border border-cyber-electric/20' : 
             isConfiguring ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' :
-            'bg-slate-800/50 text-slate-500 border border-slate-700'
+            'bg-[#061b3a] text-slate-400 border border-cyan-300/12'
           }`}>
             {integration.status}
           </span>
@@ -227,7 +217,7 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
             >
               Gestionar
             </PremiumButton>
-            <button className="p-2 rounded-lg bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700 transition-all">
+            <button className="p-2 rounded-lg bg-[#082a5e] text-slate-300 hover:text-white hover:bg-[#0a3677] transition-all">
               <RefreshCw className="w-4 h-4" />
             </button>
             <button className="p-2 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 transition-all ml-auto">
@@ -242,7 +232,7 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
         ) : (
           <button 
             onClick={onToggle}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 bg-white/[0.025] text-slate-300 font-semibold text-xs hover:border-cyber-electric/50 hover:text-white transition-all group/btn"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-cyan-300/14 bg-[#082a5e] text-slate-200 font-semibold text-xs hover:border-cyber-electric/45 hover:text-white hover:bg-[#0a3677] transition-all group/btn"
           >
             <Power className="w-3.5 h-3.5 group-hover/btn:text-cyber-electric transition-colors" />
             Conectar protocolo
@@ -256,22 +246,22 @@ const IntegrationCard: React.FC<{ integration: Integration; onToggle: () => void
 function LogItem({ title, status, time, desc, isError = false }: any) {
   return (
     <div className={`p-3 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-2 group transition-all ${
-      isError ? 'bg-rose-500/5 border-rose-500/20' : 'bg-white/[0.035] border-white/8 hover:border-white/16'
+      isError ? 'bg-rose-500/7 border-rose-500/22' : 'bg-[#061b3a] border-cyan-300/12 hover:border-cyan-300/22'
     }`}>
       <div className="flex items-center gap-3">
         <div className={`w-2 h-2 rounded-full ${
-          status === 'SUCCESS' ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.8)]' :
-          status === 'WAITING' ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' :
-          'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
+          status === 'SUCCESS' ? 'bg-cyan-400' :
+          status === 'WAITING' ? 'bg-yellow-400' :
+          'bg-rose-400'
         }`}></div>
         <div className="flex flex-col md:flex-row md:items-center md:gap-4">
           <span className="text-[11px] font-semibold text-white tracking-[0.08em] min-w-[100px]">{title}</span>
-          <span className="text-[10px] font-medium text-slate-500 line-clamp-1">{desc}</span>
+          <span className="text-[10px] font-medium text-slate-400 line-clamp-1">{desc}</span>
         </div>
       </div>
       <div className="flex items-center gap-3 justify-end italic">
-         <span className={`text-[9px] font-bold ${isError ? 'text-rose-400' : 'text-slate-600'}`}>{status}</span>
-         <span className="text-[9px] text-slate-700 font-bold">{time}</span>
+         <span className={`text-[9px] font-bold ${isError ? 'text-rose-300' : 'text-slate-400'}`}>{status}</span>
+         <span className="text-[9px] text-slate-500 font-bold">{time}</span>
       </div>
     </div>
   );

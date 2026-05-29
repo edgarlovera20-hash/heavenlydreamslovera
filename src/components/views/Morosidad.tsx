@@ -364,25 +364,25 @@ export default function Morosidad() {
   const tgLinked = channelState.telegramVendedores;
   const waUrl = chatUrl('whatsappClientes') || chatUrl('whatsappVendedores');
   const tgUrl = chatUrl('telegramVendedores');
-  const chartColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#8b5cf6'];
+  const chartColors = ['#ef5a5a', '#f28b35', '#d6ad32', '#35b979', '#2fa7c8', '#8a73df'];
   const money = (value: number) => `$${Number(value || 0).toLocaleString('es-MX')}`;
   const MiniBar = ({ title, data }: { title: string; data?: AnalyticsBucket[] }) => (
-    <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 min-h-[260px]">
+    <div className="hd-morosidad-panel rounded-2xl p-4 min-h-[260px]">
       <h3 className="text-sm font-bold text-slate-100 mb-3">{title}</h3>
       <ResponsiveContainer width="100%" height={205}>
         <BarChart data={(data || []).slice(0, 8)} margin={{ left: 0, right: 6, top: 8, bottom: 32 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.10)" />
           <XAxis dataKey="name" angle={-25} textAnchor="end" interval={0} tick={{ fill: '#94a3b8', fontSize: 10 }} height={54} />
           <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
-          <Tooltip formatter={(value: any, name: string) => name === 'monto' ? money(Number(value)) : value} contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,.12)', borderRadius: 8 }} />
-          <Bar dataKey="monto" fill="#ef4444" radius={[6, 6, 0, 0]} />
+          <Tooltip formatter={(value: any, name: string) => name === 'monto' ? money(Number(value)) : value} contentStyle={{ background: '#061b3a', border: '1px solid rgba(125,249,255,.18)', borderRadius: 10, color: '#fff' }} />
+          <Bar dataKey="monto" fill="#ef5a5a" radius={[6, 6, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>
   );
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-6">
+    <div className="hd-clean-module hd-morosidad-clean max-w-[1600px] mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
       <div>
           <h1 className="text-2xl font-bold text-slate-100 mb-1 tracking-tight flex items-center gap-2">
@@ -415,18 +415,18 @@ export default function Morosidad() {
         </div>
       )}
 
-      <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 shadow-xl">
+      <div className="hd-morosidad-panel rounded-2xl p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-bold text-slate-100">Periodo de morosidad</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-slate-300/80">
               Aplicado a tarjetas, graficas y tabla: <span className="font-semibold text-cyan-300">{chartFilterLabel}</span>
             </p>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[230px_180px_180px_auto]">
             <div className="space-y-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ver por</span>
-              <div className="grid grid-cols-3 rounded-xl border border-white/10 bg-black/30 p-1">
+              <div className="grid grid-cols-3 rounded-xl border border-cyan-300/15 bg-[#061b3a] p-1">
                 {[
                   { id: 'all', label: 'Todo' },
                   { id: 'month', label: 'Mes' },
@@ -445,8 +445,8 @@ export default function Morosidad() {
                     className={cn(
                       'rounded-lg px-3 py-2 text-xs font-bold transition-colors',
                       periodMode === option.id
-                        ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
-                        : 'text-slate-400 hover:bg-white/10 hover:text-white'
+                        ? 'bg-cyan-400 text-slate-950'
+                        : 'text-slate-300 hover:bg-cyan-300/10 hover:text-white'
                     )}
                   >
                     {option.label}
@@ -465,7 +465,7 @@ export default function Morosidad() {
                   if (chartDay && !chartDay.startsWith(event.target.value)) setChartDay('');
                 }}
                 disabled={periodMode === 'all'}
-                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition-all focus:ring-2 focus:ring-cyan-500/50 disabled:cursor-not-allowed disabled:opacity-45"
+                className="w-full rounded-xl border border-cyan-300/14 bg-[#061b3a] px-3 py-2 text-sm text-white outline-none transition-all focus:border-cyan-300/45 disabled:cursor-not-allowed disabled:opacity-45"
               />
             </label>
             <label className="space-y-1.5">
@@ -481,13 +481,13 @@ export default function Morosidad() {
                   }
                 }}
                 disabled={periodMode !== 'day'}
-                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition-all focus:ring-2 focus:ring-cyan-500/50 disabled:cursor-not-allowed disabled:opacity-45"
+                className="w-full rounded-xl border border-cyan-300/14 bg-[#061b3a] px-3 py-2 text-sm text-white outline-none transition-all focus:border-cyan-300/45 disabled:cursor-not-allowed disabled:opacity-45"
               />
             </label>
             <button
               type="button"
               onClick={() => { setPeriodMode('all'); setChartMonth(''); setChartDay(''); }}
-              className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700"
+              className="flex items-center justify-center gap-2 rounded-xl border border-cyan-300/16 bg-[#082a5e] px-4 py-2 text-sm font-medium text-white transition-colors hover:border-cyan-300/34 hover:bg-[#0a3677]"
             >
               <X className="h-4 w-4" />
               Limpiar
@@ -497,19 +497,19 @@ export default function Morosidad() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
+        <div className="hd-morosidad-panel rounded-2xl p-4">
           <p className="text-2xl font-black text-red-300">{chartAnalytics.total}</p>
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Cuentas morosas</p>
         </div>
-        <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
+        <div className="hd-morosidad-panel rounded-2xl p-4">
           <p className="text-2xl font-black text-amber-300">{money(chartAnalytics.montoTotal)}</p>
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Saldo total</p>
         </div>
-        <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
+        <div className="hd-morosidad-panel rounded-2xl p-4">
           <p className="text-2xl font-black text-cyan-300">{chartAnalytics.byPromotor?.[0]?.name || '—'}</p>
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Promotor con más saldo</p>
         </div>
-        <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4">
+        <div className="hd-morosidad-panel rounded-2xl p-4">
           <p className="text-2xl font-black text-purple-300">{chartAnalytics.byZona?.[0]?.name || '—'}</p>
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Zona con más morosidad</p>
         </div>
@@ -523,14 +523,14 @@ export default function Morosidad() {
           <MiniBar title="Morosidad por tienda" data={chartAnalytics.byTienda} />
           <MiniBar title="Morosidad por estrategia" data={chartAnalytics.byEstrategia} />
           <MiniBar title="Morosidad por área" data={chartAnalytics.byArea} />
-          <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 min-h-[260px]">
+          <div className="hd-morosidad-panel rounded-2xl p-4 min-h-[260px]">
             <h3 className="text-sm font-bold text-slate-100 mb-3">Morosidad por mercado</h3>
             <ResponsiveContainer width="100%" height={205}>
               <PieChart>
                 <Pie data={chartAnalytics.byMercado.slice(0, 6)} dataKey="monto" nameKey="name" innerRadius={45} outerRadius={82} paddingAngle={2}>
                   {chartAnalytics.byMercado.slice(0, 6).map((_, index) => <Cell key={index} fill={chartColors[index % chartColors.length]} />)}
                 </Pie>
-                <Tooltip formatter={(value: any) => money(Number(value))} contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,.12)', borderRadius: 8 }} />
+                <Tooltip formatter={(value: any) => money(Number(value))} contentStyle={{ background: '#061b3a', border: '1px solid rgba(18,223,255,.22)', borderRadius: 10, color: '#fff' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -538,7 +538,7 @@ export default function Morosidad() {
       )}
 
       {/* Channel Connections Banner */}
-      <div className="bg-slate-900/90 backdrop-blur-md border border-white/10 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+      <div className="hd-morosidad-panel rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h3 className="text-lg font-bold text-white mb-1">Integración de Cobranza</h3>
           <p className="text-sm text-slate-400">Vincula una cuenta (WhatsApp o Telegram) compartida para Seguimiento, Soporte y Morosidad.</p>
@@ -547,7 +547,7 @@ export default function Morosidad() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => openLinkModal(['whatsappVendedores', 'whatsappClientes'])}
-              className={cn('flex items-center justify-center gap-2 px-4 py-2 border rounded-xl transition-colors text-sm font-medium', waLinked ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20' : 'bg-slate-800 border-white/10 text-slate-300 hover:bg-emerald-500/20 hover:text-emerald-400 hover:border-emerald-500/30')}
+              className={cn('flex items-center justify-center gap-2 px-4 py-2 border rounded-xl transition-colors text-sm font-medium', waLinked ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/16' : 'bg-[#082a5e] border-cyan-300/14 text-slate-200 hover:bg-emerald-500/12 hover:text-emerald-300 hover:border-emerald-500/30')}
             >
               <MessageCircle className="w-4 h-4" />
               {waLinked ? <><CheckCircle2 className="w-3.5 h-3.5" /><span>{waLinked.alias}</span></> : <span>Vincular WhatsApp</span>}
@@ -557,7 +557,7 @@ export default function Morosidad() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => openLinkModal(['telegramVendedores'])}
-              className={cn('flex items-center justify-center gap-2 px-4 py-2 border rounded-xl transition-colors text-sm font-medium', tgLinked ? 'bg-sky-500/10 border-sky-500/40 text-sky-400 hover:bg-sky-500/20' : 'bg-slate-800 border-white/10 text-slate-300 hover:bg-sky-500/20 hover:text-sky-400 hover:border-sky-500/30')}
+              className={cn('flex items-center justify-center gap-2 px-4 py-2 border rounded-xl transition-colors text-sm font-medium', tgLinked ? 'bg-sky-500/10 border-sky-500/40 text-sky-300 hover:bg-sky-500/16' : 'bg-[#082a5e] border-cyan-300/14 text-slate-200 hover:bg-sky-500/12 hover:text-sky-300 hover:border-sky-500/30')}
             >
               <Send className="w-4 h-4" />
               {tgLinked ? <><CheckCircle2 className="w-3.5 h-3.5" /><span>{tgLinked.alias}</span></> : <span>Vincular Telegram</span>}
@@ -568,7 +568,7 @@ export default function Morosidad() {
       </div>
 
       {/* Filter Container */}
-      <div className="bg-slate-900/90 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl">
+      <div className="hd-morosidad-panel rounded-2xl p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Global Search */}
           <div className="space-y-2">
@@ -580,7 +580,7 @@ export default function Morosidad() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="ID, Nombre o Teléfono..." 
-                className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
+                className="w-full bg-[#061b3a] border border-cyan-300/14 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-300/45 transition-all"
               />
             </div>
           </div>
@@ -591,7 +591,7 @@ export default function Morosidad() {
             <select 
               value={estado}
               onChange={(e) => setEstado(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all appearance-none"
+              className="w-full bg-[#061b3a] border border-cyan-300/14 rounded-xl py-2.5 px-4 text-sm text-white focus:outline-none focus:border-cyan-300/45 transition-all appearance-none"
             >
               <option value="" className="bg-slate-900">TODOS</option>
               <option value="Sin contactar" className="bg-slate-900">Sin contactar</option>
@@ -607,14 +607,14 @@ export default function Morosidad() {
         <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-white/10">
           <button 
             onClick={handleClear}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-colors border border-white/5"
+            className="flex items-center gap-2 px-4 py-2 bg-[#082a5e] hover:bg-[#0a3677] text-white text-sm font-medium rounded-xl transition-colors border border-cyan-300/14"
           >
             <X className="w-4 h-4" />
             Limpiar Filtros
           </button>
           <button 
             onClick={handleFilter}
-            className="flex items-center gap-2 px-6 py-2 bg-red-600/80 hover:bg-red-500 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-red-500/20"
+            className="flex items-center gap-2 px-6 py-2 bg-[#b91c1c] hover:bg-[#dc2626] text-white text-sm font-medium rounded-xl transition-colors border border-red-300/18"
           >
             <Filter className="w-4 h-4" />
             Filtrar Morosos
@@ -623,10 +623,10 @@ export default function Morosidad() {
       </div>
 
       {/* Table Wrapper */}
-      <div className="bg-slate-900/90 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+      <div className="hd-morosidad-panel rounded-2xl overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[500px] custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[1000px]">
-            <thead className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-xl shadow-md">
+            <thead className="sticky top-0 z-20 bg-[#061b3a]">
               <tr>
                 <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">ID</th>
                 <th className="p-4 text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">CLIENTE</th>
@@ -643,7 +643,7 @@ export default function Morosidad() {
                 paginatedData.map((item, idx) => (
                   <tr 
                     key={idx} 
-                    className="hover:bg-red-500/10 transition-colors group"
+                    className="hover:bg-cyan-300/6 transition-colors group"
                   >
                     <td className="p-4 text-sm font-medium text-slate-400 whitespace-nowrap">{item.id}</td>
                     <td className="p-4 text-sm text-slate-200 font-medium whitespace-nowrap">{item.cliente}</td>
@@ -674,7 +674,7 @@ export default function Morosidad() {
                         className="p-2 bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-colors group/btn relative"
                       >
                         <Bot className="w-4 h-4" />
-                        <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity whitespace-nowrap">
+                        <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#082a5e] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity whitespace-nowrap">
                           Generar Mensaje IA
                         </span>
                       </button>
@@ -702,7 +702,7 @@ export default function Morosidad() {
 
       {/* Pagination Controls */}
       {totalPages > 1 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/90 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-xl">
+        <div className="hd-morosidad-panel flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl p-4">
           <p className="text-sm text-slate-400">
             Mostrando <span className="font-medium text-white">{(currentPage - 1) * itemsPerPage + 1}</span> a <span className="font-medium text-white">{Math.min(currentPage * itemsPerPage, filteredData.length)}</span> de <span className="font-medium text-white">{filteredData.length}</span> registros
           </p>
@@ -710,7 +710,7 @@ export default function Morosidad() {
             <button 
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#082a5e] text-slate-200 hover:bg-[#0a3677] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Anterior
             </button>
@@ -724,8 +724,8 @@ export default function Morosidad() {
                   className={cn(
                     "w-8 h-8 shrink-0 rounded-lg text-sm font-medium transition-colors flex items-center justify-center",
                     currentPage === item
-                      ? "bg-red-600 text-white"
-                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                      ? "bg-cyan-400 text-slate-950"
+                      : "bg-[#082a5e] text-slate-200 hover:bg-[#0a3677]"
                   )}
                 >
                   {item}
@@ -735,7 +735,7 @@ export default function Morosidad() {
             <button 
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#082a5e] text-slate-200 hover:bg-[#0a3677] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Siguiente
             </button>
