@@ -52,6 +52,7 @@ type PayrollUser = {
   id: string;
   name: string;
   role?: string;
+  aliases?: string[];
 };
 
 type PayrollSale = {
@@ -94,7 +95,10 @@ function getCurrentUser(): PayrollUser {
   const id = String(user.uid || user.id || user.sub || user.email || 'current-user');
   const name = String(user.displayName || user.nombre || user.name || user.email || 'Edgar Lovera');
   const role = String(user.role || user.rol || '').toUpperCase();
-  return { id, name, role };
+  const aliases = [user.uid, user.id, user.sub, user.email, user.username, user.displayName, user.nombre, user.name]
+    .filter(Boolean)
+    .map(String);
+  return { id, name, role, aliases };
 }
 
 function normalizePayrollUsers(storedUsers: any[]): PayrollUser[] {
@@ -104,6 +108,15 @@ function normalizePayrollUsers(storedUsers: any[]): PayrollUser[] {
       id: String(user.uid || user.id || user.email || ''),
       name: String(user.displayName || user.nombre || user.name || user.email || 'Usuario'),
       role: String(user.role || user.rol || '').toUpperCase(),
+      aliases: [
+        user.uid,
+        user.id,
+        user.email,
+        user.username,
+        user.displayName,
+        user.nombre,
+        user.name,
+      ].filter(Boolean).map(String),
     }))
     .filter(user => user.id);
 
@@ -176,6 +189,11 @@ function payrollOwnerMatches(owner: string, selected: string) {
   return Boolean(a && b && (a === b || a.includes(b) || b.includes(a)));
 }
 
+function payrollAliasesForUser(userId: string, users: PayrollUser[]) {
+  const user = users.find(item => payrollOwnerMatches(item.id, userId) || payrollOwnerMatches(item.name, userId));
+  return Array.from(new Set([userId, user?.id, user?.name, ...(user?.aliases || [])].filter(Boolean).map(String)));
+}
+
 function formatReceiptDate(date: Date) {
   return date.toLocaleDateString('es-MX', {
     day: '2-digit',
@@ -192,7 +210,7 @@ function buildClientName(record: any) {
   ].filter(Boolean).join(' ').trim() || 'Cliente sin nombre';
 }
 
-function buildPayrollSales(year: number, week: number, userId: string, rawSales: any[]): PayrollSale[] {
+function buildPayrollSales(year: number, week: number, userId: string, rawSales: any[], aliases: string[]): PayrollSale[] {
   return rawSales
     .map((sale, index) => {
       const date = parseDate(sale.fechaSolicitud || sale.fecha_solicitud || sale.fecha_captura || sale.fecha_os_alta || sale.created_at || sale.createdAt);
@@ -209,12 +227,13 @@ function buildPayrollSales(year: number, week: number, userId: string, rawSales:
       };
     })
     .filter(sale => dateInISOWeek(sale.date, year, week))
-    .filter(sale => !!sale.userId && payrollOwnerMatches(sale.userId, userId));
+    .filter(sale => !!sale.userId && aliases.some(alias => payrollOwnerMatches(sale.userId, alias)));
 }
 
 function buildPayrollResult(year: number, week: number, userId: string, users: PayrollUser[], salesSource: any[]): PayrollQueryResult {
   const { start, end } = getISOWeekRange(year, week);
-  const sales = buildPayrollSales(year, week, userId, salesSource);
+  const aliases = payrollAliasesForUser(userId, users);
+  const sales = buildPayrollSales(year, week, userId, salesSource, aliases);
   const subtotal = sales.reduce((sum, sale) => sum + sale.commission, 0);
   const userLabel = users.find(user => user.id === userId)?.name || userId || 'Usuario';
 

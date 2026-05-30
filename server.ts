@@ -556,6 +556,49 @@ async function startServer() {
     return ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'].includes(auth?.role);
   }
 
+  function normalizePayrollIdentity(value: any) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9@._+\-\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase();
+  }
+
+  function payrollIdentityAliases(auth: any) {
+    const user = auth?.sub ? Users.getById(auth.sub) as any : null;
+    const aliases = [
+      auth?.sub,
+      auth?.name,
+      auth?.username,
+      auth?.email,
+      user?.uid,
+      user?.nombre,
+      user?.username,
+      user?.email,
+      user?.displayName,
+    ]
+      .map(normalizePayrollIdentity)
+      .filter(Boolean);
+    return Array.from(new Set(aliases));
+  }
+
+  function payrollOwnerMatches(owner: any, aliases: string[]) {
+    const normalizedOwner = normalizePayrollIdentity(owner);
+    if (!normalizedOwner || !aliases.length) return false;
+    return aliases.some(alias => (
+      normalizedOwner === alias ||
+      normalizedOwner.includes(alias) ||
+      alias.includes(normalizedOwner)
+    ));
+  }
+
+  function payrollRowsForAuth(auth: any) {
+    const aliases = payrollIdentityAliases(auth);
+    return (Nominas.getAll() as any[]).filter(row => payrollOwnerMatches(row?.asesor_id, aliases));
+  }
+
   function canApproveHuman(auth: any) {
     return ['GERENTE', 'ADMINISTRACION'].includes(auth?.role);
   }
@@ -1659,11 +1702,13 @@ async function startServer() {
 
   function mobilePayroll(req: any, limit = 40) {
     if (canManage(req.auth)) {
-      const asesorId = String(req.query?.asesor_id || req.auth.sub || '').trim();
-      const rows = Nominas.getByAsesor(asesorId);
+      const asesorId = String(req.query?.asesor_id || '').trim();
+      const rows = asesorId
+        ? (Nominas.getAll() as any[]).filter(row => payrollOwnerMatches(row?.asesor_id, [normalizePayrollIdentity(asesorId)]))
+        : payrollRowsForAuth(req.auth);
       return rows.slice(0, limit);
     }
-    return Nominas.getByAsesor(req.auth.sub).slice(0, limit);
+    return payrollRowsForAuth(req.auth).slice(0, limit);
   }
 
   function filterUpdatedSince(rows: any[], updatedSince: any) {
@@ -2982,9 +3027,13 @@ async function startServer() {
 
   // ── NÓMINAS ────────────────────────────────────────────────
   app.get("/api/nominas", authOnly, wrap((req: any, res: any) => {
-    if (!canManage(req.auth)) return res.json(Nominas.getByAsesor(req.auth.sub));
+    if (!canManage(req.auth)) return res.json(payrollRowsForAuth(req.auth));
     const asesorId = String(req.query?.asesor_id || '').trim();
-    res.json(asesorId ? Nominas.getByAsesor(asesorId) : Nominas.getAll());
+    if (asesorId) {
+      const aliases = [normalizePayrollIdentity(asesorId)];
+      return res.json((Nominas.getAll() as any[]).filter(row => payrollOwnerMatches(row?.asesor_id, aliases)));
+    }
+    res.json(Nominas.getAll());
   }));
 
   app.get("/api/nominas/siac-week", authOnly, wrap((req: any, res: any) => {
@@ -3015,11 +3064,12 @@ async function startServer() {
       .trim()
       .toUpperCase();
     const selectedName = normalizeName(req.query.userName || req.query.usuario || '');
-    const authName = normalizeName(req.auth?.name || req.auth?.username || req.auth?.sub);
+    const authAliases = payrollIdentityAliases(req.auth);
     const rowOwnerMatches = (row: any, expectedName: string) => {
       const owner = normalizeName(row.promotor || row.usuario);
       return !!expectedName && (owner === expectedName || owner.includes(expectedName) || expectedName.includes(owner));
     };
+    const rowOwnerMatchesAuth = (row: any) => payrollOwnerMatches(row.promotor || row.usuario, authAliases);
     const weekRows = (db as any).prepare(`
       SELECT * FROM siac_records
       WHERE UPPER(COALESCE(estatus_siac,'')) LIKE '%POSTEA%'
@@ -3032,8 +3082,8 @@ async function startServer() {
         return info.year === year && info.week === week;
       });
     const rows = weekRows.filter((row: any) => {
-      if (!canManage(req.auth)) return rowOwnerMatches(row, authName);
-      return selectedName ? rowOwnerMatches(row, selectedName) : false;
+      if (!canManage(req.auth)) return rowOwnerMatchesAuth(row);
+      return selectedName ? rowOwnerMatches(row, selectedName) : true;
     });
     const userSourceRows = canManage(req.auth) ? weekRows : rows;
     const users = Array.from(new Map(userSourceRows.map((row: any) => {
@@ -3057,7 +3107,7 @@ async function startServer() {
       pago_posteo: commission,
       commission,
     }));
-    const screenshotWeek21Adjustments = year === 2026 && week === 21 ? [
+    const screenshotWeek21Adjustments = process.env.PAYROLL_DEMO_ADJUSTMENTS === '1' && year === 2026 && week === 21 ? [
       { folio_siac: '151497981', promotor: 'KIARA AQUINO', zona: 'UNIVERSIDAD', fecha_os_alta: '2026-04-03', commission: 75 },
       { folio_siac: '151419967', promotor: 'KIARA AQUINO', zona: 'ERMITA-TLAHUAC', fecha_os_alta: '2026-03-24', commission: 75 },
       { folio_siac: '151437536', promotor: 'KIARA AQUINO', zona: 'MIXCOAC', fecha_os_alta: '2026-04-03', commission: 75 },
@@ -3067,8 +3117,8 @@ async function startServer() {
     const adjustmentRows = screenshotWeek21Adjustments
       .filter((row) => {
         const owner = { promotor: row.promotor };
-        if (!canManage(req.auth)) return rowOwnerMatches(owner, authName);
-        return selectedName ? rowOwnerMatches(owner, selectedName) : false;
+        if (!canManage(req.auth)) return rowOwnerMatchesAuth(owner);
+        return selectedName ? rowOwnerMatches(owner, selectedName) : true;
       })
       .map((row) => ({
         id: `ajuste-${row.folio_siac}`,

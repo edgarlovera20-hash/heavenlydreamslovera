@@ -853,3 +853,91 @@
   background-image: linear-gradient(145deg, rgba(13, 66, 132, 0.80), rgba(9, 47, 98, 0.72) 58%, rgba(5, 28, 62, 0.64)) !important;
   background-color: rgba(9, 47, 98, 0.72) !important;
 }
+
+/* Mobile deep cleanup: solid dark-gray canvas, clean blue glass panels, no patchy overlays. */
+#mobile-root {
+  --hd-mobile-bg: #171a20;
+  --hd-mobile-panel: rgba(8, 39, 86, 0.74);
+  --hd-mobile-panel-strong: rgba(10, 54, 112, 0.82);
+  --hd-mobile-panel-muted: rgba(6, 31, 70, 0.64);
+  --hd-mobile-border: rgba(154, 214, 255, 0.24);
+  --hd-mobile-border-strong: rgba(184, 231, 255, 0.38);
+  --hd-mobile-shadow: 0 16px 38px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  background: var(--hd-mobile-bg) !important;
+  background-color: var(--hd-mobile-bg) !important;
+  background-image: none !important;
+}
+
+#mobile-root::before,
+#mobile-root::after {
+  display: none !important;
+  content: none !important;
+}
+
+#mobile-root :where(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout) {
+  background: var(--hd-mobile-bg) !important;
+  background-color: var(--hd-mobile-bg) !important;
+  background-image: none !important;
+}
+
+#mobile-root :where(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout)::before,
+#mobile-root :where(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout)::after {
+  display: none !important;
+  content: none !important;
+}
+
+#mobile-root :where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-neon-card,
+  .hd-neon-action,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-mobile-login-card,
+  .hd-mobile-topbar,
+  .hd-mobile-bottom-nav,
+  .hd-mobile-quick-action,
+  .hd-liquid-button
+) {
+  background: linear-gradient(145deg, var(--hd-mobile-panel-strong), var(--hd-mobile-panel) 58%, var(--hd-mobile-panel-muted)) !important;
+  background-color: var(--hd-mobile-panel) !important;
+  background-image: linear-gradient(145deg, var(--hd-mobile-panel-strong), var(--hd-mobile-panel) 58%, var(--hd-mobile-panel-muted)) !important;
+  border-color: var(--hd-mobile-border) !important;
+  box-shadow: var(--hd-mobile-shadow) !important;
+  backdrop-filter: blur(12px) saturate(118%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(118%) !important;
+  overflow: visible;
+}
+
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric, .hd-curp-helper, .hd-mobile-login-card, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-mobile-quick-action, .hd-liquid-button)::before,
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-action, .hd-neon-metric, .hd-curp-helper, .hd-mobile-login-card, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-mobile-quick-action, .hd-liquid-button)::after {
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+#mobile-root :where(.bg-slate-950\/90, .bg-slate-950\/85, .bg-slate-950\/80, .bg-slate-950\/75, .bg-slate-950\/60, .bg-slate-950\/55, .bg-slate-950\/50, .bg-slate-950\/20, .bg-slate-950, .bg-slate-900\/90, .bg-slate-900\/80, .bg-slate-900\/70, .bg-slate-900\/20, .bg-slate-900, .bg-slate-800\/80, .bg-slate-800\/70, .bg-slate-800\/60, .bg-slate-800\/50, .bg-slate-800\/30, .bg-slate-800, .bg-white\/5, .bg-white\/\[0\.035\], .bg-white\/\[0\.025\], .bg-black\/40, .bg-black\/35, .bg-black\/30, .bg-black\/25, .bg-black\/20),
+#mobile-root [class*="bg-[#061b3a]"],
+#mobile-root [class*="bg-[#082a5e]"],
+#mobile-root [class*="bg-[#020A1F]"],
+#mobile-root [class*="bg-[#020A16]"] {
+  background-color: var(--hd-mobile-panel-muted) !important;
+  background-image: linear-gradient(145deg, rgba(10, 54, 112, 0.60), rgba(6, 31, 70, 0.54)) !important;
+}
+
+#mobile-root :where(.hd-cyber-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  background: rgba(3, 17, 38, 0.86) !important;
+  border-color: rgba(154, 214, 255, 0.25) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  color: #ffffff !important;
+}
+
+#mobile-root :where(.hd-neon-iconbox, .hd-neon-icon, .hd-floating-icon, .hd-premium-iconbox, .hd-quick-action-icon, .hd-nav-item-icon, .hd-mobile-icon) {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}

@@ -107,6 +107,7 @@ type PayrollAdvance = {
 type PayrollUser = {
   id: string;
   name: string;
+  aliases?: string[];
 };
 
 type PayrollSale = {
@@ -587,6 +588,11 @@ function payrollOwnerMatches(owner: string, selected: string) {
   const a = normalizePayrollName(owner);
   const b = normalizePayrollName(selected);
   return Boolean(a && b && (a === b || a.includes(b) || b.includes(a)));
+}
+
+function payrollUserAliases(userId: string, users: PayrollUser[], fallbackName?: string) {
+  const selected = users.find((user) => payrollOwnerMatches(user.id, userId) || payrollOwnerMatches(user.name, userId));
+  return Array.from(new Set([userId, selected?.id, selected?.name, fallbackName, ...(selected?.aliases || [])].filter(Boolean).map(String)));
 }
 
 function dateInISOWeek(date: Date | null, year: number, week: number) {
@@ -1253,8 +1259,11 @@ export default function MobileFieldApp() {
 
   const profileModel = useMemo(() => {
     const allSales = Array.isArray(bootstrap?.recentSales) ? bootstrap.recentSales : [];
+    const profileAliases = [profileUid, profileName, profileUser?.email, profileUser?.username, profileUser?.nombre, profileUser?.displayName]
+      .filter(Boolean)
+      .map(String);
     const mySales = profileUid
-      ? allSales.filter((sale) => saleOwnerId(sale) === profileUid)
+      ? allSales.filter((sale) => profileAliases.some((alias) => payrollOwnerMatches(saleOwnerId(sale), alias)))
       : [];
     const approvedSales = mySales.filter(isApprovedSale).length;
     const foliosTotales = mySales.length;
@@ -1342,19 +1351,32 @@ export default function MobileFieldApp() {
       unlockedCount: medals.filter((medal) => medal.unlocked).length,
       xpNextLevel,
     };
-  }, [bootstrap?.recentSales, profileLeaderboardFilter, profileName, profileUid]);
+  }, [bootstrap?.recentSales, profileLeaderboardFilter, profileName, profileUid, profileUser?.displayName, profileUser?.email, profileUser?.nombre, profileUser?.username]);
 
   const canManagePayroll = ['GERENTE', 'SUPERVISOR', 'ADMIN', 'ADMINISTRACION', 'SUPERUSER'].includes(profileRole);
   const payrollUsers = useMemo<PayrollUser[]>(() => {
     const map = new Map<string, PayrollUser>();
-    if (profileUid) map.set(profileUid, { id: profileUid, name: profileName });
+    if (profileUid) {
+      map.set(profileUid, {
+        id: profileUid,
+        name: profileName,
+        aliases: [
+          profileUid,
+          profileName,
+          profileUser?.email,
+          profileUser?.username,
+          profileUser?.nombre,
+          profileUser?.displayName,
+        ].filter(Boolean).map(String),
+      });
+    }
     [...payrollSales, ...(bootstrap?.recentSales || [])].forEach((sale) => {
       const id = saleOwnerId(sale);
       if (!id || map.has(id)) return;
-      map.set(id, { id, name: saleOwnerName(sale) });
+      map.set(id, { id, name: saleOwnerName(sale), aliases: [id, saleOwnerName(sale)].filter(Boolean) });
     });
     return Array.from(map.values());
-  }, [bootstrap?.recentSales, payrollSales, profileName, profileUid]);
+  }, [bootstrap?.recentSales, payrollSales, profileName, profileUid, profileUser?.displayName, profileUser?.email, profileUser?.nombre, profileUser?.username]);
 
   const payrollResult = useMemo(() => {
     const year = Number(payrollYear) || getCurrentISOWeek().year;
@@ -1362,17 +1384,16 @@ export default function MobileFieldApp() {
     const selectedUserId = payrollUserId === 'self' || payrollUserId === 'all' ? profileUid : payrollUserId;
     const range = getISOWeekRange(year, week);
     const rawSales = payrollSales.length > 0 ? payrollSales : (bootstrap?.recentSales || []);
+    const selectedName = payrollUserId === 'self' || payrollUserId === 'all'
+      ? profileName
+      : payrollUsers.find((user) => user.id === payrollUserId)?.name || payrollUserId;
+    const ownerAliases = payrollUserAliases(selectedUserId, payrollUsers, selectedName);
     const weeklySales = buildPayrollSales(rawSales, year, week)
       .filter((sale) => {
-        const expectedOwner = payrollUserId === 'self' || payrollUserId === 'all' ? profileName : selectedUserId;
-        return !!sale.userId && (
-          sale.userId === selectedUserId ||
-          payrollOwnerMatches(sale.userId, selectedUserId) ||
-          payrollOwnerMatches(sale.userId, expectedOwner)
-        );
+        return !!sale.userId && ownerAliases.some((alias) => payrollOwnerMatches(sale.userId, alias));
       });
     const subtotal = weeklySales.reduce((sum, sale) => sum + sale.commission, 0);
-    const userLabel = payrollUsers.find((user) => user.id === selectedUserId)?.name || (payrollUserId === 'self' ? profileName : selectedUserId) || profileName;
+    const userLabel = selectedName || profileName;
     return {
       year,
       week,
