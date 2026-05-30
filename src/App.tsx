@@ -314,28 +314,28 @@ export default function App() {
       )}
       {/* Role Selector */}
       {role === null && pendingRole === null && !isRegistering && (
-        <div className="aether-entry relative z-10 flex flex-col items-center h-full px-6 overflow-y-auto py-12">
-          <div className="w-full flex flex-col items-center my-auto shrink-0">
-            <div className="aether-brand text-center mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="aether-logo-shell flex justify-center mb-6 relative">
+        <div className="aether-entry relative z-10 flex flex-col items-center h-full px-4 sm:px-6 overflow-y-auto py-6 sm:py-8">
+          <div className="aether-role-stage w-full min-h-full flex flex-col items-center justify-center gap-5 sm:gap-6">
+            <div className="aether-brand text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="aether-logo-shell flex justify-center relative">
                 <div className="aether-logo-glow absolute inset-0 rounded-full" />
-                <Logo className="aether-logo w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 relative z-10" />
+                <Logo className="aether-logo w-24 h-24 sm:w-28 sm:h-28 lg:w-32 lg:h-32 relative z-10" />
               </div>
-              <h1 className="mb-4 drop-shadow-md px-4">
-                <MatrixText text="HEAVENLY DREAMS" className="aether-title text-2xl sm:text-3xl md:text-5xl font-black font-sans tracking-[0.1em] sm:tracking-[0.14em] flex-nowrap uppercase" />
+              <h1 className="aether-title-wrap mb-2 drop-shadow-md px-2">
+                <MatrixText text="HEAVENLY DREAMS" className="aether-title text-2xl sm:text-4xl lg:text-6xl font-black font-sans tracking-[0.1em] sm:tracking-[0.14em] flex-nowrap uppercase" />
               </h1>
               <p className="aether-subtitle max-w-md mx-auto font-black tracking-[0.12em] text-xs sm:text-sm px-4 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.45)]">
                 TU DREAM TEAM COMIENZA AQUI
               </p>
             </div>
-            <div className="aether-role-grid grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-700 px-4 sm:px-0">
+            <div className="aether-role-grid grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 w-full max-w-6xl animate-in fade-in slide-in-from-bottom-8 duration-700">
               <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} chip="Control total del sistema" tone="admin" onClick={() => setPendingRole('GERENTE')} />
               <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} chip="Monitorea y gestiona" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
               <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} chip="Ventas inteligentes" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
             </div>
-            <div className="mt-8 sm:mt-12 animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
+            <div className="aether-register-wrap animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
               <button onClick={() => setIsRegistering(true)}
-                className="aether-register-button hd-liquid-button px-7 sm:px-9 py-3 sm:py-3.5 rounded-xl border transition-all font-black text-xs sm:text-sm flex items-center gap-3 backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100/80">
+                className="aether-register-button hd-liquid-button px-7 sm:px-9 py-3 rounded-xl border transition-all font-black text-xs sm:text-sm flex items-center gap-3 backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100/80">
                 <UserPlus className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
                 <span>Iniciar Registro</span>
                 <ArrowRight className="aether-register-arrow w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1" />

@@ -6959,3 +6959,93 @@ tbody tr {
 #mobile-root .hd-mobile-back-button {
   min-width: 2.35rem;
 }
+
+/* Entry screen redistribution: keep role cards and register action visible. */
+.aether-entry {
+  padding-top: clamp(1rem, 2vh, 2rem) !important;
+  padding-bottom: clamp(1rem, 2vh, 2rem) !important;
+}
+
+.aether-role-stage {
+  gap: clamp(1rem, 2vh, 1.6rem) !important;
+}
+
+.aether-entry .aether-brand {
+  margin-bottom: 0 !important;
+}
+
+.aether-entry .aether-logo-shell {
+  margin-bottom: clamp(0.55rem, 1.2vh, 0.85rem) !important;
+}
+
+.aether-entry .aether-logo {
+  width: clamp(6rem, 12vh, 8.4rem) !important;
+  height: clamp(6rem, 12vh, 8.4rem) !important;
+}
+
+.aether-entry .aether-title-wrap {
+  margin-bottom: clamp(0.35rem, 0.9vh, 0.75rem) !important;
+}
+
+.aether-entry .aether-title {
+  font-size: clamp(2.3rem, 5.2vw, 4.35rem) !important;
+  line-height: 0.98 !important;
+  letter-spacing: clamp(0.08em, 0.9vw, 0.14em) !important;
+}
+
+.aether-entry .aether-subtitle {
+  font-size: clamp(0.72rem, 1.25vw, 1rem) !important;
+  line-height: 1.15 !important;
+}
+
+.aether-entry .aether-role-grid {
+  max-width: min(92rem, calc(100vw - 3rem)) !important;
+  gap: clamp(1rem, 1.8vw, 1.6rem) !important;
+}
+
+.aether-entry .aether-role-card {
+  min-height: clamp(12.2rem, 25vh, 15.8rem) !important;
+  padding: clamp(1.2rem, 2.4vh, 1.75rem) !important;
+  justify-content: center;
+}
+
+.aether-entry .aether-role-icon {
+  width: clamp(4.6rem, 9vh, 5.6rem) !important;
+  height: clamp(4.6rem, 9vh, 5.6rem) !important;
+  margin-bottom: clamp(0.8rem, 1.5vh, 1.15rem) !important;
+}
+
+.aether-entry .aether-role-title {
+  font-size: clamp(1.45rem, 2.35vw, 2.35rem) !important;
+  line-height: 1.02 !important;
+}
+
+.aether-entry .aether-role-chip {
+  margin-top: clamp(1rem, 1.8vh, 1.35rem) !important;
+  min-height: 2.6rem;
+}
+
+.aether-register-wrap {
+  margin-top: 0 !important;
+  padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+}
+
+@media (max-height: 820px) and (min-width: 768px) {
+  .aether-entry .aether-logo {
+    width: 5.8rem !important;
+    height: 5.8rem !important;
+  }
+
+  .aether-entry .aether-title {
+    font-size: clamp(2.1rem, 4.7vw, 3.85rem) !important;
+  }
+
+  .aether-entry .aether-role-card {
+    min-height: 11.6rem !important;
+  }
+
+  .aether-entry .aether-role-icon {
+    width: 4.35rem !important;
+    height: 4.35rem !important;
+  }
+}
