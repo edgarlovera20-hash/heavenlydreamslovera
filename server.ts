@@ -547,7 +547,7 @@ async function startServer() {
   const oauthLimiter = rateLimit('oauth', 60, 15 * 60 * 1000);
   const registrationLimiter = rateLimit('registration', 8, 60 * 60 * 1000);
   const authOnly = requireAuth;
-  const adminOnly = requireRole('GERENTE', 'ADMINISTRACION');
+  const adminOnly = requireRole('GERENTE');
   const opsOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR');
   const chatUserOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR');
   const mobileOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR');
@@ -589,8 +589,12 @@ async function startServer() {
     return backupPath;
   }
 
+  function isGerente(auth: any) {
+    return String(auth?.role || '').toUpperCase() === 'GERENTE';
+  }
+
   function canManage(auth: any) {
-    return ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'].includes(auth?.role);
+    return isGerente(auth);
   }
 
   function normalizePayrollIdentity(value: any) {
@@ -637,7 +641,7 @@ async function startServer() {
   }
 
   function canApproveHuman(auth: any) {
-    return ['GERENTE', 'ADMINISTRACION'].includes(auth?.role);
+    return isGerente(auth);
   }
 
   function canAccessVenta(auth: any, venta: any) {
@@ -650,7 +654,7 @@ async function startServer() {
   }
 
   function crmCanManage(auth: any) {
-    return ['GERENTE', 'ADMINISTRACION'].includes(crmRole(auth));
+    return crmRole(auth) === 'GERENTE';
   }
 
   function crmCanOperate(auth: any) {
@@ -711,7 +715,7 @@ async function startServer() {
       else out[field] = out[field] ? 'Información restringida' : out[field];
     }
     out.permisos = {
-      canExport: crmCanOperate(auth),
+      canExport: crmCanManage(auth),
       canEditStatus: crmCanOperate(auth),
       canViewSensitive: crmCanManage(auth),
       visibleFields: visible,
@@ -2600,7 +2604,7 @@ async function startServer() {
         limit,
         offset,
         permissions: {
-          canExport: crmCanOperate(req.auth),
+          canExport: crmCanManage(req.auth),
           canEditStatus: crmCanOperate(req.auth),
           canManageVisibility: crmCanManage(req.auth),
         },
@@ -2707,7 +2711,7 @@ async function startServer() {
   }));
 
   app.post("/api/crm/export-audit", authOnly, wrap((req: any, res: any) => {
-    if (!crmCanOperate(req.auth)) return res.status(403).json({ error: 'No tienes permiso para exportar' });
+    if (!crmCanManage(req.auth)) return res.status(403).json({ error: 'No tienes permiso para exportar' });
     AuditLog.insert({
       accion: 'CRM_EXPORT_SIAC',
       entidad: 'siac_records',
@@ -3329,27 +3333,27 @@ async function startServer() {
     res.json(enterpriseHealth());
   }));
 
-  app.get("/api/enterprise/readiness", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (_req: any, res: any) => {
+  app.get("/api/enterprise/readiness", managerOnly, wrap(async (_req: any, res: any) => {
     res.json(await getEnterpriseReadiness());
   }));
 
-  app.post("/api/enterprise/events", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.post("/api/enterprise/events", managerOnly, wrap((req: any, res: any) => {
     res.json(recordEvent(req.body.event, req.body.payload || {}, (req as any).auth));
   }));
 
-  app.get("/api/enterprise/metrics", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.get("/api/enterprise/metrics", managerOnly, wrap((req: any, res: any) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 200, 1000);
     res.json(Metrics.getRecent(limit));
   }));
 
-  app.post("/api/enterprise/metrics", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.post("/api/enterprise/metrics", managerOnly, wrap((req: any, res: any) => {
     recordMetric(req.body.name, Number(req.body.value ?? 1), req.body.tags || {});
     res.json({ ok: true });
   }));
 
   app.get("/api/inventory", opsOnly, wrap((_req: any, res: any) => res.json(InventoryItems.getAll())));
 
-  app.post("/api/inventory", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.post("/api/inventory", managerOnly, wrap((req: any, res: any) => {
     const allowedTypes = new Set(['modem', 'sim', 'uniforme', 'herramienta', 'otro']);
     const allowedStates = new Set(['disponible', 'asignado', 'danado', 'baja']);
     const data = {
@@ -3371,7 +3375,7 @@ async function startServer() {
     res.json(InventoryItems.getById(data.id));
   }));
 
-  app.patch("/api/inventory/:id", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.patch("/api/inventory/:id", managerOnly, wrap((req: any, res: any) => {
     const allowedTypes = new Set(['modem', 'sim', 'uniforme', 'herramienta', 'otro']);
     const allowedStates = new Set(['disponible', 'asignado', 'danado', 'baja']);
     if (req.body.tipo && !allowedTypes.has(req.body.tipo)) return res.status(400).json({ error: 'tipo de activo invalido' });
@@ -3389,7 +3393,7 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
-  app.get("/api/automation/rules", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((_req: any, res: any) => {
+  app.get("/api/automation/rules", managerOnly, wrap((_req: any, res: any) => {
     res.json(AutomationRules.getAll());
   }));
 
@@ -3440,7 +3444,7 @@ async function startServer() {
     res.json(job);
   });
 
-  app.get("/api/telmex/jobs", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((_req: any, res: any) => {
+  app.get("/api/telmex/jobs", managerOnly, wrap((_req: any, res: any) => {
     res.json(listTelmexJobs());
   }));
 
@@ -3450,7 +3454,7 @@ async function startServer() {
     res.json(job);
   }));
 
-  app.patch("/api/telmex/status/:id", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.patch("/api/telmex/status/:id", managerOnly, wrap((req: any, res: any) => {
     const job = updateTelmexAutomationJob(req.params.id, req.body || {}, req.auth);
     if (!job) return res.status(404).json({ error: 'trabajo Telmex no encontrado' });
     res.json(job);
@@ -3472,7 +3476,7 @@ async function startServer() {
   app.post("/telmex/send-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
   app.post("/telmex/confirm-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
 
-  app.post("/api/ai/run", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (req: any, res: any) => {
+  app.post("/api/ai/run", managerOnly, wrap(async (req: any, res: any) => {
     if (!req.body.prompt) return res.status(400).json({ error: 'prompt requerido' });
     res.json(await runAiWithFallback(req.body.prompt));
   }));
@@ -3482,15 +3486,15 @@ async function startServer() {
     res.json(await classifyMorosityReply(req.body.text));
   }));
 
-  app.get("/api/ai/jobs", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((_req: any, res: any) => {
+  app.get("/api/ai/jobs", managerOnly, wrap((_req: any, res: any) => {
     res.json(AiJobs.getAll());
   }));
 
-  app.post("/api/ai/jobs", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap((req: any, res: any) => {
+  app.post("/api/ai/jobs", managerOnly, wrap((req: any, res: any) => {
     res.json(enqueueAiJob(req.body.type || 'generic', req.body.payload || {}, Number(req.body.priority ?? 5)));
   }));
 
-  app.post("/api/ai/jobs/process-next", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (_req: any, res: any) => {
+  app.post("/api/ai/jobs/process-next", managerOnly, wrap(async (_req: any, res: any) => {
     res.json(await processNextAiJob() || { ok: true, idle: true });
   }));
 
@@ -3609,12 +3613,12 @@ async function startServer() {
     const account = req.query?.account ? whatsappAccountFromReq(req) : undefined;
     res.json(safeWhatsAppStatus(getWhatsAppStatus(account), req.auth?.role));
   });
-  app.get("/api/whatsapp/qr", opsOnly, (req: any, res) => {
+  app.get("/api/whatsapp/qr", managerOnly, (req: any, res) => {
     const account = whatsappAccountFromReq(req);
     res.json({ account, qr: getWhatsAppQR(account), status: getWhatsAppStatus(account) });
   });
 
-  app.post("/api/whatsapp/init", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/whatsapp/init", managerOnly, wrap(async (req: any, res: any) => {
     const account = whatsappAccountFromReq(req);
     await initWhatsApp(account); res.json({ ok: true, account });
   }));
@@ -3625,7 +3629,7 @@ async function startServer() {
     res.json(await sendWhatsAppMessage(phone, message, whatsappAccountFromReq(req)));
   }));
 
-  app.post("/api/whatsapp/logout", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/whatsapp/logout", managerOnly, wrap(async (req: any, res: any) => {
     const account = whatsappAccountFromReq(req);
     await logoutWhatsApp(account); res.json({ ok: true, account });
   }));
@@ -3646,7 +3650,7 @@ async function startServer() {
     res.json(getRecentChannelMessages(limit, queryString(req.query.updatedSince)).filter((msg: any) => msg.channel === 'telegram'));
   }));
 
-  app.post("/api/telegram/init", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/telegram/init", managerOnly, wrap(async (req: any, res: any) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'token requerido' });
     const result = await initTelegram(token);
@@ -3657,7 +3661,7 @@ async function startServer() {
     res.json(result);
   }));
 
-  app.post("/api/telegram/stop", opsOnly, wrap((_req: any, res: any) => {
+  app.post("/api/telegram/stop", managerOnly, wrap((_req: any, res: any) => {
     stopTelegram();
     Settings.set('telegram_bot_token', '');
     res.json({ ok: true });
@@ -3680,11 +3684,11 @@ async function startServer() {
     throw new Error('Canal no soportado');
   }
 
-  app.get("/api/channels/accounts", opsOnly, wrap((_req: any, res: any) => {
+  app.get("/api/channels/accounts", managerOnly, wrap((_req: any, res: any) => {
     res.json((getChannelAccounts() as any[]).map(withLiveChannelAccountStatus));
   }));
 
-  app.post("/api/channels/accounts", opsOnly, wrap((req: any, res: any) => {
+  app.post("/api/channels/accounts", managerOnly, wrap((req: any, res: any) => {
     const channel = String(req.body?.channel || '').trim();
     const externalId = String(req.body?.externalId || req.body?.external_id || '').trim();
     const label = String(req.body?.label || channel || 'canal').trim();
@@ -3758,11 +3762,11 @@ async function startServer() {
   }));
 
   // ── TWILIO VOICE AGENT ───────────────────────────────────
-  app.get("/api/twilio/status", opsOnly, wrap((_req: any, res: any) => {
+  app.get("/api/twilio/status", managerOnly, wrap((_req: any, res: any) => {
     res.json({ configured: twilioConfigured(), from: process.env.TWILIO_FROM_NUMBER || null });
   }));
 
-  app.post("/api/twilio/calls", opsOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/twilio/calls", managerOnly, wrap(async (req: any, res: any) => {
     const to = normalizePhone10(req.body?.to || req.body?.phone);
     if (to.length !== 10) return res.status(400).json({ error: 'Telefono destino debe tener 10 digitos' });
     const message = String(req.body?.message || 'Hola, te llamamos de Heavenly Dreams para validar tu solicitud.').slice(0, 900);
@@ -4136,7 +4140,7 @@ async function startServer() {
     res.json(listAgentVideos());
   }));
 
-  app.post("/api/agents/videos", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (req: any, res: any) => {
+  app.post("/api/agents/videos", managerOnly, wrap(async (req: any, res: any) => {
     const body = req.body || {};
     if (!String(body.title || body.topic || '').trim()) return res.status(400).json({ error: 'titulo o tema requerido' });
     if (!body.base64 || !body.mimeType) return res.status(400).json({ error: 'video base64 y mimeType requeridos' });
@@ -4160,7 +4164,7 @@ async function startServer() {
     res.json(item);
   }));
 
-  app.delete("/api/agents/videos/:id", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR'), wrap(async (req: any, res: any) => {
+  app.delete("/api/agents/videos/:id", managerOnly, wrap(async (req: any, res: any) => {
     const ok = await deleteAgentVideo(req.params.id);
     if (!ok) return res.status(404).json({ error: 'Video no encontrado' });
     res.json({ ok: true });
@@ -4181,7 +4185,7 @@ async function startServer() {
     res.json(AgentProfiles.getAll());
   }));
 
-  app.post("/api/agents/profiles", requireRole('GERENTE', 'ADMINISTRACION'), wrap((req: any, res: any) => {
+  app.post("/api/agents/profiles", managerOnly, wrap((req: any, res: any) => {
     const body = req.body || {};
     const id = agentProfileIdFrom(body.id || body.name);
     const metadata = {
@@ -4232,7 +4236,7 @@ async function startServer() {
     res.json(profile);
   }));
 
-  app.delete("/api/agents/profiles/:id", requireRole('GERENTE', 'ADMINISTRACION'), wrap((req: any, res: any) => {
+  app.delete("/api/agents/profiles/:id", managerOnly, wrap((req: any, res: any) => {
     if (['promoter_receptionist', 'customer_support_agent'].includes(req.params.id)) return res.status(400).json({ error: 'Los agentes base no se pueden eliminar' });
     AgentProfiles.delete(req.params.id);
     AuditLog.insert({
