@@ -1374,3 +1374,60 @@ body,
 #mobile-root :where(.text-slate-500, .text-slate-400, .text-gray-400, .text-gray-500) {
   color: #b8bcc6 !important;
 }
+
+/* Mobile registration lives inside the mobile shell; keep it compact and glass-clean. */
+#mobile-root .hd-mobile-register-shell {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+#mobile-root .hd-mobile-register-shell > .glass-panel-neon {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 1.25rem !important;
+  border-radius: 28px !important;
+  overflow: visible !important;
+}
+
+#mobile-root .hd-mobile-register-shell form {
+  grid-template-columns: 1fr !important;
+  gap: 1rem !important;
+}
+
+#mobile-root .hd-mobile-register-shell .md\:col-span-2,
+#mobile-root .hd-mobile-register-shell .md\:col-span-1 {
+  grid-column: auto !important;
+}
+
+#mobile-root .hd-mobile-register-shell input,
+#mobile-root .hd-mobile-register-shell select,
+#mobile-root .hd-mobile-register-shell textarea {
+  min-height: 3.25rem !important;
+  font-size: 1rem !important;
+}
+
+#mobile-root .hd-mobile-register-shell .hd-login-back {
+  left: 1rem !important;
+  top: 1rem !important;
+}
+
+#mobile-root .hd-mobile-register-link {
+  background: rgba(255, 255, 255, 0.055) !important;
+  background-image: none !important;
+  border-color: rgba(0, 168, 255, 0.22) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+#mobile-root .hd-mobile-register-link:active {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+#mobile-root .hd-mobile-loading {
+  border: 1px solid var(--hd-mobile-border);
+  border-radius: 24px;
+  background: var(--hd-mobile-panel);
+  color: #ffffff;
+  padding: 1rem;
+  text-align: center;
+}

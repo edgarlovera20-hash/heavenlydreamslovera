@@ -58,3 +58,6 @@ data/*.db-shm
 
 # Claude worktrees
 .claude/worktrees/
+
+# Codex local attachments
+.codex-remote-attachments/

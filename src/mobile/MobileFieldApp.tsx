@@ -11,6 +11,7 @@ import { runMobileOcr } from './mobileOcr';
 const AvatarStudio = lazy(() => import('../components/ui/AvatarStudio'));
 const MapPicker = lazy(() => import('../components/ui/MapPicker').then(m => ({ default: m.MapPicker })));
 const NewSaleForm = lazy(() => import('../components/views/NewSaleForm'));
+const RegisterForm = lazy(() => import('../components/views/RegisterForm').then(m => ({ default: m.RegisterForm })));
 
 const SESSION_KEY = 'hd_session';
 const BOOTSTRAP_CACHE_KEY = 'hd_mobile_bootstrap_cache_v1';
@@ -1028,7 +1029,7 @@ function StatusPill({ online }: { online: boolean }) {
   );
 }
 
-function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => void; onNotice: (kind: 'success' | 'error', message: string) => void }) {
+function LoginView({ onLogin, onNotice, onRegister }: { onLogin: (session: SessionUser) => void; onNotice: (kind: 'success' | 'error', message: string) => void; onRegister: () => void }) {
   const remembered = useMemo(() => loadRememberedUsername(), []);
   const [username, setUsername] = useState(remembered?.username || '');
   const [password, setPassword] = useState('');
@@ -1169,12 +1170,13 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
             <MobileIcon name={passkeyLoading ? 'loader' : 'id'} className={cx('h-4 w-4', passkeyLoading && 'animate-spin')} />
             Huella digital
           </button>
-          <a
-            href="/?registro=1"
+          <button
+            type="button"
+            onClick={onRegister}
             className="hd-mobile-register-link flex h-12 w-full items-center justify-center rounded-2xl border text-sm font-black uppercase tracking-[0.12em] transition"
           >
             Registrarme
-          </a>
+          </button>
         </form>
       </div>
     </main>
@@ -1183,6 +1185,11 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
 
 export default function MobileFieldApp() {
   const [session, setSession] = useState<SessionUser | null>(() => loadSession());
+  const [showRegistration, setShowRegistration] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.has('registro') || window.location.hash === '#registro';
+  });
   const [active, setActive] = useState<MobileSection>(() => initialMobileSection());
   const [bootstrap, setBootstrap] = useState<MobileBootstrap | null>(null);
   const [bootLoading, setBootLoading] = useState(false);
@@ -2899,9 +2906,48 @@ export default function MobileFieldApp() {
   };
 
   if (!session?.uid) {
+    if (showRegistration) {
+      const closeRegistration = () => {
+        setShowRegistration(false);
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('registro');
+          window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+        } catch {
+          // No-op: navigation cleanup is cosmetic only.
+        }
+      };
+
+      return (
+        <>
+          <main className="hd-cyber-screen hd-mobile-login-screen min-h-dvh px-4 py-6">
+            <div className="hd-mobile-register-shell mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-md flex-col justify-center">
+              <Suspense fallback={<div className="hd-mobile-loading">Cargando registro...</div>}>
+                <RegisterForm onBack={closeRegistration} />
+              </Suspense>
+            </div>
+          </main>
+          <NoticeBanner notice={notice} />
+        </>
+      );
+    }
+
     return (
       <>
-        <LoginView onLogin={setSession} onNotice={notify} />
+        <LoginView
+          onLogin={setSession}
+          onNotice={notify}
+          onRegister={() => {
+            setShowRegistration(true);
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.set('registro', '1');
+              window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+            } catch {
+              // No-op: registration view still opens even if history is unavailable.
+            }
+          }}
+        />
         <NoticeBanner notice={notice} />
       </>
     );
