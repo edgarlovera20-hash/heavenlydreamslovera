@@ -3497,6 +3497,8 @@ async function startServer() {
   // ── MIGRACIÓN DESDE LOCALSTORAGE ──────────────────────────
   // El frontend puede enviar su localStorage para persistirlo
   app.post("/api/migrate", managerOnly, wrap((req: any, res: any) => {
+    requireHighImpactConfirmation(req, 'MIGRATE_LOCALSTORAGE', 'migration');
+    const backupPath = backupDatabaseBefore('migrate-localstorage');
     const { key, data } = req.body as { key: string; data: any[] };
     const results: Record<string, number> = {};
 
@@ -3546,6 +3548,7 @@ async function startServer() {
       results.ventas = count;
     }
 
+    authAudit(req, 'MIGRATE_LOCALSTORAGE', 'migration', `key:${key};backup:${backupPath || 'none'};results:${JSON.stringify(results)}`);
     res.json({ ok: true, migrated: results });
   }));
 
@@ -4588,7 +4591,12 @@ async function startServer() {
     const validH = headers.filter(h => tableCols.includes(h));
     if (!validH.length) return res.status(400).json({ error: 'Ninguna columna del CSV coincide con la tabla' });
 
-    if (replace) (db as any).prepare(`DELETE FROM ${table}`).run();
+    let backupPath: string | null = null;
+    if (replace) {
+      requireHighImpactConfirmation(req, `REPLACE_TABLE_${table}`, table);
+      backupPath = backupDatabaseBefore(`replace-${table}`);
+      (db as any).prepare(`DELETE FROM ${table}`).run();
+    }
 
     const stmt = (db as any).prepare(
       `INSERT OR REPLACE INTO ${table} (${validH.join(', ')}) VALUES (${validH.map(() => '?').join(', ')})`
@@ -4604,15 +4612,17 @@ async function startServer() {
       }
     });
     insertAll(rows);
-    AuditLog.insert({ accion: 'IMPORT_TABLE', entidad: table, entidad_id: null, user_id: null, user_nombre: null, detalle: `imported:${imported}` });
+    authAudit(req, 'IMPORT_TABLE', table, `imported:${imported};skipped:${skipped};replace:${Boolean(replace)};backup:${backupPath || 'none'}`);
     res.json({ imported, skipped });
   }));
 
   app.delete("/api/db/clear/:table", managerOnly, wrap((req: any, res: any) => {
     const { table } = req.params;
     if (!ALLOWED_TABLES.includes(table)) return res.status(400).json({ error: 'Tabla no permitida' });
+    requireHighImpactConfirmation(req, `CLEAR_TABLE_${table}`, table);
+    const backupPath = backupDatabaseBefore(`clear-${table}`);
     (db as any).prepare(`DELETE FROM ${table}`).run();
-    AuditLog.insert({ accion: 'CLEAR_TABLE', entidad: table, entidad_id: null, user_id: null, user_nombre: null, detalle: null });
+    authAudit(req, 'CLEAR_TABLE', table, `backup:${backupPath || 'none'}`);
     res.json({ ok: true });
   }));
 
