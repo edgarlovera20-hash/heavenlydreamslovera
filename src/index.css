@@ -7050,6 +7050,110 @@ tbody tr {
   }
 }
 
+/* Dashboard visual reset: graphite SaaS shell, no heavy blue slabs. */
+.hd-screen:has(.hd-holographic-sidebar) {
+  background: #050505 !important;
+}
+
+.hd-screen:has(.hd-holographic-sidebar) .hd-holographic-sidebar {
+  width: 16rem !important;
+  background:
+    linear-gradient(180deg, rgba(12, 12, 14, 0.96), rgba(5, 5, 5, 0.98)) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 10px 0 28px rgba(0, 0, 0, 0.46) !important;
+}
+
+.hd-screen:has(.hd-holographic-sidebar) .hd-holographic-sidebar .hd-card {
+  background: rgba(255, 255, 255, 0.055) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  border-radius: 18px !important;
+  box-shadow: none !important;
+}
+
+.hd-screen:has(.hd-holographic-sidebar) .hd-holographic-sidebar nav {
+  padding: 0.85rem 0.65rem 0.75rem !important;
+}
+
+.hd-screen:has(.hd-holographic-sidebar) .hd-holographic-sidebar nav button {
+  min-height: 3.1rem !important;
+  border-radius: 16px !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: rgba(255, 255, 255, 0.58) !important;
+}
+
+.hd-screen:has(.hd-holographic-sidebar) .hd-holographic-sidebar nav button:hover {
+  background: rgba(255, 255, 255, 0.055) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.hd-screen:has(.hd-holographic-sidebar) .hd-holographic-sidebar nav button.hd-liquid-selected,
+.hd-screen:has(.hd-holographic-sidebar) .hd-holographic-sidebar nav button[aria-current="page"] {
+  background: rgba(0, 175, 255, 0.10) !important;
+  border-color: rgba(0, 175, 255, 0.28) !important;
+  color: #ffffff !important;
+  box-shadow: inset 3px 0 0 #00afff !important;
+}
+
+.hd-dashboard-layout,
+.hd-module-stage,
+.hd-neural-layout:has(.hd-dashboard-clean),
+.hd-dashboard-clean {
+  background:
+    radial-gradient(circle at 70% -10%, rgba(0, 175, 255, 0.065), transparent 28rem),
+    linear-gradient(180deg, #08080a 0%, #0d0d10 100%) !important;
+}
+
+.hd-dashboard-breadcrumb {
+  background: rgba(8, 8, 10, 0.74) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(108%);
+  -webkit-backdrop-filter: blur(18px) saturate(108%);
+  position: relative;
+  z-index: 5;
+}
+
+.hd-dashboard-clean {
+  padding-top: 1.25rem !important;
+}
+
+.hd-dashboard-clean :where(.hd-card, .hd-panel, .glass-panel, .glass-panel-neon, .hd-chart-card, .recharts-wrapper) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.026)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 22px !important;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.hd-dashboard-clean :where(.hd-card, .hd-panel, .glass-panel, .glass-panel-neon, .hd-chart-card)::before,
+.hd-dashboard-clean :where(.hd-card, .hd-panel, .glass-panel, .glass-panel-neon, .hd-chart-card)::after {
+  opacity: 0 !important;
+  background: none !important;
+}
+
+.hd-dashboard-clean :where([class*="bg-[#"], [class*="bg-blue"], [class*="bg-cyan"], [class*="bg-sky"]) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.022)) !important;
+}
+
+.hd-dashboard-clean h1,
+.hd-dashboard-clean h2,
+.hd-dashboard-clean h3,
+.hd-dashboard-clean h4 {
+  text-shadow: none !important;
+}
+
+.hd-dashboard-clean svg {
+  filter: drop-shadow(0 0 7px currentColor) !important;
+}
+
+.hd-dashboard-clean .recharts-surface,
+.hd-dashboard-clean .recharts-wrapper {
+  filter: none !important;
+}
+
 /* Final entry visual pass: graphite glass, low light logo. */
 .hd-screen.aether-flow-hero {
   --hd-entry-panel: rgba(64, 64, 64, 0.18);

@@ -244,10 +244,10 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   return (
     <div className="hd-screen flex h-[100dvh] w-full min-w-0 text-white relative z-10 overflow-hidden">
       {/* Sidebar */}
-      <aside className="hd-holographic-sidebar w-72 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col min-h-0 relative z-20">
+      <aside className="hd-holographic-sidebar w-64 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col min-h-0 relative z-20">
         
-        <div className="h-36 flex flex-col items-center justify-center px-6 relative overflow-hidden border-b border-white/5 gap-3 z-10">
-          <Logo className="w-20 h-20 drop-shadow-[0_0_22px_rgba(34,255,136,0.32)] hover:scale-110 transition-transform duration-500" />
+        <div className="h-32 flex flex-col items-center justify-center px-5 relative overflow-hidden border-b border-white/5 gap-2 z-10">
+          <Logo className="w-16 h-16 drop-shadow-[0_0_14px_rgba(0,168,255,0.22)] hover:scale-105 transition-transform duration-500" />
           <div className="text-center">
             <h1 className="text-sm font-semibold text-white tracking-[0.08em] leading-none">Heavenly Dreams</h1>
             <p className="text-[10px] text-cyan-300/70 tracking-[0.08em] font-semibold mt-1 leading-tight">
@@ -386,7 +386,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
           {/* Subtle Top Nav */}
-          <div className="pt-5 px-8 flex items-center gap-2 mb-2 w-full">
+          <div className="hd-dashboard-breadcrumb shrink-0 px-6 py-4 flex items-center gap-2 w-full">
              <button
                onClick={() => activeSection !== 'Dashboard' ? setActiveSection('Dashboard') : null}
                className="hd-no-liquid text-slate-500 hover:text-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded p-1"
@@ -401,7 +401,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 </>
              )}
           </div>
-          <div className="hd-dashboard-clean flex-1 overflow-y-auto px-8 pb-8 custom-scrollbar">
+          <div className="hd-dashboard-clean flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar">
           {activeSection === 'Dashboard' && (
             <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                <SectionHeader
