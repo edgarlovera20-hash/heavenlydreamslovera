@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import {
   User, Wallet, Headphones,
   Bell, LogOut,
@@ -24,6 +24,13 @@ const Integrations = lazy(() => import('./Integrations'));
 const ChatsView = lazy(() => import('./ChatsView'));
 const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
 const CommissionsView = lazy(() => import('./CommissionsView'));
+const GERENTE_ONLY_MOBILE_SECTIONS = new Set([
+  'Comisiones',
+  'Soporte a Clientes',
+  'Morosidad',
+  'Integraciones',
+  'Ajustes',
+]);
 
 const SectionLoader = () => (
   <div className="flex items-center justify-center h-48">
@@ -46,6 +53,7 @@ interface MobileUserViewProps {
 export default function MobileUserView({ role, onBack, currentUser: _currentUser, isLightMode: _isLightMode, onToggleTheme: _onToggleTheme }: MobileUserViewProps) {
   const [activeSection, setActiveSection] = useState('Perfil');
   const [showMenu, setShowMenu] = useState(false);
+  const hasFullModuleAccess = role === 'GERENTE';
 
   // Define available sections based on role
   let availableSections: { id: string, label: string, icon: any, color: import('../ui/CyberIcon').CyberColor }[] = [
@@ -61,7 +69,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
     { id: 'Juego', label: 'Juego', icon: Gamepad2, color: 'pink' },
   ];
 
-  if (role === 'GERENTE' || role === 'ADMINISTRACION') {
+  if (hasFullModuleAccess) {
     availableSections = [
       { id: 'Perfil', label: 'Perfil', icon: User, color: 'blue' },
       { id: 'Documentación', label: 'Documentos', icon: FolderOpen, color: 'cyan' },
@@ -90,6 +98,13 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
     setShowMenu(false);
   };
 
+  useEffect(() => {
+    if (GERENTE_ONLY_MOBILE_SECTIONS.has(activeSection) && !hasFullModuleAccess) {
+      setActiveSection('Perfil');
+      setShowMenu(false);
+    }
+  }, [activeSection, hasFullModuleAccess]);
+
   return (
     <NeuralLayout
       mode="mobile"
@@ -103,8 +118,8 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
     <div className="hd-mobile-shell-clean flex flex-col h-[100dvh] w-full max-w-[430px] mx-auto border-x border-cyber-electric/20 relative z-10 shadow-[0_0_50px_rgba(3,154,220,0.1)] overflow-hidden">
       
       {/* Mobile Header */}
-      <header className="hd-mobile-header-clean px-4 sm:px-6 pt-4 sm:pt-8 pb-3 sm:pb-4 flex justify-between items-center shrink-0 relative z-20">
-        <div className="flex items-center gap-2 sm:gap-3">
+      <header className="hd-mobile-header-clean px-3 sm:px-6 pt-4 sm:pt-8 pb-3 sm:pb-4 flex items-center justify-between gap-2 sm:gap-3 shrink-0 relative z-20">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <button 
             onClick={() => {
               if (activeSection !== 'Perfil') {
@@ -113,7 +128,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
                 onBack(); // Logout
               }
             }} 
-            className="hd-liquid-button flex items-center text-orange-100/80 hover:text-white transition-colors bg-orange-300/5 hover:bg-orange-300/10 rounded border border-orange-300/20 hover:border-orange-200/60 mr-1 px-1.5 sm:px-2 py-1 sm:py-1.5 uppercase tracking-widest text-[9px] sm:text-[10px] font-bold"
+            className="hd-mobile-back-button hd-liquid-button flex shrink-0 items-center text-orange-100/80 hover:text-white transition-colors bg-orange-300/5 hover:bg-orange-300/10 rounded border border-orange-300/20 hover:border-orange-200/60 px-1.5 sm:px-2 py-1 sm:py-1.5 uppercase tracking-widest text-[9px] sm:text-[10px] font-bold"
           >
             <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             <span className="hidden sm:inline-block ml-1">Regresar</span>
@@ -122,12 +137,12 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
             <div className="absolute inset-0 bg-cyber-neon/20 blur-md rounded-full"></div>
             <Logo className="w-12 h-12 sm:w-16 sm:h-16 relative z-10 drop-shadow-[0_0_18px_rgba(34,255,136,0.38)]" />
           </div>
-          <div>
-            <h1 className="text-sm sm:text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyber-neon to-cyber-electric tracking-tight leading-tight">Heavenly Dreams</h1>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm sm:text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyber-neon to-cyber-electric tracking-tight leading-tight">Heavenly Dreams</h1>
             <p className="text-[8px] sm:text-[10px] text-cyber-electric/70 font-bold uppercase tracking-[0.2em]">{role}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end gap-2">
           <button className="hd-liquid-button relative p-1.5 sm:p-2 text-orange-100/80 hover:text-white transition-colors bg-orange-300/5 hover:bg-orange-300/10 rounded border border-orange-300/20 hover:border-orange-200/60 group">
             <Bell className="w-4 h-4 sm:w-5 sm:h-5 group-hover:drop-shadow-[0_0_8px_rgba(0,229,255,0.8)]" />
             <span className="absolute top-1 sm:top-1.5 right-1 sm:right-1.5 w-1.5 sm:w-2 h-1.5 sm:h-2 bg-red-500 rounded-full border border-cyber-black shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse"></span>
@@ -152,12 +167,12 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
           {activeSection === 'Chat para Clientes' && <ClientChatCrmView />}
           {activeSection === 'Seguimiento de Clientes' && <CustomerFollowUpView />}
           {activeSection === 'Nóminas' && <Payroll />}
-          {activeSection === 'Comisiones' && <CommissionsView />}
+          {activeSection === 'Comisiones' && hasFullModuleAccess && <CommissionsView />}
           {activeSection === 'Anuncios' && <Announcements />}
-          {activeSection === 'Soporte a Clientes' && <CustomerSupport />}
-          {activeSection === 'Morosidad' && <Morosidad />}
-          {activeSection === 'Ajustes' && <Settings />}
-          {activeSection === 'Integraciones' && <Integrations />}
+          {activeSection === 'Soporte a Clientes' && hasFullModuleAccess && <CustomerSupport />}
+          {activeSection === 'Morosidad' && hasFullModuleAccess && <Morosidad />}
+          {activeSection === 'Ajustes' && hasFullModuleAccess && <Settings />}
+          {activeSection === 'Integraciones' && hasFullModuleAccess && <Integrations />}
         </Suspense>
         {!['Perfil', 'Documentación', 'Juego', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Chat para Clientes', 'Seguimiento de Clientes', 'Nóminas', 'Comisiones', 'Anuncios', 'Soporte a Clientes', 'Morosidad', 'Ajustes', 'Integraciones'].includes(activeSection) && (
           <div className="flex items-center justify-center h-full">

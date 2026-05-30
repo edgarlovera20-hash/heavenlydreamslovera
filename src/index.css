@@ -6915,3 +6915,47 @@ tbody tr {
 *::-webkit-scrollbar-thumb {
   background: rgba(184, 188, 198, 0.34) !important;
 }
+
+/* Layout safety: keep navigation/back actions above scroll panels. */
+.hd-screen,
+.hd-module-stage,
+.hd-dashboard-clean,
+.hd-neural-content {
+  min-width: 0;
+}
+
+.hd-holographic-sidebar {
+  min-height: 0;
+}
+
+.hd-holographic-sidebar nav {
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.hd-sidebar-footer {
+  background: rgba(5, 5, 5, 0.72) !important;
+  backdrop-filter: blur(18px) saturate(108%);
+  -webkit-backdrop-filter: blur(18px) saturate(108%);
+  box-shadow: 0 -18px 28px rgba(0, 0, 0, 0.26);
+}
+
+.hd-sidebar-footer button {
+  position: relative;
+  z-index: 2;
+}
+
+.hd-login-back,
+.hd-mobile-back-button {
+  position: relative;
+  z-index: 80 !important;
+  flex-shrink: 0;
+}
+
+#mobile-root .hd-mobile-header-clean {
+  overflow: visible;
+}
+
+#mobile-root .hd-mobile-back-button {
+  min-width: 2.35rem;
+}

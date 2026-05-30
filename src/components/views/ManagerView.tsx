@@ -48,7 +48,25 @@ const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
 const FinancesEnterpriseView = lazy(() => import('./FinancesEnterpriseView'));
 const CommissionsView = lazy(() => import('./CommissionsView'));
 const OPS_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'];
-const ADMIN_ROLES = ['GERENTE', 'ADMINISTRACION'];
+const ADMIN_ROLES = ['GERENTE'];
+const MANAGER_ONLY_SECTIONS = new Set([
+  'Ajustes',
+  'Analytics',
+  'Equipo y Metas',
+  'Aprobaciones',
+  'Hub de Agentes',
+  'Finanzas Enterprise',
+  'Gestión de Usuarios',
+  'Territorios',
+  'Catálogo',
+  'Auditoría',
+  'Arquitectura Empresarial',
+  'Datos y Backup',
+  'Base SIAC',
+  'Validaciones',
+  'Config. Llamadas',
+  'Integraciones',
+]);
 const MOTIVATIONAL_PHRASES = [
   'Hoy cada seguimiento puede convertirse en una venta cerrada.',
   'La constancia gana: una captura clara hoy evita retrabajo manana.',
@@ -136,6 +154,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [channelSummary, setChannelSummary] = useState({ conversations: 0, pendingApprovals: 0 });
   const [pendingUsers, setPendingUsers] = useState(0);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const hasFullModuleAccess = ADMIN_ROLES.includes(role);
 
   const loadStats = async () => {
     if (!OPS_ROLES.includes(role)) return;
@@ -195,6 +214,15 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
     window.dispatchEvent(new CustomEvent('hd-neural-activity', { detail: { type: activityType, intensity } }));
   }, [pendingSales, pendingUsers, recentMessages.length, rejectedSales, role, todaySales]);
 
+  useEffect(() => {
+    if (MANAGER_ONLY_SECTIONS.has(activeSection) && !hasFullModuleAccess) {
+      setActiveSection(OPS_ROLES.includes(role) ? 'Dashboard' : 'Perfil');
+    }
+    if (showAgentDesigner && !hasFullModuleAccess) {
+      setShowAgentDesigner(false);
+    }
+  }, [activeSection, hasFullModuleAccess, role, showAgentDesigner]);
+
   const userName = currentUser?.displayName || 'Usuario';
   const userRoleLabel = (currentUser?.role || role) === 'GERENTE'
     ? 'SUPERUSER'
@@ -214,9 +242,9 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   };
 
   return (
-    <div className="hd-screen flex h-[100dvh] w-full text-white relative z-10 overflow-hidden">
+    <div className="hd-screen flex h-[100dvh] w-full min-w-0 text-white relative z-10 overflow-hidden">
       {/* Sidebar */}
-      <aside className="hd-holographic-sidebar w-72 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col relative z-20">
+      <aside className="hd-holographic-sidebar w-72 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col min-h-0 relative z-20">
         
         <div className="h-36 flex flex-col items-center justify-center px-6 relative overflow-hidden border-b border-white/5 gap-3 z-10">
           <Logo className="w-20 h-20 drop-shadow-[0_0_22px_rgba(34,255,136,0.32)] hover:scale-110 transition-transform duration-500" />
@@ -266,7 +294,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </div>
         </div>
 
-        <nav className="flex-1 py-4 px-3 overflow-y-auto custom-scrollbar relative z-10" aria-label="Navegación principal">
+        <nav className="flex-1 min-h-0 py-4 px-3 overflow-y-auto custom-scrollbar relative z-10" aria-label="Navegación principal">
           {OPS_ROLES.includes(role) && (
             <div className="mb-3">
               <NavItem icon={LayoutDashboard} color="cyan" label="Dashboard" active={activeSection === 'Dashboard'} onClick={() => setActiveSection('Dashboard')} />
@@ -288,10 +316,10 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           <NavGroup label="Administración">
             <NavItem icon={Wallet} color="yellow" label="Nóminas" active={activeSection === 'Nóminas'} onClick={() => setActiveSection('Nóminas')} />
             {OPS_ROLES.includes(role) && <NavItem icon={ReceiptText} color="green" label="Comisiones" active={activeSection === 'Comisiones'} onClick={() => setActiveSection('Comisiones')} />}
-            {ADMIN_ROLES.includes(role) && <NavItem icon={SettingsIcon} color="slate" label="Ajustes" active={activeSection === 'Ajustes'} onClick={() => setActiveSection('Ajustes')} />}
+            {hasFullModuleAccess && <NavItem icon={SettingsIcon} color="slate" label="Ajustes" active={activeSection === 'Ajustes'} onClick={() => setActiveSection('Ajustes')} />}
           </NavGroup>
 
-          {OPS_ROLES.includes(role) && (
+          {hasFullModuleAccess && (
             <NavGroup label="Administración Avanzada">
               <NavItem icon={BarChart3} color="cyan" label="Efectividad" active={activeSection === 'Analytics'} onClick={() => setActiveSection('Analytics')} />
               <NavItem icon={Users} color="blue" label="Equipo y Metas" active={activeSection === 'Equipo y Metas'} onClick={() => setActiveSection('Equipo y Metas')} />
@@ -299,15 +327,15 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             </NavGroup>
           )}
 
-          {OPS_ROLES.includes(role) && (
+          {hasFullModuleAccess && (
             <NavGroup label="Agentes IA">
               <NavItem icon={Bot} color="purple" label="Hub de Agentes" active={activeSection === 'Hub de Agentes'} onClick={() => setActiveSection('Hub de Agentes')} />
             </NavGroup>
           )}
 
-          {ADMIN_ROLES.includes(role) && (
+          {hasFullModuleAccess && (
             <NavGroup label="Gerencia">
-              {ADMIN_ROLES.includes(role) && <NavItem icon={ReceiptText} color="yellow" label="Finanzas Enterprise" active={activeSection === 'Finanzas Enterprise'} onClick={() => setActiveSection('Finanzas Enterprise')} />}
+              <NavItem icon={ReceiptText} color="yellow" label="Finanzas Enterprise" active={activeSection === 'Finanzas Enterprise'} onClick={() => setActiveSection('Finanzas Enterprise')} />
               <NavItem icon={Users} color="cyan" label="Gestión de Usuarios" active={activeSection === 'Gestión de Usuarios'} onClick={() => setActiveSection('Gestión de Usuarios')} badge={pendingUsers > 0 ? pendingUsers : undefined} />
               <NavItem icon={MapPin} color="cyan" label="Territorios" active={activeSection === 'Territorios'} onClick={() => setActiveSection('Territorios')} />
               <NavItem icon={Package} color="purple" label="Catálogo" active={activeSection === 'Catálogo'} onClick={() => setActiveSection('Catálogo')} />
@@ -329,13 +357,13 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
           <NavGroup label="Sistema">
             <NavItem icon={User} color="blue" label="Perfil" active={activeSection === 'Perfil'} onClick={() => setActiveSection('Perfil')} />
-            {OPS_ROLES.includes(role) && <NavItem icon={Zap} color="yellow" label="Integraciones" active={activeSection === 'Integraciones'} onClick={() => setActiveSection('Integraciones')} />}
-            {OPS_ROLES.includes(role) && <NavItem icon={Bot} color="purple" label="Diseñador IA" active={showAgentDesigner} onClick={() => setShowAgentDesigner(true)} />}
+            {hasFullModuleAccess && <NavItem icon={Zap} color="yellow" label="Integraciones" active={activeSection === 'Integraciones'} onClick={() => setActiveSection('Integraciones')} />}
+            {hasFullModuleAccess && <NavItem icon={Bot} color="purple" label="Diseñador IA" active={showAgentDesigner} onClick={() => setShowAgentDesigner(true)} />}
             <NavItem icon={Gamepad2} color="green" label="Juego" active={activeSection === 'Juego'} onClick={() => setActiveSection('Juego')} />
           </NavGroup>
         </nav>
 
-        <div className="p-4 border-t border-white/5 relative z-10">
+        <div className="hd-sidebar-footer shrink-0 p-4 border-t border-white/5 relative z-20">
           <button 
             onClick={onBack}
             className="hd-no-liquid w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/60 transition-all group text-rose-500"
@@ -348,7 +376,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <main className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
         <DashboardLayout
           activity={pendingSales > 0 || pendingUsers > 0 ? 'message' : waStatus === 'connected' || tgStatus === 'polling' ? 'active' : 'idle'}
           className="hd-module-stage flex min-h-0 flex-1 flex-col"
@@ -492,10 +520,14 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                   <QuickAction icon={Headphones} label="Soporte" color="purple" onClick={() => setActiveSection('Soporte a Clientes')} />
                   {OPS_ROLES.includes(role) && <>
                     <QuickAction icon={ReceiptText} label="Comisiones" color="green" onClick={() => setActiveSection('Comisiones')} />
-                    {ADMIN_ROLES.includes(role) && <QuickAction icon={ReceiptText} label="Finanzas" color="yellow" onClick={() => setActiveSection('Finanzas Enterprise')} />}
-                    <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
-                    <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
-                    <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
+                    {hasFullModuleAccess && (
+                      <>
+                        <QuickAction icon={ReceiptText} label="Finanzas" color="yellow" onClick={() => setActiveSection('Finanzas Enterprise')} />
+                        <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
+                        <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
+                        <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
+                      </>
+                    )}
                   </>}
                 </div>
               </PremiumCard>
@@ -515,12 +547,14 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                           'bg-slate-700 text-slate-500'
                         }`}>{waStatus}</span>
                       </div>
-                      <button
-                        onClick={() => setActiveSection('Integraciones')}
-                        className="hd-no-liquid text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
-                      >
-                        Gestionar <ChevronRight className="w-3 h-3" />
-                      </button>
+                      {hasFullModuleAccess && (
+                        <button
+                          onClick={() => setActiveSection('Integraciones')}
+                          className="hd-no-liquid text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
+                        >
+                          Gestionar <ChevronRight className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                     {recentMessages.length === 0 ? (
                       <p className="text-xs text-slate-600 italic">Sin mensajes recientes</p>
@@ -549,12 +583,14 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                         <p className="text-[9px] text-slate-500 uppercase tracking-widest">Aprobaciones</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setActiveSection('Hub de Agentes')}
-                      className="w-full text-xs text-emerald-300 border border-emerald-400/20 rounded-lg py-2 hover:bg-emerald-400/5 transition-colors font-semibold"
-                    >
-                      Ver en Hub de Agentes
-                    </button>
+                    {hasFullModuleAccess && (
+                      <button
+                        onClick={() => setActiveSection('Hub de Agentes')}
+                        className="w-full text-xs text-emerald-300 border border-emerald-400/20 rounded-lg py-2 hover:bg-emerald-400/5 transition-colors font-semibold"
+                      >
+                        Ver en Hub de Agentes
+                      </button>
+                    )}
                   </PremiumCard>
 
                   {/* Telegram panel */}
@@ -569,12 +605,14 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                                                    'bg-slate-700 text-slate-500'
                         }`}>{tgStatus}</span>
                       </div>
-                      <button
-                        onClick={() => setActiveSection('Hub de Agentes')}
-                        className="hd-no-liquid text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
-                      >
-                        {tgStatus === 'polling' ? 'Ver mensajes' : 'Configurar'} <ChevronRight className="w-3 h-3" />
-                      </button>
+                      {hasFullModuleAccess && (
+                        <button
+                          onClick={() => setActiveSection('Hub de Agentes')}
+                          className="hd-no-liquid text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
+                        >
+                          {tgStatus === 'polling' ? 'Ver mensajes' : 'Configurar'} <ChevronRight className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                     {tgStatus === 'polling' ? (
                       <p className="text-xs text-blue-300">✅ Bot activo — los agentes están escuchando</p>
@@ -593,7 +631,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           )}
 
           <Suspense fallback={<SectionLoader />}>
-            {activeSection === 'Ajustes' && <Settings />}
+            {activeSection === 'Ajustes' && hasFullModuleAccess && <Settings />}
             {activeSection === 'Perfil' && <Profile />}
             {activeSection === 'Nóminas' && <Payroll />}
             {activeSection === 'Comisiones' && <CommissionsView />}
@@ -604,27 +642,27 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Chat para Clientes' && <ClientChatCrmView />}
             {activeSection === 'Morosidad' && <Morosidad />}
             {activeSection === 'Juego' && <Game />}
-            {activeSection === 'Integraciones' && <Integrations />}
+            {activeSection === 'Integraciones' && hasFullModuleAccess && <Integrations />}
             {activeSection === 'Documentación' && <MyFilesView onBack={() => setActiveSection('Dashboard')} />}
             {activeSection === 'Historial por Zona' && <ZoneHistoryView />}
-            {activeSection === 'Analytics' && <AnalyticsView />}
-            {activeSection === 'Equipo y Metas' && <TeamManagementView />}
-            {activeSection === 'Aprobaciones' && <ApprovalFlowView />}
-            {activeSection === 'Territorios' && <TerritoriesView />}
-            {activeSection === 'Catálogo' && <PackageCatalogEditor />}
-            {activeSection === 'Auditoría' && <AuditLogView />}
-            {activeSection === 'Arquitectura Empresarial' && <EnterpriseOpsView />}
-            {activeSection === 'Datos y Backup' && <DataManagerView />}
-            {activeSection === 'Base SIAC' && <SIACView />}
-            {activeSection === 'Validaciones' && <ValidationRequestsView />}
-            {activeSection === 'Config. Llamadas' && <ValidationConfigView />}
-            {activeSection === 'Hub de Agentes' && <AgentHubView />}
-            {activeSection === 'Gestión de Usuarios' && <UserManagementView />}
-            {activeSection === 'Finanzas Enterprise' && ADMIN_ROLES.includes(role) && <FinancesEnterpriseView />}
+            {activeSection === 'Analytics' && hasFullModuleAccess && <AnalyticsView />}
+            {activeSection === 'Equipo y Metas' && hasFullModuleAccess && <TeamManagementView />}
+            {activeSection === 'Aprobaciones' && hasFullModuleAccess && <ApprovalFlowView />}
+            {activeSection === 'Territorios' && hasFullModuleAccess && <TerritoriesView />}
+            {activeSection === 'Catálogo' && hasFullModuleAccess && <PackageCatalogEditor />}
+            {activeSection === 'Auditoría' && hasFullModuleAccess && <AuditLogView />}
+            {activeSection === 'Arquitectura Empresarial' && hasFullModuleAccess && <EnterpriseOpsView />}
+            {activeSection === 'Datos y Backup' && hasFullModuleAccess && <DataManagerView />}
+            {activeSection === 'Base SIAC' && hasFullModuleAccess && <SIACView />}
+            {activeSection === 'Validaciones' && hasFullModuleAccess && <ValidationRequestsView />}
+            {activeSection === 'Config. Llamadas' && hasFullModuleAccess && <ValidationConfigView />}
+            {activeSection === 'Hub de Agentes' && hasFullModuleAccess && <AgentHubView />}
+            {activeSection === 'Gestión de Usuarios' && hasFullModuleAccess && <UserManagementView />}
+            {activeSection === 'Finanzas Enterprise' && hasFullModuleAccess && <FinancesEnterpriseView />}
             {activeSection === 'Chats' && (
               <ChatsView
-                onOpenSettings={() => setActiveSection('Ajustes')}
-                onOpenAgents={() => setActiveSection('Hub de Agentes')}
+                onOpenSettings={hasFullModuleAccess ? () => setActiveSection('Ajustes') : undefined}
+                onOpenAgents={hasFullModuleAccess ? () => setActiveSection('Hub de Agentes') : undefined}
                 onStartCapture={() => setActiveSection('Captura y Validación')}
                 onOpenFolios={() => setActiveSection('Consulta y Seguimiento')}
               />
