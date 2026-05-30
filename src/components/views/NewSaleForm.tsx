@@ -595,7 +595,7 @@ async function optimizeImageForOcr(
     img.onerror = () => reject(new Error('No se pudo preparar la imagen para OCR.'));
     img.src = raw;
   });
-  const maxSide = 1600;
+  const maxSide = 1200;
   const rotation = shouldRotateForOcr(image, options.autoRotateLandscape);
   const rotateToLandscape = rotation.rotate;
   const sourceWidth = rotateToLandscape ? image.height : image.width;
@@ -626,7 +626,7 @@ async function optimizeImageForOcr(
   }
 
   return {
-    dataUrl: canvas.toDataURL('image/jpeg', 0.82),
+    dataUrl: canvas.toDataURL('image/jpeg', 0.74),
     rotated: rotateToLandscape,
     rotationReason: rotation.reason,
     sharpness,
@@ -651,7 +651,7 @@ async function rotateImageDataUrl(dataUrl: string): Promise<string> {
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.rotate(Math.PI / 2);
   ctx.drawImage(image, -image.width / 2, -image.height / 2);
-  return canvas.toDataURL('image/jpeg', 0.88);
+  return canvas.toDataURL('image/jpeg', 0.78);
 }
 
 function ocrJobKey(images: string[]) {

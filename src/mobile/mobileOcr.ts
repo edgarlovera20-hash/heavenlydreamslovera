@@ -49,7 +49,7 @@ async function resizeImageForFastOcr(file: File) {
       img.onerror = () => reject(new Error('No se pudo preparar la imagen para OCR.'));
       img.src = url;
     });
-    const maxSide = 1500;
+    const maxSide = 1200;
     const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(image.width * ratio));
@@ -61,7 +61,7 @@ async function resizeImageForFastOcr(file: File) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return await canvasToJpegFile(canvas, file.name, 0.78);
+    return await canvasToJpegFile(canvas, file.name, 0.72);
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -92,7 +92,7 @@ async function normalizeImageForOcr(file: File) {
     if (!ctx) throw new Error('Canvas no disponible.');
     ctx.drawImage(bitmap, 0, 0);
     bitmap.close?.();
-    return await canvasToJpegFile(canvas, file.name, 0.78);
+    return await canvasToJpegFile(canvas, file.name, 0.72);
   } catch {
     throw new Error('Formato de imagen no compatible para OCR. Usa JPG, PNG, WEBP o HEIC convertible.');
   }

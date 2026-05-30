@@ -23,8 +23,8 @@ import { runTesseractIne, runTesseractComprobante, runTesseractSiac, shutdownTes
 
 const OLLAMA_URL        = getOllamaUrl();
 const OLLAMA_API_KEY    = getOllamaApiKey();
-const OCR_PRIMARY       = (process.env.OCR_PRIMARY || 'ollama').toLowerCase();
-const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'local').toLowerCase();
+const OCR_PRIMARY       = (process.env.OCR_PRIMARY || '').toLowerCase();
+const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'fast').toLowerCase();
 
 const OLLAMA_MODEL    = getOllamaOcrModel();
 
@@ -39,11 +39,11 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
-const TIMEOUT_MS_LLM       = parseTimeoutEnv('OCR_LLM_TIMEOUT_MS', 45_000);  // 0 desactiva timeout
+const TIMEOUT_MS_LLM       = parseTimeoutEnv('OCR_LLM_TIMEOUT_MS', 18_000);  // 0 desactiva timeout
 const TIMEOUT_MS_OLLAMA    = parseTimeoutEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM > 0 ? TIMEOUT_MS_LLM * 3 : 0);
-const TIMEOUT_MS_TESSERACT = parseTimeoutEnv('OCR_TESSERACT_TIMEOUT_MS', 30_000);
-const MAX_OUTPUT_TOKENS    = parsePositiveIntEnv('OCR_MAX_OUTPUT_TOKENS', 900);
-const OLLAMA_NUM_CTX       = parsePositiveIntEnv('OCR_OLLAMA_NUM_CTX', 4096);
+const TIMEOUT_MS_TESSERACT = parseTimeoutEnv('OCR_TESSERACT_TIMEOUT_MS', 18_000);
+const MAX_OUTPUT_TOKENS    = parsePositiveIntEnv('OCR_MAX_OUTPUT_TOKENS', 650);
+const OLLAMA_NUM_CTX       = parsePositiveIntEnv('OCR_OLLAMA_NUM_CTX', 3072);
 const OLLAMA_KEEP_ALIVE    = process.env.OLLAMA_KEEP_ALIVE || '30m';
 const CACHE_TTL_MS         = parsePositiveIntEnv('OCR_CACHE_TTL_MS', 60 * 60 * 1000);
 const CACHE_MAX_ENTRIES    = parsePositiveIntEnv('OCR_CACHE_MAX_ENTRIES', 250);
@@ -668,26 +668,26 @@ const DOC_ORDERS: Record<OcrDocType, Record<OcrStrategy, OcrProvider[]>> = {
   ine: {
     adaptive: ['ollama', 'tesseract'],
     quality: ['ollama', 'tesseract'],
-    fast: ['ollama', 'tesseract'],
-    local: ['ollama', 'tesseract'],
+    fast: ['tesseract', 'ollama'],
+    local: ['tesseract', 'ollama'],
   },
   comprobante: {
     adaptive: ['ollama', 'tesseract'],
     quality: ['ollama', 'tesseract'],
-    fast: ['ollama', 'tesseract'],
-    local: ['ollama', 'tesseract'],
+    fast: ['tesseract', 'ollama'],
+    local: ['tesseract', 'ollama'],
   },
   siac: {
-    adaptive: ['ollama', 'tesseract'],
+    adaptive: ['tesseract', 'ollama'],
     quality: ['ollama', 'tesseract'],
-    fast: ['ollama', 'tesseract'],
-    local: ['ollama', 'tesseract'],
+    fast: ['tesseract', 'ollama'],
+    local: ['tesseract', 'ollama'],
   },
   financial: {
     adaptive: ['ollama', 'tesseract'],
     quality: ['ollama', 'tesseract'],
-    fast: ['ollama', 'tesseract'],
-    local: ['ollama', 'tesseract'],
+    fast: ['tesseract', 'ollama'],
+    local: ['tesseract', 'ollama'],
   },
 };
 

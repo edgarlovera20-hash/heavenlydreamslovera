@@ -4464,8 +4464,8 @@ async function startServer() {
     try {
       const buffer = Buffer.from(match[2], 'base64');
       const { default: sharp } = await import('sharp');
-      const maxSide = ocrIntEnv('OCR_IMAGE_MAX_SIDE', 1600, 900, 2400);
-      const quality = ocrIntEnv('OCR_IMAGE_JPEG_QUALITY', 82, 65, 92);
+      const maxSide = ocrIntEnv('OCR_IMAGE_MAX_SIDE', 1200, 800, 1800);
+      const quality = ocrIntEnv('OCR_IMAGE_JPEG_QUALITY', 74, 60, 88);
       const normalized = await sharp(buffer, { failOn: 'error', limitInputPixels: 60_000_000 })
         .rotate()
         .resize({ width: maxSide, height: maxSide, fit: 'inside', withoutEnlargement: true })
