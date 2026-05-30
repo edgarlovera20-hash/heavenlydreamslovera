@@ -1,8 +1,10 @@
-export type AppRole = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'ASESOR' | string;
+export type AppRole = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'RECLUTADOR' | 'VENDEDOR' | 'ASESOR' | string;
 
 export const MANAGER_ROLE = 'GERENTE';
 export const OPS_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'];
-export const APP_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'];
+export const SALES_ROLES = ['ASESOR', 'VENDEDOR'];
+export const RECRUITING_ROLES = ['RECLUTADOR'];
+export const APP_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'RECLUTADOR', 'VENDEDOR', 'ASESOR'];
 
 export function normalizeRole(value: any): AppRole {
   return String(value || '').trim().toUpperCase();

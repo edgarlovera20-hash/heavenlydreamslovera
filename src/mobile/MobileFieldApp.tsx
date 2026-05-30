@@ -503,6 +503,8 @@ function roleLabel(role?: string) {
   if (normalized === 'GERENTE') return 'gerente';
   if (normalized === 'ADMINISTRACION') return 'administracion';
   if (normalized === 'SUPERVISOR') return 'supervisor';
+  if (normalized === 'RECLUTADOR') return 'reclutador';
+  if (normalized === 'VENDEDOR') return 'vendedor';
   if (normalized === 'ADMIN') return 'admin';
   return 'asesor';
 }

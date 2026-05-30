@@ -18,7 +18,7 @@ if (process.env.NODE_ENV === 'production' && JWT_SECRET === DEFAULT_JWT_SECRET) 
   throw new Error('JWT_SECRET es obligatorio en producción');
 }
 
-export type AppRole = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'ASESOR';
+export type AppRole = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'RECLUTADOR' | 'VENDEDOR' | 'ASESOR';
 
 type SessionOptions = {
   webAuthnVerified?: boolean;

@@ -9,7 +9,7 @@ import { LoadingOverlay } from './components/ui/LoadingOverlay';
 import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Binoculars, ClipboardList, UserPlus, Fingerprint, ArrowRight, Activity, Tag } from 'lucide-react';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
-export type Role = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'ASESOR';
+export type Role = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'RECLUTADOR' | 'VENDEDOR' | 'ASESOR';
 
 // Session helpers — server is source of truth; localStorage is only a cache for reloads
 const SESSION_KEY = 'hd_session';

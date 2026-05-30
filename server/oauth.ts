@@ -90,7 +90,7 @@ function providerConfig(provider: string) {
 
 function safeRole(value: any) {
   const role = String(value || 'ASESOR').toUpperCase();
-  return ['ASESOR', 'SUPERVISOR', 'GERENTE', 'ADMINISTRACION'].includes(role) ? role : 'ASESOR';
+  return ['ASESOR', 'VENDEDOR', 'RECLUTADOR', 'SUPERVISOR', 'GERENTE', 'ADMINISTRACION'].includes(role) ? role : 'ASESOR';
 }
 
 function htmlEscape(value: any) {

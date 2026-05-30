@@ -37,7 +37,7 @@ function getMemberStats(uid: string, period: string) {
   return { total: mine.length, approved, revenue };
 }
 
-const ROLES = ['ASESOR', 'SUPERVISOR', 'ADMINISTRACION', 'GERENTE'];
+const ROLES = ['VENDEDOR', 'RECLUTADOR', 'ASESOR', 'SUPERVISOR', 'ADMINISTRACION', 'GERENTE'];
 
 function normalizeMember(user: any): TeamMember {
   return {

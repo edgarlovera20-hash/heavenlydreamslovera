@@ -383,7 +383,15 @@ function buildCustomerWhatsAppMessage(form: Partial<CustomerCaptureData>, adviso
   const tipoSolicitud = form.tipoCliente === 'portado' ? 'Portabilidad' : 'Línea nueva';
   const segmento = form.tipoServicio === 'negocio' ? 'Negocio' : 'Residencial';
   const streamingPromo = platforms.some(item => /promoción 6 meses sin costo/i.test(item));
-  const asesorRole = advisor.role === 'SUPERVISOR' ? 'supervisor' : advisor.role === 'GERENTE' ? 'gerente' : 'asesor';
+  const roleLabels: Record<string, string> = {
+    GERENTE: 'gerente',
+    ADMINISTRACION: 'administracion',
+    SUPERVISOR: 'supervisor',
+    RECLUTADOR: 'reclutador',
+    VENDEDOR: 'vendedor',
+    ASESOR: 'asesor',
+  };
+  const asesorRole = roleLabels[advisor.role] || 'asesor';
 
   return [
     `Hola ${cliente}, muchas gracias por su preferencia. 🙌`,

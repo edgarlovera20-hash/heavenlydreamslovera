@@ -1272,7 +1272,7 @@ export const SiacRecords = {
       params.dateTo = dateTo;
     }
     const role = String(auth?.role || '').toUpperCase();
-    if (role === 'ASESOR' || role === 'PROMOTOR') {
+    if (role === 'ASESOR' || role === 'VENDEDOR' || role === 'PROMOTOR') {
       where.push('(usuario = @authName OR promotor = @authName OR usuario = @authUsername OR promotor = @authUsername)');
       params.authName = String(auth?.name || '');
       params.authUsername = String(auth?.username || auth?.sub || '');

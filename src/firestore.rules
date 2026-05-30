@@ -56,7 +56,7 @@ service cloud.firestore {
              data.nombre is string && data.nombre.size() > 0 && data.nombre.size() <= 100 &&
              data.apellidoPaterno is string && data.apellidoPaterno.size() <= 100 &&
              data.email == request.auth.token.email &&
-             data.role in ['GERENTE', 'SUPERVISOR', 'ASESOR'];
+             data.role in ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'RECLUTADOR', 'VENDEDOR', 'ASESOR'];
     }
 
     function isValidSale(data) {

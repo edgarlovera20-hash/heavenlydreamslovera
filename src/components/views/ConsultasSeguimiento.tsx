@@ -951,7 +951,7 @@ export default function ConsultasSeguimiento() {
             Panel gerencial de visibilidad
           </h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {['ASESOR', 'SUPERVISOR', 'GERENTE'].map(role => (
+            {['VENDEDOR', 'RECLUTADOR', 'ASESOR', 'SUPERVISOR', 'GERENTE'].map(role => (
               <div key={role} className="rounded-2xl border border-cyan-300/16 bg-[#020A1F]/45 p-4">
                 <p className="mb-3 text-sm font-black text-cyan-100">{role}</p>
                 {['telefono_asignado', 'telefono_referencia', 'correo', 'morosidad', 'observaciones'].map(field => (

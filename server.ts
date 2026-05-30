@@ -563,8 +563,8 @@ async function startServer() {
   const authOnly = requireAuth;
   const adminOnly = requireRole('GERENTE');
   const opsOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR');
-  const chatUserOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR');
-  const mobileOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR');
+  const chatUserOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'RECLUTADOR', 'VENDEDOR', 'ASESOR');
+  const mobileOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'RECLUTADOR', 'VENDEDOR', 'ASESOR');
   const managerOnly = adminOnly;
   const highImpactConfirmation = process.env.HIGH_IMPACT_CONFIRMATION || 'HEAVENLY_DREAMS_CONFIRM';
   const sqliteDbPath = path.join(process.cwd(), 'data', 'heavenlydreams.db');
@@ -1164,7 +1164,7 @@ async function startServer() {
 
   function safeUserRole(value: any) {
     const role = String(value || 'ASESOR').trim().toUpperCase();
-    return ['ASESOR', 'SUPERVISOR', 'GERENTE', 'ADMINISTRACION'].includes(role) ? role : 'ASESOR';
+    return ['ASESOR', 'VENDEDOR', 'RECLUTADOR', 'SUPERVISOR', 'GERENTE', 'ADMINISTRACION'].includes(role) ? role : 'ASESOR';
   }
 
   function safeActivo(value: any, fallback: number) {
@@ -3359,21 +3359,21 @@ async function startServer() {
     res.json(job);
   }));
 
-  app.post("/api/telmex/login", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('login'));
-  app.post("/api/telmex/coverage", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('coverage'));
-  app.post("/api/telmex/create-order", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('create-order'));
-  app.post("/api/telmex/send-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
-  app.post("/api/telmex/confirm-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
+  app.post("/api/telmex/login", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('login'));
+  app.post("/api/telmex/coverage", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('coverage'));
+  app.post("/api/telmex/create-order", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('create-order'));
+  app.post("/api/telmex/send-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
+  app.post("/api/telmex/confirm-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
   app.get("/telmex/status/:id", authOnly, wrap((req: any, res: any) => {
     const job = getTelmexJob(req.params.id);
     if (!job) return res.status(404).json({ error: 'trabajo Telmex no encontrado' });
     res.json(job);
   }));
-  app.post("/telmex/login", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('login'));
-  app.post("/telmex/coverage", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('coverage'));
-  app.post("/telmex/create-order", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('create-order'));
-  app.post("/telmex/send-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
-  app.post("/telmex/confirm-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
+  app.post("/telmex/login", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('login'));
+  app.post("/telmex/coverage", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('coverage'));
+  app.post("/telmex/create-order", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('create-order'));
+  app.post("/telmex/send-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('send-otp'));
+  app.post("/telmex/confirm-otp", requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'VENDEDOR', 'ASESOR'), enqueueTelmexAction('confirm-otp'));
 
   app.post("/api/ai/run", managerOnly, wrap(async (req: any, res: any) => {
     if (!req.body.prompt) return res.status(400).json({ error: 'prompt requerido' });

@@ -24,7 +24,7 @@ export default function TerritoriesView() {
   const [colonia, setColonia] = useState('');
   const [delegacion, setDelegacion] = useState('');
   const [asesorId, setAsesorId] = useState('');
-  const promotors = useMemo(() => users.filter(u => u.role === 'ASESOR' || u.role === 'SUPERVISOR'), [users]);
+  const promotors = useMemo(() => users.filter(u => ['ASESOR', 'VENDEDOR', 'SUPERVISOR'].includes(String(u.role || '').toUpperCase())), [users]);
 
   const loadData = async () => {
     try {
