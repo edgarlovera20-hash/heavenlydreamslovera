@@ -8876,6 +8876,39 @@ body,
     text-shadow: none !important;
   }
 
+  .hd-eyebrow,
+  .hd-screen :is([class*="text-slate"]),
+  .hd-cyber-screen :is([class*="text-slate"]),
+  .hd-module-stage :is([class*="text-slate"]),
+  .hd-screen :is([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]),
+  .hd-cyber-screen :is([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]),
+  .hd-module-stage :is([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]),
+  .hd-panel :is([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]),
+  .hd-card :is([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]) {
+    color: rgba(225, 225, 225, 0.78) !important;
+    text-shadow: none !important;
+  }
+
+  .hd-screen :is(.text-white, .text-slate-50, h1, h2, h3, h4, h5, h6, strong, b),
+  .hd-cyber-screen :is(.text-white, .text-slate-50, h1, h2, h3, h4, h5, h6, strong, b),
+  .hd-module-stage :is(.text-white, .text-slate-50, h1, h2, h3, h4, h5, h6, strong, b) {
+    color: #ffffff !important;
+  }
+
+  .hd-screen :is([class*="border-slate"]),
+  .hd-cyber-screen :is([class*="border-slate"]),
+  .hd-module-stage :is([class*="border-slate"]) {
+    border-color: rgba(255, 255, 255, 0.13) !important;
+  }
+
+  .hd-screen :is([class*="bg-slate"]),
+  .hd-cyber-screen :is([class*="bg-slate"]),
+  .hd-module-stage :is([class*="bg-slate"]) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014), rgba(0, 0, 0, 0.84)),
+      rgba(10, 10, 10, 0.90) !important;
+  }
+
   :where(svg, .lucide, .hd-floating-icon, .hd-neon-icon, .hd-premium-iconbox, .hd-neon-iconbox, .hd-quick-action-icon, .hd-nav-item-icon, .hd-mobile-icon) {
     color: #d8d8d8 !important;
     stroke: currentColor !important;

@@ -2270,6 +2270,28 @@ body,
     text-shadow: none !important;
   }
 
+  #mobile-root .hd-eyebrow,
+  #mobile-root :is(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout, .hd-mobile-register-shell, .hd-login-shell) :is([class*="text-slate"]),
+  #mobile-root :is(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout, .hd-mobile-register-shell, .hd-login-shell) :is([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]),
+  #mobile-root :is(.hd-panel, .hd-card, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft) :is([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]) {
+    color: rgba(225, 225, 225, 0.76) !important;
+    text-shadow: none !important;
+  }
+
+  #mobile-root :is(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout, .hd-mobile-register-shell, .hd-login-shell) :is(.text-white, .text-slate-50, h1, h2, h3, h4, h5, h6, strong, b) {
+    color: #ffffff !important;
+  }
+
+  #mobile-root :is(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout, .hd-mobile-register-shell, .hd-login-shell) :is([class*="border-slate"]) {
+    border-color: rgba(255, 255, 255, 0.13) !important;
+  }
+
+  #mobile-root :is(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout, .hd-mobile-register-shell, .hd-login-shell) :is([class*="bg-slate"]) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014), rgba(0, 0, 0, 0.84)),
+      rgba(10, 10, 10, 0.90) !important;
+  }
+
   #mobile-root :where(svg, .lucide, .hd-mobile-icon, .hd-quick-action-icon, .hd-nav-item-icon) {
     color: #d8d8d8 !important;
     stroke: currentColor !important;
