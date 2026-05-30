@@ -1,0 +1,24 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://heavenlydreams.com.mx/api/:path*"
+    },
+    {
+      "source": "/m",
+      "destination": "/mobile.html"
+    },
+    {
+      "source": "/m/",
+      "destination": "/mobile.html"
+    },
+    {
+      "source": "/m/:path*",
+      "destination": "/mobile.html"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
+    }
+  ]
+}
