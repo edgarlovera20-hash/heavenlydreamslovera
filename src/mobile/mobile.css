@@ -941,3 +941,212 @@
   background-image: none !important;
   box-shadow: none !important;
 }
+
+/* Heavenly Dreams mobile Enterprise AI master skin. */
+#mobile-root {
+  --hd-mobile-bg: #050505;
+  --hd-mobile-bg-soft: #0a0a0a;
+  --hd-mobile-panel: rgba(60, 60, 60, 0.10);
+  --hd-mobile-panel-strong: rgba(60, 60, 60, 0.12);
+  --hd-mobile-panel-muted: rgba(20, 20, 20, 0.40);
+  --hd-mobile-border: rgba(255, 255, 255, 0.08);
+  --hd-mobile-border-strong: rgba(255, 255, 255, 0.12);
+  --hd-mobile-shadow: 0 10px 40px rgba(0, 0, 0, 0.40);
+  --hd-mobile-blue: #00afff;
+  --hd-mobile-green: #00ffaa;
+  --hd-mobile-cyan: #00c2ff;
+  --hd-mobile-mint: #00ffcc;
+  --hd-mobile-violet: #b56cff;
+  --hd-mobile-pink: #ff4d6d;
+  --hd-mobile-orange: #ff9900;
+  --hd-mobile-amber: #ffd700;
+  --hd-mobile-red: #ff3b30;
+  background: var(--hd-mobile-bg) !important;
+  background-color: var(--hd-mobile-bg) !important;
+  background-image: none !important;
+  color: #ffffff !important;
+}
+
+#mobile-root,
+#mobile-root .hd-cyber-screen,
+#mobile-root .hd-mobile-login-screen,
+#mobile-root .hd-mobile-main,
+#mobile-root .hd-mobile-clean,
+#mobile-root .hd-neural-layout {
+  background: var(--hd-mobile-bg) !important;
+  background-color: var(--hd-mobile-bg) !important;
+  background-image: none !important;
+}
+
+#mobile-root::before,
+#mobile-root::after,
+#mobile-root :where(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout)::before,
+#mobile-root :where(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout)::after {
+  content: none !important;
+  display: none !important;
+}
+
+#mobile-root * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hd-mobile-blue) transparent;
+}
+
+#mobile-root *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+
+#mobile-root *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#mobile-root *::-webkit-scrollbar-thumb {
+  background: var(--hd-mobile-blue);
+  border-radius: 20px;
+}
+
+#mobile-root :where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-mobile-login-card,
+  .hd-mobile-topbar,
+  .hd-mobile-bottom-nav,
+  .hd-mobile-quick-action
+),
+#mobile-root :where(section, article, aside):where(.rounded-xl, .rounded-2xl, .rounded-3xl, [class*="border-white"], [class*="border-cyan"], [class*="border-slate"]) {
+  background: var(--hd-mobile-panel) !important;
+  background-color: var(--hd-mobile-panel) !important;
+  background-image: none !important;
+  border: 1px solid var(--hd-mobile-border) !important;
+  border-radius: 24px !important;
+  box-shadow: var(--hd-mobile-shadow) !important;
+  backdrop-filter: blur(25px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(112%) !important;
+  color: #ffffff !important;
+}
+
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-metric, .hd-curp-helper, .hd-mobile-login-card, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-mobile-quick-action)::before,
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-metric, .hd-curp-helper, .hd-mobile-login-card, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-mobile-quick-action)::after,
+#mobile-root .hd-liquid-button::before,
+#mobile-root .hd-liquid-button::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+
+#mobile-root :where(.bg-slate-950\/90, .bg-slate-950\/85, .bg-slate-950\/80, .bg-slate-950\/75, .bg-slate-950\/60, .bg-slate-950\/55, .bg-slate-950\/50, .bg-slate-950\/20, .bg-slate-950, .bg-slate-900\/90, .bg-slate-900\/80, .bg-slate-900\/70, .bg-slate-900\/20, .bg-slate-900, .bg-slate-800\/80, .bg-slate-800\/70, .bg-slate-800\/60, .bg-slate-800\/50, .bg-slate-800\/30, .bg-slate-800, .bg-white\/5, .bg-white\/\[0\.035\], .bg-white\/\[0\.025\], .bg-black\/40, .bg-black\/35, .bg-black\/30, .bg-black\/25, .bg-black\/20),
+#mobile-root [class*="bg-[#"] {
+  background: var(--hd-mobile-panel-muted) !important;
+  background-image: none !important;
+  border-color: var(--hd-mobile-border) !important;
+}
+
+#mobile-root :where(.hd-mobile-bottom-nav, .hd-mobile-topbar) {
+  background: rgba(5, 5, 5, 0.86) !important;
+  border-color: var(--hd-mobile-border) !important;
+  backdrop-filter: blur(28px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(112%) !important;
+}
+
+#mobile-root :where(.hd-mobile-bottom-nav button, .hd-mobile-topbar button, .hd-mobile-quick-action, .hd-neon-action, .hd-liquid-button):not(:disabled) {
+  background: rgba(50, 50, 50, 0.20) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.34) !important;
+  backdrop-filter: blur(25px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(110%) !important;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+#mobile-root :where(.hd-mobile-bottom-nav button, .hd-mobile-topbar button, .hd-mobile-quick-action, .hd-neon-action, .hd-liquid-button):not(:disabled):hover {
+  background: rgba(70, 70, 70, 0.24) !important;
+  border-color: var(--hd-mobile-border-strong) !important;
+  transform: translateY(-2px);
+}
+
+#mobile-root :where(.hd-cyber-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  background: rgba(40, 40, 40, 0.30) !important;
+  background-image: none !important;
+  border: 1px solid var(--hd-mobile-border) !important;
+  border-radius: 16px !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  backdrop-filter: blur(16px) saturate(105%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(105%) !important;
+}
+
+#mobile-root :where(.hd-cyber-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus,
+#mobile-root :where(.hd-cyber-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus-visible {
+  border-color: var(--hd-mobile-blue) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(0, 175, 255, 0.12) !important;
+}
+
+#mobile-root :where(.hd-neon-iconbox, .hd-neon-icon, .hd-floating-icon, .hd-premium-iconbox, .hd-quick-action-icon, .hd-nav-item-icon, .hd-mobile-icon),
+#mobile-root :where(.rounded-full, .rounded-xl, .rounded-2xl):has(> svg:only-child),
+#mobile-root :where([class*="bg-cyan"], [class*="bg-emerald"], [class*="bg-blue"], [class*="bg-purple"], [class*="bg-rose"], [class*="bg-yellow"], [class*="bg-orange"]):has(> svg:only-child) {
+  background: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+#mobile-root :where(svg, .hd-mobile-icon, .hd-quick-action-icon, .hd-nav-item-icon) {
+  filter: drop-shadow(0 0 8px currentColor) !important;
+}
+
+#mobile-root :where(.hd-tone-cyan, .text-cyan-200, .text-cyan-300, .text-sky-300) svg,
+#mobile-root :where(svg.text-cyan-200, svg.text-cyan-300, svg.text-sky-300) {
+  color: var(--hd-mobile-cyan) !important;
+}
+
+#mobile-root :where(.hd-tone-emerald, .text-emerald-200, .text-emerald-300) svg,
+#mobile-root :where(svg.text-emerald-200, svg.text-emerald-300) {
+  color: var(--hd-mobile-green) !important;
+}
+
+#mobile-root :where(.hd-tone-violet, .text-violet-200, .text-purple-300, .text-purple-400) svg,
+#mobile-root :where(svg.text-violet-200, svg.text-purple-300, svg.text-purple-400) {
+  color: var(--hd-mobile-violet) !important;
+}
+
+#mobile-root :where(.hd-tone-pink, .text-rose-200, .text-rose-300, .text-red-400) svg,
+#mobile-root :where(svg.text-rose-200, svg.text-rose-300, svg.text-red-400) {
+  color: var(--hd-mobile-pink) !important;
+}
+
+#mobile-root :where(.hd-tone-amber, .text-yellow-100, .text-yellow-300, .text-amber-300) svg,
+#mobile-root :where(svg.text-yellow-100, svg.text-yellow-300, svg.text-amber-300) {
+  color: var(--hd-mobile-amber) !important;
+}
+
+#mobile-root :where(table) {
+  border-collapse: separate !important;
+  border-spacing: 0 0.55rem !important;
+}
+
+#mobile-root :where(thead, th) {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+#mobile-root :where(tbody tr) {
+  background: rgba(60, 60, 60, 0.08) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24) !important;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+#mobile-root :where(tbody tr:hover) {
+  background: rgba(70, 70, 70, 0.14) !important;
+  transform: translateY(-1px);
+}

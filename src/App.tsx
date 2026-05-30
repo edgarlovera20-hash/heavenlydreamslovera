@@ -6,7 +6,7 @@ import Logo from './components/ui/Logo';
 import { MatrixInput } from './components/ui/MatrixInput';
 import { MatrixText } from './components/ui/matrix-text';
 import { LoadingOverlay } from './components/ui/LoadingOverlay';
-import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Binoculars, ClipboardList, UserPlus, Fingerprint } from 'lucide-react';
+import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Binoculars, ClipboardList, UserPlus, Fingerprint, ArrowRight, Activity, Tag } from 'lucide-react';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
 export type Role = 'GERENTE' | 'ADMINISTRACION' | 'SUPERVISOR' | 'ASESOR';
@@ -329,14 +329,16 @@ export default function App() {
               </p>
             </div>
             <div className="aether-role-grid grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-700 px-4 sm:px-0">
-              <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} color="yellow" tone="admin" onClick={() => setPendingRole('GERENTE')} />
-              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} color="pink" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
-              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} color="orange" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
+              <RoleButton title="Gerencia / Admin" desc="Acceso Total Enterprise" icon={Crown} chip="Control total del sistema" tone="admin" onClick={() => setPendingRole('GERENTE')} />
+              <RoleButton title="Supervisor" desc="Control & Monitoreo IA" icon={Binoculars} chip="Monitorea y gestiona" tone="supervisor" onClick={() => setPendingRole('SUPERVISOR')} />
+              <RoleButton title="Asesor Comercial" desc="Operativa & Ventas IA" icon={ClipboardList} chip="Ventas inteligentes" tone="advisor" onClick={() => setPendingRole('ASESOR')} />
             </div>
             <div className="mt-8 sm:mt-12 animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
               <button onClick={() => setIsRegistering(true)}
                 className="aether-register-button hd-liquid-button px-7 sm:px-9 py-3 sm:py-3.5 rounded-xl border transition-all font-black text-xs sm:text-sm flex items-center gap-3 backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100/80">
-                <UserPlus className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" /> Iniciar Registro
+                <UserPlus className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                <span>Iniciar Registro</span>
+                <ArrowRight className="aether-register-arrow w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1" />
               </button>
             </div>
           </div>
@@ -353,8 +355,8 @@ export default function App() {
           <div className="hd-login-card w-full max-w-md glass-panel-neon rounded-3xl p-6 sm:p-8 animate-in zoom-in-95 duration-300 relative overflow-hidden my-auto shrink-0">
             <div className="flex justify-center mb-4 sm:mb-6 relative z-10">
               <div className={pendingRole === 'GERENTE'
-                ? "hd-liquid-selected w-14 h-14 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl flex items-center justify-center border bg-yellow-300/10 border-yellow-200/70 text-yellow-300 shadow-[0_0_28px_rgba(250,204,21,0.72),0_0_58px_rgba(250,204,21,0.26)]"
-                : "w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center border bg-orange-400/10 border-orange-300/40 text-orange-200"}
+                ? "hd-login-role-icon flex items-center justify-center text-yellow-300"
+                : "hd-login-role-icon flex items-center justify-center text-orange-300"}
               >
                 {pendingRole === 'GERENTE' ? <Crown className="w-8 h-8 sm:w-10 sm:h-10 drop-shadow-[0_0_14px_rgba(250,204,21,0.9)]" /> : <Smartphone className="w-6 h-6 sm:w-8 sm:h-8" />}
               </div>
@@ -502,7 +504,7 @@ export default function App() {
   );
 }
 
-const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, tone = 'default', onClick }: any) {
+const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, chip, tone = 'default', onClick }: any) {
   const styles: Record<string, { card: string; title: string; desc: string }> = {
     admin: {
       card: 'border-[#123a6a] hover:border-cyan-200/90 focus-visible:border-cyan-200/90 hover:shadow-[0_0_34px_rgba(0,194,255,0.44),0_0_70px_rgba(10,132,255,0.18)] focus-visible:shadow-[0_0_34px_rgba(0,194,255,0.44),0_0_70px_rgba(10,132,255,0.18)]',
@@ -526,6 +528,7 @@ const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, ton
     },
   };
   const toneStyle = styles[tone] || styles.default;
+  const ChipIcon = tone === 'admin' ? Shield : tone === 'supervisor' ? Activity : Tag;
 
   return (
     <button onClick={onClick}
@@ -535,6 +538,10 @@ const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, ton
       <Icon className="aether-role-icon mb-4 sm:mb-6" aria-hidden="true" />
       <h2 className={`aether-role-title relative z-10 text-lg sm:text-2xl font-black text-white mb-1 sm:mb-2 tracking-tight transition-colors ${toneStyle.title}`}>{title}</h2>
       <p className={`aether-role-desc relative z-10 text-xs sm:text-sm font-bold tracking-[0.06em] leading-tight ${toneStyle.desc}`}>{desc}</p>
+      <span className="aether-role-chip relative z-10 mt-5">
+        <ChipIcon className="aether-role-chip-icon" aria-hidden="true" />
+        {chip || 'Seleccionar'}
+      </span>
     </button>
   );
 });

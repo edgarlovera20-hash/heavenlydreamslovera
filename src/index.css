@@ -5087,3 +5087,1075 @@ body::after {
   background-image: none !important;
   box-shadow: none !important;
 }
+
+/* Enterprise AI SaaS login: final visual authority for the public access screen. */
+.hd-screen.aether-flow-hero {
+  --hd-login-black: #050505;
+  --hd-login-blue: #00afff;
+  --hd-login-card: rgba(70, 70, 70, 0.15);
+  --hd-login-border: rgba(255, 255, 255, 0.15);
+  --hd-login-text: #ffffff;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0, 175, 255, 0.12), transparent 31%),
+    radial-gradient(circle at 15% 18%, rgba(11, 23, 41, 0.82), transparent 34%),
+    radial-gradient(circle at 86% 15%, rgba(8, 18, 32, 0.78), transparent 38%),
+    linear-gradient(180deg, #050505 0%, #081220 48%, #050505 100%) !important;
+  background-color: var(--hd-login-black) !important;
+  color: var(--hd-login-text) !important;
+  isolation: isolate;
+}
+
+.hd-screen.aether-flow-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.32;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.38) 0 1px, transparent 1.7px),
+    linear-gradient(115deg, transparent 0 42%, rgba(255, 255, 255, 0.075) 42.2% 42.45%, transparent 42.8%),
+    linear-gradient(28deg, transparent 0 52%, rgba(0, 175, 255, 0.08) 52.2% 52.45%, transparent 52.8%);
+  background-size: 170px 170px, 520px 520px, 620px 620px;
+  background-position: 0 0, 18% 25%, 83% 19%;
+  mask-image: radial-gradient(circle at 50% 35%, black 0 42%, transparent 78%);
+}
+
+.hd-screen.aether-flow-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 20%, transparent 0 34%, rgba(0, 0, 0, 0.42) 76%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.62), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.62));
+}
+
+.hd-screen.aether-flow-hero .aether-clean-bg {
+  background:
+    radial-gradient(circle at 50% 14%, rgba(0, 175, 255, 0.14), transparent 26%),
+    radial-gradient(circle at 50% 52%, rgba(11, 23, 41, 0.48), transparent 42%) !important;
+  background-color: transparent !important;
+  opacity: 1;
+}
+
+.hd-screen.aether-flow-hero .aether-entry {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  padding-top: clamp(2.25rem, 5vh, 4.5rem) !important;
+  padding-bottom: clamp(2.25rem, 5vh, 4.5rem) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-entry::before,
+.hd-screen.aether-flow-hero .aether-entry::after {
+  display: none !important;
+  content: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-brand {
+  margin-bottom: clamp(2rem, 5vh, 4rem) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo-shell {
+  width: clamp(136px, 14vw, 180px) !important;
+  height: clamp(136px, 14vw, 180px) !important;
+  margin-inline: auto;
+  margin-bottom: 1.75rem !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.hd-screen.aether-flow-hero .aether-logo-shell::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: inherit;
+  border: 1px solid rgba(0, 175, 255, 0.34);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.10), rgba(0, 175, 255, 0.035));
+  box-shadow:
+    0 0 32px rgba(0, 175, 255, 0.23),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.hd-screen.aether-flow-hero .aether-logo-shell::after {
+  content: "";
+  position: absolute;
+  inset: -18px;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(0, 175, 255, 0.35), transparent 68%);
+  filter: blur(20px);
+  opacity: 0.35;
+  animation: hd-login-logo-breathe 4s ease-in-out infinite;
+}
+
+.hd-screen.aether-flow-hero .aether-logo-glow {
+  inset: -18px !important;
+  background: radial-gradient(circle, rgba(0, 175, 255, 0.35), transparent 68%) !important;
+  filter: blur(20px) !important;
+  opacity: 0.35 !important;
+  box-shadow: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo {
+  width: clamp(132px, 13.5vw, 180px) !important;
+  height: clamp(132px, 13.5vw, 180px) !important;
+  filter: drop-shadow(0 0 18px rgba(0, 175, 255, 0.28));
+  animation: hd-login-logo-float 4s ease-in-out infinite;
+}
+
+.hd-screen.aether-flow-hero .aether-title,
+.hd-screen.aether-flow-hero .aether-title * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: none !important;
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 0.22),
+    0 0 28px rgba(0, 175, 255, 0.16),
+    0 14px 32px rgba(0, 0, 0, 0.55) !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-title {
+  display: block !important;
+  font-size: clamp(2.35rem, 5vw, 4rem) !important;
+  line-height: 1.02 !important;
+  font-weight: 800 !important;
+  letter-spacing: clamp(0.14em, 1.1vw, 0.24em) !important;
+  animation: none !important;
+  white-space: nowrap;
+}
+
+.hd-screen.aether-flow-hero .aether-subtitle {
+  color: rgba(255, 255, 255, 0.75) !important;
+  font-size: clamp(0.82rem, 1.35vw, 1.125rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.18em !important;
+  text-shadow: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-grid {
+  width: min(100%, 1180px) !important;
+  max-width: 1180px !important;
+  gap: clamp(1.25rem, 2.4vw, 2rem) !important;
+  align-items: stretch;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid {
+  min-height: clamp(248px, 25vw, 300px) !important;
+  padding: clamp(1.8rem, 2.7vw, 2.45rem) clamp(1.35rem, 2.2vw, 2rem) !important;
+  border-radius: 32px !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 38%),
+    linear-gradient(145deg, rgba(70, 70, 70, 0.18), rgba(44, 44, 44, 0.11)) !important;
+  background-color: var(--hd-login-card) !important;
+  border: 1px solid var(--hd-login-border) !important;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+  backdrop-filter: blur(25px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(112%) !important;
+  overflow: hidden !important;
+  transform: translateZ(0);
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(126deg, rgba(255, 255, 255, 0.08), transparent 36%, transparent 100%) !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+  pointer-events: none;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 8%, rgba(0, 175, 255, 0.12), transparent 42%) !important;
+  opacity: 0;
+  transition: opacity 250ms ease, transform 250ms ease;
+  pointer-events: none;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:hover,
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:focus-visible {
+  transform: translateY(-12px) scale(1.03) translateZ(0) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  box-shadow:
+    0 22px 58px rgba(0, 0, 0, 0.58),
+    0 0 34px rgba(0, 175, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:hover::after,
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:focus-visible::after {
+  opacity: 1;
+}
+
+.hd-screen.aether-flow-hero .aether-role-icon,
+.hd-screen.aether-flow-hero button.aether-role-card.hd-no-liquid > svg.aether-role-icon {
+  width: clamp(58px, 5.3vw, 72px) !important;
+  height: clamp(58px, 5.3vw, 72px) !important;
+  margin-bottom: 1.65rem !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  opacity: 0.88 !important;
+  transition: transform 250ms ease, opacity 250ms ease, filter 250ms ease;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card[data-tone="admin"] > svg.aether-role-icon {
+  color: #ffd700 !important;
+  stroke: #ffd700 !important;
+  filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.50));
+}
+
+.hd-screen.aether-flow-hero .aether-role-card[data-tone="supervisor"] > svg.aether-role-icon {
+  color: #ff2dde !important;
+  stroke: #ff2dde !important;
+  filter: drop-shadow(0 0 25px rgba(255, 45, 222, 0.50));
+}
+
+.hd-screen.aether-flow-hero .aether-role-card[data-tone="advisor"] > svg.aether-role-icon {
+  color: #ff8c00 !important;
+  stroke: #ff8c00 !important;
+  filter: drop-shadow(0 0 25px rgba(255, 140, 0, 0.50));
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:hover > svg.aether-role-icon,
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:focus-visible > svg.aether-role-icon {
+  opacity: 1 !important;
+  transform: scale(1.06);
+}
+
+.hd-screen.aether-flow-hero .aether-role-title {
+  color: #ffffff !important;
+  font-size: clamp(1.35rem, 2vw, 1.9rem) !important;
+  line-height: 1.08 !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+  text-shadow: 0 10px 24px rgba(0, 0, 0, 0.45) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-desc {
+  color: rgba(255, 255, 255, 0.68) !important;
+  font-size: clamp(0.78rem, 1vw, 0.95rem) !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.015em !important;
+  text-shadow: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 118px;
+  margin-top: auto;
+  padding: 0.62rem 0.95rem;
+  border-radius: 14px;
+  background: rgba(80, 80, 80, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.hd-screen.aether-flow-hero .aether-register-button {
+  width: 280px !important;
+  min-height: 78px !important;
+  justify-content: center;
+  border-radius: 22px !important;
+  background: rgba(40, 40, 40, 0.45) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  text-shadow: none !important;
+  box-shadow:
+    0 14px 42px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.11) !important;
+  backdrop-filter: blur(22px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(112%) !important;
+  transition: transform 250ms ease, box-shadow 250ms ease, border-color 250ms ease, background 250ms ease;
+}
+
+.hd-screen.aether-flow-hero .aether-register-button svg {
+  color: #00afff !important;
+  stroke: #00afff !important;
+  filter: drop-shadow(0 0 20px rgba(0, 175, 255, 0.50));
+}
+
+.hd-screen.aether-flow-hero .aether-register-button:hover,
+.hd-screen.aether-flow-hero .aether-register-button:focus-visible {
+  transform: scale(1.02) translateZ(0) !important;
+  border-color: rgba(0, 175, 255, 0.34) !important;
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.48),
+    0 0 30px rgba(0, 175, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+}
+
+@keyframes hd-login-logo-breathe {
+  0%, 100% {
+    opacity: 0.26;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.42;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes hd-login-logo-float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.03);
+  }
+}
+
+@media (max-width: 767px) {
+  .hd-screen.aether-flow-hero .aether-title {
+    white-space: normal;
+    font-size: clamp(2rem, 11vw, 3.05rem) !important;
+    letter-spacing: 0.11em !important;
+  }
+
+  .hd-screen.aether-flow-hero .aether-role-grid {
+    max-width: 420px !important;
+  }
+
+  .hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid {
+    min-height: 220px !important;
+    border-radius: 28px !important;
+  }
+
+  .hd-screen.aether-flow-hero .aether-register-button {
+    width: min(280px, calc(100vw - 48px)) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hd-screen.aether-flow-hero .aether-logo,
+  .hd-screen.aether-flow-hero .aether-logo-shell::after {
+    animation: none !important;
+  }
+}
+
+/* Heavenly Dreams Enterprise AI master skin: black canvas, graphite glass, floating icons. */
+:root {
+  --hd-ai-bg: #050505;
+  --hd-ai-bg-2: #0a0a0a;
+  --hd-ai-border: rgba(255, 255, 255, 0.08);
+  --hd-ai-border-strong: rgba(255, 255, 255, 0.12);
+  --hd-ai-glass: rgba(60, 60, 60, 0.10);
+  --hd-ai-glass-soft: rgba(60, 60, 60, 0.08);
+  --hd-ai-glass-dark: rgba(20, 20, 20, 0.40);
+  --hd-ai-input: rgba(40, 40, 40, 0.30);
+  --hd-ai-blue: #00afff;
+  --hd-ai-green: #00ffaa;
+  --hd-ai-cyan: #00c2ff;
+  --hd-ai-mint: #00ffcc;
+  --hd-ai-violet: #b56cff;
+  --hd-ai-pink: #ff4d6d;
+  --hd-ai-orange: #ff9900;
+  --hd-ai-amber: #ffd700;
+  --hd-ai-red: #ff3b30;
+  --hd-ai-shadow: 0 10px 40px rgba(0, 0, 0, 0.40);
+  --hd-ai-shadow-soft: 0 8px 28px rgba(0, 0, 0, 0.34);
+}
+
+html,
+body,
+#root,
+.hd-screen,
+.hd-cyber-screen,
+.hd-module-stage,
+.hd-neural-layout,
+.hd-dashboard-clean,
+.hd-clean-module,
+.aether-flow-hero,
+.aether-entry {
+  background: var(--hd-ai-bg) !important;
+  background-color: var(--hd-ai-bg) !important;
+  background-image: none !important;
+  color: #f7f7f7 !important;
+}
+
+body::before,
+body::after,
+.hd-screen::before,
+.hd-screen::after,
+.hd-cyber-screen::before,
+.hd-cyber-screen::after,
+.hd-module-stage::before,
+.hd-module-stage::after,
+.hd-neural-layout::before,
+.hd-neural-layout::after {
+  content: none !important;
+  display: none !important;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hd-ai-blue) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--hd-ai-blue);
+  border-radius: 20px;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-neural-layout, .hd-dashboard-clean, .hd-clean-module, .aether-flow-hero)
+  :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-card,
+    .hd-panel,
+    .hd-module-panel,
+    .hd-morosidad-panel,
+    .hd-cyber-panel,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-chart-card,
+    .hd-glass-card,
+    .hd-premium-card,
+    .hd-premium-surface,
+    .hd-neon-card,
+    .hd-neon-metric,
+    .hd-curp-helper,
+    .neural-command-hero,
+    .recharts-wrapper
+  ),
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-neural-layout, .hd-dashboard-clean, .hd-clean-module)
+  :where(section, article, aside):where(.rounded-xl, .rounded-2xl, .rounded-3xl, [class*="border-white"], [class*="border-cyan"], [class*="border-slate"]) {
+  background: var(--hd-ai-glass) !important;
+  background-color: var(--hd-ai-glass) !important;
+  background-image: none !important;
+  border: 1px solid var(--hd-ai-border) !important;
+  border-radius: 24px !important;
+  box-shadow: var(--hd-ai-shadow) !important;
+  backdrop-filter: blur(25px) saturate(115%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(115%) !important;
+  color: #ffffff !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-neural-layout, .hd-dashboard-clean, .hd-clean-module)
+  :where(
+    .bg-slate-950\/90,
+    .bg-slate-950\/85,
+    .bg-slate-950\/80,
+    .bg-slate-950\/75,
+    .bg-slate-950\/60,
+    .bg-slate-950\/55,
+    .bg-slate-950\/50,
+    .bg-slate-950\/20,
+    .bg-slate-950,
+    .bg-slate-900\/90,
+    .bg-slate-900\/80,
+    .bg-slate-900\/70,
+    .bg-slate-900\/20,
+    .bg-slate-900,
+    .bg-slate-800\/80,
+    .bg-slate-800\/70,
+    .bg-slate-800\/60,
+    .bg-slate-800\/50,
+    .bg-slate-800\/30,
+    .bg-slate-800,
+    .bg-white\/5,
+    .bg-white\/\[0\.035\],
+    .bg-white\/\[0\.025\],
+    .bg-black\/40,
+    .bg-black\/35,
+    .bg-black\/30,
+    .bg-black\/25,
+    .bg-black\/20
+  ),
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-neural-layout, .hd-dashboard-clean, .hd-clean-module) [class*="bg-[#"] {
+  background: var(--hd-ai-glass-dark) !important;
+  background-image: none !important;
+  border-color: var(--hd-ai-border) !important;
+}
+
+:where(.glass-panel, .glass-panel-neon, .hd-card, .hd-panel, .hd-module-panel, .hd-morosidad-panel, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-chart-card, .hd-glass-card, .hd-premium-card, .hd-premium-surface, .hd-neon-card, .hd-neon-metric, .hd-curp-helper, .neural-command-hero)::before,
+:where(.glass-panel, .glass-panel-neon, .hd-card, .hd-panel, .hd-module-panel, .hd-morosidad-panel, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-chart-card, .hd-glass-card, .hd-premium-card, .hd-premium-surface, .hd-neon-card, .hd-neon-metric, .hd-curp-helper, .neural-command-hero)::after,
+.hd-liquid-button::before,
+.hd-liquid-button::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+
+.hd-holographic-sidebar {
+  background: rgba(5, 5, 5, 0.88) !important;
+  background-image: none !important;
+  border-right: 1px solid var(--hd-ai-border) !important;
+  box-shadow: 18px 0 42px rgba(0, 0, 0, 0.36) !important;
+  backdrop-filter: blur(28px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(112%) !important;
+}
+
+.hd-holographic-sidebar :where(.border-cyan-300\/10, .border-white\/10, .border-\[var\(--hd-border\)\]) {
+  border-color: var(--hd-ai-border) !important;
+}
+
+.hd-nav-item,
+.hd-liquid-button.hd-nav-item {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 18px !important;
+  box-shadow: none !important;
+}
+
+.hd-nav-item:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--hd-ai-border) !important;
+  transform: translateX(2px);
+}
+
+.hd-nav-item.is-active,
+.hd-nav-item.hd-liquid-selected {
+  background: rgba(0, 170, 255, 0.12) !important;
+  border-color: var(--hd-ai-border) !important;
+  border-left: 3px solid var(--hd-ai-blue) !important;
+  color: #ffffff !important;
+}
+
+.hd-nav-item.is-active > div.absolute,
+.hd-nav-item.hd-liquid-selected > div.absolute {
+  display: none !important;
+}
+
+.hd-nav-item-icon,
+.hd-quick-action-icon,
+.hd-floating-icon,
+.hd-neon-icon,
+.hd-premium-iconbox,
+.hd-quick-action-icon,
+.hd-mobile-icon,
+.hd-cyber-icon,
+svg[class*="Icon"],
+button > svg,
+a > svg {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 0 8px currentColor) !important;
+}
+
+:where(.hd-neon-iconbox, .hd-floating-icon, .hd-premium-iconbox, .hd-quick-action-icon, .hd-nav-item-icon) {
+  width: auto;
+  height: auto;
+  padding: 0 !important;
+}
+
+.hd-nav-item[data-tone="cyan"] .hd-nav-item-icon,
+.hd-quick-action[data-tone="cyan"] .hd-quick-action-icon {
+  color: var(--hd-ai-cyan) !important;
+}
+
+.hd-nav-item[data-tone="green"] .hd-nav-item-icon,
+.hd-quick-action[data-tone="green"] .hd-quick-action-icon {
+  color: var(--hd-ai-green) !important;
+}
+
+.hd-nav-item[data-tone="blue"] .hd-nav-item-icon,
+.hd-quick-action[data-tone="blue"] .hd-quick-action-icon {
+  color: var(--hd-ai-blue) !important;
+}
+
+.hd-nav-item[data-tone="purple"] .hd-nav-item-icon,
+.hd-quick-action[data-tone="purple"] .hd-quick-action-icon {
+  color: var(--hd-ai-violet) !important;
+}
+
+.hd-nav-item[data-tone="yellow"] .hd-nav-item-icon,
+.hd-quick-action[data-tone="yellow"] .hd-quick-action-icon {
+  color: var(--hd-ai-amber) !important;
+}
+
+.hd-nav-item[data-tone="red"] .hd-nav-item-icon,
+.hd-quick-action[data-tone="red"] .hd-quick-action-icon {
+  color: var(--hd-ai-red) !important;
+}
+
+:where(.hd-neon-card, .hd-neon-metric, .hd-card, .hd-cyber-card-soft) :where(svg) {
+  filter: drop-shadow(0 0 8px currentColor) !important;
+}
+
+:where(button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-neon-action, .hd-quick-action):not(.hd-nav-item) {
+  background: rgba(50, 50, 50, 0.20) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--hd-ai-shadow-soft) !important;
+  backdrop-filter: blur(25px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(110%) !important;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+:where(button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-neon-action, .hd-quick-action):not(.hd-nav-item):hover {
+  background: rgba(70, 70, 70, 0.24) !important;
+  border-color: var(--hd-ai-border-strong) !important;
+  transform: translateY(-2px);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-premium-input) {
+  background: var(--hd-ai-input) !important;
+  background-image: none !important;
+  border: 1px solid var(--hd-ai-border) !important;
+  border-radius: 16px !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  backdrop-filter: blur(16px) saturate(105%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(105%) !important;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-premium-input):focus,
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-premium-input):focus-visible {
+  border-color: var(--hd-ai-blue) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(0, 175, 255, 0.12) !important;
+}
+
+:where(table) {
+  border-collapse: separate !important;
+  border-spacing: 0 0.55rem !important;
+}
+
+:where(thead, th) {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+:where(tbody tr) {
+  background: var(--hd-ai-glass-soft) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24) !important;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+:where(tbody tr:hover) {
+  background: rgba(70, 70, 70, 0.14) !important;
+  transform: translateY(-1px);
+}
+
+:where(td) {
+  border-top: 1px solid var(--hd-ai-border) !important;
+  border-bottom: 1px solid var(--hd-ai-border) !important;
+}
+
+:where(td:first-child) {
+  border-left: 1px solid var(--hd-ai-border) !important;
+  border-radius: 18px 0 0 18px;
+}
+
+:where(td:last-child) {
+  border-right: 1px solid var(--hd-ai-border) !important;
+  border-radius: 0 18px 18px 0;
+}
+
+:where(.hd-neon-metric, .hd-card):has(.text-2xl),
+:where(.hd-neon-metric, .hd-card):has(.text-3xl),
+:where(.hd-neon-metric, .hd-card):has(.text-4xl) {
+  background: rgba(10, 10, 10, 0.72) !important;
+}
+
+:where(.hd-neon-metric, .hd-card) :where(.text-2xl, .text-3xl, .text-4xl, .text-5xl) {
+  color: #ffffff !important;
+  letter-spacing: 0 !important;
+}
+
+:where(.rounded-full):has(svg),
+:where(.rounded-xl):has(> svg:only-child),
+:where(.rounded-2xl):has(> svg:only-child),
+:where([class*="bg-cyan"], [class*="bg-emerald"], [class*="bg-blue"], [class*="bg-purple"], [class*="bg-rose"], [class*="bg-yellow"], [class*="bg-orange"]):has(> svg:only-child) {
+  background: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+:where(.hd-tone-cyan, .text-cyan-200, .text-cyan-300, .text-sky-300) svg,
+:where(svg.text-cyan-200, svg.text-cyan-300, svg.text-sky-300) {
+  color: var(--hd-ai-cyan) !important;
+}
+
+:where(.hd-tone-emerald, .text-emerald-200, .text-emerald-300) svg,
+:where(svg.text-emerald-200, svg.text-emerald-300) {
+  color: var(--hd-ai-green) !important;
+}
+
+:where(.hd-tone-violet, .text-violet-200, .text-purple-300, .text-purple-400) svg,
+:where(svg.text-violet-200, svg.text-purple-300, svg.text-purple-400) {
+  color: var(--hd-ai-violet) !important;
+}
+
+:where(.hd-tone-pink, .text-rose-200, .text-rose-300, .text-red-400) svg,
+:where(svg.text-rose-200, svg.text-rose-300, svg.text-red-400) {
+  color: var(--hd-ai-pink) !important;
+}
+
+:where(.hd-tone-amber, .text-yellow-100, .text-yellow-300, .text-amber-300) svg,
+:where(svg.text-yellow-100, svg.text-yellow-300, svg.text-amber-300) {
+  color: var(--hd-ai-amber) !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-neural-layout)
+  :where(.chat, [class*="message"], [class*="conversation"], [class*="whatsapp"], [class*="telegram"]) {
+  border-color: var(--hd-ai-border) !important;
+}
+
+/* Last-pass login lock: keep the enterprise access page independent from app-wide skins. */
+.hd-screen.aether-flow-hero {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0, 175, 255, 0.12), transparent 31%),
+    radial-gradient(circle at 15% 18%, rgba(11, 23, 41, 0.82), transparent 34%),
+    radial-gradient(circle at 86% 15%, rgba(8, 18, 32, 0.78), transparent 38%),
+    linear-gradient(180deg, #050505 0%, #081220 48%, #050505 100%) !important;
+  background-color: #050505 !important;
+}
+
+.hd-screen.aether-flow-hero .aether-entry {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-clean-bg {
+  background:
+    radial-gradient(circle at 50% 14%, rgba(0, 175, 255, 0.14), transparent 26%),
+    radial-gradient(circle at 50% 52%, rgba(11, 23, 41, 0.48), transparent 42%) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 38%),
+    linear-gradient(145deg, rgba(70, 70, 70, 0.18), rgba(44, 44, 44, 0.11)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 32px !important;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+  backdrop-filter: blur(25px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(112%) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:hover,
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:focus-visible {
+  transform: translateY(-12px) scale(1.03) translateZ(0) !important;
+  box-shadow:
+    0 22px 58px rgba(0, 0, 0, 0.58),
+    0 0 34px rgba(0, 175, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card[data-tone="admin"] > svg.aether-role-icon {
+  color: #ffd700 !important;
+  stroke: #ffd700 !important;
+  filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.50)) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card[data-tone="supervisor"] > svg.aether-role-icon {
+  color: #ff2dde !important;
+  stroke: #ff2dde !important;
+  filter: drop-shadow(0 0 25px rgba(255, 45, 222, 0.50)) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card[data-tone="advisor"] > svg.aether-role-icon {
+  color: #ff8c00 !important;
+  stroke: #ff8c00 !important;
+  filter: drop-shadow(0 0 25px rgba(255, 140, 0, 0.50)) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-register-button {
+  background: rgba(40, 40, 40, 0.45) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 22px !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 14px 42px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.11) !important;
+}
+
+/* AAA login composition pass: closer to the provided enterprise reference. */
+.hd-screen.aether-flow-hero {
+  background:
+    radial-gradient(circle at 50% 10%, rgba(0, 175, 255, 0.13), transparent 23%),
+    radial-gradient(circle at 50% 46%, rgba(11, 23, 41, 0.44), transparent 46%),
+    radial-gradient(circle at 20% 16%, rgba(8, 18, 32, 0.52), transparent 34%),
+    radial-gradient(circle at 82% 12%, rgba(8, 18, 32, 0.48), transparent 34%),
+    #050505 !important;
+}
+
+.hd-screen.aether-flow-hero::before {
+  opacity: 0.22 !important;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.24) 0 1px, transparent 1.8px),
+    linear-gradient(122deg, transparent 0 44%, rgba(255, 255, 255, 0.045) 44.2% 44.42%, transparent 44.8%),
+    linear-gradient(28deg, transparent 0 55%, rgba(0, 175, 255, 0.045) 55.2% 55.45%, transparent 55.8%) !important;
+  background-size: 210px 210px, 680px 680px, 760px 760px !important;
+}
+
+.hd-screen.aether-flow-hero .aether-entry {
+  padding-top: clamp(1.4rem, 3.4vh, 3rem) !important;
+  padding-bottom: clamp(1.5rem, 3.2vh, 3rem) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-brand {
+  margin-bottom: clamp(1.55rem, 3.5vh, 2.7rem) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo-shell {
+  width: clamp(142px, 12vw, 180px) !important;
+  height: clamp(142px, 12vw, 180px) !important;
+  margin-bottom: clamp(1rem, 2.2vh, 1.5rem) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo-shell::before {
+  inset: 3px !important;
+  border-color: rgba(95, 176, 255, 0.64) !important;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(0, 175, 255, 0.16), transparent 56%),
+    rgba(255, 255, 255, 0.025) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 0 30px rgba(0, 175, 255, 0.28),
+    0 0 58px rgba(0, 96, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.20) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo-shell::after,
+.hd-screen.aether-flow-hero .aether-logo-glow {
+  opacity: 0.32 !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo {
+  width: clamp(132px, 11vw, 170px) !important;
+  height: clamp(132px, 11vw, 170px) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-title {
+  font-size: clamp(3rem, 4.8vw, 4rem) !important;
+  letter-spacing: clamp(0.14em, 0.9vw, 0.20em) !important;
+  text-shadow:
+    0 1px 0 rgba(180, 220, 255, 0.65),
+    0 0 14px rgba(255, 255, 255, 0.32),
+    0 0 34px rgba(0, 140, 255, 0.30),
+    0 15px 35px rgba(0, 0, 0, 0.72) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-subtitle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.65rem, 1.6vw, 1.25rem);
+  max-width: none !important;
+  color: rgba(225, 240, 255, 0.78) !important;
+  font-size: clamp(0.86rem, 1.35vw, 1.1rem) !important;
+  letter-spacing: 0.18em !important;
+}
+
+.hd-screen.aether-flow-hero .aether-subtitle::before,
+.hd-screen.aether-flow-hero .aether-subtitle::after {
+  content: "";
+  display: block;
+  width: clamp(70px, 10vw, 150px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 175, 255, 0.82));
+  box-shadow: 0 0 10px rgba(0, 175, 255, 0.42);
+}
+
+.hd-screen.aether-flow-hero .aether-subtitle::after {
+  background: linear-gradient(90deg, rgba(0, 175, 255, 0.82), transparent);
+}
+
+.hd-screen.aether-flow-hero .aether-role-grid {
+  max-width: min(86vw, 1280px) !important;
+  gap: clamp(1.35rem, 2.2vw, 2.25rem) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid {
+  min-height: clamp(276px, 23vw, 330px) !important;
+  padding: clamp(2rem, 2.6vw, 2.55rem) clamp(1.55rem, 2.25vw, 2.2rem) !important;
+  border-radius: 32px !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.035) 32%, transparent 33%),
+    radial-gradient(circle at 88% 88%, rgba(120, 205, 255, 0.18), transparent 22%),
+    linear-gradient(145deg, rgba(88, 92, 96, 0.18), rgba(18, 20, 23, 0.34) 48%, rgba(32, 35, 39, 0.16)) !important;
+  border: 1px solid rgba(214, 239, 255, 0.56) !important;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.45),
+    0 0 24px rgba(120, 205, 255, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    inset 0 -1px 0 rgba(95, 180, 255, 0.22) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid::before {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10), transparent 36%),
+    radial-gradient(circle at 93% 93%, rgba(255, 255, 255, 0.18) 0 1px, transparent 2px) !important;
+  background-size: auto, 11px 11px !important;
+  opacity: 0.72 !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:hover,
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:focus-visible {
+  border-color: rgba(230, 248, 255, 0.84) !important;
+  box-shadow:
+    0 26px 64px rgba(0, 0, 0, 0.60),
+    0 0 38px rgba(0, 175, 255, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(95, 180, 255, 0.28) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-icon,
+.hd-screen.aether-flow-hero button.aether-role-card.hd-no-liquid > svg.aether-role-icon {
+  width: clamp(78px, 6.4vw, 104px) !important;
+  height: clamp(78px, 6.4vw, 104px) !important;
+  margin-bottom: clamp(1.4rem, 2.4vh, 2rem) !important;
+  stroke-width: 1.85 !important;
+  opacity: 1 !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-title {
+  font-size: clamp(1.55rem, 2vw, 2rem) !important;
+  margin-bottom: 0.45rem !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-desc {
+  color: rgba(218, 236, 255, 0.78) !important;
+  font-size: clamp(0.92rem, 1.1vw, 1.08rem) !important;
+  margin-bottom: clamp(1.1rem, 2vh, 1.65rem) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-chip {
+  min-width: min(100%, 250px);
+  gap: 0.85rem;
+  padding: 0.72rem 1.05rem;
+  background:
+    linear-gradient(180deg, rgba(118, 130, 142, 0.28), rgba(38, 42, 48, 0.48)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(235, 244, 255, 0.86);
+  font-size: clamp(0.78rem, 0.9vw, 0.92rem);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.hd-screen.aether-flow-hero .aether-role-chip-icon {
+  width: 1.05rem !important;
+  height: 1.05rem !important;
+  color: rgba(245, 250, 255, 0.9) !important;
+  stroke: currentColor !important;
+  filter: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-register-button {
+  width: min(100%, 390px) !important;
+  min-height: 78px !important;
+  gap: 1.1rem !important;
+  border-radius: 22px !important;
+  font-size: clamp(0.98rem, 1.25vw, 1.2rem) !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03) 44%, rgba(0, 0, 0, 0.20)),
+    rgba(40, 40, 40, 0.45) !important;
+  border-color: rgba(214, 239, 255, 0.42) !important;
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.50),
+    0 0 28px rgba(0, 175, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-register-button .aether-register-arrow {
+  margin-left: auto;
+  color: rgba(226, 246, 255, 0.92) !important;
+  stroke: currentColor !important;
+  filter: drop-shadow(0 0 12px rgba(0, 175, 255, 0.28)) !important;
+}
+
+@media (max-width: 767px) {
+  .hd-screen.aether-flow-hero .aether-subtitle::before,
+  .hd-screen.aether-flow-hero .aether-subtitle::after {
+    width: 42px;
+  }
+
+  .hd-screen.aether-flow-hero .aether-role-grid {
+    max-width: min(100%, 430px) !important;
+  }
+
+  .hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid {
+    min-height: 250px !important;
+  }
+}
+
+.hd-screen.aether-flow-hero .hd-login-role-icon,
+.hd-screen.aether-flow-hero .hd-login-role-icon *,
+.hd-screen.aether-flow-hero .aether-role-icon,
+.hd-screen.aether-flow-hero .aether-role-icon * {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.hd-screen.aether-flow-hero .hd-login-role-icon {
+  width: auto !important;
+  height: auto !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.hd-screen.aether-flow-hero .hd-login-role-icon svg {
+  width: clamp(42px, 5vw, 64px) !important;
+  height: clamp(42px, 5vw, 64px) !important;
+}
+
+.hd-screen.aether-flow-hero .hd-login-role-icon svg,
+.hd-screen.aether-flow-hero .aether-role-card[data-tone="admin"] > svg.aether-role-icon {
+  color: #ffd700 !important;
+  stroke: #ffd700 !important;
+  filter: drop-shadow(0 0 18px rgba(255, 215, 0, 0.46)) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card[data-tone="supervisor"] > svg.aether-role-icon {
+  color: #ff2dde !important;
+  stroke: #ff2dde !important;
+  filter: drop-shadow(0 0 18px rgba(255, 45, 222, 0.46)) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card[data-tone="advisor"] > svg.aether-role-icon {
+  color: #ff8c00 !important;
+  stroke: #ff8c00 !important;
+  filter: drop-shadow(0 0 18px rgba(255, 140, 0, 0.46)) !important;
+}
