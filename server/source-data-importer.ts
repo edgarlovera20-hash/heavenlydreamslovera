@@ -5,9 +5,11 @@ import JSZip from 'jszip';
 import db, { ClientesCrm, Morosidad, SiacRecords } from './db';
 
 const REPO_SIAC_SOURCE = path.join(process.cwd(), 'server', 'source-data', 'siac-current.xlsx');
+const REPO_MOROSOS_SOURCE = path.join(process.cwd(), 'server', 'source-data', 'morosos-current.xlsx');
 export const DEFAULT_SIAC_SOURCE = process.env.SIAC_PRIMARY_SOURCE
-  || (existsSync(REPO_SIAC_SOURCE) ? REPO_SIAC_SOURCE : 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\SIAC PPIES.csv');
-export const DEFAULT_MOROSOS_SOURCE = process.env.MOROSOS_PRIMARY_SOURCE || 'C:\\Users\\Edgar Lovera\\OneDrive\\Desktop\\MOROSOS APP.csv';
+  || (existsSync(REPO_SIAC_SOURCE) ? REPO_SIAC_SOURCE : '');
+export const DEFAULT_MOROSOS_SOURCE = process.env.MOROSOS_PRIMARY_SOURCE
+  || (existsSync(REPO_MOROSOS_SOURCE) ? REPO_MOROSOS_SOURCE : '');
 export const SIAC_IMPORTER_VERSION = 'siac-ppies-v2';
 
 export type SourceInput = { sourcePath?: string; buffer?: Buffer; fileName?: string; replace?: boolean };

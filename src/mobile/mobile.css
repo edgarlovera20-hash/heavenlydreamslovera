@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Monomaniac+One&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif;
   --color-cyber-electric: #12dfff;
   --color-cyber-deep: #063a78;
   --color-cyber-dark: #061b3a;
@@ -1255,4 +1255,18 @@ body,
 #mobile-root :where(h1, h2, h3, h4, .hd-premium-title) {
   color: #ffffff !important;
   text-shadow: 0 0 16px rgba(0, 175, 255, 0.12);
+}
+
+/* Mobile typography lock: Intro Rust / Monomaniac One / SAIIHAH. */
+#mobile-root,
+#mobile-root *,
+#mobile-root button,
+#mobile-root input,
+#mobile-root select,
+#mobile-root textarea {
+  font-family: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif !important;
+}
+
+#mobile-root :where(h1, h2, h3, h4, h5, h6, .hd-premium-title, .hd-mobile-section-title, .hd-neon-card, .hd-neon-action, .hd-mobile-bottom-nav) {
+  letter-spacing: 0.045em;
 }

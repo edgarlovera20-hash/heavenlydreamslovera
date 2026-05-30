@@ -3,6 +3,7 @@ import express from "express";
 import { createServer as createHttpServer } from "http";
 import { createServer as createViteServer } from "vite";
 import path from "path";
+import { copyFileSync, existsSync, mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { createApp } from "./server/app";
 import { createHttpError, hasPagingQuery, parseLimit, parseOffset, queryString, wrap } from "./server/http";
@@ -551,6 +552,42 @@ async function startServer() {
   const chatUserOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR');
   const mobileOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'ASESOR');
   const managerOnly = adminOnly;
+  const highImpactConfirmation = process.env.HIGH_IMPACT_CONFIRMATION || 'HEAVENLY_DREAMS_CONFIRM';
+  const sqliteDbPath = path.join(process.cwd(), 'data', 'heavenlydreams.db');
+
+  function authAudit(req: any, accion: string, entidad: string, detalle: string | null = null) {
+    AuditLog.insert({
+      accion,
+      entidad,
+      entidad_id: null,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || req.auth?.username || null,
+      detalle,
+    });
+  }
+
+  function requireHighImpactConfirmation(req: any, action: string, entidad: string) {
+    const provided = String(
+      req.headers?.['x-hd-confirm']
+      || req.body?.confirm
+      || req.body?.confirmation
+      || '',
+    ).trim();
+    if (provided !== highImpactConfirmation) {
+      authAudit(req, 'BLOCKED_HIGH_IMPACT_ACTION', entidad, `${action};missing_confirmation`);
+      throw createHttpError(428, `Confirmacion requerida para ${action}`, 'CONFIRMATION_REQUIRED');
+    }
+  }
+
+  function backupDatabaseBefore(action: string) {
+    if (!existsSync(sqliteDbPath)) return null;
+    const backupDir = path.join(process.cwd(), 'data', 'backups');
+    mkdirSync(backupDir, { recursive: true });
+    const safeAction = action.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+    const backupPath = path.join(backupDir, `${Date.now()}-${safeAction}.db`);
+    copyFileSync(sqliteDbPath, backupPath);
+    return backupPath;
+  }
 
   function canManage(auth: any) {
     return ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'].includes(auth?.role);

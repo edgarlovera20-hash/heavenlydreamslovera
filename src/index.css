@@ -1,11 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Monomaniac+One&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
+  --font-sans: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif;
+  --hd-font-primary: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif;
+  --hd-font-display: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif;
   --background: 220 42% 8%;
   --foreground: 0 0% 100%;
   --foreground-muted: 215 24% 76%;
@@ -6566,4 +6569,52 @@ th {
 .hd-screen.aether-flow-hero::before {
   opacity: 0.10 !important;
   filter: blur(20px) !important;
+}
+
+/* Global typography lock: Intro Rust / Monomaniac One / SAIIHAH. */
+html,
+body,
+#root,
+#mobile-root,
+button,
+input,
+select,
+textarea,
+table,
+svg text {
+  font-family: var(--hd-font-primary, "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif) !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.aether-title,
+.aether-subtitle,
+.aether-role-title,
+.aether-role-desc,
+.hd-premium-title,
+.hd-section-title,
+.hd-eyebrow,
+.hd-nav-item,
+.hd-button,
+.hd-liquid-button,
+.hd-card,
+.hd-panel {
+  font-family: var(--hd-font-display, "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif) !important;
+  letter-spacing: 0.045em;
+}
+
+p,
+span,
+label,
+li,
+td,
+th,
+small,
+code,
+pre {
+  font-family: var(--hd-font-primary, "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif) !important;
 }

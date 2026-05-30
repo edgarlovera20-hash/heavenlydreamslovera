@@ -27,7 +27,20 @@ export function createApp() {
     res.set('Expires', '0');
     next();
   });
-  app.use(express.json({ limit: process.env.API_JSON_LIMIT || '350mb' }));
+  const defaultJsonLimit = process.env.API_JSON_LIMIT || '5mb';
+  const largeJsonLimit = process.env.API_LARGE_JSON_LIMIT || '80mb';
+  app.use(
+    [
+      '/api/ocr',
+      '/api/document-files',
+      '/api/email-sync',
+      '/api/import',
+      '/api/siac/import-file',
+      '/api/morosidad/import-file',
+    ],
+    express.json({ limit: largeJsonLimit }),
+  );
+  app.use(express.json({ limit: defaultJsonLimit }));
   app.use(requestLogger);
   return app;
 }
