@@ -1,14 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Monomaniac+One&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 :root {
-  --font-sans: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif;
-  --hd-font-primary: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif;
-  --hd-font-display: "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --hd-font-primary: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --hd-font-display: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --background: 220 42% 8%;
   --foreground: 0 0% 100%;
   --foreground-muted: 215 24% 76%;
@@ -6571,7 +6570,7 @@ th {
   filter: blur(20px) !important;
 }
 
-/* Global typography lock: Intro Rust / Monomaniac One / SAIIHAH. */
+/* Global typography lock: sans-serif across the app. */
 html,
 body,
 #root,
@@ -6582,7 +6581,7 @@ select,
 textarea,
 table,
 svg text {
-  font-family: var(--hd-font-primary, "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif) !important;
+  font-family: var(--hd-font-primary, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif) !important;
 }
 
 h1,
@@ -6603,7 +6602,7 @@ h6,
 .hd-liquid-button,
 .hd-card,
 .hd-panel {
-  font-family: var(--hd-font-display, "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif) !important;
+  font-family: var(--hd-font-display, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif) !important;
   letter-spacing: 0.045em;
 }
 
@@ -6616,5 +6615,5 @@ th,
 small,
 code,
 pre {
-  font-family: var(--hd-font-primary, "Intro Rust", "SAIIHAH", "Saiihah", "Monomaniac One", ui-sans-serif, system-ui, sans-serif) !important;
+  font-family: var(--hd-font-primary, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif) !important;
 }
