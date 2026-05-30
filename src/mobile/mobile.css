@@ -1666,3 +1666,123 @@ body,
 #mobile-root :where(svg, .lucide, .hd-mobile-icon, .hd-quick-action-icon, .hd-nav-item-icon) {
   filter: drop-shadow(0 0 7px currentColor) !important;
 }
+
+/* Mobile black luxury lock: no blue shell, graphite glass, color only on active controls. */
+#mobile-root {
+  --hd-mobile-bg: #000000;
+  --hd-mobile-bg-soft: #050505;
+  --hd-mobile-panel: rgba(255, 255, 255, 0.02);
+  --hd-mobile-panel-2: rgba(255, 255, 255, 0.035);
+  --hd-mobile-border: rgba(255, 255, 255, 0.05);
+  --hd-mobile-border-strong: rgba(255, 255, 255, 0.14);
+  --hd-mobile-text: #ffffff;
+  --hd-mobile-muted: #a0a0a0;
+  --hd-mobile-cyan: #8a8a8a;
+  --hd-mobile-blue: #8a8a8a;
+  --hd-mobile-shadow: 0 18px 46px rgba(0, 0, 0, 0.52);
+  background: #000000 !important;
+  color: #ffffff !important;
+  scrollbar-color: #2a2a2a transparent !important;
+}
+
+#mobile-root :where(.hd-mobile-shell-clean, .hd-mobile-content-clean, .hd-mobile-main, .hd-mobile-clean, .hd-mobile-app-shell, .hd-mobile-view, .hd-cyber-screen, .hd-neural-layout, main, section) {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+#mobile-root :where(.hd-mobile-shell-clean, .hd-mobile-content-clean, .hd-mobile-main, .hd-mobile-clean, .hd-mobile-app-shell, .hd-mobile-view, .hd-cyber-screen, .hd-neural-layout)::before,
+#mobile-root :where(.hd-mobile-shell-clean, .hd-mobile-content-clean, .hd-mobile-main, .hd-mobile-clean, .hd-mobile-app-shell, .hd-mobile-view, .hd-cyber-screen, .hd-neural-layout)::after {
+  opacity: 0.02 !important;
+  filter: none !important;
+  box-shadow: none !important;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.38) 1px, transparent 0) !important;
+  background-size: 22px 22px !important;
+}
+
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-card, .hd-panel, .hd-neon-card, .hd-neon-metric, .hd-curp-helper, .hd-mobile-login-card, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-mobile-quick-action, .hd-mobile-register-link, .hd-liquid-button, section[class*="rounded"], article[class*="rounded"], form[class*="rounded"], div[class*="rounded-2xl"][class*="border"], div[class*="rounded-3xl"][class*="border"]) {
+  background: rgba(255, 255, 255, 0.02) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.026), rgba(255, 255, 255, 0.01)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+  backdrop-filter: blur(25px) saturate(104%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(104%) !important;
+  color: #ffffff !important;
+}
+
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-card, .hd-panel, .hd-neon-card, .hd-neon-metric, .hd-curp-helper, .hd-mobile-login-card, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-mobile-quick-action, .hd-mobile-register-link, .hd-liquid-button)::before,
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-card, .hd-panel, .hd-neon-card, .hd-neon-metric, .hd-curp-helper, .hd-mobile-login-card, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-mobile-quick-action, .hd-mobile-register-link, .hd-liquid-button)::after {
+  background: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+#mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(:disabled) {
+  background: #0d0d0d !important;
+  background-image: none !important;
+  border: 1px solid #252525 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+#mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(:disabled):hover,
+#mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(:disabled):focus-visible,
+#mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(:disabled):active {
+  background: #0d0d0d !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.045) !important;
+}
+
+#mobile-root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input) {
+  background: #080808 !important;
+  border: 1px solid #252525 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+#mobile-root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input):focus,
+#mobile-root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input):focus-visible {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.055) !important;
+}
+
+#mobile-root :where([class*="bg-blue"], [class*="bg-cyan"], [class*="bg-sky"], [class*="from-blue"], [class*="from-cyan"], [class*="to-blue"], [class*="to-cyan"]) {
+  background: rgba(255, 255, 255, 0.02) !important;
+  background-image: none !important;
+}
+
+#mobile-root :where([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"], p, span, label, small) {
+  color: #a0a0a0 !important;
+  text-shadow: none !important;
+}
+
+#mobile-root :where(h1, h2, h3, h4, h5, h6, strong, b, .text-white) {
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
+
+#mobile-root :where(svg, .lucide, .hd-mobile-icon, .hd-quick-action-icon, .hd-nav-item-icon) {
+  color: #8a8a8a !important;
+  filter: none !important;
+}
+
+#mobile-root :where(button:hover, button:focus-visible, .is-active, .hd-liquid-selected, [aria-current="page"]) :where(svg, .lucide),
+#mobile-root :where(.is-active, .hd-liquid-selected, [aria-current="page"]):where(svg, .lucide) {
+  color: #ffffff !important;
+  filter: drop-shadow(0 0 8px currentColor) !important;
+}
+
+#mobile-root *::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+#mobile-root *::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+#mobile-root *::-webkit-scrollbar-thumb {
+  background: #2a2a2a !important;
+  border-radius: 20px !important;
+}
