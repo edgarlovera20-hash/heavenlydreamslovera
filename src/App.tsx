@@ -317,9 +317,9 @@ export default function App() {
         <div className="aether-entry relative z-10 flex flex-col items-center h-full px-4 sm:px-6 overflow-y-auto py-6 sm:py-8">
           <div className="aether-role-stage w-full min-h-full flex flex-col items-center justify-center gap-5 sm:gap-6">
             <div className="aether-brand text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="aether-logo-shell flex justify-center relative">
-                <div className="aether-logo-glow absolute inset-0 rounded-full" />
-                <Logo className="aether-logo w-24 h-24 sm:w-28 sm:h-28 lg:w-32 lg:h-32 relative z-10" />
+              <div className="aether-logo-shell hd-entry-logo-shell flex justify-center relative">
+                <div className="aether-logo-glow hd-entry-logo-glow absolute inset-0 rounded-full" />
+                <Logo className="aether-logo hd-entry-logo w-24 h-24 sm:w-28 sm:h-28 lg:w-32 lg:h-32 relative z-10" />
               </div>
               <h1 className="aether-title-wrap mb-2 drop-shadow-md px-2">
                 <MatrixText text="HEAVENLY DREAMS" className="aether-title text-2xl sm:text-4xl lg:text-6xl font-black font-sans tracking-[0.1em] sm:tracking-[0.14em] flex-nowrap uppercase" />
@@ -335,7 +335,7 @@ export default function App() {
             </div>
             <div className="aether-register-wrap animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
               <button onClick={() => setIsRegistering(true)}
-                className="aether-register-button hd-liquid-button px-7 sm:px-9 py-3 rounded-xl border transition-all font-black text-xs sm:text-sm flex items-center gap-3 backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100/80">
+                className="aether-register-button hd-entry-register-button hd-liquid-button px-7 sm:px-9 py-3 rounded-xl border transition-all font-black text-xs sm:text-sm flex items-center gap-3 backdrop-blur-md group uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100/80">
                 <UserPlus className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
                 <span>Iniciar Registro</span>
                 <ArrowRight className="aether-register-arrow w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:translate-x-1" />
@@ -533,7 +533,7 @@ const RoleButton = React.memo(function RoleButton({ title, desc, icon: Icon, chi
   return (
     <button onClick={onClick}
       data-tone={tone}
-      className={`aether-role-card hd-no-liquid group rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 relative overflow-hidden bg-[#061a38] ${toneStyle.card}`}
+      className={`aether-role-card hd-entry-role-card hd-no-liquid group rounded-2xl p-5 sm:p-7 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 relative overflow-hidden ${toneStyle.card}`}
       aria-label={`${title}: ${desc}`}>
       <Icon className="aether-role-icon mb-4 sm:mb-6" aria-hidden="true" />
       <h2 className={`aether-role-title relative z-10 text-lg sm:text-2xl font-black text-white mb-1 sm:mb-2 tracking-tight transition-colors ${toneStyle.title}`}>{title}</h2>
