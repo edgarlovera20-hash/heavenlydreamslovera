@@ -1578,3 +1578,91 @@ body,
   letter-spacing: 0.18em !important;
   text-transform: uppercase;
 }
+
+/* Mobile global reference skin: mirror desktop black glass across every mobile view. */
+#mobile-root,
+#mobile-root * {
+  scrollbar-color: rgba(0, 175, 255, 0.72) transparent;
+}
+
+#mobile-root :where(
+  .hd-mobile-shell-clean,
+  .hd-mobile-content-clean,
+  .hd-mobile-main,
+  .hd-mobile-clean,
+  .hd-mobile-app-shell,
+  .hd-mobile-view,
+  .hd-cyber-screen,
+  .hd-neural-layout
+) {
+  background:
+    radial-gradient(circle at 50% -10%, rgba(0, 175, 255, 0.10), transparent 18rem),
+    linear-gradient(180deg, #020202 0%, #08080a 100%) !important;
+}
+
+#mobile-root :where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-card,
+  .hd-panel,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-mobile-login-card,
+  .hd-mobile-topbar,
+  .hd-mobile-bottom-nav,
+  .hd-mobile-quick-action,
+  .hd-mobile-register-link,
+  .hd-liquid-button,
+  section[class*="rounded"],
+  article[class*="rounded"],
+  form[class*="rounded"],
+  div[class*="rounded-2xl"][class*="border"],
+  div[class*="rounded-3xl"][class*="border"]
+) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.022)),
+    rgba(42, 42, 45, 0.34) !important;
+  border: 1px solid rgba(225, 244, 255, 0.15) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(20px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(112%) !important;
+}
+
+#mobile-root :where([class*="bg-[#"], [class*="bg-blue"], [class*="bg-cyan"], [class*="bg-sky"], [class*="bg-slate"], [class*="bg-black"]) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+    rgba(35, 35, 38, 0.32) !important;
+}
+
+#mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(:disabled) {
+  border-radius: 20px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.026)),
+    rgba(45, 45, 48, 0.34) !important;
+  border-color: rgba(225, 244, 255, 0.18) !important;
+  color: #ffffff !important;
+}
+
+#mobile-root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input) {
+  background: rgba(255, 255, 255, 0.055) !important;
+  border: 1px solid rgba(225, 244, 255, 0.14) !important;
+  border-radius: 16px !important;
+  color: #ffffff !important;
+}
+
+#mobile-root :where(.hd-neon-iconbox, .hd-neon-icon, .hd-floating-icon, .hd-premium-iconbox, .hd-quick-action-icon, .hd-nav-item-icon, .hd-mobile-icon),
+#mobile-root :where(.rounded-full, .rounded-xl, .rounded-2xl):has(> svg:only-child) {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#mobile-root :where(svg, .lucide, .hd-mobile-icon, .hd-quick-action-icon, .hd-nav-item-icon) {
+  filter: drop-shadow(0 0 7px currentColor) !important;
+}

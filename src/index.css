@@ -7668,3 +7668,242 @@ body,
     linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)) !important;
   border-color: rgba(255, 255, 255, 0.13) !important;
 }
+
+/* Heavenly Dreams Global Reference Skin
+   Applies the black glass/neon language across every module, not only entry/dashboard. */
+:root {
+  --hd-ref-bg: #020202;
+  --hd-ref-bg-soft: #070708;
+  --hd-ref-surface: rgba(38, 38, 38, 0.44);
+  --hd-ref-surface-soft: rgba(255, 255, 255, 0.045);
+  --hd-ref-surface-strong: rgba(255, 255, 255, 0.075);
+  --hd-ref-border: rgba(225, 244, 255, 0.16);
+  --hd-ref-border-hot: rgba(120, 198, 255, 0.42);
+  --hd-ref-text: #f7fbff;
+  --hd-ref-muted: #a9bdd2;
+  --hd-ref-dim: #6f7f90;
+  --hd-ref-blue: #0aa7ff;
+  --hd-ref-shadow: 0 18px 54px rgba(0, 0, 0, 0.54), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+html,
+body,
+#root {
+  background: var(--hd-ref-bg) !important;
+  color: var(--hd-ref-text) !important;
+}
+
+:where(
+  .hd-screen,
+  .hd-cyber-screen,
+  .hd-neural-layout,
+  .hd-module-stage,
+  .hd-dashboard-layout,
+  .hd-dashboard-clean,
+  .hd-clean-module,
+  main,
+  [class*="min-h-screen"],
+  [class*="bg-cyber"],
+  [class*="bg-slate-950"],
+  [class*="bg-slate-900"]
+) {
+  background:
+    radial-gradient(circle at 50% -10%, rgba(0, 120, 255, 0.10), transparent 26rem),
+    radial-gradient(circle at 110% 18%, rgba(0, 175, 255, 0.045), transparent 24rem),
+    linear-gradient(180deg, #020202 0%, #070708 52%, #020202 100%) !important;
+  color: var(--hd-ref-text) !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-neural-layout, .hd-module-stage, .hd-dashboard-layout, .hd-dashboard-clean, .hd-clean-module)::before,
+:where(.hd-screen, .hd-cyber-screen, .hd-neural-layout, .hd-module-stage, .hd-dashboard-layout, .hd-dashboard-clean, .hd-clean-module)::after {
+  opacity: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-premium-surface,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-ai-panel,
+  .hd-modal,
+  .hd-glass-modal,
+  .neural-command-hero,
+  .recharts-wrapper,
+  section[class*="rounded"],
+  article[class*="rounded"],
+  form[class*="rounded"],
+  div[class*="rounded-2xl"][class*="border"],
+  div[class*="rounded-3xl"][class*="border"]
+):not(.aether-role-card):not(.aether-logo-shell) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.024)),
+    var(--hd-ref-surface) !important;
+  border: 1px solid var(--hd-ref-border) !important;
+  border-radius: 24px !important;
+  box-shadow: var(--hd-ref-shadow) !important;
+  backdrop-filter: blur(22px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(112%) !important;
+}
+
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-premium-surface,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-ai-panel,
+  .hd-modal,
+  .hd-glass-modal,
+  .neural-command-hero
+):not(.aether-role-card)::before,
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-premium-surface,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-ai-panel,
+  .hd-modal,
+  .hd-glass-modal,
+  .neural-command-hero
+):not(.aether-role-card)::after {
+  opacity: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+
+:where([class*="bg-[#"], [class*="bg-blue"], [class*="bg-cyan"], [class*="bg-sky"], [class*="bg-slate"], [class*="bg-black"]) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+    rgba(32, 32, 34, 0.36) !important;
+}
+
+:where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action, a[class*="button"]) {
+  border-radius: 20px !important;
+}
+
+:where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action, a[class*="button"]):not(.aether-role-card):not(.hd-no-liquid) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.026)),
+    rgba(45, 45, 48, 0.34) !important;
+  border: 1px solid rgba(225, 244, 255, 0.18) !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38), 0 0 18px rgba(0, 175, 255, 0.09) !important;
+  backdrop-filter: blur(18px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(110%) !important;
+}
+
+:where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action, a[class*="button"]):not(.aether-role-card):not(.hd-no-liquid):hover,
+:where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action, a[class*="button"]):not(.aether-role-card):not(.hd-no-liquid):focus-visible {
+  border-color: var(--hd-ref-border-hot) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), 0 0 24px rgba(0, 175, 255, 0.16) !important;
+  transform: translateY(-1px);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-input, .hd-cyber-input, .hd-premium-input) {
+  background: rgba(255, 255, 255, 0.055) !important;
+  border: 1px solid rgba(225, 244, 255, 0.14) !important;
+  border-radius: 16px !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-input, .hd-cyber-input, .hd-premium-input):focus,
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-input, .hd-cyber-input, .hd-premium-input):focus-visible {
+  border-color: rgba(0, 175, 255, 0.48) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(0, 175, 255, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+:where(table, .hd-table) {
+  border-collapse: separate !important;
+  border-spacing: 0 0.55rem !important;
+}
+
+:where(tbody tr, .hd-table-row, [role="row"]) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.018)),
+    rgba(35, 35, 38, 0.36) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24) !important;
+}
+
+:where(th, td) {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  color: #ffffff !important;
+  text-shadow: 0 0 14px rgba(255, 255, 255, 0.13) !important;
+}
+
+:where(p, span, label, li, td, th, small) {
+  text-shadow: none !important;
+}
+
+:where(.text-slate-400, .text-slate-500, .text-gray-400, .text-gray-500, .hd-premium-muted) {
+  color: var(--hd-ref-muted) !important;
+}
+
+:where(.hd-floating-icon, .hd-neon-icon, .hd-premium-iconbox, .hd-neon-iconbox, .hd-quick-action-icon, .hd-nav-item-icon, .hd-mobile-icon, .rounded-full:has(> svg:only-child), .rounded-xl:has(> svg:only-child), .rounded-2xl:has(> svg:only-child)) {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+:where(svg, .lucide) {
+  filter: drop-shadow(0 0 7px currentColor) !important;
+}
+
+* {
+  scrollbar-color: rgba(0, 175, 255, 0.72) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 175, 255, 0.72) !important;
+  border-radius: 999px;
+}
