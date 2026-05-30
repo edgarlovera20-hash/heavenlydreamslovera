@@ -1,24 +1,27 @@
 import Database from 'better-sqlite3';
 import { randomBytes, randomUUID, scryptSync } from 'crypto';
+import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const db = new Database(join(__dirname, '..', 'data', 'heavenlydreams.db'));
+const dbPath = process.env.SQLITE_DB_PATH || process.env.DB_PATH || join(__dirname, '..', 'data', 'heavenlydreams.db');
 
-const email = process.env.HD_ADMIN_EMAIL || '';
-const username = process.env.HD_ADMIN_USERNAME || '';
-const password = process.env.HD_ADMIN_PASSWORD || '';
-const nombre = process.env.HD_ADMIN_NAME || username || email;
-const role = process.env.HD_ADMIN_ROLE || 'GERENTE';
+const email = process.env.HD_USER_EMAIL || process.env.HD_ADMIN_EMAIL || '';
+const username = process.env.HD_USER_USERNAME || process.env.HD_ADMIN_USERNAME || '';
+const password = process.env.HD_USER_PASSWORD || process.env.HD_ADMIN_PASSWORD || '';
+const nombre = process.env.HD_USER_NAME || process.env.HD_ADMIN_NAME || username || email;
+const role = process.env.HD_USER_ROLE || process.env.HD_ADMIN_ROLE || 'GERENTE';
 
 function usage() {
   console.error([
     'Faltan variables para crear/actualizar usuario.',
     'Uso:',
-    '  HD_ADMIN_EMAIL=persona@dominio.com HD_ADMIN_USERNAME=persona HD_ADMIN_PASSWORD="..." node scripts/add-user.mjs',
+    '  HD_USER_EMAIL=persona@dominio.com HD_USER_USERNAME=persona HD_USER_PASSWORD="..." node scripts/add-user.mjs',
     'Opcional:',
-    '  HD_ADMIN_NAME="Nombre" HD_ADMIN_ROLE=GERENTE',
+    '  HD_USER_NAME="Nombre" HD_USER_ROLE=SUPERVISOR SQLITE_DB_PATH=/ruta/heavenlydreams.db',
+    '',
+    'Tambien acepta las variables legacy HD_ADMIN_*.',
   ].join('\n'));
   process.exit(1);
 }
@@ -30,12 +33,28 @@ function hashPassword(plain) {
 }
 
 if (!email || !username || !password) usage();
+if (!existsSync(dbPath)) {
+  console.error(`No existe la base de datos: ${dbPath}`);
+  process.exit(1);
+}
+
+const db = new Database(dbPath);
+const usersTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+if (!usersTable) {
+  db.close();
+  console.error(`La base de datos no contiene tabla users: ${dbPath}`);
+  process.exit(1);
+}
 
 const existing = db.prepare('SELECT uid, activo FROM users WHERE email=? OR username=?').get(email, username);
 const storedPassword = hashPassword(password);
 
 if (existing) {
-  db.prepare("UPDATE users SET activo=1, password=?, updated_at=datetime('now') WHERE uid=?").run(storedPassword, existing.uid);
+  db.prepare(`
+    UPDATE users
+    SET nombre=?, email=?, username=?, role=?, activo=1, password=?, updated_at=datetime('now')
+    WHERE uid=?
+  `).run(nombre, email, username, role, storedPassword, existing.uid);
   console.log('Usuario actualizado y habilitado. UID:', existing.uid);
 } else {
   const uid = randomUUID();
