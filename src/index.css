@@ -7614,6 +7614,29 @@ body,
   }
 }
 
+/* Strict entry override for legacy aether-entry selectors. */
+.hd-screen.aether-flow-hero .aether-entry .aether-role-card.hd-no-liquid,
+.hd-screen.aether-flow-hero .aether-entry button.aether-role-card.hd-no-liquid {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.055) 30%, rgba(255, 255, 255, 0.018) 100%),
+    rgba(70, 70, 70, 0.15) !important;
+  background-image:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.055) 30%, rgba(255, 255, 255, 0.018) 100%) !important;
+  background-color: rgba(70, 70, 70, 0.15) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-entry .aether-role-card.hd-no-liquid:hover,
+.hd-screen.aether-flow-hero .aether-entry button.aether-role-card.hd-no-liquid:hover,
+.hd-screen.aether-flow-hero .aether-entry .aether-role-card.hd-no-liquid:focus-visible,
+.hd-screen.aether-flow-hero .aether-entry button.aether-role-card.hd-no-liquid:focus-visible {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.075) 34%, rgba(255, 255, 255, 0.025) 100%),
+    rgba(84, 84, 84, 0.18) !important;
+  background-image:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.075) 34%, rgba(255, 255, 255, 0.025) 100%) !important;
+  background-color: rgba(84, 84, 84, 0.18) !important;
+}
+
 /* Hard lock for the public entry screen. Keeps stale blue utility layers from winning. */
 .hd-screen.aether-flow-hero .hd-entry-logo-glow {
   display: none !important;
