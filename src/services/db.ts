@@ -146,8 +146,12 @@ export const PackagesAPI = {
 
 // ── Nóminas ─────────────────────────────────────────────────
 export const NominasAPI = {
-  getAll: (asesor_id?: string) => api('GET', asesor_id ? `/api/nominas?asesor_id=${asesor_id}` : '/api/nominas'),
-  getSiacWeek: (year: number, week: number) => api('GET', `/api/nominas/siac-week?year=${year}&week=${week}`),
+  getAll: (asesor_id?: string) => api('GET', asesor_id ? `/api/nominas?asesor_id=${encodeURIComponent(asesor_id)}` : '/api/nominas'),
+  getSiacWeek: (year: number, week: number, userName?: string) => {
+    const params = new URLSearchParams({ year: String(year), week: String(week) });
+    if (userName) params.set('userName', userName);
+    return api('GET', `/api/nominas/siac-week?${params.toString()}`);
+  },
   create: (data: any) => api('POST', '/api/nominas', data),
   update: (id: string, data: any) => api('PUT', `/api/nominas/${id}`, data),
 };

@@ -1659,8 +1659,8 @@ async function startServer() {
 
   function mobilePayroll(req: any, limit = 40) {
     if (canManage(req.auth)) {
-      const asesorId = String(req.query?.asesor_id || '').trim();
-      const rows = asesorId ? Nominas.getByAsesor(asesorId) : Nominas.getAll();
+      const asesorId = String(req.query?.asesor_id || req.auth.sub || '').trim();
+      const rows = Nominas.getByAsesor(asesorId);
       return rows.slice(0, limit);
     }
     return Nominas.getByAsesor(req.auth.sub).slice(0, limit);
@@ -2981,9 +2981,10 @@ async function startServer() {
   }));
 
   // ── NÓMINAS ────────────────────────────────────────────────
-  app.get("/api/nominas", opsOnly, wrap((req: any, res: any) => {
-    const { asesor_id } = req.query;
-    res.json(asesor_id ? Nominas.getByAsesor(asesor_id as string) : Nominas.getAll());
+  app.get("/api/nominas", authOnly, wrap((req: any, res: any) => {
+    if (!canManage(req.auth)) return res.json(Nominas.getByAsesor(req.auth.sub));
+    const asesorId = String(req.query?.asesor_id || '').trim();
+    res.json(asesorId ? Nominas.getByAsesor(asesorId) : Nominas.getAll());
   }));
 
   app.get("/api/nominas/siac-week", authOnly, wrap((req: any, res: any) => {
@@ -3014,7 +3015,12 @@ async function startServer() {
       .trim()
       .toUpperCase();
     const selectedName = normalizeName(req.query.userName || req.query.usuario || '');
-    const rows = (db as any).prepare(`
+    const authName = normalizeName(req.auth?.name || req.auth?.username || req.auth?.sub);
+    const rowOwnerMatches = (row: any, expectedName: string) => {
+      const owner = normalizeName(row.promotor || row.usuario);
+      return !!expectedName && (owner === expectedName || owner.includes(expectedName) || expectedName.includes(owner));
+    };
+    const weekRows = (db as any).prepare(`
       SELECT * FROM siac_records
       WHERE UPPER(COALESCE(estatus_siac,'')) LIKE '%POSTEA%'
       ORDER BY fecha_os_alta DESC, fecha_captura DESC
@@ -3023,19 +3029,14 @@ async function startServer() {
         const date = parseLocalDate(row.fecha_os_alta || row.fecha_captura);
         if (!date) return false;
         const info = isoWeek(date);
-        if (info.year !== year || info.week !== week) return false;
-        if (!canManage(req.auth)) {
-          const authName = normalizeName(req.auth?.name || req.auth?.username || req.auth?.sub);
-          const owner = normalizeName(row.promotor || row.usuario);
-          return owner === authName || owner.includes(authName) || authName.includes(owner);
-        }
-        if (selectedName) {
-          const owner = normalizeName(row.promotor || row.usuario);
-          return owner === selectedName || owner.includes(selectedName) || selectedName.includes(owner);
-        }
-        return true;
+        return info.year === year && info.week === week;
       });
-    const users = Array.from(new Map(rows.map((row: any) => {
+    const rows = weekRows.filter((row: any) => {
+      if (!canManage(req.auth)) return rowOwnerMatches(row, authName);
+      return selectedName ? rowOwnerMatches(row, selectedName) : false;
+    });
+    const userSourceRows = canManage(req.auth) ? weekRows : rows;
+    const users = Array.from(new Map(userSourceRows.map((row: any) => {
       const name = String(row.promotor || row.usuario || 'Sin nombre').trim() || 'Sin nombre';
       return [name, { id: name, name, role: 'PROMOTOR' }];
     })).values()).sort((a: any, b: any) => a.name.localeCompare(b.name));
@@ -3065,12 +3066,9 @@ async function startServer() {
     ] : [];
     const adjustmentRows = screenshotWeek21Adjustments
       .filter((row) => {
-        const owner = normalizeName(row.promotor);
-        if (!canManage(req.auth)) {
-          const authName = normalizeName(req.auth?.name || req.auth?.username || req.auth?.sub);
-          return owner === authName || owner.includes(authName) || authName.includes(owner);
-        }
-        return !selectedName || owner === selectedName || owner.includes(selectedName) || selectedName.includes(owner);
+        const owner = { promotor: row.promotor };
+        if (!canManage(req.auth)) return rowOwnerMatches(owner, authName);
+        return selectedName ? rowOwnerMatches(owner, selectedName) : false;
       })
       .map((row) => ({
         id: `ajuste-${row.folio_siac}`,

@@ -209,16 +209,14 @@ function buildPayrollSales(year: number, week: number, userId: string, rawSales:
       };
     })
     .filter(sale => dateInISOWeek(sale.date, year, week))
-    .filter(sale => userId === 'all' || !sale.userId || payrollOwnerMatches(sale.userId, userId));
+    .filter(sale => !!sale.userId && payrollOwnerMatches(sale.userId, userId));
 }
 
 function buildPayrollResult(year: number, week: number, userId: string, users: PayrollUser[], salesSource: any[]): PayrollQueryResult {
   const { start, end } = getISOWeekRange(year, week);
   const sales = buildPayrollSales(year, week, userId, salesSource);
   const subtotal = sales.reduce((sum, sale) => sum + sale.commission, 0);
-  const userLabel = userId === 'all'
-    ? 'Todos los usuarios'
-    : users.find(user => user.id === userId)?.name || 'Usuario';
+  const userLabel = users.find(user => user.id === userId)?.name || userId || 'Usuario';
 
   return {
     userLabel,
@@ -250,7 +248,7 @@ async function exportElementToPDF(element: HTMLDivElement | null, fileName: stri
 export default function Payroll() {
   const [activeTab, setActiveTab] = useState<Tab>('seguimiento');
   const currentUser = getCurrentUser();
-  const isAdmin = ['GERENTE', 'ADMIN', 'ADMINISTRACION', 'SUPERUSER'].includes((currentUser.role || '').toUpperCase());
+  const isAdmin = ['GERENTE', 'ADMIN', 'ADMINISTRACION', 'SUPERVISOR', 'SUPERUSER'].includes((currentUser.role || '').toUpperCase());
 
   const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
     { id: 'seguimiento', label: 'Mi Seguimiento', icon: Calendar },
@@ -313,7 +311,7 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
   const [loadError, setLoadError] = useState('');
   const currentWeek = useMemo(() => ({ year: 2026, week: 21 }), []);
   const currentUser = getCurrentUser();
-  const defaultUserId = managementMode || isAdmin ? 'all' : currentUser.name;
+  const defaultUserId = currentUser.name;
   const [year, setYear] = useState(String(currentWeek.year));
   const [week, setWeek] = useState(String(currentWeek.week));
   const [userId, setUserId] = useState(defaultUserId);
@@ -326,13 +324,13 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const loadSiacPayroll = async (targetYear: number, targetWeek: number, targetUserId = userId) => {
-    const data = await NominasAPI.getSiacWeek(targetYear, targetWeek);
+    const data = await NominasAPI.getSiacWeek(targetYear, targetWeek, targetUserId);
     const siacUsers = Array.isArray(data.users) ? data.users : [];
     const nextUsers = siacUsers.length ? siacUsers : normalizePayrollUsers([]);
     const nextSales = Array.isArray(data.sales) ? data.sales : [];
-    const nextUserId = targetUserId !== 'all' && nextUsers.some((user: PayrollUser) => payrollOwnerMatches(user.id, targetUserId))
+    const nextUserId = nextUsers.some((user: PayrollUser) => payrollOwnerMatches(user.id, targetUserId))
       ? targetUserId
-      : (managementMode || isAdmin ? 'all' : currentUser.name);
+      : currentUser.name;
     setUsers(nextUsers);
     setSalesSource(nextSales);
     setUserId(nextUserId);
@@ -375,7 +373,7 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
     const entry = {
       periodo: `${year}-S${week.padStart(2, '0')}`,
       userId,
-      asesor_id: userId === 'all' ? currentUser.id : userId,
+      asesor_id: userId,
       ventas_count: queryResult.sales.length,
       monto_base: queryResult.subtotal,
       comisiones: queryResult.subtotal,
@@ -444,7 +442,6 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
               value={userId}
               onChange={(event) => setUserId(event.target.value)}
             >
-              {(managementMode || isAdmin) && <option value="all">Todos los usuarios</option>}
               {users.map(user => (
                 <option key={user.id} value={user.id}>{user.name}</option>
               ))}

@@ -1359,18 +1359,20 @@ export default function MobileFieldApp() {
   const payrollResult = useMemo(() => {
     const year = Number(payrollYear) || getCurrentISOWeek().year;
     const week = Number(payrollWeek) || getCurrentISOWeek().week;
-    const selectedUserId = payrollUserId === 'self' ? profileUid : payrollUserId;
+    const selectedUserId = payrollUserId === 'self' || payrollUserId === 'all' ? profileUid : payrollUserId;
     const range = getISOWeekRange(year, week);
     const rawSales = payrollSales.length > 0 ? payrollSales : (bootstrap?.recentSales || []);
     const weeklySales = buildPayrollSales(rawSales, year, week)
       .filter((sale) => {
-        if (payrollUserId === 'all' && canManagePayroll) return true;
-        return !sale.userId || sale.userId === selectedUserId || payrollOwnerMatches(sale.userId, selectedUserId) || payrollOwnerMatches(sale.userId, profileName);
+        const expectedOwner = payrollUserId === 'self' || payrollUserId === 'all' ? profileName : selectedUserId;
+        return !!sale.userId && (
+          sale.userId === selectedUserId ||
+          payrollOwnerMatches(sale.userId, selectedUserId) ||
+          payrollOwnerMatches(sale.userId, expectedOwner)
+        );
       });
     const subtotal = weeklySales.reduce((sum, sale) => sum + sale.commission, 0);
-    const userLabel = payrollUserId === 'all' && canManagePayroll
-      ? 'Todos los usuarios'
-      : payrollUsers.find((user) => user.id === selectedUserId)?.name || profileName;
+    const userLabel = payrollUsers.find((user) => user.id === selectedUserId)?.name || (payrollUserId === 'self' ? profileName : selectedUserId) || profileName;
     return {
       year,
       week,
@@ -1757,10 +1759,22 @@ export default function MobileFieldApp() {
         await writeModuleCache(section, next);
       }
       if (section === 'nominas') {
-        const data = await apiJson<any[]>(`/api/mobile/nominas${since}`);
+        const selectedPayrollId = payrollUserId === 'self' || payrollUserId === 'all' ? profileUid : payrollUserId;
+        const mobilePayrollParams = new URLSearchParams();
+        if (selectedPayrollId) mobilePayrollParams.set('asesor_id', selectedPayrollId);
+        if (since) mobilePayrollParams.set('updatedSince', String((cached as any)?.savedAt || 0));
+        const data = await apiJson<any[]>(`/api/mobile/nominas${mobilePayrollParams.toString() ? `?${mobilePayrollParams.toString()}` : ''}`);
         const cachedRows = Array.isArray(cached?.data) ? cached?.data : cached?.data?.rows;
         const next = since && cachedRows ? mergeById(cachedRows, data) : data;
-        const siacPayroll = await apiJson<any>(`/api/nominas/siac-week?year=${encodeURIComponent(payrollYear)}&week=${encodeURIComponent(payrollWeek)}`).catch(() => null);
+        const selectedPayrollName = payrollUserId === 'self' || payrollUserId === 'all'
+          ? profileName
+          : payrollUsers.find((user) => user.id === payrollUserId)?.name || payrollUserId;
+        const payrollParams = new URLSearchParams({
+          year: payrollYear,
+          week: payrollWeek,
+          userName: selectedPayrollName,
+        });
+        const siacPayroll = await apiJson<any>(`/api/nominas/siac-week?${payrollParams.toString()}`).catch(() => null);
         const sales = Array.isArray(siacPayroll?.sales)
           ? siacPayroll.sales
           : await apiJson<any[]>('/api/ventas').catch(() => bootstrap?.recentSales || []);
@@ -1793,7 +1807,7 @@ export default function MobileFieldApp() {
     } finally {
       setModuleLoading(false);
     }
-  }, [bootstrap?.sync?.supportsUpdatedSince, notify, session?.uid]);
+  }, [bootstrap?.sync?.supportsUpdatedSince, notify, payrollUserId, payrollUsers, payrollWeek, payrollYear, profileName, session?.uid]);
 
   const flushOfflineQueue = useCallback(async () => {
     if (!online || syncingQueue || offlineQueue.length === 0) return;
@@ -2795,7 +2809,7 @@ export default function MobileFieldApp() {
         const data = await apiJson<{ ok: boolean; id: string }>('/api/nominas', {
           method: 'POST',
           body: JSON.stringify({
-            asesor_id: payrollUserId === 'all' ? 'all' : payrollResult.userId,
+            asesor_id: payrollResult.userId,
             periodo: `${payrollResult.year}-S${String(payrollResult.week).padStart(2, '0')}`,
             ventas_count: payrollResult.sales.length,
             monto_base: payrollResult.subtotal,
@@ -2807,7 +2821,7 @@ export default function MobileFieldApp() {
         });
         const row = {
           id: data.id || `${Date.now()}-${payrollResult.userLabel}`,
-          asesor_id: payrollUserId === 'all' ? 'all' : payrollResult.userId,
+          asesor_id: payrollResult.userId,
           asesor_nombre: payrollResult.userLabel,
           periodo: `${payrollResult.year}-S${String(payrollResult.week).padStart(2, '0')}`,
           ventas_count: payrollResult.sales.length,
@@ -3790,9 +3804,8 @@ export default function MobileFieldApp() {
           <label className="mt-3 block space-y-2">
             <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Usuario</span>
             <select value={payrollUserId} onChange={(event) => { setPayrollUserId(event.target.value); setPayrollSaved(false); }} className="min-h-12 w-full rounded-2xl border border-cyan-400/15 bg-black/35 px-4 py-3 text-[16px] text-slate-50 outline-none focus:border-cyan-300/70">
-              {canManagePayroll && <option value="all">Todos los usuarios</option>}
               <option value="self">{profileName}</option>
-              {payrollUsers.filter((user) => user.id !== profileUid).map((user) => (
+              {canManagePayroll && payrollUsers.filter((user) => user.id !== profileUid).map((user) => (
                 <option key={user.id} value={user.id}>{user.name}</option>
               ))}
             </select>
