@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Settings as SettingsIcon, ChevronRight,
   User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, Gamepad2, FolderOpen,
   Database, Sun, Moon, Crown, Zap, Bot, Home, MessageSquare, MessageCircle,
-  MapPin, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall, ReceiptText
+  MapPin, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall, ReceiptText, Target, DollarSign
 } from 'lucide-react';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
@@ -120,6 +120,19 @@ function getMotivationalPhrase() {
   return MOTIVATIONAL_PHRASES[dayIndex];
 }
 
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    maximumFractionDigits: 0,
+  }).format(value || 0);
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
 import { Role } from '../../App';
 
 interface ManagerViewProps {
@@ -148,6 +161,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [approvedSales, setApprovedSales] = useState(0);
   const [rejectedSales, setRejectedSales] = useState(0);
   const [todaySales, setTodaySales] = useState(0);
+  const [monthRevenue, setMonthRevenue] = useState(0);
   const [waStatus, setWaStatus] = useState<'disconnected'|'qr'|'authenticating'|'connected'>('disconnected');
   const [tgStatus, setTgStatus] = useState<'disconnected'|'polling'|'error'>('disconnected');
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
@@ -169,6 +183,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       setApprovedSales(data.approvedSales || 0);
       setRejectedSales(data.rejectedSales || 0);
       setTodaySales(data.todaySales || 0);
+      setMonthRevenue(data.monthRevenue || 0);
     } catch { /* silencioso - puede estar offline */ }
   };
 
@@ -232,6 +247,28 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const notificationCount = pendingSales + pendingUsers;
   const greeting = getLoginGreeting();
   const motivationalPhrase = getMotivationalPhrase();
+  const conversionRate = saleCount > 0 ? clampPercent((approvedSales / saleCount) * 100) : 0;
+  const monthlyGoal = Math.max(30, Math.ceil(Math.max(approvedSales, saleCount, todaySales, 1) / 10) * 10);
+  const goalProgress = clampPercent((approvedSales / monthlyGoal) * 100);
+  const pipelineProspects = Math.max(channelSummary.conversations + saleCount + pendingSales + rejectedSales, saleCount, 1);
+  const pipelineStages = [
+    { label: 'Prospectos', value: pipelineProspects, color: 'from-cyan-300 to-sky-500', detail: 'Canales + capturas' },
+    { label: 'Contactados', value: channelSummary.conversations, color: 'from-emerald-300 to-emerald-600', detail: 'Conversaciones' },
+    { label: 'Citas', value: pendingSales + channelSummary.pendingApprovals, color: 'from-violet-300 to-violet-600', detail: 'Por validar / IA' },
+    { label: 'Ventas', value: saleCount, color: 'from-amber-300 to-orange-500', detail: 'Capturas totales' },
+    { label: 'Instalados', value: approvedSales, color: 'from-lime-300 to-emerald-500', detail: 'Aprobadas' },
+  ];
+  const directorSignals = [
+    pendingSales > 0
+      ? `${pendingSales} ventas requieren validacion para liberar avance comercial.`
+      : 'Validaciones al dia; el flujo operativo esta despejado.',
+    rejectedSales > 0
+      ? `${rejectedSales} rechazos activos: conviene revisar causa y recuperar oportunidad.`
+      : 'Sin rechazo critico visible en el tablero actual.',
+    channelSummary.pendingApprovals > 0
+      ? `${channelSummary.pendingApprovals} aprobaciones IA esperan decision gerencial.`
+      : 'Automatizaciones sin aprobaciones pendientes.',
+  ];
   const openCaptureMenu = () => {
     setCaptureInitialView('menu');
     setActiveSection('Captura y Validación');
@@ -410,6 +447,72 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                  description={<>Vista ejecutiva de capturas, validaciones, canales y tareas operativas. Hora del sistema: <ClockText />.</>}
                  action={<PremiumBadge tone="emerald" dot>Sistema activo</PremiumBadge>}
                />
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_.75fr]">
+                <PremiumCard className="overflow-hidden p-6" tone="slate">
+                  <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">CEO Dashboard</p>
+                      <h2 className="mt-1 text-2xl font-semibold text-white">Centro ejecutivo Heavenly Dreams</h2>
+                      <p className="mt-2 text-sm text-slate-400">Primer bloque del plan 95+: ventas, instalaciones, reclutamiento, conversion y meta mensual.</p>
+                    </div>
+                    <PremiumBadge tone={hasFullModuleAccess ? 'emerald' : 'amber'} dot>
+                      {hasFullModuleAccess ? 'Vista gerente completa' : 'Vista operativa limitada'}
+                    </PremiumBadge>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <ExecutiveMetric icon={TrendingUp} label="Ventas del dia" value={todaySales} detail="Capturas nuevas" tone="cyan" />
+                    <ExecutiveMetric icon={CheckCircle2} label="Instalaciones" value={approvedSales} detail="Aprobadas / procedieron" tone="emerald" />
+                    <ExecutiveMetric icon={Users} label="Reclutas" value={pendingUsers} detail="Pendientes por aprobar" tone="purple" />
+                    <ExecutiveMetric icon={Target} label="Conversion" value={`${conversionRate}%`} detail={`${approvedSales}/${saleCount} ventas`} tone="amber" />
+                    <ExecutiveMetric icon={DollarSign} label="Ingreso mensual" value={formatMoney(monthRevenue)} detail="Renta mensual capturada" tone="green" />
+                    <ExecutiveMetric icon={Activity} label="Meta mensual" value={`${goalProgress}%`} detail={`${approvedSales}/${monthlyGoal} objetivo`} tone="blue" />
+                  </div>
+                </PremiumCard>
+
+                <PremiumCard className="p-6" tone="purple">
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-2xl border border-violet-300/20 bg-violet-400/10 p-3 text-violet-200">
+                      <Bot className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">Director operativo IA</p>
+                      <h3 className="mt-1 text-xl font-semibold text-white">Lectura ejecutiva</h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">Heavenly AI inicia como capa de supervision: detecta pendientes, riesgo y decisiones que bloquean avance.</p>
+                    </div>
+                  </div>
+                  <div className="mt-5 space-y-3">
+                    {directorSignals.map(signal => (
+                      <div key={signal} className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-xs font-semibold leading-5 text-slate-200">
+                        {signal}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-5 grid grid-cols-2 gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                    <span className="rounded-xl border border-emerald-300/15 bg-emerald-400/5 px-3 py-2 text-emerald-200">Gerente: todo</span>
+                    <span className="rounded-xl border border-cyan-300/15 bg-cyan-400/5 px-3 py-2 text-cyan-200">Supervisor: operativo</span>
+                    <span className="rounded-xl border border-violet-300/15 bg-violet-400/5 px-3 py-2 text-violet-200">Reclutador: equipo</span>
+                    <span className="rounded-xl border border-amber-300/15 bg-amber-400/5 px-3 py-2 text-amber-200">Vendedor: campo</span>
+                  </div>
+                </PremiumCard>
+              </div>
+
+              <PremiumCard className="p-6" tone="amber">
+                <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">Embudo comercial visual</p>
+                    <h3 className="mt-1 text-xl font-semibold text-white">Prospectos a instalaciones</h3>
+                  </div>
+                  <p className="text-xs text-slate-400">Construido con canales, aprobaciones IA y ventas reales disponibles.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
+                  {pipelineStages.map(stage => (
+                    <div key={stage.label}>
+                      <PipelineStage stage={stage} maxValue={pipelineProspects} />
+                    </div>
+                  ))}
+                </div>
+              </PremiumCard>
 
               {/* KPI Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 hover-group">
@@ -692,6 +795,66 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       )}
 
       <OfflineBanner isOnline={isOnline} pendingCount={pendingCount} syncing={syncing} onSync={syncNow} />
+    </div>
+  );
+}
+
+function ExecutiveMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: any;
+  label: string;
+  value: React.ReactNode;
+  detail: string;
+  tone: 'cyan' | 'emerald' | 'purple' | 'amber' | 'green' | 'blue';
+}) {
+  const tones: Record<string, string> = {
+    cyan: 'border-cyan-300/15 bg-cyan-400/5 text-cyan-200',
+    emerald: 'border-emerald-300/15 bg-emerald-400/5 text-emerald-200',
+    purple: 'border-violet-300/15 bg-violet-400/5 text-violet-200',
+    amber: 'border-amber-300/15 bg-amber-400/5 text-amber-200',
+    green: 'border-lime-300/15 bg-lime-400/5 text-lime-200',
+    blue: 'border-sky-300/15 bg-sky-400/5 text-sky-200',
+  };
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
+        <div className={`rounded-xl border p-2 ${tones[tone]}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+      <p className="mt-4 truncate text-2xl font-semibold tracking-tight text-white">{value}</p>
+      <p className="mt-1 text-xs font-semibold text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function PipelineStage({
+  stage,
+  maxValue,
+}: {
+  stage: { label: string; value: number; color: string; detail: string };
+  maxValue: number;
+}) {
+  const progress = clampPercent((stage.value / Math.max(maxValue, 1)) * 100);
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{stage.label}</p>
+          <p className="mt-2 text-2xl font-semibold text-white">{stage.value}</p>
+        </div>
+        <span className="text-xs font-black text-slate-500">{progress}%</span>
+      </div>
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+        <div className={`h-full rounded-full bg-gradient-to-r ${stage.color}`} style={{ width: `${Math.max(progress, stage.value ? 8 : 0)}%` }} />
+      </div>
+      <p className="mt-3 text-[11px] font-semibold text-slate-500">{stage.detail}</p>
     </div>
   );
 }
