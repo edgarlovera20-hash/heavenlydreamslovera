@@ -147,9 +147,33 @@ const qualityFilters = [
   { id: 'sin_zona_tienda', label: 'Sin zona/tienda' },
 ];
 
-const chartColors = ['#60a5fa', '#22d3ee', '#34d399', '#fbbf24', '#fb7185', '#a78bfa'];
+const chartColors = ['#f8fafc', '#b8b8b8', '#f5c542', '#ff8a00', '#d26dff', '#ff4d6d', '#00ff88'];
+const chartGridColor = 'rgba(255,255,255,0.075)';
+const chartAxisColor = 'rgba(232,236,242,0.72)';
+const chartCursor = { fill: 'rgba(255,255,255,0.045)' };
+const chartTooltipStyle = {
+  background: 'rgba(7,7,7,.96)',
+  border: '1px solid rgba(255,255,255,.18)',
+  borderRadius: 14,
+  color: '#f8fafc',
+  boxShadow: '0 18px 46px rgba(0,0,0,.58)',
+  backdropFilter: 'blur(18px)',
+};
+const chartTooltipLabelStyle = { color: '#ffffff', fontWeight: 900 };
+const chartTooltipItemStyle = { color: '#e8e8e8', fontWeight: 700 };
+const miniBarGradients = [
+  { top: '#f7f7f7', mid: '#b8b8b8', bottom: '#3a3a3a' },
+  { top: '#ffd84a', mid: '#c89119', bottom: '#3d2b07' },
+  { top: '#ff9a28', mid: '#b95712', bottom: '#321707' },
+  { top: '#d26dff', mid: '#8344b6', bottom: '#25102f' },
+  { top: '#ff4d6d', mid: '#9e263f', bottom: '#2b0710' },
+  { top: '#00ff88', mid: '#1c8f5d', bottom: '#092416' },
+  { top: '#e5e5e5', mid: '#7c7c7c', bottom: '#242424' },
+  { top: '#b8b8b8', mid: '#5a5a5a', bottom: '#181818' },
+];
 const pageSize = 25;
 const premiumPanel = 'hd-premium-card rounded-3xl border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(6,27,58,.96),rgba(8,42,94,.92))] shadow-[0_22px_56px_rgba(0,8,36,.46)]';
+const chartPanel = 'rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(44,44,44,.72),rgba(9,9,9,.94)_58%,rgba(0,0,0,.98))] shadow-[0_22px_58px_rgba(0,0,0,.52)] backdrop-blur-xl';
 const premiumControl = 'hd-premium-input rounded-2xl border border-cyan-300/20 bg-[#020A1F]/80 text-white outline-none transition focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/20';
 const premiumButton = 'hd-premium-button rounded-2xl border border-cyan-300/35 px-4 py-2.5 text-sm font-bold text-white';
 const premiumLabel = 'text-[10px] font-black uppercase tracking-[0.14em] text-[#B9D8F6]';
@@ -157,6 +181,16 @@ const premiumLabel = 'text-[10px] font-black uppercase tracking-[0.14em] text-[#
 function compactTick(value: unknown, max = 14) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function chartGradientId(title: string, suffix: string) {
+  const slug = title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'chart';
+  return `hd-${suffix}-${slug}`;
 }
 
 function hasValue(value: unknown) {
@@ -266,19 +300,32 @@ function MetricCard({ label, value, tone = 'cyan' }: { label: string; value: Rea
 }
 
 function MiniBarChart({ title, data }: { title: string; data: { name: string; total: number }[] }) {
+  const bars = data.slice(0, 8);
+  const gradientId = chartGradientId(title, 'bar');
   return (
-    <div className={cn(premiumPanel, 'min-h-[22rem] p-5')}>
+    <div className={cn(chartPanel, 'min-h-[22rem] p-5')}>
       <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-white">
-        <BarChart3 className="h-4 w-4 text-cyan-200" />
+        <BarChart3 className="h-4 w-4 text-zinc-200" />
         {title}
       </h3>
       <ResponsiveContainer width="100%" height={250}>
-        <BarChart data={data.slice(0, 8)} margin={{ left: 0, right: 12, top: 8, bottom: 48 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.11)" />
-          <XAxis dataKey="name" angle={-18} textAnchor="end" interval={0} tick={{ fill: '#cbd5e1', fontSize: 10 }} tickFormatter={value => compactTick(value, 12)} height={58} />
-          <YAxis allowDecimals={false} tick={{ fill: '#cbd5e1', fontSize: 10 }} />
-          <Tooltip contentStyle={{ background: '#061B3A', border: '1px solid rgba(0,217,255,.28)', borderRadius: 14, color: '#fff' }} />
-          <Bar dataKey="total" fill="#7dd3fc" radius={[8, 8, 0, 0]} />
+        <BarChart data={bars} margin={{ left: 0, right: 12, top: 8, bottom: 48 }}>
+          <defs>
+            {miniBarGradients.map((colors, index) => (
+              <linearGradient key={index} id={`${gradientId}-${index}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={colors.top} stopOpacity={0.96} />
+                <stop offset="54%" stopColor={colors.mid} stopOpacity={0.82} />
+                <stop offset="100%" stopColor={colors.bottom} stopOpacity={0.46} />
+              </linearGradient>
+            ))}
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} />
+          <XAxis dataKey="name" angle={-18} textAnchor="end" interval={0} tick={{ fill: chartAxisColor, fontSize: 10 }} tickFormatter={value => compactTick(value, 12)} height={58} />
+          <YAxis allowDecimals={false} tick={{ fill: chartAxisColor, fontSize: 10 }} />
+          <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} labelStyle={chartTooltipLabelStyle} itemStyle={chartTooltipItemStyle} wrapperStyle={{ outline: 'none' }} />
+          <Bar dataKey="total" radius={[12, 12, 4, 4]} maxBarSize={72} stroke="rgba(255,255,255,.28)" strokeWidth={1.1}>
+            {bars.map((_, index) => <Cell key={index} fill={`url(#${gradientId}-${index % miniBarGradients.length})`} />)}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -286,25 +333,44 @@ function MiniBarChart({ title, data }: { title: string; data: { name: string; to
 }
 
 function EffectivenessChart({ title, data }: { title: string; data: EffectivenessBucket[] }) {
+  const gradientId = chartGradientId(title, 'effectiveness');
   return (
-    <div className={cn(premiumPanel, 'min-h-[24rem] p-5')}>
+    <div className={cn(chartPanel, 'min-h-[24rem] p-5')}>
       <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-white">
-        <BarChart3 className="h-4 w-4 text-cyan-200" />
+        <BarChart3 className="h-4 w-4 text-zinc-200" />
         {title}
       </h3>
       <ResponsiveContainer width="100%" height={280}>
         <BarChart data={(data || []).slice(0, 8)} margin={{ left: 0, right: 12, top: 8, bottom: 56 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.11)" />
-          <XAxis dataKey="name" angle={-18} textAnchor="end" interval={0} tick={{ fill: '#cbd5e1', fontSize: 10 }} tickFormatter={value => compactTick(value, 14)} height={70} />
-          <YAxis yAxisId="left" allowDecimals={false} tick={{ fill: '#cbd5e1', fontSize: 10 }} />
-          <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tickFormatter={value => `${value}%`} tick={{ fill: '#bae6fd', fontSize: 10 }} />
+          <defs>
+            <linearGradient id={`${gradientId}-total`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f6f6f6" stopOpacity={0.86} />
+              <stop offset="100%" stopColor="#525252" stopOpacity={0.42} />
+            </linearGradient>
+            <linearGradient id={`${gradientId}-done`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#ffd84a" stopOpacity={0.94} />
+              <stop offset="100%" stopColor="#8b5a0b" stopOpacity={0.54} />
+            </linearGradient>
+            <linearGradient id={`${gradientId}-rate`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#00ff88" stopOpacity={0.88} />
+              <stop offset="100%" stopColor="#0d4f32" stopOpacity={0.5} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} />
+          <XAxis dataKey="name" angle={-18} textAnchor="end" interval={0} tick={{ fill: chartAxisColor, fontSize: 10 }} tickFormatter={value => compactTick(value, 14)} height={70} />
+          <YAxis yAxisId="left" allowDecimals={false} tick={{ fill: chartAxisColor, fontSize: 10 }} />
+          <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tickFormatter={value => `${value}%`} tick={{ fill: 'rgba(232,236,242,0.68)', fontSize: 10 }} />
           <Tooltip
+            cursor={chartCursor}
             formatter={(value: any, name: string) => name === 'efectividad' ? `${value}%` : value}
-            contentStyle={{ background: '#061B3A', border: '1px solid rgba(0,217,255,.28)', borderRadius: 14, color: '#fff' }}
+            contentStyle={chartTooltipStyle}
+            labelStyle={chartTooltipLabelStyle}
+            itemStyle={chartTooltipItemStyle}
+            wrapperStyle={{ outline: 'none' }}
           />
-          <Bar yAxisId="left" dataKey="total" name="Total" fill="#334155" radius={[8, 8, 0, 0]} />
-          <Bar yAxisId="left" dataKey="efectivas" name="Efectivas" fill="#22d3ee" radius={[8, 8, 0, 0]} />
-          <Bar yAxisId="right" dataKey="efectividad" name="Efectividad" fill="#34d399" radius={[8, 8, 0, 0]} />
+          <Bar yAxisId="left" dataKey="total" name="Total" fill={`url(#${gradientId}-total)`} radius={[10, 10, 3, 3]} maxBarSize={52} stroke="rgba(255,255,255,.18)" strokeWidth={1} />
+          <Bar yAxisId="left" dataKey="efectivas" name="Efectivas" fill={`url(#${gradientId}-done)`} radius={[10, 10, 3, 3]} maxBarSize={52} stroke="rgba(255,216,74,.22)" strokeWidth={1} />
+          <Bar yAxisId="right" dataKey="efectividad" name="Efectividad" fill={`url(#${gradientId}-rate)`} radius={[10, 10, 3, 3]} maxBarSize={52} stroke="rgba(0,255,136,.18)" strokeWidth={1} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -645,17 +711,27 @@ export default function ConsultasSeguimiento() {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-        <div className={cn(premiumPanel, 'min-h-[22rem] p-5')}>
+        <div className={cn(chartPanel, 'min-h-[22rem] p-5')}>
           <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-white">
-            <Sparkles className="h-4 w-4 text-cyan-200" />
+            <Sparkles className="h-4 w-4 text-zinc-200" />
             Calidad operativa
           </h3>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
-              <Pie data={analytics.byQuality} dataKey="value" nameKey="name" innerRadius={56} outerRadius={88} paddingAngle={2}>
+              <Pie
+                data={analytics.byQuality}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={62}
+                outerRadius={90}
+                paddingAngle={3}
+                cornerRadius={8}
+                stroke="rgba(5,5,5,.88)"
+                strokeWidth={4}
+              >
                 {analytics.byQuality.map((_, index) => <Cell key={index} fill={chartColors[index % chartColors.length]} />)}
               </Pie>
-              <Tooltip contentStyle={{ background: '#061B3A', border: '1px solid rgba(0,217,255,.28)', borderRadius: 14, color: '#fff' }} />
+              <Tooltip cursor={false} contentStyle={chartTooltipStyle} labelStyle={chartTooltipLabelStyle} itemStyle={chartTooltipItemStyle} wrapperStyle={{ outline: 'none' }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
