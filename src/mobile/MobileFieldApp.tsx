@@ -504,11 +504,11 @@ function roleLabel(role?: string) {
 }
 
 function saleOwnerId(sale: any) {
-  return String(sale?.asesor_id || sale?.asesorId || sale?.vendedor_id || sale?.vendedorId || sale?.userId || '').trim();
+  return String(sale?.asesor_id || sale?.asesorId || sale?.vendedor_id || sale?.vendedorId || sale?.userId || sale?.promotor || sale?.nombre || '').trim();
 }
 
 function saleOwnerName(sale: any) {
-  return String(sale?.asesor_nombre || sale?.asesorNombre || sale?.vendedor_nombre || sale?.vendedor || 'Asesor').trim();
+  return String(sale?.asesor_nombre || sale?.asesorNombre || sale?.vendedor_nombre || sale?.vendedor || sale?.promotor || sale?.nombre || 'Asesor').trim();
 }
 
 function saleDateValue(sale: any) {
@@ -560,6 +560,11 @@ function parsePayrollDate(value: unknown): Date | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   const raw = String(value).trim();
   if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split('-').map(Number);
+    const parsed = new Date(year, month - 1, day);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
     const [day, month, year] = raw.split('/').map(Number);
     const parsed = new Date(year, month - 1, day);
@@ -567,6 +572,21 @@ function parsePayrollDate(value: unknown): Date | null {
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizePayrollName(value: unknown) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function payrollOwnerMatches(owner: string, selected: string) {
+  const a = normalizePayrollName(owner);
+  const b = normalizePayrollName(selected);
+  return Boolean(a && b && (a === b || a.includes(b) || b.includes(a)));
 }
 
 function dateInISOWeek(date: Date | null, year: number, week: number) {
@@ -602,7 +622,7 @@ function buildPayrollSales(rawSales: any[], year: number, week: number): Payroll
         client: buildPayrollClientName(sale),
         packageName: String(sale.paqueteNombre || sale.packageName || sale.paquete || sale.plan || sale.tipoServicio || sale.tipo_servicio || 'Sin paquete'),
         status: String(sale.estatus_pisa || sale.estatus_siac || sale.status || sale.status_captura || 'CAPTURADO'),
-        commission: Number(sale.monto_comision || sale.comision || sale.commission || sale.comision_total || 0),
+        commission: Number(sale.monto_comision || sale.comision || sale.commission || sale.comision_total || sale.pago_posteo || 0),
         date,
         userId: saleOwnerId(sale),
       };
@@ -1179,8 +1199,8 @@ export default function MobileFieldApp() {
   const [payroll, setPayroll] = useState<any[]>([]);
   const [payrollSales, setPayrollSales] = useState<any[]>([]);
   const [payrollTab, setPayrollTab] = useState<PayrollTab>('seguimiento');
-  const [payrollYear, setPayrollYear] = useState(() => String(getCurrentISOWeek().year));
-  const [payrollWeek, setPayrollWeek] = useState(() => String(getCurrentISOWeek().week));
+  const [payrollYear, setPayrollYear] = useState('2026');
+  const [payrollWeek, setPayrollWeek] = useState('21');
   const [payrollUserId, setPayrollUserId] = useState('self');
   const [payrollPaymentMethod, setPayrollPaymentMethod] = useState('Transferencia bancaria');
   const [payrollExporting, setPayrollExporting] = useState(false);
@@ -1339,7 +1359,7 @@ export default function MobileFieldApp() {
     const weeklySales = buildPayrollSales(rawSales, year, week)
       .filter((sale) => {
         if (payrollUserId === 'all' && canManagePayroll) return true;
-        return !sale.userId || sale.userId === selectedUserId;
+        return !sale.userId || sale.userId === selectedUserId || payrollOwnerMatches(sale.userId, selectedUserId) || payrollOwnerMatches(sale.userId, profileName);
       });
     const subtotal = weeklySales.reduce((sum, sale) => sum + sale.commission, 0);
     const userLabel = payrollUserId === 'all' && canManagePayroll
@@ -1734,7 +1754,10 @@ export default function MobileFieldApp() {
         const data = await apiJson<any[]>(`/api/mobile/nominas${since}`);
         const cachedRows = Array.isArray(cached?.data) ? cached?.data : cached?.data?.rows;
         const next = since && cachedRows ? mergeById(cachedRows, data) : data;
-        const sales = await apiJson<any[]>('/api/ventas').catch(() => bootstrap?.recentSales || []);
+        const siacPayroll = await apiJson<any>(`/api/nominas/siac-week?year=${encodeURIComponent(payrollYear)}&week=${encodeURIComponent(payrollWeek)}`).catch(() => null);
+        const sales = Array.isArray(siacPayroll?.sales)
+          ? siacPayroll.sales
+          : await apiJson<any[]>('/api/ventas').catch(() => bootstrap?.recentSales || []);
         setPayroll(next);
         setPayrollSales(sales);
         await writeModuleCache(section, { rows: next, sales });

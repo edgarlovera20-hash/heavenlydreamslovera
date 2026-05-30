@@ -147,6 +147,7 @@ export const PackagesAPI = {
 // ── Nóminas ─────────────────────────────────────────────────
 export const NominasAPI = {
   getAll: (asesor_id?: string) => api('GET', asesor_id ? `/api/nominas?asesor_id=${asesor_id}` : '/api/nominas'),
+  getSiacWeek: (year: number, week: number) => api('GET', `/api/nominas/siac-week?year=${year}&week=${week}`),
   create: (data: any) => api('POST', '/api/nominas', data),
   update: (id: string, data: any) => api('PUT', `/api/nominas/${id}`, data),
 };

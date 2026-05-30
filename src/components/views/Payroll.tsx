@@ -140,6 +140,11 @@ function parseDate(value: unknown): Date | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   const raw = String(value).trim();
   if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split('-').map(Number);
+    const parsed = new Date(year, month - 1, day);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
     const [day, month, year] = raw.split('/').map(Number);
     const parsed = new Date(year, month - 1, day);
@@ -153,6 +158,22 @@ function dateInISOWeek(date: Date | null, year: number, week: number) {
   if (!date) return false;
   const info = getCurrentISOWeek(date);
   return info.year === year && info.week === week;
+}
+
+function normalizePayrollName(value: unknown) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function payrollOwnerMatches(owner: string, selected: string) {
+  if (selected === 'all') return true;
+  const a = normalizePayrollName(owner);
+  const b = normalizePayrollName(selected);
+  return Boolean(a && b && (a === b || a.includes(b) || b.includes(a)));
 }
 
 function formatReceiptDate(date: Date) {
@@ -175,20 +196,20 @@ function buildPayrollSales(year: number, week: number, userId: string, rawSales:
   return rawSales
     .map((sale, index) => {
       const date = parseDate(sale.fechaSolicitud || sale.fecha_solicitud || sale.fecha_captura || sale.fecha_os_alta || sale.created_at || sale.createdAt);
-      const ownerId = String(sale.asesorId || sale.vendedor_id || sale.userId || sale.promotor_id || '');
+      const ownerId = String(sale.asesorId || sale.vendedor_id || sale.userId || sale.promotor_id || sale.promotor || sale.nombre || sale.asesor_nombre || '');
       return {
         id: String(sale.id || sale.folio || sale.folio_siac || `sale-${index}`),
         folio: String(sale.folioSiac || sale.folio_siac || sale.folio || sale.os_alta || `VT-${index + 1}`),
         client: buildClientName(sale),
         packageName: String(sale.paqueteNombre || sale.packageName || sale.paquete || sale.tipoServicio || sale.tipo_servicio || 'Sin paquete'),
         status: String(sale.estatus_pisa || sale.estatus_siac || sale.status || sale.status_captura || 'CAPTURADO'),
-        commission: Number(sale.monto_comision || sale.comision || sale.commission || sale.comision_total || 0),
+        commission: Number(sale.monto_comision || sale.comision || sale.commission || sale.comision_total || sale.pago_posteo || 0),
         date,
         userId: ownerId,
       };
     })
     .filter(sale => dateInISOWeek(sale.date, year, week))
-    .filter(sale => userId === 'all' || !sale.userId || sale.userId === userId);
+    .filter(sale => userId === 'all' || !sale.userId || payrollOwnerMatches(sale.userId, userId));
 }
 
 function buildPayrollResult(year: number, week: number, userId: string, users: PayrollUser[], salesSource: any[]): PayrollQueryResult {
@@ -290,9 +311,9 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
   const [users, setUsers] = useState<PayrollUser[]>(() => normalizePayrollUsers([]));
   const [salesSource, setSalesSource] = useState<any[]>([]);
   const [loadError, setLoadError] = useState('');
-  const currentWeek = useMemo(() => getCurrentISOWeek(), []);
+  const currentWeek = useMemo(() => ({ year: 2026, week: 21 }), []);
   const currentUser = getCurrentUser();
-  const defaultUserId = managementMode || isAdmin ? 'all' : currentUser.id;
+  const defaultUserId = managementMode || isAdmin ? 'all' : currentUser.name;
   const [year, setYear] = useState(String(currentWeek.year));
   const [week, setWeek] = useState(String(currentWeek.week));
   const [userId, setUserId] = useState(defaultUserId);
@@ -304,28 +325,50 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
   );
   const receiptRef = useRef<HTMLDivElement>(null);
 
+  const loadSiacPayroll = async (targetYear: number, targetWeek: number, targetUserId = userId) => {
+    const data = await NominasAPI.getSiacWeek(targetYear, targetWeek);
+    const siacUsers = Array.isArray(data.users) ? data.users : [];
+    const nextUsers = siacUsers.length ? siacUsers : normalizePayrollUsers([]);
+    const nextSales = Array.isArray(data.sales) ? data.sales : [];
+    const nextUserId = targetUserId !== 'all' && nextUsers.some((user: PayrollUser) => payrollOwnerMatches(user.id, targetUserId))
+      ? targetUserId
+      : (managementMode || isAdmin ? 'all' : currentUser.name);
+    setUsers(nextUsers);
+    setSalesSource(nextSales);
+    setUserId(nextUserId);
+    setQueryResult(buildPayrollResult(targetYear, targetWeek, nextUserId, nextUsers, nextSales));
+    setLoadError('');
+  };
+
   useEffect(() => {
-    Promise.all([UsersAPI.getAll(), VentasAPI.getAll()])
+    loadSiacPayroll(Number(year) || currentWeek.year, Number(week) || currentWeek.week, userId)
+      .catch(() => Promise.all([UsersAPI.getAll(), VentasAPI.getAll()])
       .then(([userRows, saleRows]: any[]) => {
-        const nextUsers = normalizePayrollUsers(Array.isArray(userRows) ? userRows : []);
-        const nextSales = Array.isArray(saleRows) ? saleRows : [];
-        setUsers(nextUsers);
-        setSalesSource(nextSales);
-        setQueryResult(buildPayrollResult(Number(year) || currentWeek.year, Number(week) || currentWeek.week, userId, nextUsers, nextSales));
-        setLoadError('');
+          const nextUsers = normalizePayrollUsers(Array.isArray(userRows) ? userRows : []);
+          const nextSales = Array.isArray(saleRows) ? saleRows : [];
+          setUsers(nextUsers);
+          setSalesSource(nextSales);
+          setQueryResult(buildPayrollResult(Number(year) || currentWeek.year, Number(week) || currentWeek.week, userId, nextUsers, nextSales));
+          setLoadError('');
       })
       .catch((err) => {
         setUsers(normalizePayrollUsers([]));
         setSalesSource([]);
         setLoadError(err instanceof Error ? err.message : 'Backend no disponible');
-      });
+      }));
   }, []);
 
-  const runSearch = () => {
+  const runSearch = async () => {
     const parsedYear = Number(year) || currentWeek.year;
     const parsedWeek = Number(week) || currentWeek.week;
-    setQueryResult(buildPayrollResult(parsedYear, parsedWeek, userId, users, salesSource));
-    setSaved(false);
+    try {
+      await loadSiacPayroll(parsedYear, parsedWeek, userId);
+      setSaved(false);
+    } catch (err) {
+      setQueryResult(buildPayrollResult(parsedYear, parsedWeek, userId, users, salesSource));
+      setSaved(false);
+      setLoadError(err instanceof Error ? err.message : 'No se pudo cargar SIAC para nomina.');
+    }
   };
 
   const savePayroll = async () => {
