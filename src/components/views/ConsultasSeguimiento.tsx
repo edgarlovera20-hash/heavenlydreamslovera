@@ -154,6 +154,11 @@ const premiumControl = 'hd-premium-input rounded-2xl border border-cyan-300/20 b
 const premiumButton = 'hd-premium-button rounded-2xl border border-cyan-300/35 px-4 py-2.5 text-sm font-bold text-white';
 const premiumLabel = 'text-[10px] font-black uppercase tracking-[0.14em] text-[#B9D8F6]';
 
+function compactTick(value: unknown, max = 14) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
 function hasValue(value: unknown) {
   const raw = String(value ?? '').trim();
   return Boolean(raw && !['--', '0', '0000000000', 'null', 'undefined', 'restringido'].includes(raw.toLowerCase()));
@@ -253,24 +258,24 @@ function MetricCard({ label, value, tone = 'cyan' }: { label: string; value: Rea
     red: 'text-rose-200',
   }[tone];
   return (
-    <div className={cn(premiumPanel, 'p-4')}>
-      <p className={cn('text-3xl font-black tracking-tight', toneClass)}>{value}</p>
-      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#B9D8F6]">{label}</p>
+    <div className={cn(premiumPanel, 'flex min-h-28 flex-col justify-center p-5')}>
+      <p className={cn('text-2xl font-black tracking-tight 2xl:text-3xl', toneClass)}>{value}</p>
+      <p className="mt-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#B9D8F6]">{label}</p>
     </div>
   );
 }
 
 function MiniBarChart({ title, data }: { title: string; data: { name: string; total: number }[] }) {
   return (
-    <div className={cn(premiumPanel, 'p-4')}>
+    <div className={cn(premiumPanel, 'min-h-[22rem] p-5')}>
       <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-white">
         <BarChart3 className="h-4 w-4 text-cyan-200" />
         {title}
       </h3>
-      <ResponsiveContainer width="100%" height={210}>
-        <BarChart data={data} margin={{ left: 0, right: 4, top: 8, bottom: 36 }}>
+      <ResponsiveContainer width="100%" height={250}>
+        <BarChart data={data.slice(0, 8)} margin={{ left: 0, right: 12, top: 8, bottom: 48 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.11)" />
-          <XAxis dataKey="name" angle={-24} textAnchor="end" interval={0} tick={{ fill: '#cbd5e1', fontSize: 10 }} height={58} />
+          <XAxis dataKey="name" angle={-18} textAnchor="end" interval={0} tick={{ fill: '#cbd5e1', fontSize: 10 }} tickFormatter={value => compactTick(value, 12)} height={58} />
           <YAxis allowDecimals={false} tick={{ fill: '#cbd5e1', fontSize: 10 }} />
           <Tooltip contentStyle={{ background: '#061B3A', border: '1px solid rgba(0,217,255,.28)', borderRadius: 14, color: '#fff' }} />
           <Bar dataKey="total" fill="#7dd3fc" radius={[8, 8, 0, 0]} />
@@ -282,15 +287,15 @@ function MiniBarChart({ title, data }: { title: string; data: { name: string; to
 
 function EffectivenessChart({ title, data }: { title: string; data: EffectivenessBucket[] }) {
   return (
-    <div className={cn(premiumPanel, 'p-4')}>
+    <div className={cn(premiumPanel, 'min-h-[24rem] p-5')}>
       <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-white">
         <BarChart3 className="h-4 w-4 text-cyan-200" />
         {title}
       </h3>
-      <ResponsiveContainer width="100%" height={235}>
-        <BarChart data={(data || []).slice(0, 10)} margin={{ left: 0, right: 4, top: 8, bottom: 44 }}>
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={(data || []).slice(0, 8)} margin={{ left: 0, right: 12, top: 8, bottom: 56 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.11)" />
-          <XAxis dataKey="name" angle={-24} textAnchor="end" interval={0} tick={{ fill: '#cbd5e1', fontSize: 10 }} height={66} />
+          <XAxis dataKey="name" angle={-18} textAnchor="end" interval={0} tick={{ fill: '#cbd5e1', fontSize: 10 }} tickFormatter={value => compactTick(value, 14)} height={70} />
           <YAxis yAxisId="left" allowDecimals={false} tick={{ fill: '#cbd5e1', fontSize: 10 }} />
           <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tickFormatter={value => `${value}%`} tick={{ fill: '#bae6fd', fontSize: 10 }} />
           <Tooltip
@@ -631,7 +636,7 @@ export default function ConsultasSeguimiento() {
         </div>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <section className="grid grid-cols-2 gap-4 xl:grid-cols-3 2xl:grid-cols-5">
         <MetricCard label="Registros filtrados" value={total.toLocaleString('es-MX')} />
         <MetricCard label="Posteadas" value={effectiveness.efectivas.toLocaleString('es-MX')} tone="green" />
         <MetricCard label="% efectividad" value={`${effectiveness.efectividad}%`} tone="green" />
@@ -639,15 +644,15 @@ export default function ConsultasSeguimiento() {
         <MetricCard label="Datos completos" value={analytics.calidadCompleta.toLocaleString('es-MX')} tone="green" />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className={cn(premiumPanel, 'p-4')}>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+        <div className={cn(premiumPanel, 'min-h-[22rem] p-5')}>
           <h3 className="mb-3 flex items-center gap-2 text-sm font-black text-white">
             <Sparkles className="h-4 w-4 text-cyan-200" />
             Calidad operativa
           </h3>
-          <ResponsiveContainer width="100%" height={210}>
+          <ResponsiveContainer width="100%" height={250}>
             <PieChart>
-              <Pie data={analytics.byQuality} dataKey="value" nameKey="name" innerRadius={48} outerRadius={78} paddingAngle={2}>
+              <Pie data={analytics.byQuality} dataKey="value" nameKey="name" innerRadius={56} outerRadius={88} paddingAngle={2}>
                 {analytics.byQuality.map((_, index) => <Cell key={index} fill={chartColors[index % chartColors.length]} />)}
               </Pie>
               <Tooltip contentStyle={{ background: '#061B3A', border: '1px solid rgba(0,217,255,.28)', borderRadius: 14, color: '#fff' }} />
@@ -658,7 +663,7 @@ export default function ConsultasSeguimiento() {
         <MiniBarChart title="Usuarios" data={analytics.byUsuario} />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
         <EffectivenessChart title="Efectividad por zona" data={effectiveness.byZona} />
         <EffectivenessChart title="Efectividad por tienda" data={effectiveness.byTienda} />
         <EffectivenessChart title="Efectividad por promotor nombre" data={effectiveness.byPromotor} />
