@@ -195,3 +195,33 @@ export function PremiumKpiCard({
     </PremiumCard>
   );
 }
+
+export const HDGlassCard = PremiumCard;
+export const HDMetricCard = PremiumKpiCard;
+export const HDNeonButton = PremiumButton;
+export const HDBadge = PremiumBadge;
+export const HDSectionTitle = SectionHeader;
+
+export function HDInput({
+  className,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={cn('hd-input hd-premium-input', className)} {...props} />;
+}
+
+export function HDModal({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <div className={cn('hd-modal hd-glass-modal', className)}>{children}</div>;
+}
+
+export function HDTable({
+  className,
+  ...props
+}: React.TableHTMLAttributes<HTMLTableElement>) {
+  return <table className={cn('hd-table', className)} {...props} />;
+}

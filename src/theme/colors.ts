@@ -1,7 +1,7 @@
 export const neuralColors = {
-  deepSpace: '#020A1F',
-  navy: '#061B3A',
-  electricBlue: '#0437F2',
+  deepSpace: '#050505',
+  navy: '#081220',
+  electricBlue: '#00AFFF',
   cyan: '#00D9FF',
   ice: '#EAFBFF',
   violet: '#7B61FF',

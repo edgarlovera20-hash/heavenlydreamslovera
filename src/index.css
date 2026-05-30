@@ -6159,3 +6159,362 @@ a > svg {
   stroke: #ff8c00 !important;
   filter: drop-shadow(0 0 18px rgba(255, 140, 0, 0.46)) !important;
 }
+
+/* ==========================================================================
+   Heavenly Dreams global enterprise skin
+   Applies the black premium visual system to every module without touching logic.
+   ========================================================================== */
+:root {
+  --hd-global-bg: #050505;
+  --hd-global-bg-soft: #081220;
+  --hd-global-panel: rgba(70, 70, 70, 0.15);
+  --hd-global-panel-strong: rgba(18, 22, 29, 0.74);
+  --hd-global-panel-soft: rgba(255, 255, 255, 0.055);
+  --hd-global-border: rgba(255, 255, 255, 0.14);
+  --hd-global-border-strong: rgba(208, 238, 255, 0.32);
+  --hd-global-cyan: #00afff;
+  --hd-global-cyan-2: #00d9ff;
+  --hd-global-text: #ffffff;
+  --hd-global-muted: rgba(220, 236, 255, 0.72);
+  --hd-global-dim: rgba(180, 201, 224, 0.58);
+  --hd-global-shadow: 0 18px 54px rgba(0, 0, 0, 0.42);
+  --hd-global-glow: 0 0 26px rgba(0, 175, 255, 0.18);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0, 175, 255, 0.10), transparent 32rem),
+    radial-gradient(circle at 92% 12%, rgba(34, 88, 160, 0.16), transparent 28rem),
+    linear-gradient(180deg, #050505 0%, #081220 50%, #050505 100%) !important;
+  color: var(--hd-global-text) !important;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+#root,
+.hd-screen,
+.hd-neural-layout,
+.hd-dashboard-layout,
+.hd-module-stage,
+.hd-dashboard-clean,
+.hd-cyber-screen,
+.hd-mobile-clean {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0, 175, 255, 0.10), transparent 30rem),
+    radial-gradient(circle at 100% 14%, rgba(85, 120, 190, 0.12), transparent 32rem),
+    linear-gradient(180deg, #050505 0%, #081220 48%, #050505 100%) !important;
+  color: var(--hd-global-text) !important;
+}
+
+.hd-neural-gradient,
+.hd-neural-orbs {
+  opacity: 0.42 !important;
+  filter: saturate(0.8) brightness(0.74) !important;
+}
+
+.hd-screen:not(.aether-flow-hero)::before,
+.hd-neural-layout::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.7px),
+    linear-gradient(115deg, transparent 0 45%, rgba(255, 255, 255, 0.035) 46%, transparent 47% 100%);
+  background-size: 120px 120px, 280px 280px;
+  opacity: 0.18;
+}
+
+.hd-screen:not(.aether-flow-hero) > *,
+.hd-neural-content {
+  position: relative;
+  z-index: 1;
+}
+
+.glass-panel,
+.glass-panel-neon,
+.hd-panel,
+.hd-card,
+.hd-cyber-panel,
+.hd-cyber-card,
+.hd-cyber-card-soft,
+.hd-neon-card,
+.hd-neon-metric,
+.hd-premium-surface,
+.hd-premium-card,
+.hd-modal,
+.hd-glass-modal,
+.hd-holographic-sidebar,
+.hd-mobile-login-card,
+.hd-curp-helper,
+.hd-ai-panel,
+.hd-quick-action,
+main :where(section, article, aside, form):where(.rounded-xl, .rounded-2xl, .rounded-3xl, [class*="border-white"], [class*="border-cyan"], [class*="border-slate"], [class*="bg-[#"], [class*="bg-slate"], [class*="bg-black"]) {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025) 42%, rgba(0, 0, 0, 0.18)),
+    var(--hd-global-panel) !important;
+  border: 1px solid var(--hd-global-border) !important;
+  border-radius: 24px !important;
+  box-shadow:
+    var(--hd-global-shadow),
+    var(--hd-global-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(112%) !important;
+  color: var(--hd-global-text) !important;
+}
+
+.hd-card:hover,
+.hd-card-interactive:hover,
+.hd-neon-card:hover,
+.hd-quick-action:hover,
+.hd-panel:hover,
+.glass-panel:hover,
+.glass-panel-neon:hover,
+main :where(button, a):where(.rounded-xl, .rounded-2xl, .rounded-3xl):hover {
+  border-color: var(--hd-global-border-strong) !important;
+  box-shadow:
+    0 22px 62px rgba(0, 0, 0, 0.48),
+    0 0 32px rgba(0, 175, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+  transform: translateY(-2px);
+}
+
+.hd-liquid-button,
+.hd-button,
+.hd-premium-button,
+button:not(.aether-role-card):not(.hd-no-liquid):where(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl),
+a:where(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl)[role="button"] {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
+    rgba(40, 40, 40, 0.40) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.34),
+    0 0 18px rgba(0, 175, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(16px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(110%) !important;
+}
+
+.hd-liquid-button:hover,
+.hd-button:hover,
+.hd-premium-button:hover,
+button:not(.aether-role-card):not(.hd-no-liquid):where(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl):hover {
+  background:
+    linear-gradient(135deg, rgba(0, 175, 255, 0.18), rgba(255, 255, 255, 0.04)),
+    rgba(46, 52, 60, 0.46) !important;
+  border-color: rgba(210, 240, 255, 0.32) !important;
+}
+
+.hd-input,
+.hd-premium-input,
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select,
+textarea {
+  background: rgba(8, 18, 32, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 16px !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(12px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(108%) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(220, 236, 255, 0.50) !important;
+}
+
+.hd-input:focus,
+.hd-premium-input:focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(0, 175, 255, 0.64) !important;
+  outline: none !important;
+  box-shadow:
+    0 0 0 3px rgba(0, 175, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.hd-label,
+label,
+.hd-eyebrow,
+[class*="text-slate-500"],
+[class*="text-slate-400"] {
+  color: var(--hd-global-muted) !important;
+}
+
+[class*="text-slate-300"],
+[class*="text-slate-200"],
+[class*="text-gray-"] {
+  color: rgba(239, 247, 255, 0.86) !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+.hd-premium-title,
+.hd-section-title {
+  color: #ffffff !important;
+  text-shadow:
+    0 0 16px rgba(0, 175, 255, 0.12),
+    0 14px 30px rgba(0, 0, 0, 0.34);
+}
+
+.hd-holographic-sidebar,
+aside[class*="w-72"],
+aside[class*="border-r"] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.018)),
+    rgba(5, 5, 5, 0.76) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 18px 0 58px rgba(0, 0, 0, 0.38), inset -1px 0 0 rgba(0, 175, 255, 0.16) !important;
+}
+
+.hd-nav-item,
+nav button,
+aside button {
+  color: rgba(235, 245, 255, 0.74) !important;
+}
+
+.hd-nav-item.is-active,
+.hd-liquid-selected,
+nav button[aria-current="page"],
+aside button[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.075) !important;
+  border-color: rgba(0, 175, 255, 0.40) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 24px rgba(0, 175, 255, 0.18), inset 3px 0 0 rgba(0, 217, 255, 0.88) !important;
+}
+
+.hd-floating-icon,
+.hd-neon-icon,
+.hd-quick-action-icon,
+.hd-nav-item-icon,
+.hd-premium-iconbox,
+.hd-neon-iconbox,
+.hd-mobile-icon,
+:where(.rounded-full, .rounded-xl, .rounded-2xl):has(> svg:only-child) {
+  background: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+svg {
+  filter: drop-shadow(0 0 7px currentColor);
+}
+
+table,
+.hd-table {
+  width: 100%;
+  border-collapse: separate !important;
+  border-spacing: 0 0.62rem !important;
+  color: #ffffff !important;
+}
+
+thead,
+th {
+  background: transparent !important;
+  color: rgba(220, 236, 255, 0.70) !important;
+  border-color: transparent !important;
+}
+
+tbody tr {
+  background: rgba(255, 255, 255, 0.045) !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.26) !important;
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+tbody tr:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  transform: translateY(-1px);
+}
+
+td,
+th {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.recharts-wrapper,
+.recharts-surface {
+  filter: none !important;
+}
+
+.recharts-cartesian-grid line {
+  stroke: rgba(255, 255, 255, 0.10) !important;
+}
+
+.recharts-text,
+.recharts-label {
+  fill: rgba(230, 242, 255, 0.72) !important;
+}
+
+.recharts-bar-rectangle path,
+.recharts-sector {
+  filter: drop-shadow(0 0 10px rgba(0, 175, 255, 0.10)) !important;
+}
+
+.custom-scrollbar,
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 175, 255, 0.60) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(0, 175, 255, 0.75), rgba(125, 249, 255, 0.42));
+  border-radius: 99px;
+}
+
+.Toastify__toast,
+[role="alert"],
+.hd-login-alert {
+  background: rgba(28, 14, 18, 0.78) !important;
+  border: 1px solid rgba(255, 95, 130, 0.36) !important;
+  color: #ffffff !important;
+  border-radius: 18px !important;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.34) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+@media (max-width: 767px) {
+  .hd-screen:not(.aether-flow-hero)::before,
+  .hd-neural-layout::before {
+    opacity: 0.10;
+    background-size: 150px 150px, 340px 340px;
+  }
+
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-panel,
+  .hd-card,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-neon-card,
+  .hd-neon-metric {
+    border-radius: 20px !important;
+    backdrop-filter: blur(14px) saturate(108%) !important;
+    -webkit-backdrop-filter: blur(14px) saturate(108%) !important;
+  }
+}
