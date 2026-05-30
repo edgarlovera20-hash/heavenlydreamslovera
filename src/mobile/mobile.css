@@ -318,6 +318,22 @@
   background: linear-gradient(135deg, rgba(8, 42, 94, 0.96), rgba(6, 27, 58, 0.98));
 }
 
+#mobile-root .hd-mobile-register-link {
+  background: rgba(18, 223, 255, 0.08);
+  border-color: rgba(103, 244, 255, 0.22);
+  color: #dffbff;
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+#mobile-root .hd-mobile-register-link:hover,
+#mobile-root .hd-mobile-register-link:focus-visible {
+  background: rgba(18, 223, 255, 0.14);
+  border-color: rgba(103, 244, 255, 0.42);
+  color: #ffffff;
+  outline: none;
+}
+
 #mobile-root .hd-cyber-card-soft {
   border-radius: 1.15rem;
   background: rgba(2, 14, 34, 0.52);

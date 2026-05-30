@@ -1163,6 +1163,12 @@ function LoginView({ onLogin, onNotice }: { onLogin: (session: SessionUser) => v
             <MobileIcon name={passkeyLoading ? 'loader' : 'id'} className={cx('h-4 w-4', passkeyLoading && 'animate-spin')} />
             Huella digital
           </button>
+          <a
+            href="/?registro=1"
+            className="hd-mobile-register-link flex h-12 w-full items-center justify-center rounded-2xl border text-sm font-black uppercase tracking-[0.12em] transition"
+          >
+            Registrarme
+          </a>
         </form>
       </div>
     </main>

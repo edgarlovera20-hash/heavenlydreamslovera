@@ -30,10 +30,16 @@ function friendlyPasskeyError(err: any) {
   return raw || 'No se pudo completar la passkey.';
 }
 
+function shouldOpenRegistration() {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has('registro') || window.location.hash === '#registro';
+}
+
 export default function App() {
   const [role, setRole] = useState<Role | null>(null);
   const [pendingRole, setPendingRole] = useState<Role | null>(null);
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(shouldOpenRegistration);
   const [isMobile, setIsMobile] = useState(false);
   const [isLightMode] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
