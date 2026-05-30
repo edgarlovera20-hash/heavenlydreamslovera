@@ -1,25 +1,25 @@
 export const neuralColors = {
-  deepSpace: '#050505',
-  navy: '#081220',
-  electricBlue: '#00AFFF',
-  cyan: '#00D9FF',
+  deepSpace: '#0B0B0D',
+  navy: '#111214',
+  electricBlue: '#00A8FF',
+  cyan: '#00A8FF',
   ice: '#EAFBFF',
-  violet: '#7B61FF',
-  magenta: '#D946EF',
-  success: '#2CF5B8',
+  violet: '#8B8D98',
+  magenta: '#C7C9D1',
+  success: '#35D399',
   warning: '#FFB86B',
-  danger: '#FF4D7D',
+  danger: '#FF5F7E',
   text: '#FFFFFF',
-  muted: '#B9D8F6',
+  muted: '#B8BCC6',
 } as const;
 
 export type NeuralTone = 'cyan' | 'blue' | 'violet' | 'emerald' | 'amber' | 'rose';
 
 export const neuralToneRgb: Record<NeuralTone, string> = {
-  cyan: '0, 217, 255',
-  blue: '4, 55, 242',
-  violet: '123, 97, 255',
-  emerald: '44, 245, 184',
+  cyan: '0, 168, 255',
+  blue: '0, 168, 255',
+  violet: '139, 141, 152',
+  emerald: '53, 211, 153',
   amber: '255, 184, 107',
-  rose: '255, 77, 125',
+  rose: '255, 95, 126',
 };

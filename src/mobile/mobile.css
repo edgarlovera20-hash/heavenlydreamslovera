@@ -1269,3 +1269,108 @@ body,
 #mobile-root :where(h1, h2, h3, h4, h5, h6, .hd-premium-title, .hd-mobile-section-title, .hd-neon-card, .hd-neon-action, .hd-mobile-bottom-nav) {
   letter-spacing: 0.045em;
 }
+
+/* Mobile Graphite Enterprise Pass: same sober language as desktop. */
+#mobile-root {
+  --hd-mobile-bg: #0b0b0d;
+  --hd-mobile-bg-soft: #111214;
+  --hd-mobile-panel: rgba(255, 255, 255, 0.06);
+  --hd-mobile-panel-strong: rgba(255, 255, 255, 0.085);
+  --hd-mobile-panel-muted: rgba(255, 255, 255, 0.045);
+  --hd-mobile-border: rgba(255, 255, 255, 0.12);
+  --hd-mobile-border-strong: rgba(255, 255, 255, 0.18);
+  --hd-mobile-blue: #00a8ff;
+  --hd-mobile-cyan: #00a8ff;
+  --hd-mobile-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+html,
+body,
+#mobile-root,
+#mobile-root .hd-cyber-screen,
+#mobile-root .hd-mobile-login-screen,
+#mobile-root .hd-mobile-main,
+#mobile-root .hd-mobile-clean,
+#mobile-root .hd-neural-layout {
+  background: linear-gradient(180deg, #0b0b0d 0%, #111214 100%) !important;
+  background-color: #0b0b0d !important;
+  color: #ffffff !important;
+}
+
+#mobile-root .hd-cyber-screen::before,
+#mobile-root .hd-cyber-screen::after,
+#mobile-root .hd-mobile-main::before,
+#mobile-root .hd-mobile-main::after,
+#mobile-root .hd-neural-layout::before,
+#mobile-root .hd-neural-layout::after {
+  opacity: 0.018 !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+#mobile-root :where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-mobile-login-card,
+  .hd-mobile-topbar,
+  .hd-mobile-bottom-nav,
+  .hd-mobile-quick-action,
+  .hd-liquid-button
+),
+#mobile-root :where(section, article, aside, form):where(.rounded-xl, .rounded-2xl, .rounded-3xl, [class*="border-white"], [class*="border-cyan"], [class*="border-slate"], [class*="bg-[#"], [class*="bg-slate"], [class*="bg-black"]) {
+  background: var(--hd-mobile-panel) !important;
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)) !important;
+  border: 1px solid var(--hd-mobile-border) !important;
+  border-radius: 22px !important;
+  box-shadow: var(--hd-mobile-shadow) !important;
+  backdrop-filter: blur(16px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(108%) !important;
+}
+
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-metric, .hd-curp-helper, .hd-mobile-login-card, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-mobile-quick-action, .hd-liquid-button)::before,
+#mobile-root :where(.glass-panel, .glass-panel-neon, .hd-cyber-panel, .hd-cyber-card, .hd-cyber-card-soft, .hd-neon-card, .hd-neon-metric, .hd-curp-helper, .hd-mobile-login-card, .hd-mobile-topbar, .hd-mobile-bottom-nav, .hd-mobile-quick-action, .hd-liquid-button)::after {
+  background: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+#mobile-root :where(.hd-mobile-bottom-nav button, .hd-mobile-topbar button, .hd-mobile-quick-action, .hd-neon-action, .hd-liquid-button):not(:disabled) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  background-image: none !important;
+  border: 1px solid var(--hd-mobile-border) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24) !important;
+}
+
+#mobile-root :where(.hd-mobile-bottom-nav button, .hd-mobile-topbar button, .hd-mobile-quick-action, .hd-neon-action, .hd-liquid-button):not(:disabled):active {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: var(--hd-mobile-border-strong) !important;
+}
+
+#mobile-root :where(.hd-cyber-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  background: rgba(255, 255, 255, 0.055) !important;
+  background-image: none !important;
+  border: 1px solid var(--hd-mobile-border) !important;
+  box-shadow: none !important;
+}
+
+#mobile-root :where(.hd-neon-iconbox, .hd-neon-icon, .hd-floating-icon, .hd-premium-iconbox, .hd-quick-action-icon, .hd-nav-item-icon, .hd-mobile-icon),
+#mobile-root :where(.rounded-full, .rounded-xl, .rounded-2xl):has(> svg:only-child) {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#mobile-root :where(svg, .hd-mobile-icon, .hd-quick-action-icon, .hd-nav-item-icon) {
+  filter: none !important;
+}
+
+#mobile-root :where(.text-slate-500, .text-slate-400, .text-gray-400, .text-gray-500) {
+  color: #b8bcc6 !important;
+}

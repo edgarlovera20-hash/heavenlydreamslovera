@@ -6617,3 +6617,301 @@ code,
 pre {
   font-family: var(--hd-font-primary, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif) !important;
 }
+
+/* Graphite Enterprise Pass: final visual authority for the internal CRM.
+   Keeps the landing/login premium, while cleaning the rest into a sober SaaS shell. */
+:root {
+  --hd-graphite-bg: #0b0b0d;
+  --hd-graphite-bg-2: #111214;
+  --hd-graphite-bg-3: #18191c;
+  --hd-graphite-glass: rgba(255, 255, 255, 0.06);
+  --hd-graphite-glass-strong: rgba(255, 255, 255, 0.085);
+  --hd-graphite-border: rgba(255, 255, 255, 0.12);
+  --hd-graphite-border-hot: rgba(255, 255, 255, 0.18);
+  --hd-graphite-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+  --hd-graphite-shadow-hover: 0 14px 34px rgba(0, 0, 0, 0.32);
+  --hd-graphite-text: #ffffff;
+  --hd-graphite-muted: #b8bcc6;
+  --hd-graphite-dim: #7c818d;
+  --hd-graphite-accent: #00a8ff;
+}
+
+html,
+body,
+#root {
+  background: linear-gradient(180deg, var(--hd-graphite-bg) 0%, var(--hd-graphite-bg-2) 100%) !important;
+  color: var(--hd-graphite-text) !important;
+}
+
+.hd-screen:not(.aether-flow-hero),
+.hd-neural-layout,
+.hd-dashboard-layout,
+.hd-dashboard-clean,
+.hd-module-stage,
+.hd-cyber-screen:not(.aether-flow-hero),
+.hd-clean-module,
+main:not(.aether-flow-hero),
+.min-h-screen:not(.aether-flow-hero) {
+  background:
+    radial-gradient(circle at 52% 0%, rgba(0, 168, 255, 0.055), transparent 34rem),
+    linear-gradient(180deg, var(--hd-graphite-bg) 0%, var(--hd-graphite-bg-2) 100%) !important;
+  background-color: var(--hd-graphite-bg) !important;
+}
+
+.hd-screen:not(.aether-flow-hero)::before,
+.hd-screen:not(.aether-flow-hero)::after,
+.hd-neural-layout::before,
+.hd-neural-layout::after,
+.hd-module-stage::before,
+.hd-module-stage::after,
+.hd-dashboard-layout::before,
+.hd-dashboard-layout::after,
+.hd-dashboard-clean::before,
+.hd-dashboard-clean::after,
+.hd-cyber-screen:not(.aether-flow-hero)::before,
+.hd-cyber-screen:not(.aether-flow-hero)::after {
+  opacity: 0.018 !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-premium-surface,
+  .hd-neon-card,
+  .hd-neon-action,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-ai-panel,
+  .hd-modal,
+  .hd-glass-modal,
+  .neural-command-hero
+):not(.aether-role-card):not(.aether-logo-shell) {
+  background: var(--hd-graphite-glass) !important;
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)) !important;
+  border: 1px solid var(--hd-graphite-border) !important;
+  border-radius: 24px !important;
+  box-shadow: var(--hd-graphite-shadow) !important;
+  backdrop-filter: blur(18px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(112%) !important;
+  color: var(--hd-graphite-text) !important;
+}
+
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-premium-surface,
+  .hd-neon-card,
+  .hd-neon-action,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-ai-panel,
+  .neural-command-hero
+):not(.aether-role-card):hover {
+  background: var(--hd-graphite-glass-strong) !important;
+  border-color: var(--hd-graphite-border-hot) !important;
+  box-shadow: var(--hd-graphite-shadow-hover) !important;
+  transform: translateY(-2px);
+}
+
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-premium-surface,
+  .hd-neon-card,
+  .hd-neon-action,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-ai-panel,
+  .neural-command-hero
+):not(.aether-role-card)::before,
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-premium-surface,
+  .hd-neon-card,
+  .hd-neon-action,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-ai-panel,
+  .neural-command-hero
+):not(.aether-role-card)::after {
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+.hd-holographic-sidebar,
+aside[class*="w-72"],
+aside[class*="border-r"] {
+  background: rgba(255, 255, 255, 0.04) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012)) !important;
+  border-color: var(--hd-graphite-border) !important;
+  box-shadow: 12px 0 30px rgba(0, 0, 0, 0.24) !important;
+  backdrop-filter: blur(18px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(108%) !important;
+}
+
+.hd-nav-item,
+nav button,
+aside button {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--hd-graphite-muted) !important;
+  box-shadow: none !important;
+}
+
+.hd-nav-item.is-active,
+.hd-liquid-selected,
+nav button[aria-current="page"],
+aside button[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--hd-graphite-border) !important;
+  color: #ffffff !important;
+  box-shadow: inset 3px 0 0 var(--hd-graphite-accent), 0 8px 22px rgba(0, 0, 0, 0.22) !important;
+}
+
+:where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action):not(.aether-register-button):not(.aether-role-card) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  background-image: none !important;
+  border: 1px solid var(--hd-graphite-border) !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22) !important;
+  backdrop-filter: blur(16px) saturate(106%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(106%) !important;
+}
+
+:where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action):not(.aether-register-button):not(.aether-role-card):hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  transform: translateY(-1px);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-premium-input) {
+  background: rgba(255, 255, 255, 0.055) !important;
+  background-image: none !important;
+  border: 1px solid var(--hd-graphite-border) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(14px) saturate(106%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(106%) !important;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-premium-input):focus,
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-premium-input):focus-visible {
+  border-color: rgba(0, 168, 255, 0.50) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(0, 168, 255, 0.10) !important;
+}
+
+:where(.hd-floating-icon, .hd-neon-icon, .hd-quick-action-icon, .hd-nav-item-icon, .hd-premium-iconbox, .hd-neon-iconbox, .hd-mobile-icon),
+:where(.rounded-full, .rounded-xl, .rounded-2xl):has(> svg:only-child) {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+svg {
+  filter: none !important;
+}
+
+:where(.hd-tone-cyan, .text-cyan-200, .text-cyan-300, .text-sky-300) svg,
+:where(svg.text-cyan-200, svg.text-cyan-300, svg.text-sky-300) {
+  color: var(--hd-graphite-accent) !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+.hd-premium-title,
+.hd-section-title {
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
+
+p,
+span,
+label,
+li,
+td,
+th,
+small,
+.hd-premium-muted,
+.text-slate-400,
+.text-slate-500,
+.text-gray-400,
+.text-gray-500 {
+  color: var(--hd-graphite-muted) !important;
+}
+
+.text-white,
+.text-slate-50,
+.text-gray-50,
+strong,
+b {
+  color: #ffffff !important;
+}
+
+tbody tr {
+  background: rgba(255, 255, 255, 0.045) !important;
+  box-shadow: none !important;
+}
+
+.recharts-bar-rectangle path,
+.recharts-sector,
+.recharts-wrapper,
+.recharts-surface {
+  filter: none !important;
+}
+
+* {
+  scrollbar-color: rgba(184, 188, 198, 0.45) transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(184, 188, 198, 0.34) !important;
+}
