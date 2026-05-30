@@ -7049,3 +7049,134 @@ tbody tr {
     height: 4.35rem !important;
   }
 }
+
+/* Final entry visual pass: graphite glass, low light logo. */
+.hd-screen.aether-flow-hero {
+  --hd-entry-panel: rgba(64, 64, 64, 0.18);
+  --hd-entry-panel-strong: rgba(78, 78, 78, 0.22);
+  --hd-entry-border: rgba(255, 255, 255, 0.11);
+  --hd-entry-edge: rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at 50% 7%, rgba(255, 255, 255, 0.045), transparent 22%),
+    linear-gradient(180deg, #050505 0%, #080808 54%, #030303 100%) !important;
+}
+
+.hd-screen.aether-flow-hero::before,
+.hd-screen.aether-flow-hero::after,
+.hd-screen.aether-flow-hero .aether-clean-bg {
+  background: none !important;
+  opacity: 0 !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo-glow,
+.hd-screen.aether-flow-hero .aether-logo-shell::before,
+.hd-screen.aether-flow-hero .aether-logo-shell::after {
+  background: none !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: none !important;
+  opacity: 0.18 !important;
+  animation: none !important;
+  filter: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo-shell {
+  filter: drop-shadow(0 0 10px rgba(0, 175, 255, 0.12)) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo {
+  filter:
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.10))
+    drop-shadow(0 0 14px rgba(0, 175, 255, 0.10)) !important;
+  animation: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-title,
+.hd-screen.aether-flow-hero .aether-title * {
+  color: #f5f7fb !important;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.14),
+    0 0 18px rgba(0, 175, 255, 0.10) !important;
+  filter: none !important;
+  animation: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-subtitle {
+  color: rgba(226, 232, 240, 0.78) !important;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.08) !important;
+  filter: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-subtitle::before,
+.hd-screen.aether-flow-hero .aether-subtitle::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent) !important;
+  box-shadow: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid,
+.hd-screen.aether-flow-hero .hd-login-card.glass-panel-neon,
+.hd-screen.aether-flow-hero .hd-login-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.025)),
+    var(--hd-entry-panel) !important;
+  background-color: var(--hd-entry-panel) !important;
+  border: 1px solid var(--hd-entry-border) !important;
+  border-radius: 24px !important;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+  backdrop-filter: blur(24px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(108%) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid::before {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10), transparent 34%),
+    radial-gradient(circle at 82% 88%, rgba(255, 255, 255, 0.055), transparent 38%) !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid::after {
+  background: none !important;
+  opacity: 0 !important;
+  animation: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:hover,
+.hd-screen.aether-flow-hero .aether-role-card.hd-no-liquid:focus-visible {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035)),
+    var(--hd-entry-panel-strong) !important;
+  border-color: var(--hd-entry-edge) !important;
+  box-shadow:
+    0 22px 48px rgba(0, 0, 0, 0.48),
+    0 0 18px rgba(255, 255, 255, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-chip,
+.hd-screen.aether-flow-hero .aether-register-button {
+  background: rgba(255, 255, 255, 0.07) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34) !important;
+  backdrop-filter: blur(20px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(108%) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-register-button:hover,
+.hd-screen.aether-flow-hero .aether-register-button:focus-visible {
+  background: rgba(255, 255, 255, 0.10) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.42) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-icon,
+.hd-screen.aether-flow-hero button.aether-role-card.hd-no-liquid > svg.aether-role-icon {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 0 9px rgba(var(--aether-rgb), 0.30)) !important;
+}
