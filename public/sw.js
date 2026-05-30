@@ -1,5 +1,5 @@
 // Service Worker — Heavenly Dreams CRM
-const CACHE = 'hd-crm-v2';
+const CACHE = 'hd-crm-v3';
 const PRECACHE = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
