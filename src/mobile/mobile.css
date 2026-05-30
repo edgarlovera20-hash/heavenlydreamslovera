@@ -1786,3 +1786,545 @@ body,
   background: #2a2a2a !important;
   border-radius: 20px !important;
 }
+
+/* Final no-blue graphite lock for mobile routes. */
+#mobile-root {
+  --color-cyber-electric: #9a9a9a !important;
+  --color-cyber-deep: #050505 !important;
+  --color-cyber-dark: #0a0a0a !important;
+  --color-cyber-black: #000000 !important;
+  --color-cyber-neon: #ffffff !important;
+  --color-cyber-matrix: #b8b8b8 !important;
+  --hd-mobile-bg: #000000 !important;
+  --hd-mobile-bg-soft: #050505 !important;
+  --hd-mobile-panel: rgba(12, 12, 12, 0.88) !important;
+  --hd-mobile-panel-2: rgba(255, 255, 255, 0.055) !important;
+  --hd-mobile-panel-strong: rgba(255, 255, 255, 0.085) !important;
+  --hd-mobile-panel-muted: rgba(255, 255, 255, 0.035) !important;
+  --hd-mobile-border: rgba(255, 255, 255, 0.13) !important;
+  --hd-mobile-border-strong: rgba(255, 255, 255, 0.24) !important;
+  --hd-mobile-text: #ffffff !important;
+  --hd-mobile-muted: rgba(225, 225, 225, 0.72) !important;
+  --hd-mobile-cyan: #d8d8d8 !important;
+  --hd-mobile-blue: #d8d8d8 !important;
+  --hd-mobile-shadow: 0 18px 54px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+  --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
+  --tw-ring-offset-color: #000000 !important;
+  background: #000000 !important;
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+#mobile-root :where(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout, .hd-mobile-register-shell, .hd-login-shell) {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+}
+
+#mobile-root :where(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout, .hd-mobile-register-shell, .hd-login-shell)::before,
+#mobile-root :where(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout, .hd-mobile-register-shell, .hd-login-shell)::after {
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+#mobile-root :where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-card,
+  .hd-panel,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-mobile-login-card,
+  .hd-mobile-topbar,
+  .hd-mobile-bottom-nav,
+  .hd-mobile-quick-action,
+  .hd-mobile-register-link,
+  .hd-liquid-button,
+  .hd-login-password-control,
+  section[class*="rounded"],
+  article[class*="rounded"],
+  form[class*="rounded"],
+  div[class*="rounded-2xl"][class*="border"],
+  div[class*="rounded-3xl"][class*="border"]
+) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.024) 48%, rgba(0, 0, 0, 0.82)),
+    rgba(12, 12, 12, 0.88) !important;
+  background-color: rgba(12, 12, 12, 0.88) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.024) 48%, rgba(0, 0, 0, 0.82)) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  box-shadow: var(--hd-mobile-shadow) !important;
+  backdrop-filter: blur(24px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(108%) !important;
+  color: #ffffff !important;
+}
+
+#mobile-root :where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-card,
+  .hd-panel,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-mobile-login-card,
+  .hd-mobile-topbar,
+  .hd-mobile-bottom-nav,
+  .hd-mobile-quick-action,
+  .hd-mobile-register-link,
+  .hd-liquid-button,
+  .hd-login-password-control
+)::before,
+#mobile-root :where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-card,
+  .hd-panel,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-curp-helper,
+  .hd-mobile-login-card,
+  .hd-mobile-topbar,
+  .hd-mobile-bottom-nav,
+  .hd-mobile-quick-action,
+  .hd-mobile-register-link,
+  .hd-liquid-button,
+  .hd-login-password-control
+)::after {
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+#mobile-root :where(
+  [class*="bg-blue"],
+  [class*="bg-cyan"],
+  [class*="bg-sky"],
+  [class*="bg-indigo"],
+  [class*="bg-[#002"],
+  [class*="bg-[#003"],
+  [class*="bg-[#004"],
+  [class*="bg-[#005"],
+  [class*="bg-[#006"],
+  [class*="bg-[#007"],
+  [class*="bg-[#008"],
+  [class*="bg-[#061b3a"],
+  [class*="bg-[#082a5e"],
+  [class*="bg-[#020A1F"],
+  [class*="bg-[#020A16"],
+  [class*="bg-[var(--hd-surface"],
+  [class*="bg-[var(--theme"],
+  [class*="bg-cyber"],
+  [class*="from-blue"],
+  [class*="from-cyan"],
+  [class*="from-sky"],
+  [class*="via-blue"],
+  [class*="via-cyan"],
+  [class*="via-sky"],
+  [class*="to-blue"],
+  [class*="to-cyan"],
+  [class*="to-sky"],
+  [class*="bg-gradient"]
+) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.018) 50%, rgba(0, 0, 0, 0.82)),
+    rgba(10, 10, 10, 0.90) !important;
+  background-color: rgba(10, 10, 10, 0.90) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.018) 50%, rgba(0, 0, 0, 0.82)) !important;
+}
+
+#mobile-root :where(
+  [class*="border-blue"],
+  [class*="border-cyan"],
+  [class*="border-sky"],
+  [class*="border-cyber"],
+  [class*="focus:border-blue"],
+  [class*="focus:border-cyan"],
+  [class*="focus-visible:ring-blue"],
+  [class*="focus-visible:ring-cyan"],
+  [class*="ring-blue"],
+  [class*="ring-cyan"]
+) {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+#mobile-root :where([class*="shadow-blue"], [class*="shadow-cyan"], [class*="shadow-sky"], [class*="shadow-[0_0"], [class*="drop-shadow-[0_0"]) {
+  box-shadow: var(--hd-mobile-shadow) !important;
+  filter: none !important;
+}
+
+#mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(.aether-role-card):not(:disabled) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018) 56%, rgba(0, 0, 0, 0.84)),
+    rgba(12, 12, 12, 0.90) !important;
+  background-color: rgba(12, 12, 12, 0.90) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.54),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+
+#mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(.aether-role-card):not(:disabled):hover,
+#mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(.aether-role-card):not(:disabled):focus-visible,
+#mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(.aether-role-card):not(:disabled):active {
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  box-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.62),
+    0 0 20px rgba(255, 255, 255, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+#mobile-root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+    rgba(4, 4, 4, 0.92) !important;
+  background-color: rgba(4, 4, 4, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
+}
+
+#mobile-root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control):focus,
+#mobile-root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control):focus-within,
+#mobile-root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control):focus-visible {
+  border-color: rgba(255, 255, 255, 0.34) !important;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+#mobile-root :where(
+  [class*="text-cyber"],
+  [class*="text-cyan"],
+  [class*="text-sky"],
+  [class*="text-blue"],
+  p,
+  span,
+  label,
+  small
+) {
+  color: rgba(225, 225, 225, 0.76) !important;
+  text-shadow: none !important;
+}
+
+#mobile-root :where(h1, h2, h3, h4, h5, h6, strong, b, .text-white) {
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
+
+#mobile-root :where(.hd-mobile-bottom-nav [aria-current="page"], .hd-mobile-bottom-nav .is-active, .hd-liquid-selected, [aria-current="page"], .is-active) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+    rgba(12, 12, 12, 0.88) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 3px 0 0 rgba(255, 255, 255, 0.72),
+    0 10px 28px rgba(0, 0, 0, 0.42) !important;
+}
+
+#mobile-root :where(svg, .lucide, .hd-mobile-icon, .hd-quick-action-icon, .hd-nav-item-icon) {
+  color: #d8d8d8 !important;
+  stroke: currentColor !important;
+  filter: none !important;
+}
+
+#mobile-root :where(.hd-tone-amber, .hd-tone-yellow, [class*="text-yellow"], [class*="text-amber"]) :where(svg, .lucide),
+#mobile-root :where(svg[class*="text-yellow"], svg[class*="text-amber"]) {
+  color: #ffd900 !important;
+  filter: drop-shadow(0 0 10px rgba(255, 217, 0, 0.42)) !important;
+}
+
+#mobile-root :where(.hd-tone-pink, .hd-tone-violet, [class*="text-pink"], [class*="text-fuchsia"], [class*="text-violet"], [class*="text-purple"]) :where(svg, .lucide),
+#mobile-root :where(svg[class*="text-pink"], svg[class*="text-fuchsia"], svg[class*="text-violet"], svg[class*="text-purple"]) {
+  color: #ff31df !important;
+  filter: drop-shadow(0 0 10px rgba(255, 49, 223, 0.36)) !important;
+}
+
+#mobile-root :where(.hd-tone-orange, [class*="text-orange"]) :where(svg, .lucide),
+#mobile-root :where(svg[class*="text-orange"]) {
+  color: #ff8a00 !important;
+  filter: drop-shadow(0 0 10px rgba(255, 138, 0, 0.38)) !important;
+}
+
+#mobile-root :where(.hd-tone-emerald, .hd-tone-green, [class*="text-emerald"], [class*="text-green"]) :where(svg, .lucide),
+#mobile-root :where(svg[class*="text-emerald"], svg[class*="text-green"]) {
+  color: #00ff7a !important;
+  filter: drop-shadow(0 0 10px rgba(0, 255, 122, 0.30)) !important;
+}
+
+#mobile-root :where(.hd-tone-rose, .hd-tone-red, [class*="text-rose"], [class*="text-red"]) :where(svg, .lucide),
+#mobile-root :where(svg[class*="text-rose"], svg[class*="text-red"]) {
+  color: #ff365a !important;
+  filter: drop-shadow(0 0 10px rgba(255, 54, 90, 0.30)) !important;
+}
+
+#mobile-root :where(.hd-tone-cyan, .hd-tone-blue, [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]) :where(svg, .lucide),
+#mobile-root :where(svg[class*="text-cyan"], svg[class*="text-sky"], svg[class*="text-blue"]) {
+  color: #f2f2f2 !important;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.16)) !important;
+}
+
+#mobile-root :where(.hd-app-logo, img[alt*="logo" i], img[alt*="heavenly" i]) {
+  filter:
+    drop-shadow(0 0 8px rgba(255, 255, 255, 0.10))
+    drop-shadow(0 0 18px rgba(255, 255, 255, 0.05)) !important;
+  box-shadow: none !important;
+}
+
+#mobile-root :where(.hd-login-back, button.hd-login-back, .hd-no-liquid.hd-login-back) {
+  background: rgba(10, 10, 10, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.56),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  z-index: 80 !important;
+}
+
+#mobile-root * {
+  scrollbar-color: #3a3a3a transparent !important;
+}
+
+#mobile-root *::-webkit-scrollbar-thumb {
+  background: #3a3a3a !important;
+}
+
+#mobile-root *::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a !important;
+}
+
+@layer base {
+  #mobile-root {
+    --color-cyber-electric: #9a9a9a !important;
+    --color-cyber-deep: #050505 !important;
+    --color-cyber-dark: #0a0a0a !important;
+    --color-cyber-black: #000000 !important;
+    --color-cyber-neon: #ffffff !important;
+    --color-cyber-matrix: #b8b8b8 !important;
+    --hd-mobile-bg: #000000 !important;
+    --hd-mobile-bg-soft: #050505 !important;
+    --hd-mobile-panel: rgba(12, 12, 12, 0.88) !important;
+    --hd-mobile-panel-2: rgba(255, 255, 255, 0.055) !important;
+    --hd-mobile-panel-strong: rgba(255, 255, 255, 0.085) !important;
+    --hd-mobile-panel-muted: rgba(255, 255, 255, 0.035) !important;
+    --hd-mobile-border: rgba(255, 255, 255, 0.13) !important;
+    --hd-mobile-border-strong: rgba(255, 255, 255, 0.24) !important;
+    --hd-mobile-text: #ffffff !important;
+    --hd-mobile-muted: rgba(225, 225, 225, 0.72) !important;
+    --hd-mobile-cyan: #d8d8d8 !important;
+    --hd-mobile-blue: #d8d8d8 !important;
+    --hd-mobile-shadow: 0 18px 54px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+    --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
+    --tw-ring-offset-color: #000000 !important;
+    background: #000000 !important;
+    background-color: #000000 !important;
+    color: #ffffff !important;
+  }
+
+  #mobile-root :where(.hd-cyber-screen, .hd-mobile-login-screen, .hd-mobile-main, .hd-mobile-clean, .hd-neural-layout, .hd-mobile-register-shell, .hd-login-shell) {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    background-image: none !important;
+    color: #ffffff !important;
+  }
+
+  #mobile-root :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-cyber-panel,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-card,
+    .hd-panel,
+    .hd-neon-card,
+    .hd-neon-metric,
+    .hd-curp-helper,
+    .hd-mobile-login-card,
+    .hd-mobile-topbar,
+    .hd-mobile-bottom-nav,
+    .hd-mobile-quick-action,
+    .hd-mobile-register-link,
+    .hd-liquid-button,
+    .hd-login-password-control,
+    section[class*="rounded"],
+    article[class*="rounded"],
+    form[class*="rounded"],
+    div[class*="rounded-2xl"][class*="border"],
+    div[class*="rounded-3xl"][class*="border"]
+  ) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.024) 48%, rgba(0, 0, 0, 0.82)),
+      rgba(12, 12, 12, 0.88) !important;
+    background-color: rgba(12, 12, 12, 0.88) !important;
+    background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.024) 48%, rgba(0, 0, 0, 0.82)) !important;
+    border-color: rgba(255, 255, 255, 0.13) !important;
+    box-shadow: var(--hd-mobile-shadow) !important;
+    color: #ffffff !important;
+  }
+
+  #mobile-root :where(
+    [class*="bg-blue"],
+    [class*="bg-cyan"],
+    [class*="bg-sky"],
+    [class*="bg-indigo"],
+    [class*="bg-[#002"],
+    [class*="bg-[#003"],
+    [class*="bg-[#004"],
+    [class*="bg-[#005"],
+    [class*="bg-[#006"],
+    [class*="bg-[#007"],
+    [class*="bg-[#008"],
+    [class*="bg-[#061b3a"],
+    [class*="bg-[#082a5e"],
+    [class*="bg-[#020A1F"],
+    [class*="bg-[#020A16"],
+    [class*="bg-[var(--hd-surface"],
+    [class*="bg-[var(--theme"],
+    [class*="bg-cyber"],
+    [class*="from-blue"],
+    [class*="from-cyan"],
+    [class*="from-sky"],
+    [class*="via-blue"],
+    [class*="via-cyan"],
+    [class*="via-sky"],
+    [class*="to-blue"],
+    [class*="to-cyan"],
+    [class*="to-sky"],
+    [class*="bg-gradient"]
+  ) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.018) 50%, rgba(0, 0, 0, 0.82)),
+      rgba(10, 10, 10, 0.90) !important;
+    background-color: rgba(10, 10, 10, 0.90) !important;
+    background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.018) 50%, rgba(0, 0, 0, 0.82)) !important;
+  }
+
+  #mobile-root :where(
+    [class*="border-blue"],
+    [class*="border-cyan"],
+    [class*="border-sky"],
+    [class*="border-cyber"],
+    [class*="ring-blue"],
+    [class*="ring-cyan"]
+  ) {
+    border-color: rgba(255, 255, 255, 0.14) !important;
+    --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
+  }
+
+  #mobile-root :where(button, .hd-liquid-button, .hd-neon-action, .hd-mobile-quick-action, .hd-mobile-register-link):not(.aether-role-card):not(:disabled) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018) 56%, rgba(0, 0, 0, 0.84)),
+      rgba(12, 12, 12, 0.90) !important;
+    background-color: rgba(12, 12, 12, 0.90) !important;
+    border: 1px solid rgba(255, 255, 255, 0.13) !important;
+    color: #ffffff !important;
+    box-shadow:
+      0 12px 34px rgba(0, 0, 0, 0.54),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+  }
+
+  #mobile-root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+      rgba(4, 4, 4, 0.92) !important;
+    background-color: rgba(4, 4, 4, 0.92) !important;
+    border: 1px solid rgba(255, 255, 255, 0.13) !important;
+    color: #ffffff !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
+  }
+
+  #mobile-root :where(.hd-login-back, button.hd-login-back, .hd-no-liquid.hd-login-back) {
+    background: rgba(10, 10, 10, 0.82) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    color: #ffffff !important;
+    box-shadow:
+      0 12px 28px rgba(0, 0, 0, 0.56),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  }
+
+  #mobile-root :where(.hd-login-back, button.hd-login-back, .hd-no-liquid.hd-login-back) svg {
+    color: #ffffff !important;
+    stroke: currentColor !important;
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.16)) !important;
+  }
+
+  #mobile-root :where([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"], p, span, label, small) {
+    color: rgba(225, 225, 225, 0.76) !important;
+    text-shadow: none !important;
+  }
+
+  #mobile-root :where(svg, .lucide, .hd-mobile-icon, .hd-quick-action-icon, .hd-nav-item-icon) {
+    color: #d8d8d8 !important;
+    stroke: currentColor !important;
+    filter: none !important;
+  }
+
+  #mobile-root :where(.hd-tone-amber, .hd-tone-yellow, [class*="text-yellow"], [class*="text-amber"]) :where(svg, .lucide),
+  #mobile-root :where(svg[class*="text-yellow"], svg[class*="text-amber"]) {
+    color: #ffd900 !important;
+    filter: drop-shadow(0 0 10px rgba(255, 217, 0, 0.42)) !important;
+  }
+
+  #mobile-root :where(.hd-tone-pink, .hd-tone-violet, [class*="text-pink"], [class*="text-fuchsia"], [class*="text-violet"], [class*="text-purple"]) :where(svg, .lucide),
+  #mobile-root :where(svg[class*="text-pink"], svg[class*="text-fuchsia"], svg[class*="text-violet"], svg[class*="text-purple"]) {
+    color: #ff31df !important;
+    filter: drop-shadow(0 0 10px rgba(255, 49, 223, 0.36)) !important;
+  }
+
+  #mobile-root :where(.hd-tone-orange, [class*="text-orange"]) :where(svg, .lucide),
+  #mobile-root :where(svg[class*="text-orange"]) {
+    color: #ff8a00 !important;
+    filter: drop-shadow(0 0 10px rgba(255, 138, 0, 0.38)) !important;
+  }
+
+  #mobile-root :where(.hd-tone-emerald, .hd-tone-green, [class*="text-emerald"], [class*="text-green"]) :where(svg, .lucide),
+  #mobile-root :where(svg[class*="text-emerald"], svg[class*="text-green"]) {
+    color: #00ff7a !important;
+    filter: drop-shadow(0 0 10px rgba(0, 255, 122, 0.30)) !important;
+  }
+
+  #mobile-root :where(.hd-tone-rose, .hd-tone-red, [class*="text-rose"], [class*="text-red"]) :where(svg, .lucide),
+  #mobile-root :where(svg[class*="text-rose"], svg[class*="text-red"]) {
+    color: #ff365a !important;
+    filter: drop-shadow(0 0 10px rgba(255, 54, 90, 0.30)) !important;
+  }
+
+  #mobile-root :where(.hd-tone-cyan, .hd-tone-blue, [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]) :where(svg, .lucide),
+  #mobile-root :where(svg[class*="text-cyan"], svg[class*="text-sky"], svg[class*="text-blue"]),
+  #mobile-root .hd-login-back svg,
+  #mobile-root .hd-login-card svg,
+  #mobile-root .hd-login-role-icon,
+  #mobile-root .hd-login-role-icon svg {
+    color: #f2f2f2 !important;
+    stroke: currentColor !important;
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.16)) !important;
+  }
+
+  #mobile-root :where(.hd-mobile-bottom-nav [aria-current="page"], .hd-mobile-bottom-nav .is-active, .hd-liquid-selected, [aria-current="page"], .is-active) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+      rgba(12, 12, 12, 0.88) !important;
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    color: #ffffff !important;
+    box-shadow:
+      inset 3px 0 0 rgba(255, 255, 255, 0.72),
+      0 10px 28px rgba(0, 0, 0, 0.42) !important;
+  }
+}

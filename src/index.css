@@ -8238,3 +8238,702 @@ body::before {
 *::-webkit-scrollbar-thumb:hover {
   background: #4a4a4a !important;
 }
+
+/* Final no-blue graphite lock: black reference skin across desktop/PWA. */
+:root,
+html,
+html.light,
+body {
+  --theme-electric: #9a9a9a !important;
+  --theme-deep: #050505 !important;
+  --theme-dark: #0a0a0a !important;
+  --theme-black: #000000 !important;
+  --theme-neon: #ffffff !important;
+  --theme-matrix: #b8b8b8 !important;
+  --color-cyber-electric: #9a9a9a !important;
+  --color-cyber-deep: #050505 !important;
+  --color-cyber-dark: #0a0a0a !important;
+  --color-cyber-black: #000000 !important;
+  --color-cyber-neon: #ffffff !important;
+  --color-cyber-matrix: #b8b8b8 !important;
+  --hd-bg: #000000 !important;
+  --hd-bg-soft: #050505 !important;
+  --hd-surface: #0a0a0a !important;
+  --hd-surface-strong: #101010 !important;
+  --hd-surface-muted: #070707 !important;
+  --hd-border: rgba(255, 255, 255, 0.10) !important;
+  --hd-border-strong: rgba(255, 255, 255, 0.18) !important;
+  --hd-text: #ffffff !important;
+  --hd-text-muted: rgba(225, 225, 225, 0.72) !important;
+  --hd-accent: #d7d7d7 !important;
+  --hd-accent-strong: #ffffff !important;
+  --hd-ref-blue: #d7d7d7 !important;
+  --hd-ref-border-hot: rgba(255, 255, 255, 0.30) !important;
+  --hd-enterprise-accent: #d7d7d7 !important;
+  --hd-login-blue: #d7d7d7 !important;
+  --hd-ai-blue: #d7d7d7 !important;
+  --hd-graphite-accent: #f5f5f5 !important;
+  --hd-lux-panel: rgba(255, 255, 255, 0.055) !important;
+  --hd-lux-panel-strong: rgba(255, 255, 255, 0.085) !important;
+  --hd-lux-card: rgba(12, 12, 12, 0.88) !important;
+  --hd-lux-border: rgba(255, 255, 255, 0.12) !important;
+  --hd-lux-border-hot: rgba(255, 255, 255, 0.24) !important;
+  --hd-lux-muted: rgba(225, 225, 225, 0.70) !important;
+  --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
+  --tw-ring-offset-color: #000000 !important;
+}
+
+html,
+body,
+#root,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-neural-layout, .hd-dashboard-clean, .hd-clean-module, .aether-flow-hero, .hd-login-shell) {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-neural-layout, .hd-dashboard-clean, .hd-clean-module, .aether-flow-hero)::before,
+:where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-neural-layout, .hd-dashboard-clean, .hd-clean-module, .aether-flow-hero)::after,
+:where(.aether-flow-gradient, .aether-flow-canvas, .aether-flow-hologram, .aether-clean-bg, .aether-flow-lines) {
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-premium-card-hover,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-ai-panel,
+  .hd-login-card,
+  .hd-holographic-sidebar,
+  .hd-entry-role-card,
+  .aether-role-card,
+  .aether-role-chip,
+  .aether-register-button,
+  .hd-entry-register-button,
+  .hd-mobile-login-card,
+  section[class*="rounded"][class*="border"],
+  article[class*="rounded"][class*="border"],
+  aside[class*="rounded"][class*="border"],
+  form[class*="rounded"][class*="border"],
+  div[class*="rounded-2xl"][class*="border"],
+  div[class*="rounded-3xl"][class*="border"]
+) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.024) 48%, rgba(0, 0, 0, 0.82)),
+    rgba(12, 12, 12, 0.88) !important;
+  background-color: rgba(12, 12, 12, 0.88) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+  backdrop-filter: blur(24px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(108%) !important;
+  color: #ffffff !important;
+}
+
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-ai-panel,
+  .hd-login-card,
+  .hd-holographic-sidebar,
+  .aether-role-card,
+  .aether-role-chip,
+  .aether-register-button,
+  .hd-entry-register-button
+)::before,
+:where(
+  .glass-panel,
+  .glass-panel-neon,
+  .hd-card,
+  .hd-panel,
+  .hd-module-panel,
+  .hd-morosidad-panel,
+  .hd-cyber-panel,
+  .hd-cyber-card,
+  .hd-cyber-card-soft,
+  .hd-chart-card,
+  .hd-glass-card,
+  .hd-premium-card,
+  .hd-neon-card,
+  .hd-neon-metric,
+  .hd-ai-panel,
+  .hd-login-card,
+  .hd-holographic-sidebar,
+  .aether-role-card,
+  .aether-role-chip,
+  .aether-register-button,
+  .hd-entry-register-button
+)::after {
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+:where(
+  [class*="bg-blue"],
+  [class*="bg-cyan"],
+  [class*="bg-sky"],
+  [class*="bg-indigo"],
+  [class*="bg-[#002"],
+  [class*="bg-[#003"],
+  [class*="bg-[#004"],
+  [class*="bg-[#005"],
+  [class*="bg-[#006"],
+  [class*="bg-[#007"],
+  [class*="bg-[#008"],
+  [class*="bg-[#061b3a"],
+  [class*="bg-[#082a5e"],
+  [class*="bg-[#020A1F"],
+  [class*="bg-[#020A16"],
+  [class*="bg-[var(--hd-surface"],
+  [class*="bg-[var(--theme"],
+  [class*="bg-cyber"],
+  [class*="from-blue"],
+  [class*="from-cyan"],
+  [class*="from-sky"],
+  [class*="via-blue"],
+  [class*="via-cyan"],
+  [class*="via-sky"],
+  [class*="to-blue"],
+  [class*="to-cyan"],
+  [class*="to-sky"],
+  [class*="bg-gradient"]
+) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.018) 50%, rgba(0, 0, 0, 0.82)),
+    rgba(10, 10, 10, 0.90) !important;
+  background-color: rgba(10, 10, 10, 0.90) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.018) 50%, rgba(0, 0, 0, 0.82)) !important;
+}
+
+:where(
+  [class*="border-blue"],
+  [class*="border-cyan"],
+  [class*="border-sky"],
+  [class*="border-cyber"],
+  [class*="focus:border-blue"],
+  [class*="focus:border-cyan"],
+  [class*="focus-visible:ring-blue"],
+  [class*="focus-visible:ring-cyan"],
+  [class*="ring-blue"],
+  [class*="ring-cyan"]
+) {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+:where([class*="shadow-blue"], [class*="shadow-cyan"], [class*="shadow-sky"], [class*="shadow-[0_0"], [class*="drop-shadow-[0_0"]) {
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  filter: none !important;
+}
+
+:where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action, a[class*="button"]):not(.aether-role-card):not(.hd-no-liquid) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018) 56%, rgba(0, 0, 0, 0.84)),
+    rgba(12, 12, 12, 0.90) !important;
+  background-color: rgba(12, 12, 12, 0.90) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.54),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+
+:where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action, a[class*="button"]):not(.aether-role-card):hover,
+:where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action, a[class*="button"]):not(.aether-role-card):focus-visible {
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  box-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.62),
+    0 0 20px rgba(255, 255, 255, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+    rgba(4, 4, 4, 0.92) !important;
+  background-color: rgba(4, 4, 4, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
+  outline: none !important;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control):focus,
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control):focus-within,
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control):focus-visible {
+  border-color: rgba(255, 255, 255, 0.34) !important;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+:where(
+  [class*="text-cyber"],
+  [class*="text-cyan"],
+  [class*="text-sky"],
+  [class*="text-blue"],
+  [class*="group-hover:text-cyan"],
+  [class*="group-hover:text-sky"],
+  [class*="group-hover:text-blue"]
+) {
+  color: rgba(225, 225, 225, 0.78) !important;
+  text-shadow: none !important;
+}
+
+:where(.text-white, .text-slate-50, .text-gray-50, h1, h2, h3, h4, h5, h6, strong, b) {
+  color: #ffffff !important;
+}
+
+:where(.hd-holographic-sidebar nav button, .hd-nav-item, [role="tab"], [aria-current="page"], .hd-liquid-selected, .is-active) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+    rgba(12, 12, 12, 0.88) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 3px 0 0 rgba(255, 255, 255, 0.72),
+    0 10px 28px rgba(0, 0, 0, 0.42) !important;
+}
+
+:where(svg, .lucide, .hd-floating-icon, .hd-neon-icon, .hd-premium-iconbox, .hd-neon-iconbox, .hd-quick-action-icon, .hd-nav-item-icon, .hd-mobile-icon) {
+  color: #d8d8d8 !important;
+  stroke: currentColor !important;
+  filter: none !important;
+}
+
+.aether-role-card[data-tone="admin"] > svg.aether-role-icon,
+:where(.hd-tone-amber, .hd-tone-yellow, [class*="text-yellow"], [class*="text-amber"]) :where(svg, .lucide),
+:where(svg[class*="text-yellow"], svg[class*="text-amber"]) {
+  color: #ffd900 !important;
+  filter: drop-shadow(0 0 10px rgba(255, 217, 0, 0.42)) !important;
+}
+
+.aether-role-card[data-tone="supervisor"] > svg.aether-role-icon,
+:where(.hd-tone-pink, .hd-tone-violet, [class*="text-pink"], [class*="text-fuchsia"], [class*="text-violet"], [class*="text-purple"]) :where(svg, .lucide),
+:where(svg[class*="text-pink"], svg[class*="text-fuchsia"], svg[class*="text-violet"], svg[class*="text-purple"]) {
+  color: #ff31df !important;
+  filter: drop-shadow(0 0 10px rgba(255, 49, 223, 0.36)) !important;
+}
+
+.aether-role-card[data-tone="advisor"] > svg.aether-role-icon,
+:where(.hd-tone-orange, [class*="text-orange"]) :where(svg, .lucide),
+:where(svg[class*="text-orange"]) {
+  color: #ff8a00 !important;
+  filter: drop-shadow(0 0 10px rgba(255, 138, 0, 0.38)) !important;
+}
+
+:where(.hd-tone-emerald, .hd-tone-green, [class*="text-emerald"], [class*="text-green"]) :where(svg, .lucide),
+:where(svg[class*="text-emerald"], svg[class*="text-green"]) {
+  color: #00ff7a !important;
+  filter: drop-shadow(0 0 10px rgba(0, 255, 122, 0.30)) !important;
+}
+
+:where(.hd-tone-rose, .hd-tone-red, [class*="text-rose"], [class*="text-red"]) :where(svg, .lucide),
+:where(svg[class*="text-rose"], svg[class*="text-red"]) {
+  color: #ff365a !important;
+  filter: drop-shadow(0 0 10px rgba(255, 54, 90, 0.30)) !important;
+}
+
+:where(.hd-tone-cyan, .hd-tone-blue, [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]) :where(svg, .lucide),
+:where(svg[class*="text-cyan"], svg[class*="text-sky"], svg[class*="text-blue"]) {
+  color: #f2f2f2 !important;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.16)) !important;
+}
+
+:where(.hd-logo, .aether-logo, .hd-entry-logo, img[alt*="logo" i], img[alt*="heavenly" i]) {
+  filter:
+    drop-shadow(0 0 8px rgba(255, 255, 255, 0.10))
+    drop-shadow(0 0 18px rgba(255, 255, 255, 0.05)) !important;
+  box-shadow: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-logo-shell,
+.hd-screen.aether-flow-hero .hd-entry-logo-shell {
+  background: rgba(0, 0, 0, 0.76) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow:
+    0 0 24px rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-title,
+.hd-screen.aether-flow-hero .aether-title * {
+  color: #ffffff !important;
+  text-shadow:
+    0 0 12px rgba(255, 255, 255, 0.22),
+    0 8px 24px rgba(0, 0, 0, 0.74) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-subtitle,
+.hd-screen.aether-flow-hero .aether-role-desc {
+  color: rgba(226, 232, 240, 0.82) !important;
+  text-shadow: none !important;
+}
+
+.hd-screen.aether-flow-hero .aether-role-card,
+.hd-screen.aether-flow-hero .hd-entry-role-card {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.02) 34%, rgba(0, 0, 0, 0.88)),
+    rgba(14, 14, 14, 0.92) !important;
+  border-color: rgba(226, 244, 255, 0.30) !important;
+  box-shadow:
+    0 20px 56px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.hd-screen.aether-flow-hero .aether-register-button,
+.hd-screen.aether-flow-hero .hd-entry-register-button {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.018) 55%, rgba(0, 0, 0, 0.86)),
+    rgba(8, 8, 8, 0.94) !important;
+  border-color: rgba(226, 244, 255, 0.30) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.hd-login-back,
+:where(button.hd-login-back, .hd-no-liquid.hd-login-back) {
+  background: rgba(10, 10, 10, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.56),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  z-index: 80 !important;
+}
+
+.recharts-wrapper :where([fill="#00AFFF"], [fill="#00afff"], [fill="#00D9FF"], [fill="#00d9ff"], [fill="#00C2FF"], [fill="#00c2ff"], [fill="#0EA5E9"], [fill="#0ea5e9"], [fill="#38BDF8"], [fill="#38bdf8"], [fill="#22D3EE"], [fill="#22d3ee"], [fill="#12DFFF"], [fill="#12dfff"]) {
+  fill: #f2f2f2 !important;
+}
+
+.recharts-wrapper :where([stroke="#00AFFF"], [stroke="#00afff"], [stroke="#00D9FF"], [stroke="#00d9ff"], [stroke="#00C2FF"], [stroke="#00c2ff"], [stroke="#0EA5E9"], [stroke="#0ea5e9"], [stroke="#38BDF8"], [stroke="#38bdf8"], [stroke="#22D3EE"], [stroke="#22d3ee"], [stroke="#12DFFF"], [stroke="#12dfff"]) {
+  stroke: #f2f2f2 !important;
+}
+
+* {
+  scrollbar-color: #3a3a3a transparent !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #3a3a3a !important;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a !important;
+}
+
+@layer base {
+  :root,
+  html,
+  html.light,
+  body {
+    --theme-electric: #9a9a9a !important;
+    --theme-deep: #050505 !important;
+    --theme-dark: #0a0a0a !important;
+    --theme-black: #000000 !important;
+    --theme-neon: #ffffff !important;
+    --theme-matrix: #b8b8b8 !important;
+    --color-cyber-electric: #9a9a9a !important;
+    --color-cyber-deep: #050505 !important;
+    --color-cyber-dark: #0a0a0a !important;
+    --color-cyber-black: #000000 !important;
+    --color-cyber-neon: #ffffff !important;
+    --color-cyber-matrix: #b8b8b8 !important;
+    --hd-bg: #000000 !important;
+    --hd-bg-soft: #050505 !important;
+    --hd-surface: #0a0a0a !important;
+    --hd-surface-strong: #101010 !important;
+    --hd-surface-muted: #070707 !important;
+    --hd-border: rgba(255, 255, 255, 0.10) !important;
+    --hd-border-strong: rgba(255, 255, 255, 0.18) !important;
+    --hd-text: #ffffff !important;
+    --hd-text-muted: rgba(225, 225, 225, 0.72) !important;
+    --hd-accent: #d7d7d7 !important;
+    --hd-accent-strong: #ffffff !important;
+    --hd-ref-blue: #d7d7d7 !important;
+    --hd-ref-border-hot: rgba(255, 255, 255, 0.30) !important;
+    --hd-enterprise-accent: #d7d7d7 !important;
+    --hd-login-blue: #d7d7d7 !important;
+    --hd-ai-blue: #d7d7d7 !important;
+    --hd-graphite-accent: #f5f5f5 !important;
+    --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
+    --tw-ring-offset-color: #000000 !important;
+  }
+
+  html,
+  body,
+  #root,
+  :where(.hd-screen, .hd-cyber-screen, .hd-module-stage, .hd-neural-layout, .hd-dashboard-clean, .hd-clean-module, .aether-flow-hero, .hd-login-shell) {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    color: #ffffff !important;
+  }
+
+  :where(
+    .glass-panel,
+    .glass-panel-neon,
+    .hd-card,
+    .hd-panel,
+    .hd-module-panel,
+    .hd-morosidad-panel,
+    .hd-cyber-panel,
+    .hd-cyber-card,
+    .hd-cyber-card-soft,
+    .hd-chart-card,
+    .hd-glass-card,
+    .hd-premium-card,
+    .hd-premium-card-hover,
+    .hd-neon-card,
+    .hd-neon-metric,
+    .hd-ai-panel,
+    .hd-login-card,
+    .hd-holographic-sidebar,
+    .hd-entry-role-card,
+    .aether-role-card,
+    .aether-role-chip,
+    .aether-register-button,
+    .hd-entry-register-button,
+    section[class*="rounded"][class*="border"],
+    article[class*="rounded"][class*="border"],
+    aside[class*="rounded"][class*="border"],
+    form[class*="rounded"][class*="border"],
+    div[class*="rounded-2xl"][class*="border"],
+    div[class*="rounded-3xl"][class*="border"]
+  ) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.024) 48%, rgba(0, 0, 0, 0.82)),
+      rgba(12, 12, 12, 0.88) !important;
+    background-color: rgba(12, 12, 12, 0.88) !important;
+    border-color: rgba(255, 255, 255, 0.13) !important;
+    box-shadow:
+      0 18px 54px rgba(0, 0, 0, 0.62),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+  }
+
+  :where(
+    [class*="bg-blue"],
+    [class*="bg-cyan"],
+    [class*="bg-sky"],
+    [class*="bg-indigo"],
+    [class*="bg-[#002"],
+    [class*="bg-[#003"],
+    [class*="bg-[#004"],
+    [class*="bg-[#005"],
+    [class*="bg-[#006"],
+    [class*="bg-[#007"],
+    [class*="bg-[#008"],
+    [class*="bg-[#061b3a"],
+    [class*="bg-[#082a5e"],
+    [class*="bg-[#020A1F"],
+    [class*="bg-[#020A16"],
+    [class*="bg-[var(--hd-surface"],
+    [class*="bg-[var(--theme"],
+    [class*="bg-cyber"],
+    [class*="from-blue"],
+    [class*="from-cyan"],
+    [class*="from-sky"],
+    [class*="via-blue"],
+    [class*="via-cyan"],
+    [class*="via-sky"],
+    [class*="to-blue"],
+    [class*="to-cyan"],
+    [class*="to-sky"],
+    [class*="bg-gradient"]
+  ) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.018) 50%, rgba(0, 0, 0, 0.82)),
+      rgba(10, 10, 10, 0.90) !important;
+    background-color: rgba(10, 10, 10, 0.90) !important;
+    background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.018) 50%, rgba(0, 0, 0, 0.82)) !important;
+  }
+
+  :where(
+    [class*="border-blue"],
+    [class*="border-cyan"],
+    [class*="border-sky"],
+    [class*="border-cyber"],
+    [class*="ring-blue"],
+    [class*="ring-cyan"]
+  ) {
+    border-color: rgba(255, 255, 255, 0.14) !important;
+    --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
+  }
+
+  :where(button, .hd-button, .hd-premium-button, .hd-liquid-button, .hd-cyber-primary, .hd-cyber-secondary, .hd-quick-action, .hd-neon-action, a[class*="button"]):not(.aether-role-card):not(.hd-no-liquid) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018) 56%, rgba(0, 0, 0, 0.84)),
+      rgba(12, 12, 12, 0.90) !important;
+    background-color: rgba(12, 12, 12, 0.90) !important;
+    border: 1px solid rgba(255, 255, 255, 0.13) !important;
+    color: #ffffff !important;
+    box-shadow:
+      0 12px 34px rgba(0, 0, 0, 0.54),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+  }
+
+  .hd-screen.aether-flow-hero .aether-register-button,
+  .hd-screen.aether-flow-hero .hd-entry-register-button {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.018) 55%, rgba(0, 0, 0, 0.86)),
+      rgba(8, 8, 8, 0.94) !important;
+    border-color: rgba(226, 244, 255, 0.30) !important;
+    color: #ffffff !important;
+    box-shadow:
+      0 18px 46px rgba(0, 0, 0, 0.62),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .hd-screen.aether-flow-hero .aether-register-button svg,
+  .hd-screen.aether-flow-hero .hd-entry-register-button svg,
+  .hd-screen.aether-flow-hero .aether-register-arrow {
+    color: #ffffff !important;
+    stroke: currentColor !important;
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.16)) !important;
+  }
+
+  .hd-screen.aether-flow-hero .aether-subtitle::before,
+  .hd-screen.aether-flow-hero .aether-subtitle::after {
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.32), transparent) !important;
+    box-shadow: none !important;
+  }
+
+  .hd-screen.aether-flow-hero .aether-role-card,
+  .hd-screen.aether-flow-hero .hd-entry-role-card {
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.02) 34%, rgba(0, 0, 0, 0.88)),
+      rgba(14, 14, 14, 0.92) !important;
+    border-color: rgba(226, 244, 255, 0.30) !important;
+    box-shadow:
+      0 20px 56px rgba(0, 0, 0, 0.62),
+      inset 0 1px 0 rgba(255, 255, 255, 0.10),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.06) !important;
+  }
+
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, .hd-cyber-input, .hd-login-password-control) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+      rgba(4, 4, 4, 0.92) !important;
+    background-color: rgba(4, 4, 4, 0.92) !important;
+    border: 1px solid rgba(255, 255, 255, 0.13) !important;
+    color: #ffffff !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
+  }
+
+  .hd-login-back,
+  :where(button.hd-login-back, .hd-no-liquid.hd-login-back) {
+    background: rgba(10, 10, 10, 0.82) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    color: #ffffff !important;
+    box-shadow:
+      0 12px 28px rgba(0, 0, 0, 0.56),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .hd-login-back svg,
+  :where(button.hd-login-back, .hd-no-liquid.hd-login-back) svg {
+    color: #ffffff !important;
+    stroke: currentColor !important;
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.16)) !important;
+  }
+
+  :where([class*="text-cyber"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]) {
+    color: rgba(225, 225, 225, 0.78) !important;
+    text-shadow: none !important;
+  }
+
+  :where(svg, .lucide, .hd-floating-icon, .hd-neon-icon, .hd-premium-iconbox, .hd-neon-iconbox, .hd-quick-action-icon, .hd-nav-item-icon, .hd-mobile-icon) {
+    color: #d8d8d8 !important;
+    stroke: currentColor !important;
+    filter: none !important;
+  }
+
+  .aether-role-card[data-tone="admin"] > svg.aether-role-icon,
+  :where(.hd-tone-amber, .hd-tone-yellow, [class*="text-yellow"], [class*="text-amber"]) :where(svg, .lucide),
+  :where(svg[class*="text-yellow"], svg[class*="text-amber"]) {
+    color: #ffd900 !important;
+    filter: drop-shadow(0 0 10px rgba(255, 217, 0, 0.42)) !important;
+  }
+
+  .aether-role-card[data-tone="supervisor"] > svg.aether-role-icon,
+  :where(.hd-tone-pink, .hd-tone-violet, [class*="text-pink"], [class*="text-fuchsia"], [class*="text-violet"], [class*="text-purple"]) :where(svg, .lucide),
+  :where(svg[class*="text-pink"], svg[class*="text-fuchsia"], svg[class*="text-violet"], svg[class*="text-purple"]) {
+    color: #ff31df !important;
+    filter: drop-shadow(0 0 10px rgba(255, 49, 223, 0.36)) !important;
+  }
+
+  .aether-role-card[data-tone="advisor"] > svg.aether-role-icon,
+  :where(.hd-tone-orange, [class*="text-orange"]) :where(svg, .lucide),
+  :where(svg[class*="text-orange"]) {
+    color: #ff8a00 !important;
+    filter: drop-shadow(0 0 10px rgba(255, 138, 0, 0.38)) !important;
+  }
+
+  :where(.hd-tone-emerald, .hd-tone-green, [class*="text-emerald"], [class*="text-green"]) :where(svg, .lucide),
+  :where(svg[class*="text-emerald"], svg[class*="text-green"]) {
+    color: #00ff7a !important;
+    filter: drop-shadow(0 0 10px rgba(0, 255, 122, 0.30)) !important;
+  }
+
+  :where(.hd-tone-rose, .hd-tone-red, [class*="text-rose"], [class*="text-red"]) :where(svg, .lucide),
+  :where(svg[class*="text-rose"], svg[class*="text-red"]) {
+    color: #ff365a !important;
+    filter: drop-shadow(0 0 10px rgba(255, 54, 90, 0.30)) !important;
+  }
+
+  :where(.hd-tone-cyan, .hd-tone-blue, [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"]) :where(svg, .lucide),
+  :where(svg[class*="text-cyan"], svg[class*="text-sky"], svg[class*="text-blue"]),
+  .hd-login-back svg,
+  .hd-login-card svg,
+  .hd-login-role-icon,
+  .hd-login-role-icon svg {
+    color: #f2f2f2 !important;
+    stroke: currentColor !important;
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.16)) !important;
+  }
+
+  :where(.hd-holographic-sidebar nav button, .hd-nav-item, [role="tab"], [aria-current="page"], .hd-liquid-selected, .is-active) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+      rgba(12, 12, 12, 0.88) !important;
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    color: #ffffff !important;
+    box-shadow:
+      inset 3px 0 0 rgba(255, 255, 255, 0.72),
+      0 10px 28px rgba(0, 0, 0, 0.42) !important;
+  }
+}

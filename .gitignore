@@ -61,3 +61,6 @@ data/*.db-shm
 
 # Codex local attachments
 .codex-remote-attachments/
+
+.vercel
+.env*
