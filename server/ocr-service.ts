@@ -1,7 +1,8 @@
 /**
  * OCR documental local con fallback en cascada:
- *   1. Ollama (local/remoto)   — primario, requiere OLLAMA_URL
- *   2. Tesseract.js            — fallback offline, sin red ni API key
+ *   1. Gemini                  — opcional, requiere GEMINI_API_KEY
+ *   2. Ollama (local/remoto)   — requiere OLLAMA_URL
+ *   3. Tesseract.js            — fallback offline, sin red ni API key
  *
  * Si ambos fallan, lanza error.
  *
@@ -10,23 +11,28 @@
  *   OLLAMA_API_KEY     — opcional, solo si usas un proxy autenticado
  *   OLLAMA_MODEL       — modelo local/remoto para OCR visual (default: glm-ocr:latest)
  *   OLLAMA_TIMEOUT_MS  — timeout para OCR Ollama (default: 135000)
- *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'ollama' | 'tesseract'
+ *   GEMINI_API_KEY     — clave para OCR Gemini
+ *   GEMINI_OCR_MODEL   — modelo Gemini para OCR (default: gemini-2.5-flash)
+ *   OCR_PRIMARY        — opcional, fuerza proveedor primario: 'gemini' | 'ollama' | 'tesseract'
  *   OCR_STRATEGY       — 'adaptive' | 'quality' | 'fast' | 'local'
- *   OCR_ORDER_INE      — opcional, orden por documento: "ollama,tesseract"
+ *   OCR_ORDER_INE      — opcional, orden por documento: "gemini,ollama,tesseract"
  *   OCR_IMAGE_MAX_SIDE — tamaño máximo recomendado por server.ts antes de llamar proveedores
  *   OCR_CACHE_TTL_MS   — cache anti-repetición de resultados OCR
  */
 
 import { createHash } from 'node:crypto';
-import { getOllamaApiKey, getOllamaOcrModel, getOllamaUrl, getOllamaUrlSource } from './ai-config';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getGeminiApiKey, getGeminiOcrModel, getOllamaApiKey, getOllamaOcrModel, getOllamaUrl, getOllamaUrlSource } from './ai-config';
 import { runTesseractIne, runTesseractComprobante, runTesseractSiac, shutdownTesseract, parseOcrText } from './ocr-tesseract';
 
 const OLLAMA_URL        = getOllamaUrl();
 const OLLAMA_API_KEY    = getOllamaApiKey();
+const GEMINI_API_KEY    = getGeminiApiKey();
 const OCR_PRIMARY       = (process.env.OCR_PRIMARY || '').toLowerCase();
 const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'fast').toLowerCase();
 
 const OLLAMA_MODEL    = getOllamaOcrModel();
+const GEMINI_MODEL    = getGeminiOcrModel();
 
 function parseTimeoutEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -40,6 +46,7 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
 }
 
 const TIMEOUT_MS_LLM       = parseTimeoutEnv('OCR_LLM_TIMEOUT_MS', 18_000);  // 0 desactiva timeout
+const TIMEOUT_MS_GEMINI    = parseTimeoutEnv('OCR_GEMINI_TIMEOUT_MS', TIMEOUT_MS_LLM);
 const TIMEOUT_MS_OLLAMA    = parseTimeoutEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM > 0 ? TIMEOUT_MS_LLM * 3 : 0);
 const TIMEOUT_MS_TESSERACT = parseTimeoutEnv('OCR_TESSERACT_TIMEOUT_MS', 18_000);
 const MAX_OUTPUT_TOKENS    = parsePositiveIntEnv('OCR_MAX_OUTPUT_TOKENS', 650);
@@ -48,7 +55,7 @@ const OLLAMA_KEEP_ALIVE    = process.env.OLLAMA_KEEP_ALIVE || '30m';
 const CACHE_TTL_MS         = parsePositiveIntEnv('OCR_CACHE_TTL_MS', 60 * 60 * 1000);
 const CACHE_MAX_ENTRIES    = parsePositiveIntEnv('OCR_CACHE_MAX_ENTRIES', 250);
 
-const VALID_PROVIDER_NAMES = ['ollama', 'tesseract'] as const;
+const VALID_PROVIDER_NAMES = ['gemini', 'ollama', 'tesseract'] as const;
 
 export type OcrProvider = typeof VALID_PROVIDER_NAMES[number];
 export type OcrDocType  = 'ine' | 'comprobante' | 'siac' | 'financial';
@@ -214,6 +221,30 @@ Respond ONLY with valid JSON:
 
 Do NOT include markdown or explanations.`;
 
+const GEMINI_DOCUMENT_PROMPT = `Eres un sistema experto en extracción de datos de documentos mexicanos para un CRM. Analiza la imagen adjunta, la cual puede ser una credencial para votar (INE) o un comprobante de domicilio (recibo de teléfono, internet o luz como Izzi, Total Play, Telmex, CFE, etc.).
+
+Tu tarea es extraer la información visible y devolverla ÚNICAMENTE en un objeto JSON válido, sin usar bloques de código Markdown ni texto adicional.
+
+Si un dato no existe en el documento o es ilegible, asigna el valor null. Usa exactamente esta estructura de claves:
+
+{
+  "tipo_documento": "INE, COMPROBANTE o DESCONOCIDO",
+  "proveedor_servicio": "Si es comprobante, nombre de la empresa; si es INE, null",
+  "titular_nombres": "Nombre o nombres propios de la persona",
+  "titular_apellido_paterno": "Primer apellido",
+  "titular_apellido_materno": "Segundo apellido",
+  "ine_curp": "Extraer solo si es INE",
+  "ine_clave_elector": "Extraer solo si es INE",
+  "domicilio_calle_numero": "Calle, número exterior e interior",
+  "domicilio_colonia": "Colonia, fraccionamiento o asentamiento",
+  "domicilio_codigo_postal": "Los 5 dígitos del CP",
+  "domicilio_municipio_alcaldia": "Municipio o delegación",
+  "domicilio_estado": "Estado de la república",
+  "domicilio_texto_completo": "Copia el domicilio tal cual aparece escrito en el documento, letra por letra",
+  "comprobante_fecha_emision": "Si es recibo, mes y año de facturación o emisión para validar vigencia",
+  "rawText": "todo el texto visible, línea por línea"
+}`;
+
 const PROMPTS: Record<OcrDocType, string> = {
   ine: INE_PROMPT,
   comprobante: COMPROBANTE_PROMPT,
@@ -240,6 +271,40 @@ function parseJsonResponse(raw: string): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+function splitStreetNumber(value: string) {
+  const text = String(value || '').trim();
+  const match = text.match(/^(.*?)(?:\s+(?:NO\.?|NUM\.?|NÚM\.?|#)?\s*([A-Z0-9-]+))(?:\s+(?:INT\.?|INTERIOR|DEPTO\.?|DEPTO|DPTO\.?)\s*([A-Z0-9-]+))?$/i);
+  if (!match) return { calle: text, numeroExterior: '', numeroInterior: '' };
+  const calle = match[1]?.trim() || text;
+  return {
+    calle,
+    numeroExterior: match[2]?.trim() || '',
+    numeroInterior: match[3]?.trim() || '',
+  };
+}
+
+function normalizeGeminiDocumentFields(fields: Record<string, string>) {
+  const street = splitStreetNumber(fields.domicilio_calle_numero || '');
+  const mapped: Record<string, string> = {
+    nombres: fields.titular_nombres || '',
+    apellidoPaterno: fields.titular_apellido_paterno || '',
+    apellidoMaterno: fields.titular_apellido_materno || '',
+    curp: fields.ine_curp || '',
+    folioIne: fields.ine_clave_elector || '',
+    calle: street.calle,
+    numeroExterior: street.numeroExterior,
+    numeroInterior: street.numeroInterior,
+    colonia: fields.domicilio_colonia || '',
+    codigoPostal: fields.domicilio_codigo_postal || '',
+    delegacion: fields.domicilio_municipio_alcaldia || '',
+    ciudad: fields.domicilio_estado || '',
+    proveedor: fields.proveedor_servicio || '',
+    fechaEmision: fields.comprobante_fecha_emision || '',
+    domicilioTextoCompleto: fields.domicilio_texto_completo || '',
+  };
+  return Object.fromEntries(Object.entries(mapped).filter(([, value]) => String(value || '').trim()));
 }
 
 function modelTagMatches(availableModel: string, configuredModel: string): boolean {
@@ -508,6 +573,48 @@ function setCached(key: string, result: OcrResult) {
   ocrCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, result: { ...result } });
 }
 
+// ─── PROVIDER 1: Gemini (OCR multimodal administrado) ───────────────────────
+
+function geminiMimeTypeFromDataUrl(value: string) {
+  const match = String(value || '').match(/^data:([^;]+);base64,/i);
+  return match?.[1] || 'image/jpeg';
+}
+
+async function callGemini(prompt: string, base64Images: string[]): Promise<string> {
+  if (!GEMINI_API_KEY) throw new Error('Gemini no configurado: falta GEMINI_API_KEY');
+
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    generationConfig: {
+      temperature: 0,
+      responseMimeType: 'application/json',
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+    },
+  });
+  const imageParts = base64Images.map(image => ({
+    inlineData: {
+      mimeType: geminiMimeTypeFromDataUrl(image),
+      data: stripDataUrl(image),
+    },
+  }));
+  const response = await withTimeout(
+    model.generateContent([prompt, ...imageParts]),
+    TIMEOUT_MS_GEMINI,
+    'Gemini'
+  );
+  return response.response.text();
+}
+
+async function checkGeminiHealth() {
+  return {
+    configured: Boolean(GEMINI_API_KEY),
+    reachable: Boolean(GEMINI_API_KEY),
+    model: GEMINI_MODEL,
+    timeoutMs: TIMEOUT_MS_GEMINI,
+  };
+}
+
 // ─── PROVIDER 1: Ollama (local/remoto privado) ──────────────────────────────
 
 async function callOllama(prompt: string, base64Images: string[]): Promise<string> {
@@ -666,27 +773,27 @@ const VALID_PROVIDERS: OcrProvider[] = [...VALID_PROVIDER_NAMES];
 
 const DOC_ORDERS: Record<OcrDocType, Record<OcrStrategy, OcrProvider[]>> = {
   ine: {
-    adaptive: ['ollama', 'tesseract'],
-    quality: ['ollama', 'tesseract'],
-    fast: ['tesseract', 'ollama'],
+    adaptive: ['gemini', 'ollama', 'tesseract'],
+    quality: ['gemini', 'ollama', 'tesseract'],
+    fast: ['gemini', 'tesseract', 'ollama'],
     local: ['tesseract', 'ollama'],
   },
   comprobante: {
-    adaptive: ['ollama', 'tesseract'],
-    quality: ['ollama', 'tesseract'],
-    fast: ['tesseract', 'ollama'],
+    adaptive: ['gemini', 'ollama', 'tesseract'],
+    quality: ['gemini', 'ollama', 'tesseract'],
+    fast: ['gemini', 'tesseract', 'ollama'],
     local: ['tesseract', 'ollama'],
   },
   siac: {
-    adaptive: ['tesseract', 'ollama'],
-    quality: ['ollama', 'tesseract'],
-    fast: ['tesseract', 'ollama'],
+    adaptive: ['tesseract', 'ollama', 'gemini'],
+    quality: ['ollama', 'gemini', 'tesseract'],
+    fast: ['tesseract', 'ollama', 'gemini'],
     local: ['tesseract', 'ollama'],
   },
   financial: {
-    adaptive: ['ollama', 'tesseract'],
-    quality: ['ollama', 'tesseract'],
-    fast: ['tesseract', 'ollama'],
+    adaptive: ['gemini', 'ollama', 'tesseract'],
+    quality: ['gemini', 'ollama', 'tesseract'],
+    fast: ['tesseract', 'gemini', 'ollama'],
     local: ['tesseract', 'ollama'],
   },
 };
@@ -781,6 +888,23 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
   const t0 = Date.now();
   const prompt = PROMPTS[docType];
 
+  if (provider === 'gemini') {
+    const geminiPrompt = docType === 'ine' || docType === 'comprobante'
+      ? GEMINI_DOCUMENT_PROMPT
+      : prompt;
+    const raw = await callGemini(geminiPrompt, images);
+    if (!raw) throw new Error('Gemini devolvió respuesta vacía');
+    const parsed = parseJsonResponse(raw);
+    const text = parsed.rawText || parsed.domicilio_texto_completo || raw;
+    const normalized = docType === 'ine' || docType === 'comprobante'
+      ? normalizeGeminiDocumentFields(parsed)
+      : parsed;
+    delete normalized.rawText;
+    delete normalized.domicilioTextoCompleto;
+    const fields = sanitizeFields(docType, enrichFieldsFromText(docType, normalized, text));
+    return enrichLocalSignals(docType, { text, fields, provider, model: GEMINI_MODEL, durationMs: Date.now() - t0 });
+  }
+
   if (provider === 'ollama') {
     const raw = await callOllama(prompt, images);
     if (!raw) throw new Error('Ollama devolvió respuesta vacía');
@@ -828,6 +952,7 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
     const strategy = currentStrategy();
 
     for (const provider of providerOrder) {
+      if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin GEMINI_API_KEY'); continue; }
       if (provider === 'ollama' && !OLLAMA_URL) { errors.push('ollama: sin servidor local'); continue; }
 
       try {
@@ -911,6 +1036,7 @@ export async function runFinancialOcr(images: string | string[]): Promise<Cached
 
 export async function checkOcrStatus() {
   const ollamaHealth = await checkOllamaHealth();
+  const geminiHealth = await checkGeminiHealth();
   const orders = {
     ine: providerOrderFor('ine'),
     comprobante: providerOrderFor('comprobante'),
@@ -918,6 +1044,7 @@ export async function checkOcrStatus() {
     financial: providerOrderFor('financial'),
   };
   const providerReady = (provider: OcrProvider) => {
+    if (provider === 'gemini') return Boolean(GEMINI_API_KEY);
     if (provider === 'ollama') return Boolean(OLLAMA_URL) && ollamaHealth.reachable;
     return true;
   };
@@ -941,11 +1068,13 @@ export async function checkOcrStatus() {
       ollamaKeepAlive: OLLAMA_KEEP_ALIVE,
       timeoutMs: {
         llm: TIMEOUT_MS_LLM,
+        gemini: TIMEOUT_MS_GEMINI,
         ollama: TIMEOUT_MS_OLLAMA,
         tesseract: TIMEOUT_MS_TESSERACT,
       },
     },
     providers: {
+      gemini:   geminiHealth,
       ollama:    ollamaHealth,
       tesseract: { configured: true,                model: 'tesseract-spa (local)' },
     },
