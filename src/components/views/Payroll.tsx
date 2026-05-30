@@ -267,7 +267,7 @@ async function exportElementToPDF(element: HTMLDivElement | null, fileName: stri
 export default function Payroll() {
   const [activeTab, setActiveTab] = useState<Tab>('seguimiento');
   const currentUser = getCurrentUser();
-  const isAdmin = ['GERENTE', 'ADMIN', 'ADMINISTRACION', 'SUPERVISOR', 'SUPERUSER'].includes((currentUser.role || '').toUpperCase());
+  const isAdmin = (currentUser.role || '').toUpperCase() === 'GERENTE';
 
   const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
     { id: 'seguimiento', label: 'Mi Seguimiento', icon: Calendar },

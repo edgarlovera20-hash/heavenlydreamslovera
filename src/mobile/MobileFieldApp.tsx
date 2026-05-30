@@ -170,6 +170,7 @@ type CaptureDraft = {
   videoFirmaLocal: boolean;
   firmaClienteDataUrl: string;
   solicitudFirmadaPdfLocal: boolean;
+  clientMutationId: string;
   savedCaptureId: string;
   validationRequestId: string;
   expedienteGuardado: boolean;
@@ -264,6 +265,7 @@ const EMPTY_DRAFT: CaptureDraft = {
   videoFirmaLocal: false,
   firmaClienteDataUrl: '',
   solicitudFirmadaPdfLocal: false,
+  clientMutationId: '',
   savedCaptureId: '',
   validationRequestId: '',
   expedienteGuardado: false,
@@ -639,7 +641,7 @@ function buildPayrollSales(rawSales: any[], year: number, week: number): Payroll
 
 function hasDraftData(draft: CaptureDraft) {
   return Object.entries(draft).some(([key, value]) => {
-    if (['identityDocumentType', 'tipoVialidad', 'tipoCliente', 'tipoServicio', 'categoriaProducto', 'mismaDireccionIne', 'incluyeClaroVideo', 'streamingElegido', 'videoFirmaLocal', 'solicitudFirmadaPdfLocal'].includes(key)) return false;
+    if (['identityDocumentType', 'tipoVialidad', 'tipoCliente', 'tipoServicio', 'categoriaProducto', 'mismaDireccionIne', 'incluyeClaroVideo', 'streamingElegido', 'videoFirmaLocal', 'solicitudFirmadaPdfLocal', 'clientMutationId'].includes(key)) return false;
     if (Array.isArray(value)) return value.length > 0;
     return String(value ?? '').trim().length > 0;
   });
@@ -781,6 +783,10 @@ function isSupportedExpedienteFile(file: File) {
 
 function newQueueId() {
   return `mq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function newClientMutationId() {
+  return `mobile_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 async function readOfflineQueue(): Promise<OfflineQueueItem[]> {
@@ -1260,8 +1266,9 @@ export default function MobileFieldApp() {
   const profileName = displayName(profileUser || session);
   const profileRole = String(profileUser?.role || session?.role || 'ASESOR').toUpperCase();
   const profileRoleLabel = roleLabel(profileRole);
-  const canApproveMobile = Boolean(bootstrap?.permissions.canApproveHuman) || ['GERENTE', 'ADMINISTRACION', 'ADMIN', 'SUPERUSER'].includes(profileRole);
-  const canManageMobile = Boolean(bootstrap?.permissions.canManage) || canApproveMobile || profileRole === 'SUPERVISOR';
+  const isManagerMobile = Boolean(bootstrap?.permissions.canManage) || profileRole === 'GERENTE';
+  const canApproveMobile = Boolean(bootstrap?.permissions.canApproveHuman) || isManagerMobile;
+  const canManageMobile = isManagerMobile;
   const canUseMobileChats = canManageMobile;
 
   const profileModel = useMemo(() => {
@@ -1360,7 +1367,7 @@ export default function MobileFieldApp() {
     };
   }, [bootstrap?.recentSales, profileLeaderboardFilter, profileName, profileUid, profileUser?.displayName, profileUser?.email, profileUser?.nombre, profileUser?.username]);
 
-  const canManagePayroll = ['GERENTE', 'SUPERVISOR', 'ADMIN', 'ADMINISTRACION', 'SUPERUSER'].includes(profileRole);
+  const canManagePayroll = isManagerMobile;
   const payrollUsers = useMemo<PayrollUser[]>(() => {
     const map = new Map<string, PayrollUser>();
     if (profileUid) {
@@ -1509,13 +1516,16 @@ export default function MobileFieldApp() {
     return '';
   }, [draft.curp, draft.curpAgentRequestedAt, draft.identityDocumentType, hasDraftDocument]);
 
-  const capturePayload = useCallback(() => {
+  const capturePayload = useCallback((clientMutationIdOverride?: string) => {
     const phone = normalizePhone(draft.telefono || draft.telefonoTitular);
     const titularPhone = normalizePhone(draft.telefonoTitular || draft.telefono);
     const referenciaPhone = normalizePhone(draft.telefonoReferencia);
     const identityDocumentType = draft.identityDocumentType || 'ine';
     const folioIne = identityDocumentType === 'ine' ? draft.folioIne.trim().toUpperCase() : '';
+    const clientMutationId = clientMutationIdOverride || draft.clientMutationId || newClientMutationId();
     return {
+      clientMutationId,
+      client_mutation_id: clientMutationId,
       nombres: draft.nombres.trim(),
       apellidoPaterno: draft.apellidoPaterno.trim(),
       apellidoMaterno: draft.apellidoMaterno.trim(),
@@ -1575,6 +1585,7 @@ export default function MobileFieldApp() {
         source: 'mobile-pwa',
         mobileVersion: 1,
         ...draft,
+        clientMutationId,
         identityDocumentType,
         folioIne,
         telefonoTitular: titularPhone,
@@ -2489,11 +2500,13 @@ export default function MobileFieldApp() {
     setValidationCallRequesting(true);
     try {
       const existingCaptureId = draft.savedCaptureId;
+      const clientMutationId = draft.clientMutationId || newClientMutationId();
+      if (!draft.clientMutationId) updateDraft({ clientMutationId });
       const saved = existingCaptureId
         ? { id: existingCaptureId, validation: draft.validationRequestId ? { id: draft.validationRequestId } : null }
         : await apiJson<any>('/api/mobile/capturas', {
             method: 'POST',
-            body: JSON.stringify(capturePayload()),
+            body: JSON.stringify(capturePayload(clientMutationId)),
           });
 
       const captureId = saved.id;
@@ -2544,7 +2557,9 @@ export default function MobileFieldApp() {
       notify('success', 'Expediente y validacion ya guardados.');
       return;
     }
-    const payload = capturePayload();
+    const clientMutationId = draft.clientMutationId || newClientMutationId();
+    if (!draft.clientMutationId) updateDraft({ clientMutationId });
+    const payload = capturePayload(clientMutationId);
     let files = selectedFilesForUpload();
     let draftSignedPdf: File;
     try {

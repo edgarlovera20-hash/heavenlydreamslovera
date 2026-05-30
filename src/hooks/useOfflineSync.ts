@@ -16,6 +16,15 @@ function saveQueue(q: OfflineQueueItem[]) {
   localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 }
 
+function addClientMutationId(type: 'sale', data: unknown, queueId: string) {
+  if (type !== 'sale' || !data || typeof data !== 'object' || Array.isArray(data)) return data;
+  const payload = data as Record<string, any>;
+  return {
+    ...payload,
+    clientMutationId: payload.clientMutationId || queueId,
+  };
+}
+
 export function useOfflineSync() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingCount, setPendingCount] = useState(getQueue().length);
@@ -25,7 +34,8 @@ export function useOfflineSync() {
 
   const enqueue = useCallback((type: 'sale', data: unknown) => {
     const q = getQueue();
-    q.push({ id: `q-${Date.now()}`, type, data, queuedAt: new Date().toISOString() });
+    const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    q.push({ id, type, data: addClientMutationId(type, data, id), queuedAt: new Date().toISOString() });
     saveQueue(q);
     setPendingCount(q.length);
   }, []);
