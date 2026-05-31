@@ -47,6 +47,7 @@ const ChatsView = lazy(() => import('./ChatsView'));
 const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
 const FinancesEnterpriseView = lazy(() => import('./FinancesEnterpriseView'));
 const CommissionsView = lazy(() => import('./CommissionsView'));
+const ProductionSimulationView = lazy(() => import('./ProductionSimulationView'));
 const OPS_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'];
 const ADMIN_ROLES = ['GERENTE'];
 const MANAGER_ONLY_SECTIONS = new Set([
@@ -61,6 +62,7 @@ const MANAGER_ONLY_SECTIONS = new Set([
   'Catálogo',
   'Auditoría',
   'Arquitectura Empresarial',
+  'Simulación Producción',
   'Datos y Backup',
   'Base SIAC',
   'Validaciones',
@@ -378,6 +380,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
               <NavItem icon={Package} color="purple" label="Catálogo" active={activeSection === 'Catálogo'} onClick={() => setActiveSection('Catálogo')} />
               <NavItem icon={Shield} color="yellow" label="Auditoría" active={activeSection === 'Auditoría'} onClick={() => setActiveSection('Auditoría')} />
               <NavItem icon={Activity} color="green" label="Arquitectura Empresarial" active={activeSection === 'Arquitectura Empresarial'} onClick={() => setActiveSection('Arquitectura Empresarial')} />
+              <NavItem icon={Zap} color="cyan" label="Simulación Producción" active={activeSection === 'Simulación Producción'} onClick={() => setActiveSection('Simulación Producción')} />
               <NavItem icon={Database} color="blue" label="Datos y Backup" active={activeSection === 'Datos y Backup'} onClick={() => setActiveSection('Datos y Backup')} />
               <NavItem icon={FileSpreadsheet} color="cyan" label="Base SIAC" active={activeSection === 'Base SIAC'} onClick={() => setActiveSection('Base SIAC')} />
               <NavItem icon={PhoneCall} color="green" label="Validaciones" active={activeSection === 'Validaciones'} onClick={() => setActiveSection('Validaciones')} />
@@ -627,6 +630,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                       <>
                         <QuickAction icon={ReceiptText} label="Finanzas" color="yellow" onClick={() => setActiveSection('Finanzas Enterprise')} />
                         <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
+                        <QuickAction icon={Zap} label="Simulación" color="cyan" onClick={() => setActiveSection('Simulación Producción')} />
                         <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
                         <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
                       </>
@@ -755,6 +759,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Catálogo' && hasFullModuleAccess && <PackageCatalogEditor />}
             {activeSection === 'Auditoría' && hasFullModuleAccess && <AuditLogView />}
             {activeSection === 'Arquitectura Empresarial' && hasFullModuleAccess && <EnterpriseOpsView />}
+            {activeSection === 'Simulación Producción' && hasFullModuleAccess && <ProductionSimulationView />}
             {activeSection === 'Datos y Backup' && hasFullModuleAccess && <DataManagerView />}
             {activeSection === 'Base SIAC' && hasFullModuleAccess && <SIACView />}
             {activeSection === 'Validaciones' && hasFullModuleAccess && <ValidationRequestsView />}
@@ -774,7 +779,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Comisiones', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios', 'Finanzas Enterprise'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Comisiones', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Simulación Producción', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios', 'Finanzas Enterprise'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
