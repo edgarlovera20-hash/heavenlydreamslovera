@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Settings as SettingsIcon, ChevronRight,
   User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, Gamepad2, FolderOpen,
   Database, Sun, Moon, Crown, Zap, Bot, Home, MessageSquare, MessageCircle,
-  MapPin, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall, ReceiptText, Target, DollarSign
+  MapPin, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall, ReceiptText, Target, DollarSign, BriefcaseBusiness
 } from 'lucide-react';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
@@ -48,6 +48,7 @@ const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
 const FinancesEnterpriseView = lazy(() => import('./FinancesEnterpriseView'));
 const CommissionsView = lazy(() => import('./CommissionsView'));
 const ProductionSimulationView = lazy(() => import('./ProductionSimulationView'));
+const LFTRecruitmentGuide = lazy(() => import('./LFTRecruitmentGuide'));
 const OPS_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'];
 const ADMIN_ROLES = ['GERENTE'];
 const MANAGER_ONLY_SECTIONS = new Set([
@@ -63,6 +64,7 @@ const MANAGER_ONLY_SECTIONS = new Set([
   'Auditoría',
   'Arquitectura Empresarial',
   'Simulación Producción',
+  'Guía LFT Reclutamiento',
   'Datos y Backup',
   'Base SIAC',
   'Validaciones',
@@ -381,6 +383,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
               <NavItem icon={Shield} color="yellow" label="Auditoría" active={activeSection === 'Auditoría'} onClick={() => setActiveSection('Auditoría')} />
               <NavItem icon={Activity} color="green" label="Arquitectura Empresarial" active={activeSection === 'Arquitectura Empresarial'} onClick={() => setActiveSection('Arquitectura Empresarial')} />
               <NavItem icon={Zap} color="cyan" label="Simulación Producción" active={activeSection === 'Simulación Producción'} onClick={() => setActiveSection('Simulación Producción')} />
+              <NavItem icon={BriefcaseBusiness} color="yellow" label="Guía LFT Reclutamiento" active={activeSection === 'Guía LFT Reclutamiento'} onClick={() => setActiveSection('Guía LFT Reclutamiento')} />
               <NavItem icon={Database} color="blue" label="Datos y Backup" active={activeSection === 'Datos y Backup'} onClick={() => setActiveSection('Datos y Backup')} />
               <NavItem icon={FileSpreadsheet} color="cyan" label="Base SIAC" active={activeSection === 'Base SIAC'} onClick={() => setActiveSection('Base SIAC')} />
               <NavItem icon={PhoneCall} color="green" label="Validaciones" active={activeSection === 'Validaciones'} onClick={() => setActiveSection('Validaciones')} />
@@ -631,6 +634,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                         <QuickAction icon={ReceiptText} label="Finanzas" color="yellow" onClick={() => setActiveSection('Finanzas Enterprise')} />
                         <QuickAction icon={BarChart3} label="Efectividad" color="cyan" onClick={() => setActiveSection('Analytics')} />
                         <QuickAction icon={Zap} label="Simulación" color="cyan" onClick={() => setActiveSection('Simulación Producción')} />
+                        <QuickAction icon={BriefcaseBusiness} label="Guía LFT" color="yellow" onClick={() => setActiveSection('Guía LFT Reclutamiento')} />
                         <QuickAction icon={CheckCircle2} label="Aprobaciones" color="green" onClick={() => setActiveSection('Aprobaciones')} />
                         <QuickAction icon={Users} label="Equipo" color="purple" onClick={() => setActiveSection('Equipo y Metas')} />
                       </>
@@ -760,6 +764,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Auditoría' && hasFullModuleAccess && <AuditLogView />}
             {activeSection === 'Arquitectura Empresarial' && hasFullModuleAccess && <EnterpriseOpsView />}
             {activeSection === 'Simulación Producción' && hasFullModuleAccess && <ProductionSimulationView />}
+            {activeSection === 'Guía LFT Reclutamiento' && hasFullModuleAccess && <LFTRecruitmentGuide />}
             {activeSection === 'Datos y Backup' && hasFullModuleAccess && <DataManagerView />}
             {activeSection === 'Base SIAC' && hasFullModuleAccess && <SIACView />}
             {activeSection === 'Validaciones' && hasFullModuleAccess && <ValidationRequestsView />}
@@ -779,7 +784,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Comisiones', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Simulación Producción', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios', 'Finanzas Enterprise'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Comisiones', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Juego', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Simulación Producción', 'Guía LFT Reclutamiento', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios', 'Finanzas Enterprise'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
