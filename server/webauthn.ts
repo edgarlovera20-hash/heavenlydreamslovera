@@ -9,6 +9,7 @@ import {
 import type { AuthenticationResponseJSON, RegistrationResponseJSON, WebAuthnCredential } from '@simplewebauthn/server';
 import { AuditLog, Users, WebAuthnChallenges, WebAuthnCredentials } from './db';
 import { issueSessionCookie } from './security';
+import { getPublicAppUrl } from './domain';
 import type { Request, Response } from 'express';
 
 const RP_NAME = 'Heavenly Dreams CRM';
@@ -34,6 +35,8 @@ function rpID(req?: Request) {
 function origin(req?: Request) {
   const configured = process.env.WEBAUTHN_ORIGIN?.trim();
   if (configured) return configured.replace(/\/$/, '');
+  const publicAppUrl = getPublicAppUrl();
+  if (publicAppUrl) return publicAppUrl;
   const proto = firstHeader(req?.headers['x-forwarded-proto'] as any) || req?.protocol || 'http';
   const forwardedHost = firstHeader(req?.headers['x-forwarded-host'] as any);
   const host = forwardedHost || req?.get('host') || 'localhost:3000';

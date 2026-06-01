@@ -22,7 +22,7 @@ export interface StoredDocumentResult {
 }
 
 const STORAGE_ROOT = process.env.DOCUMENT_STORAGE_DIR || join(process.cwd(), 'data', 'document_storage');
-const DEFAULT_MAX_BYTES = 250 * 1024 * 1024;
+const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
 
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',

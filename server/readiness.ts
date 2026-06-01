@@ -1,5 +1,7 @@
 import { infraMode, checkInfraConnections } from './infra';
 import { getOllamaUrl } from './ai-config';
+import { getConfiguredDomain, getPublicAppUrl } from './domain';
+import { getSecretValue } from './secret-vault';
 
 type GateStatus = 'ok' | 'warning' | 'critical';
 
@@ -12,7 +14,7 @@ export interface ReadinessGate {
 }
 
 function hasEnv(name: string) {
-  return Boolean(String(process.env[name] || '').trim());
+  return Boolean(getSecretValue(name, process.env[name] || ''));
 }
 
 function isProduction() {
@@ -31,7 +33,9 @@ export function getReadinessGates(): ReadinessGate[] {
   const objectStorageConfigured = hasEnv('DOCUMENT_STORAGE_DIR') || (hasEnv('S3_BUCKET') && hasEnv('S3_ENDPOINT'));
   const ollamaUrl = getOllamaUrl();
   const ocrConfigured = Boolean(ollamaUrl);
-  const webauthnConfigured = hasEnv('WEBAUTHN_RP_ID') && hasEnv('WEBAUTHN_ORIGIN');
+  const publicAppUrl = getPublicAppUrl();
+  const configuredDomain = getConfiguredDomain();
+  const webauthnConfigured = Boolean((hasEnv('WEBAUTHN_RP_ID') && hasEnv('WEBAUTHN_ORIGIN')) || (configuredDomain && publicAppUrl.startsWith('https://')));
   const twilioConfigured = hasEnv('TWILIO_ACCOUNT_SID') && hasEnv('TWILIO_AUTH_TOKEN') && hasEnv('TWILIO_FROM_NUMBER');
   const googleOAuthConfigured = hasEnv('GOOGLE_OAUTH_CLIENT_ID') && hasEnv('GOOGLE_OAUTH_CLIENT_SECRET');
   const oauthConfigured = googleOAuthConfigured;
@@ -90,8 +94,8 @@ export function getReadinessGates(): ReadinessGate[] {
       'webauthn',
       'WebAuthn dominio real',
       webauthnConfigured ? 'ok' : 'warning',
-      webauthnConfigured ? 'RP ID y origin definidos.' : 'Faltan WEBAUTHN_RP_ID / WEBAUTHN_ORIGIN.',
-      'Configura HTTPS y dominio final para passkeys.',
+      webauthnConfigured ? `Dominio HTTPS listo: ${publicAppUrl || process.env.WEBAUTHN_ORIGIN}.` : 'Faltan APP_DOMAIN/APP_URL o WEBAUTHN_RP_ID / WEBAUTHN_ORIGIN.',
+      'Configura APP_DOMAIN=tu-dominio.com con HTTPS, o define WEBAUTHN_RP_ID y WEBAUTHN_ORIGIN manualmente.',
     ),
     gate(
       'twilio',

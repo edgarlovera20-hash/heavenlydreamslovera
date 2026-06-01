@@ -142,37 +142,39 @@ export default function LFTRecruitmentGuide() {
         {legalBlocks.map(block => {
           const Icon = block.icon;
           return (
-            <PremiumCard key={block.title} className="p-6" tone={block.tone as any}>
-              <div className="mb-4 flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className={`rounded-2xl border p-3 ${toneClass(block.tone)}`}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{block.article}</p>
-                    <h3 className="mt-1 text-lg font-semibold text-white">{block.title}</h3>
+            <div key={block.title}>
+              <PremiumCard className="h-full p-6" tone={block.tone as any}>
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`rounded-2xl border p-3 ${toneClass(block.tone)}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{block.article}</p>
+                      <h3 className="mt-1 text-lg font-semibold text-white">{block.title}</h3>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <ul className="space-y-3">
-                {block.points.map(point => (
-                  <li key={point} className="flex gap-3 text-sm leading-6 text-slate-300">
-                    <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-300" />
-                    <span>{point}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-cyan-200">Accion en la app</p>
-                <p className="mt-2 text-sm leading-6 text-slate-300">{block.action}</p>
-              </div>
-            </PremiumCard>
+                <ul className="space-y-3">
+                  {block.points.map(point => (
+                    <li key={point} className="flex gap-3 text-sm leading-6 text-slate-300">
+                      <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-300" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-cyan-200">Accion en la app</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">{block.action}</p>
+                </div>
+              </PremiumCard>
+            </div>
           );
         })}
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[.9fr_1.1fr]">
-        <PremiumCard className="p-6" tone="green">
+        <PremiumCard className="p-6" tone="emerald">
           <div className="mb-5 flex items-center gap-3">
             <ClipboardList className="h-6 w-6 text-emerald-200" />
             <div>

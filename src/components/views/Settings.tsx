@@ -76,7 +76,7 @@ export default function Settings() {
         {activeTab === 'canales' && <CanalesTab />}
         {activeTab === 'email_sync' && <EmailSyncTab />}
         {activeTab === 'notificaciones' && <NotificacionesTab />}
-        {activeTab === 'integraciones' && <IntegracionesTab />}
+        {activeTab === 'integraciones' && <ApiVaultTab />}
         {activeTab === 'import_export' && <ImportExportTab />}
       </div>
     </div>
@@ -163,6 +163,309 @@ function NotificacionesTab() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+type VaultSecret = {
+  id: string;
+  provider: string;
+  label: string;
+  keyName: string;
+  valueLast4?: string;
+  status: 'active' | 'pending' | 'revoked';
+  metadata?: Record<string, any>;
+  createdAt?: string;
+  updatedAt?: string;
+  revokedAt?: string | null;
+};
+
+const API_PROVIDERS = [
+  { id: 'gemini', label: 'Gemini', keyName: 'GEMINI_API_KEY', hint: 'Modelo recomendado: gemini-2.5-flash' },
+  { id: 'openai', label: 'OpenAI', keyName: 'OPENAI_API_KEY', hint: 'Para Realtime, transcripcion y automatizaciones IA.' },
+  { id: 'ollama', label: 'Ollama-compatible', keyName: 'OLLAMA_API_KEY', hint: 'Opcional; usa Base URL para servidor local/remoto.' },
+  { id: 'twilio', label: 'Twilio', keyName: 'TWILIO_AUTH_TOKEN', hint: 'Tambien agrega TWILIO_ACCOUNT_SID y TWILIO_FROM_NUMBER.' },
+  { id: 'elevenlabs', label: 'ElevenLabs', keyName: 'ELEVENLABS_API_KEY', hint: 'Voz/validaciones; agrega IDs como claves separadas si aplica.' },
+  { id: 'telegram', label: 'Telegram', keyName: 'TELEGRAM_BOT_TOKEN', hint: 'Token del bot para canales Telegram.' },
+  { id: 'didit', label: 'Didit KYC', keyName: 'DIDIT_API_KEY', hint: 'Validacion KYC/documental.' },
+  { id: 'custom', label: 'Custom', keyName: 'CUSTOM_API_KEY', hint: 'Cualquier modelo o API externa nueva.' },
+];
+
+function ApiVaultTab() {
+  const role = currentSessionRole();
+  const isManager = role === 'GERENTE';
+  const [secrets, setSecrets] = useState<VaultSecret[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    provider: 'gemini',
+    label: 'Gemini API',
+    keyName: 'GEMINI_API_KEY',
+    value: '',
+    status: 'active',
+    model: 'gemini-2.5-flash',
+    baseUrl: '',
+    notes: '',
+  });
+
+  const selectedProvider = API_PROVIDERS.find(provider => provider.id === form.provider) || API_PROVIDERS[0];
+
+  const loadVault = async () => {
+    if (!isManager) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/integration-secrets');
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'No se pudo cargar la bóveda');
+      const data = await res.json();
+      setSecrets(Array.isArray(data.value) ? data.value : []);
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo cargar la bóveda');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadVault(); }, [isManager]);
+
+  const updateProvider = (providerId: string) => {
+    const provider = API_PROVIDERS.find(item => item.id === providerId) || API_PROVIDERS[0];
+    setForm(prev => ({
+      ...prev,
+      provider: provider.id,
+      label: provider.label,
+      keyName: provider.keyName,
+      model: provider.id === 'gemini' ? 'gemini-2.5-flash' : '',
+      baseUrl: provider.id === 'ollama' ? 'http://127.0.0.1:11434' : '',
+    }));
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setForm({
+      provider: 'gemini',
+      label: 'Gemini API',
+      keyName: 'GEMINI_API_KEY',
+      value: '',
+      status: 'active',
+      model: 'gemini-2.5-flash',
+      baseUrl: '',
+      notes: '',
+    });
+  };
+
+  const saveVaultSecret = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.value.trim()) {
+      toast.error('Pega la clave nueva para guardarla o reemplazarla.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const metadata: Record<string, string> = {};
+      if (form.model.trim()) metadata.model = form.model.trim();
+      if (form.baseUrl.trim()) metadata.baseUrl = form.baseUrl.trim();
+      if (form.notes.trim()) metadata.notes = form.notes.trim();
+      const res = await fetch('/api/admin/integration-secrets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingId || undefined,
+          provider: form.provider,
+          label: form.label,
+          keyName: form.keyName,
+          value: form.value,
+          status: form.status,
+          metadata,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'No se pudo guardar');
+      toast.success(editingId ? 'Clave reemplazada sin exponer el valor.' : 'Clave guardada en la bóveda.');
+      resetForm();
+      await loadVault();
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startReplace = (secret: VaultSecret) => {
+    setEditingId(secret.id);
+    setForm({
+      provider: secret.provider || 'custom',
+      label: secret.label || '',
+      keyName: secret.keyName || '',
+      value: '',
+      status: secret.status === 'revoked' ? 'active' : secret.status,
+      model: String(secret.metadata?.model || ''),
+      baseUrl: String(secret.metadata?.baseUrl || ''),
+      notes: String(secret.metadata?.notes || ''),
+    });
+  };
+
+  const patchStatus = async (secret: VaultSecret, status: 'active' | 'pending') => {
+    const res = await fetch(`/api/admin/integration-secrets/${secret.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'No se pudo actualizar');
+    await loadVault();
+  };
+
+  const revoke = async (secret: VaultSecret) => {
+    const res = await fetch(`/api/admin/integration-secrets/${secret.id}/revoke`, { method: 'POST' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'No se pudo revocar');
+    toast.success('Clave revocada en la bóveda.');
+    await loadVault();
+  };
+
+  const remove = async (secret: VaultSecret) => {
+    const res = await fetch(`/api/admin/integration-secrets/${secret.id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'No se pudo eliminar');
+    toast.success('Registro eliminado.');
+    await loadVault();
+  };
+
+  const test = async (secret: VaultSecret) => {
+    setTestingId(secret.id);
+    try {
+      const res = await fetch(`/api/admin/integration-secrets/${secret.id}/test`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.message || data.error || 'Prueba fallida');
+      toast.success(data.message || 'Prueba correcta');
+    } catch (err: any) {
+      toast.error(err?.message || 'Prueba fallida');
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const statusClass = (status: string) => status === 'active'
+    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
+    : status === 'revoked'
+      ? 'bg-red-500/15 text-red-300 border-red-500/25'
+      : 'bg-amber-500/15 text-amber-300 border-amber-500/25';
+
+  if (!isManager) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Lock className="w-10 h-10 text-blue-300 mb-4" />
+        <h3 className="text-xl font-bold text-white">Bóveda solo para Gerente</h3>
+        <p className="text-sm text-slate-400 mt-2 max-w-md">Tu rol actual es {role || 'desconocido'}. Solo GERENTE puede crear, reemplazar o revocar claves API.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <Key className="w-5 h-5 text-blue-400" /> Bóveda de APIs
+          </h3>
+          <p className="text-sm text-slate-400 mt-1">Guarda, reemplaza y revoca claves sin exponer el valor completo al navegador.</p>
+        </div>
+        <button onClick={loadVault} className="px-3 py-2 rounded-lg border border-white/10 bg-slate-950/60 text-slate-300 text-sm flex items-center gap-2">
+          <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} /> Actualizar
+        </button>
+      </div>
+
+      <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4 flex gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
+        <p className="text-sm text-amber-100/90">La clave Gemini que se pegó en el chat debe rotarse en Google Cloud antes de guardarse aquí. Después de guardar, esta pantalla solo mostrará los últimos 4 caracteres.</p>
+      </div>
+
+      <form onSubmit={saveVaultSecret} className="grid grid-cols-1 lg:grid-cols-12 gap-4 rounded-2xl border border-white/10 bg-slate-950/50 p-5">
+        <div className="lg:col-span-3">
+          <label className="text-xs uppercase tracking-wider text-slate-500 font-bold">Proveedor</label>
+          <select value={form.provider} onChange={e => updateProvider(e.target.value)} className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-white">
+            {API_PROVIDERS.map(provider => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
+          </select>
+          <p className="text-[11px] text-slate-500 mt-2">{selectedProvider.hint}</p>
+        </div>
+        <div className="lg:col-span-3">
+          <label className="text-xs uppercase tracking-wider text-slate-500 font-bold">Etiqueta</label>
+          <input value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-white" />
+        </div>
+        <div className="lg:col-span-3">
+          <label className="text-xs uppercase tracking-wider text-slate-500 font-bold">Variable / uso</label>
+          <input value={form.keyName} onChange={e => setForm({ ...form, keyName: e.target.value.toUpperCase() })} className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm font-mono text-white" />
+        </div>
+        <div className="lg:col-span-3">
+          <label className="text-xs uppercase tracking-wider text-slate-500 font-bold">Estado</label>
+          <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-white">
+            <option value="active">Activo</option>
+            <option value="pending">Pendiente</option>
+          </select>
+        </div>
+        <div className="lg:col-span-6">
+          <label className="text-xs uppercase tracking-wider text-slate-500 font-bold">Clave nueva</label>
+          <input type="password" value={form.value} onChange={e => setForm({ ...form, value: e.target.value })} placeholder={editingId ? 'Pega la clave nueva para reemplazar' : 'Pega la clave API'} className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-white" autoComplete="off" />
+        </div>
+        <div className="lg:col-span-3">
+          <label className="text-xs uppercase tracking-wider text-slate-500 font-bold">Modelo</label>
+          <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="gemini-2.5-flash" className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-white" />
+        </div>
+        <div className="lg:col-span-3">
+          <label className="text-xs uppercase tracking-wider text-slate-500 font-bold">Base URL</label>
+          <input value={form.baseUrl} onChange={e => setForm({ ...form, baseUrl: e.target.value })} placeholder="https://api..." className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-white" />
+        </div>
+        <div className="lg:col-span-9">
+          <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Notas internas opcionales" className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-white" />
+        </div>
+        <div className="lg:col-span-3 flex gap-2">
+          {editingId && <button type="button" onClick={resetForm} className="flex-1 rounded-xl border border-white/10 bg-slate-800 text-slate-200 text-sm">Cancelar</button>}
+          <button disabled={saving} className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold flex items-center justify-center gap-2">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {editingId ? 'Reemplazar' : 'Guardar'}
+          </button>
+        </div>
+      </form>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {secrets.map(secret => (
+          <div key={secret.id} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-white">{secret.label}</p>
+                <p className="text-xs text-slate-500 font-mono mt-1">{secret.keyName} · {secret.provider}</p>
+              </div>
+              <span className={cn('px-2 py-1 rounded-full border text-[10px] uppercase font-bold', statusClass(secret.status))}>{secret.status}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="rounded-xl bg-black/30 border border-white/5 p-3">
+                <p className="text-slate-500 uppercase font-bold">Clave</p>
+                <p className="text-slate-200 font-mono mt-1 flex items-center gap-2"><EyeOff className="w-3.5 h-3.5" /> ****{secret.valueLast4 || '----'}</p>
+              </div>
+              <div className="rounded-xl bg-black/30 border border-white/5 p-3">
+                <p className="text-slate-500 uppercase font-bold">Actualizada</p>
+                <p className="text-slate-200 mt-1">{secret.updatedAt ? new Date(secret.updatedAt).toLocaleString() : 'Sin fecha'}</p>
+              </div>
+            </div>
+            {(secret.metadata?.model || secret.metadata?.baseUrl) && (
+              <p className="text-xs text-slate-400">Modelo: <span className="text-slate-200">{secret.metadata?.model || 'N/A'}</span>{secret.metadata?.baseUrl ? ` · URL: ${secret.metadata.baseUrl}` : ''}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => test(secret)} disabled={testingId === secret.id || secret.status === 'revoked'} className="px-3 py-2 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-xs font-bold flex items-center gap-2 disabled:opacity-50">
+                {testingId === secret.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Probar
+              </button>
+              <button onClick={() => startReplace(secret)} className="px-3 py-2 rounded-lg bg-blue-500/10 text-blue-300 border border-blue-500/20 text-xs font-bold flex items-center gap-2"><Edit2 className="w-3.5 h-3.5" /> Reemplazar</button>
+              {secret.status !== 'active' && <button onClick={() => patchStatus(secret, 'active').then(() => toast.success('Clave activada')).catch(err => toast.error(err.message))} className="px-3 py-2 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-xs font-bold flex items-center gap-2"><Power className="w-3.5 h-3.5" /> Activar</button>}
+              {secret.status !== 'revoked' && <button onClick={() => revoke(secret).catch(err => toast.error(err.message))} className="px-3 py-2 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs font-bold">Revocar</button>}
+              <button onClick={() => remove(secret).catch(err => toast.error(err.message))} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-300 border border-red-500/20 text-xs font-bold flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" /> Eliminar</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {!loading && secrets.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-white/10 p-10 text-center text-slate-400">
+          No hay claves guardadas todavía. Agrega Gemini, OpenAI u otra API para activarla en el backend.
+        </div>
+      )}
     </div>
   );
 }

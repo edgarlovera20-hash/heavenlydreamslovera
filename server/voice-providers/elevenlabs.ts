@@ -1,10 +1,11 @@
 import { inferProposedResult } from './scripts';
 import type { ValidationCallPayload, ValidationSyncResult, VoiceProviderAdapter } from './types';
+import { getSecretValue } from '../secret-vault';
 
 const API_BASE = 'https://api.elevenlabs.io/v1';
 
 function env(name: string) {
-  return process.env[name]?.trim() || '';
+  return getSecretValue(name);
 }
 
 async function elevenFetch(path: string, init: RequestInit = {}) {

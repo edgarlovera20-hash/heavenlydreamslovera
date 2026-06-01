@@ -25,14 +25,16 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getGeminiApiKey, getGeminiOcrModel, getOllamaApiKey, getOllamaOcrModel, getOllamaUrl, getOllamaUrlSource } from './ai-config';
 import { runTesseractIne, runTesseractComprobante, runTesseractSiac, shutdownTesseract, parseOcrText } from './ocr-tesseract';
 
-const OLLAMA_URL        = getOllamaUrl();
-const OLLAMA_API_KEY    = getOllamaApiKey();
-const GEMINI_API_KEY    = getGeminiApiKey();
 const OCR_PRIMARY       = (process.env.OCR_PRIMARY || '').toLowerCase();
 const OCR_STRATEGY      = (process.env.OCR_STRATEGY || 'fast').toLowerCase();
 
-const OLLAMA_MODEL    = getOllamaOcrModel();
-const GEMINI_MODEL    = getGeminiOcrModel();
+const OLLAMA_KEEP_ALIVE    = process.env.OLLAMA_KEEP_ALIVE || '30m';
+
+function ollamaUrl() { return getOllamaUrl(); }
+function ollamaApiKey() { return getOllamaApiKey(); }
+function ollamaModel() { return getOllamaOcrModel(); }
+function geminiApiKey() { return getGeminiApiKey(); }
+function geminiModel() { return getGeminiOcrModel(); }
 
 function parseTimeoutEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -51,7 +53,6 @@ const TIMEOUT_MS_OLLAMA    = parseTimeoutEnv('OLLAMA_TIMEOUT_MS', TIMEOUT_MS_LLM
 const TIMEOUT_MS_TESSERACT = parseTimeoutEnv('OCR_TESSERACT_TIMEOUT_MS', 18_000);
 const MAX_OUTPUT_TOKENS    = parsePositiveIntEnv('OCR_MAX_OUTPUT_TOKENS', 650);
 const OLLAMA_NUM_CTX       = parsePositiveIntEnv('OCR_OLLAMA_NUM_CTX', 3072);
-const OLLAMA_KEEP_ALIVE    = process.env.OLLAMA_KEEP_ALIVE || '30m';
 const CACHE_TTL_MS         = parsePositiveIntEnv('OCR_CACHE_TTL_MS', 60 * 60 * 1000);
 const CACHE_MAX_ENTRIES    = parsePositiveIntEnv('OCR_CACHE_MAX_ENTRIES', 250);
 
@@ -581,11 +582,13 @@ function geminiMimeTypeFromDataUrl(value: string) {
 }
 
 async function callGemini(prompt: string, base64Images: string[]): Promise<string> {
-  if (!GEMINI_API_KEY) throw new Error('Gemini no configurado: falta GEMINI_API_KEY');
+  const apiKey = geminiApiKey();
+  const modelName = geminiModel();
+  if (!apiKey) throw new Error('Gemini no configurado: falta GEMINI_API_KEY');
 
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
+    model: modelName,
     generationConfig: {
       temperature: 0,
       responseMimeType: 'application/json',
@@ -607,10 +610,11 @@ async function callGemini(prompt: string, base64Images: string[]): Promise<strin
 }
 
 async function checkGeminiHealth() {
+  const apiKey = geminiApiKey();
   return {
-    configured: Boolean(GEMINI_API_KEY),
-    reachable: Boolean(GEMINI_API_KEY),
-    model: GEMINI_MODEL,
+    configured: Boolean(apiKey),
+    reachable: Boolean(apiKey),
+    model: geminiModel(),
     timeoutMs: TIMEOUT_MS_GEMINI,
   };
 }
@@ -618,13 +622,16 @@ async function checkGeminiHealth() {
 // ─── PROVIDER 1: Ollama (local/remoto privado) ──────────────────────────────
 
 async function callOllama(prompt: string, base64Images: string[]): Promise<string> {
-  if (!OLLAMA_URL) throw new Error('Ollama local no configurado');
+  const url = ollamaUrl();
+  const apiKey = ollamaApiKey();
+  const modelName = ollamaModel();
+  if (!url) throw new Error('Ollama local no configurado');
 
   // Ollama espera el base64 PURO (sin prefijo data:image/...;base64,)
   const imageBlocks = base64Images.map(b64 => stripDataUrl(b64));
 
   const payload: any = {
-    model: OLLAMA_MODEL,
+    model: modelName,
     stream: false,
     format: 'json',
     keep_alive: OLLAMA_KEEP_ALIVE,
@@ -641,12 +648,12 @@ async function callOllama(prompt: string, base64Images: string[]): Promise<strin
   };
 
   const res = await fetchWithTimeout(
-    `${OLLAMA_URL}/api/chat`,
+    `${url}/api/chat`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(OLLAMA_API_KEY && { 'Authorization': `Bearer ${OLLAMA_API_KEY}` }),
+        ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
       },
       body: JSON.stringify(payload),
     },
@@ -664,12 +671,15 @@ async function callOllama(prompt: string, base64Images: string[]): Promise<strin
 }
 
 async function checkOllamaHealth() {
-  if (!OLLAMA_URL) {
+  const url = ollamaUrl();
+  const apiKey = ollamaApiKey();
+  const modelName = ollamaModel();
+  if (!url) {
     return {
       configured: false,
       reachable: false,
-      model: OLLAMA_MODEL,
-      url: OLLAMA_URL,
+      model: modelName,
+      url,
       source: getOllamaUrlSource(),
       timeoutMs: TIMEOUT_MS_OLLAMA,
       models: [] as string[],
@@ -680,11 +690,11 @@ async function checkOllamaHealth() {
 
   try {
     const res = await fetchWithTimeout(
-      `${OLLAMA_URL}/api/tags`,
+      `${url}/api/tags`,
       {
         method: 'GET',
         headers: {
-          ...(OLLAMA_API_KEY && { 'Authorization': `Bearer ${OLLAMA_API_KEY}` }),
+          ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
         },
       },
       Math.min(TIMEOUT_MS_OLLAMA, 10_000),
@@ -696,8 +706,8 @@ async function checkOllamaHealth() {
       return {
         configured: true,
         reachable: false,
-        model: OLLAMA_MODEL,
-        url: OLLAMA_URL,
+        model: modelName,
+        url,
         source: getOllamaUrlSource(),
         timeoutMs: TIMEOUT_MS_OLLAMA,
         models: [] as string[],
@@ -715,19 +725,19 @@ async function checkOllamaHealth() {
     return {
       configured: true,
       reachable: true,
-      model: OLLAMA_MODEL,
-      url: OLLAMA_URL,
+      model: modelName,
+      url,
       source: getOllamaUrlSource(),
       timeoutMs: TIMEOUT_MS_OLLAMA,
       models,
-      hasModel: models.some(model => modelTagMatches(model, OLLAMA_MODEL)),
+      hasModel: models.some(model => modelTagMatches(model, modelName)),
     };
   } catch (err: any) {
     return {
       configured: true,
       reachable: false,
-      model: OLLAMA_MODEL,
-      url: OLLAMA_URL,
+      model: modelName,
+      url,
       source: getOllamaUrlSource(),
       timeoutMs: TIMEOUT_MS_OLLAMA,
       models: [] as string[],
@@ -902,7 +912,7 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
     delete normalized.rawText;
     delete normalized.domicilioTextoCompleto;
     const fields = sanitizeFields(docType, enrichFieldsFromText(docType, normalized, text));
-    return enrichLocalSignals(docType, { text, fields, provider, model: GEMINI_MODEL, durationMs: Date.now() - t0 });
+    return enrichLocalSignals(docType, { text, fields, provider, model: geminiModel(), durationMs: Date.now() - t0 });
   }
 
   if (provider === 'ollama') {
@@ -912,7 +922,7 @@ async function tryProvider(provider: OcrProvider, docType: OcrDocType, images: s
     const text = parsed.rawText || raw;
     delete parsed.rawText;
     const fields = sanitizeFields(docType, enrichFieldsFromText(docType, parsed, text));
-    return enrichLocalSignals(docType, { text, fields, provider, model: OLLAMA_MODEL, durationMs: Date.now() - t0 });
+    return enrichLocalSignals(docType, { text, fields, provider, model: ollamaModel(), durationMs: Date.now() - t0 });
   }
 
   // tesseract
@@ -952,8 +962,8 @@ export async function runOcrWithFallback(docType: OcrDocType, images: string | s
     const strategy = currentStrategy();
 
     for (const provider of providerOrder) {
-      if (provider === 'gemini' && !GEMINI_API_KEY) { errors.push('gemini: sin GEMINI_API_KEY'); continue; }
-      if (provider === 'ollama' && !OLLAMA_URL) { errors.push('ollama: sin servidor local'); continue; }
+      if (provider === 'gemini' && !geminiApiKey()) { errors.push('gemini: sin GEMINI_API_KEY'); continue; }
+      if (provider === 'ollama' && !ollamaUrl()) { errors.push('ollama: sin servidor local'); continue; }
 
       try {
         const result = await tryProvider(provider, docType, imgs);
@@ -1044,8 +1054,8 @@ export async function checkOcrStatus() {
     financial: providerOrderFor('financial'),
   };
   const providerReady = (provider: OcrProvider) => {
-    if (provider === 'gemini') return Boolean(GEMINI_API_KEY);
-    if (provider === 'ollama') return Boolean(OLLAMA_URL) && ollamaHealth.reachable;
+    if (provider === 'gemini') return Boolean(geminiApiKey());
+    if (provider === 'ollama') return Boolean(ollamaUrl()) && ollamaHealth.reachable;
     return true;
   };
   const activePrimary = orders.ine.find(providerReady) || orders.ine[0];

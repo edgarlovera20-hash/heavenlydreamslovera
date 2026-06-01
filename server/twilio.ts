@@ -1,5 +1,7 @@
+import { getSecretValue } from './secret-vault';
+
 function requiredEnv(name: string) {
-  const value = process.env[name];
+  const value = getSecretValue(name);
   if (!value) throw new Error(`${name} no configurado`);
   return value;
 }
@@ -18,7 +20,23 @@ function escapeXml(value: string) {
 }
 
 export function twilioConfigured() {
-  return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER);
+  return Boolean(getSecretValue('TWILIO_ACCOUNT_SID') && getSecretValue('TWILIO_AUTH_TOKEN') && getSecretValue('TWILIO_FROM_NUMBER'));
+}
+
+export function getTwilioFromNumber() {
+  return getSecretValue('TWILIO_FROM_NUMBER') || null;
+}
+
+export function getTwilioWebhookToken() {
+  return getSecretValue('TWILIO_WEBHOOK_TOKEN') || getSecretValue('VOICE_WEBHOOK_TOKEN') || null;
+}
+
+function appendWebhookToken(rawUrl: string) {
+  const token = getTwilioWebhookToken();
+  if (!token) return rawUrl;
+  const url = new URL(rawUrl);
+  url.searchParams.set('token', token);
+  return url.toString();
 }
 
 export function buildValidationTwiML(message: string) {
@@ -36,7 +54,7 @@ export async function createTwilioCall(to: string, message: string, options: { u
   const accountSid = requiredEnv('TWILIO_ACCOUNT_SID');
   const authToken = requiredEnv('TWILIO_AUTH_TOKEN');
   const from = requiredEnv('TWILIO_FROM_NUMBER');
-  const webhookBaseUrl = process.env.TWILIO_WEBHOOK_BASE_URL || process.env.APP_URL || '';
+  const webhookBaseUrl = getSecretValue('TWILIO_WEBHOOK_BASE_URL') || process.env.APP_URL || '';
   if (!webhookBaseUrl) throw new Error('TWILIO_WEBHOOK_BASE_URL o APP_URL requerido para TwiML');
 
   const url = new URL(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`);
@@ -46,7 +64,7 @@ export async function createTwilioCall(to: string, message: string, options: { u
     MachineDetection: 'Enable',
   });
   if (options.url) {
-    params.set('Url', options.url);
+    params.set('Url', appendWebhookToken(options.url));
   } else {
     params.set('Twiml', buildValidationTwiML(message));
   }

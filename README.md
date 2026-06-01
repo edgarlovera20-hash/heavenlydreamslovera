@@ -40,3 +40,25 @@ Si no tienes PM2:
 ```bash
 npm install -g pm2
 ```
+
+### Agregar dominio al servidor
+
+Puedes pasar el dominio al script de deploy y la app configurara `APP_URL`, OAuth, Twilio y WebAuthn/passkeys:
+
+```bash
+APP_DOMAIN=crm.tudominio.com bash /tmp/deploy-heavenly-dreams.sh
+```
+
+Luego apunta el DNS del subdominio a la IP del servidor y activa HTTPS en el reverse proxy. Guia completa: `docs/server-domain.md`.
+
+### Bóveda de claves API
+
+El gerente puede administrar claves de Gemini, OpenAI, Twilio, ElevenLabs, Telegram, Didit, Ollama-compatible y proveedores personalizados desde `Ajustes -> Integraciones y APIs`.
+
+Antes de producción genera `SECRETS_ENCRYPTION_KEY`:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
+
+Guia completa: `docs/api-vault.md`.

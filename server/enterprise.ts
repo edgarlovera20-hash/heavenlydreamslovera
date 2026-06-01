@@ -2,13 +2,13 @@ import { randomUUID } from 'crypto';
 import db, { AiJobs, AuditLog, AutomationRules, Metrics } from './db';
 import { infraMode, queueJob } from './infra';
 import { getReadinessGates } from './readiness';
-import { getOllamaApiKey, getOllamaChatModel, getOllamaOcrModel, getOllamaUrl } from './ai-config';
+import { getGeminiApiKey, getGeminiOcrModel, getGeminiSource, getOllamaApiKey, getOllamaChatModel, getOllamaOcrModel, getOllamaUrl, getOllamaUrlSource } from './ai-config';
 
 type ProviderName = 'ollama' | 'gemini';
 
 const PROVIDERS: Array<{ name: ProviderName; configured: () => boolean; run: (prompt: string) => Promise<string> }> = [
   { name: 'ollama', configured: () => !!getOllamaUrl(), run: callOllama },
-  { name: 'gemini', configured: () => !!process.env.GEMINI_API_KEY, run: callGemini },
+  { name: 'gemini', configured: () => !!getGeminiApiKey(), run: callGemini },
 ];
 
 function stripVisibleThinking(value: string) {
@@ -50,8 +50,8 @@ async function callOllama(prompt: string) {
 }
 
 async function callGemini(prompt: string) {
-  const key = process.env.GEMINI_API_KEY || '';
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const key = getGeminiApiKey();
+  const model = getGeminiOcrModel();
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -74,7 +74,7 @@ export async function runAiWithFallback(prompt: string) {
       if (!output.trim()) throw new Error('respuesta vacía');
       return {
         provider: provider.name,
-        model: provider.name === 'ollama' ? getOllamaChatModel() : process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        model: provider.name === 'ollama' ? getOllamaChatModel() : getGeminiOcrModel(),
         output,
         errors,
       };
@@ -178,10 +178,12 @@ export function enterpriseHealth() {
       configured: !!getOllamaUrl(),
       chatModel: getOllamaChatModel(),
       ocrModel: getOllamaOcrModel(),
+      source: getOllamaUrlSource(),
     },
     gemini: {
-      configured: !!process.env.GEMINI_API_KEY,
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      configured: !!getGeminiApiKey(),
+      model: getGeminiOcrModel(),
+      source: getGeminiSource(),
     },
   };
   const infra = infraMode();

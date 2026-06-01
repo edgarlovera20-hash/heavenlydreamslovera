@@ -5,6 +5,8 @@ APP_DIR="${APP_DIR:-/opt/heavenly-dreams}"
 REPO_URL="${REPO_URL:-https://github.com/edgarlovera20-hash/heavenlydreamslovera.git}"
 BRANCH="${BRANCH:-main}"
 APP_NAME="${APP_NAME:-heavenly-dreams}"
+APP_DOMAIN="${APP_DOMAIN:-}"
+APP_URL="${APP_URL:-}"
 
 echo "Deploying ${APP_NAME} into ${APP_DIR}"
 
@@ -24,6 +26,19 @@ if [ ! -d "${APP_DIR}" ]; then
 fi
 
 cd "${APP_DIR}"
+
+upsert_env_var() {
+  local key="$1"
+  local value="$2"
+  local file="${3:-.env}"
+  [ -n "${value}" ] || return 0
+  touch "${file}"
+  if grep -qE "^${key}=" "${file}"; then
+    sed -i "s|^${key}=.*|${key}=\"${value}\"|" "${file}"
+  else
+    printf '%s="%s"\n' "${key}" "${value}" >> "${file}"
+  fi
+}
 
 if [ ! -d .git ]; then
   echo "${APP_DIR} exists but is not a git repository. Move it or set APP_DIR to the real app folder."
@@ -57,6 +72,23 @@ done
 git fetch origin "${BRANCH}"
 git checkout "${BRANCH}"
 git pull --ff-only origin "${BRANCH}"
+
+if [ -n "${APP_DOMAIN}" ] || [ -n "${APP_URL}" ]; then
+  if [ -z "${APP_DOMAIN}" ]; then
+    APP_DOMAIN="$(printf '%s' "${APP_URL}" | sed -E 's|^https?://||; s|/.*$||; s|:[0-9]+$||')"
+  fi
+  if [ -z "${APP_URL}" ]; then
+    APP_URL="https://${APP_DOMAIN}"
+  fi
+  upsert_env_var APP_DOMAIN "${APP_DOMAIN}"
+  upsert_env_var APP_URL "${APP_URL}"
+  upsert_env_var OAUTH_CALLBACK_BASE_URL "${APP_URL}"
+  upsert_env_var TWILIO_WEBHOOK_BASE_URL "${APP_URL}"
+  upsert_env_var WEBAUTHN_RP_ID "${APP_DOMAIN}"
+  upsert_env_var WEBAUTHN_ORIGIN "${APP_URL}"
+  upsert_env_var HOST "0.0.0.0"
+  echo "Dominio configurado: ${APP_URL}"
+fi
 
 if [ -n "${DB_BACKUP}" ] && [ -f "${DB_BACKUP}" ]; then
   cp -f "${DB_BACKUP}" data/heavenlydreams.db

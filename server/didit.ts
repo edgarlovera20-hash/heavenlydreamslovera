@@ -4,6 +4,7 @@ import { DiditChecks, DocumentFiles } from './db';
 import { readStoredDocument } from './document-storage';
 import { createHttpError, parseLimit, wrap } from './http';
 import { requireRole } from './security';
+import { getSecretValue } from './secret-vault';
 
 type ParsedFile = {
   fieldName: string;
@@ -22,7 +23,7 @@ const DIDIT_BASE_URL = (process.env.DIDIT_BASE_URL || 'https://verification.didi
 const DEFAULT_UPLOAD_MAX_BYTES = 60 * 1024 * 1024;
 
 function diditApiKey() {
-  const key = process.env.DIDIT_API_KEY?.trim();
+  const key = getSecretValue('DIDIT_API_KEY');
   if (!key) {
     throw createHttpError(503, 'DIDIT_API_KEY no esta configurada en el servidor.', 'DIDIT_NOT_CONFIGURED');
   }
@@ -298,7 +299,7 @@ export function registerDiditRoutes(app: Express) {
 
   app.get('/api/didit/status', diditOnly, wrap((_req: any, res: any) => {
     res.json({
-      configured: Boolean(process.env.DIDIT_API_KEY?.trim()),
+      configured: Boolean(getSecretValue('DIDIT_API_KEY')),
       baseUrl: DIDIT_BASE_URL,
       uploadMaxBytes: maxUploadBytes(),
       supported: [

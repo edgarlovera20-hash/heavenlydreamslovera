@@ -254,6 +254,22 @@ db.exec(`
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS integration_secrets (
+    id              TEXT PRIMARY KEY,
+    provider        TEXT NOT NULL,
+    label           TEXT NOT NULL,
+    key_name        TEXT NOT NULL,
+    encrypted_value TEXT NOT NULL,
+    value_last4     TEXT,
+    status          TEXT NOT NULL DEFAULT 'active',
+    metadata        TEXT,
+    created_by      TEXT,
+    updated_by      TEXT,
+    revoked_at      TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   -- CRM operativo para Consulta y Seguimiento
   CREATE TABLE IF NOT EXISTS crm_followups (
     id             TEXT PRIMARY KEY,
@@ -1605,6 +1621,58 @@ export const Settings = {
     INSERT INTO settings (key,value,updated_at) VALUES (?,?,datetime('now'))
     ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
   `).run(key, JSON.stringify(value)),
+};
+
+export const IntegrationSecrets = {
+  list: () => db.prepare(`
+    SELECT * FROM integration_secrets
+    ORDER BY
+      CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 WHEN 'revoked' THEN 2 ELSE 3 END,
+      datetime(updated_at) DESC
+  `).all(),
+  getById: (id: string) => db.prepare('SELECT * FROM integration_secrets WHERE id=?').get(id),
+  getActiveByKeyName: (keyName: string) => db.prepare(`
+    SELECT * FROM integration_secrets
+    WHERE key_name=? AND status='active' AND revoked_at IS NULL
+    ORDER BY datetime(updated_at) DESC
+    LIMIT 1
+  `).get(keyName),
+  getActiveByProvider: (provider: string) => db.prepare(`
+    SELECT * FROM integration_secrets
+    WHERE provider=? AND status='active' AND revoked_at IS NULL
+    ORDER BY datetime(updated_at) DESC
+    LIMIT 1
+  `).get(provider),
+  upsert: (data: any) => db.prepare(`
+    INSERT INTO integration_secrets
+      (id,provider,label,key_name,encrypted_value,value_last4,status,metadata,created_by,updated_by,revoked_at,created_at,updated_at)
+    VALUES
+      (@id,@provider,@label,@key_name,@encrypted_value,@value_last4,@status,@metadata,@created_by,@updated_by,@revoked_at,datetime('now'),datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      provider=excluded.provider,
+      label=excluded.label,
+      key_name=excluded.key_name,
+      encrypted_value=excluded.encrypted_value,
+      value_last4=excluded.value_last4,
+      status=excluded.status,
+      metadata=excluded.metadata,
+      updated_by=excluded.updated_by,
+      revoked_at=excluded.revoked_at,
+      updated_at=datetime('now')
+  `).run(data),
+  patch: (id: string, data: any) => {
+    const allowed = ['provider', 'label', 'key_name', 'encrypted_value', 'value_last4', 'status', 'metadata', 'updated_by', 'revoked_at'];
+    const keys = Object.keys(data).filter((key) => allowed.includes(key));
+    if (!keys.length) return { changes: 0 };
+    const fields = keys.map((key) => `${key}=@${key}`).join(',');
+    return db.prepare(`UPDATE integration_secrets SET ${fields}, updated_at=datetime('now') WHERE id=@id`).run({ ...data, id });
+  },
+  revoke: (id: string, updatedBy: string | null = null) => db.prepare(`
+    UPDATE integration_secrets
+    SET status='revoked', revoked_at=datetime('now'), updated_by=@updatedBy, updated_at=datetime('now')
+    WHERE id=@id
+  `).run({ id, updatedBy }),
+  delete: (id: string) => db.prepare('DELETE FROM integration_secrets WHERE id=?').run(id),
 };
 
 export const Referrals = {

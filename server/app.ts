@@ -2,6 +2,29 @@ import express from 'express';
 import compression from 'compression';
 import { requestLogger } from './http';
 
+function contentSecurityPolicy() {
+  const isProd = process.env.NODE_ENV === 'production';
+  const scriptSrc = isProd
+    ? "script-src 'self' https://accounts.google.com https://apis.google.com"
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com";
+  return [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https: wss: ws:",
+    "media-src 'self' data: blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+    "frame-src 'self' https://accounts.google.com",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+  ].join('; ');
+}
+
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
@@ -19,6 +42,7 @@ export function createApp() {
     res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.set('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self), payment=()');
     res.set('X-Frame-Options', 'SAMEORIGIN');
+    res.set('Content-Security-Policy', contentSecurityPolicy());
     next();
   });
   app.use('/api', (_req, res, next) => {
@@ -28,7 +52,7 @@ export function createApp() {
     next();
   });
   const defaultJsonLimit = process.env.API_JSON_LIMIT || '5mb';
-  const largeJsonLimit = process.env.API_LARGE_JSON_LIMIT || '80mb';
+  const largeJsonLimit = process.env.API_LARGE_JSON_LIMIT || '35mb';
   app.use(
     [
       '/api/ocr',

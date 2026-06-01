@@ -1,7 +1,9 @@
+import { getSecretValue } from './secret-vault';
+
 const OPENAI_TRANSCRIPTION_URL = 'https://api.openai.com/v1/audio/transcriptions';
 
 function transcriptionEnabled() {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return Boolean(getSecretValue('OPENAI_API_KEY'));
 }
 
 function extensionForAudio(mimeType: string) {
@@ -31,15 +33,16 @@ export async function transcribeAudioBuffer(input: {
   const fileName = input.fileName || `audio.${extensionForAudio(input.mimeType)}`;
   const startedAt = Date.now();
   const form = new FormData();
-  form.set('model', process.env.OPENAI_AUDIO_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe');
-  form.set('language', process.env.OPENAI_AUDIO_TRANSCRIPTION_LANGUAGE || 'es');
+  const model = getSecretValue('OPENAI_AUDIO_TRANSCRIPTION_MODEL', process.env.OPENAI_AUDIO_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe');
+  form.set('model', model);
+  form.set('language', getSecretValue('OPENAI_AUDIO_TRANSCRIPTION_LANGUAGE', process.env.OPENAI_AUDIO_TRANSCRIPTION_LANGUAGE || 'es'));
   form.set('response_format', 'json');
   form.set('file', new File([input.buffer], fileName, { type: input.mimeType || 'audio/ogg' }));
 
   const res = await fetch(OPENAI_TRANSCRIPTION_URL, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${getSecretValue('OPENAI_API_KEY')}`,
     },
     body: form,
   });
@@ -49,7 +52,7 @@ export async function transcribeAudioBuffer(input: {
     return {
       status: 'failed',
       provider: 'openai',
-      model: process.env.OPENAI_AUDIO_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe',
+      model,
       error: data?.error?.message || `OpenAI transcription HTTP ${res.status}`,
       durationMs: Date.now() - startedAt,
     };
@@ -58,7 +61,7 @@ export async function transcribeAudioBuffer(input: {
   return {
     status: 'completed',
     provider: 'openai',
-    model: process.env.OPENAI_AUDIO_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe',
+    model,
     text: String(data?.text || '').trim(),
     durationMs: Date.now() - startedAt,
   };

@@ -1,10 +1,11 @@
 import "dotenv/config";
+import "./server/domain";
 import express from "express";
 import { createServer as createHttpServer } from "http";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { copyFileSync, existsSync, mkdirSync } from "fs";
-import { randomUUID } from "crypto";
+import { randomUUID, timingSafeEqual } from "crypto";
 import { createApp } from "./server/app";
 import { createHttpError, hasPagingQuery, parseLimit, parseOffset, queryString, wrap } from "./server/http";
 import {
@@ -67,6 +68,15 @@ import {
   runAiWithFallback,
 } from "./server/enterprise";
 import {
+  deleteSecret,
+  getSecretForServerUse,
+  getSecretValue,
+  listMaskedSecrets,
+  patchSecret,
+  revokeSecret,
+  saveSecret,
+} from "./server/secret-vault";
+import {
   makeAuthenticationOptions,
   makeRegistrationOptions,
   isWebAuthnRequired,
@@ -76,7 +86,7 @@ import {
 } from "./server/webauthn";
 import { getEnterpriseReadiness } from "./server/readiness";
 import { readStoredDocument, storeDocument } from "./server/document-storage";
-import { buildValidationTwiML, createTwilioCall, twilioConfigured } from "./server/twilio";
+import { buildValidationTwiML, createTwilioCall, getTwilioFromNumber, getTwilioWebhookToken, twilioConfigured } from "./server/twilio";
 import {
   attachOpenAIRealtimeStream,
   buildOpenAIRealtimeTwiML,
@@ -549,17 +559,63 @@ async function downloadPublicSiacFromGoogleDrive(input: string) {
   throw lastError || new Error('No se pudo descargar el archivo de Google Drive.');
 }
 
+async function testIntegrationSecret(secret: any) {
+  const provider = String(secret.provider || '').toLowerCase();
+  const keyName = String(secret.keyName || '').toUpperCase();
+  const metadata = secret.metadata || {};
+  try {
+    if (provider === 'gemini' || keyName === 'GEMINI_API_KEY') {
+      const model = metadata.model || metadata.ocrModel || getSecretValue('GEMINI_MODEL', process.env.GEMINI_MODEL || 'gemini-2.5-flash');
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(secret.value)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'Responde solo OK' }] }], generationConfig: { maxOutputTokens: 8, temperature: 0 } }),
+      });
+      if (!response.ok) return { ok: false, provider, message: `Gemini HTTP ${response.status}: ${(await response.text()).slice(0, 180)}` };
+      return { ok: true, provider, message: `Gemini respondió con ${model}` };
+    }
+    if (provider === 'openai' || keyName === 'OPENAI_API_KEY') {
+      const response = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${secret.value}` } });
+      if (!response.ok) return { ok: false, provider, message: `OpenAI HTTP ${response.status}: ${(await response.text()).slice(0, 180)}` };
+      return { ok: true, provider, message: 'OpenAI API respondió correctamente' };
+    }
+    if (provider === 'telegram' || keyName === 'TELEGRAM_BOT_TOKEN') {
+      const response = await fetch(`https://api.telegram.org/bot${secret.value}/getMe`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok === false) return { ok: false, provider, message: data?.description || `Telegram HTTP ${response.status}` };
+      return { ok: true, provider, message: `Telegram bot @${data?.result?.username || 'desconocido'} válido` };
+    }
+    if (provider === 'ollama') {
+      const baseUrl = String(metadata.baseUrl || getSecretValue('OLLAMA_URL', process.env.OLLAMA_URL || 'http://127.0.0.1:11434')).replace(/\/+$/, '');
+      const response = await fetch(`${baseUrl}/api/tags`, { headers: secret.value ? { Authorization: `Bearer ${secret.value}` } : {} });
+      if (!response.ok) return { ok: false, provider, message: `Ollama HTTP ${response.status}` };
+      return { ok: true, provider, message: `Ollama respondió en ${baseUrl}` };
+    }
+    if (provider === 'elevenlabs' || keyName === 'ELEVENLABS_API_KEY') {
+      const response = await fetch('https://api.elevenlabs.io/v1/user', { headers: { 'xi-api-key': secret.value } });
+      if (!response.ok) return { ok: false, provider, message: `ElevenLabs HTTP ${response.status}: ${(await response.text()).slice(0, 180)}` };
+      return { ok: true, provider, message: 'ElevenLabs API respondió correctamente' };
+    }
+    if (provider === 'twilio' || keyName.startsWith('TWILIO_')) {
+      return { ok: true, provider, message: 'Clave guardada. Twilio se valida cuando SID, token y número estén activos.' };
+    }
+    if (provider === 'didit' || keyName === 'DIDIT_API_KEY') {
+      return { ok: true, provider, message: 'Clave Didit guardada. Se validará en la siguiente verificación KYC.' };
+    }
+    return { ok: true, provider: provider || 'custom', message: 'Clave guardada. Proveedor personalizado sin prueba automática.' };
+  } catch (err: any) {
+    return { ok: false, provider: provider || 'custom', message: err?.message || String(err) };
+  }
+}
+
 async function startServer() {
   const app = createApp();
-  app.use('/agent-videos', express.static(agentVideoDirectory(), {
-    fallthrough: false,
-    maxAge: '1h',
-  }));
   const PORT = Number(process.env.PORT || 3000);
   const HOST = process.env.HOST?.trim();
   const loginLimiter = rateLimit('login', 12, 15 * 60 * 1000);
   const oauthLimiter = rateLimit('oauth', 60, 15 * 60 * 1000);
   const registrationLimiter = rateLimit('registration', 8, 60 * 60 * 1000);
+  const uploadLimiter = rateLimit('upload', 40, 15 * 60 * 1000);
   const authOnly = requireAuth;
   const adminOnly = requireRole('GERENTE');
   const opsOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR');
@@ -568,6 +624,32 @@ async function startServer() {
   const managerOnly = adminOnly;
   const highImpactConfirmation = process.env.HIGH_IMPACT_CONFIRMATION || 'HEAVENLY_DREAMS_CONFIRM';
   const sqliteDbPath = path.join(process.cwd(), 'data', 'heavenlydreams.db');
+
+  app.get('/agent-videos/:fileName', chatUserOnly, wrap((req: any, res: any) => {
+    const requested = String(req.params.fileName || '');
+    const fileName = path.basename(requested);
+    if (!requested || requested !== fileName) return res.status(400).json({ error: 'Archivo invalido' });
+    res.sendFile(path.join(agentVideoDirectory(), fileName));
+  }));
+
+  function safeEqual(a: string, b: string) {
+    const left = Buffer.from(a);
+    const right = Buffer.from(b);
+    return left.length === right.length && timingSafeEqual(left, right);
+  }
+
+  function trustedVoiceWebhook(req: any) {
+    const expected = getTwilioWebhookToken();
+    const provided = String(req.query?.token || req.body?.token || req.headers?.['x-hd-webhook-token'] || '').trim();
+    if (expected) return safeEqual(provided, expected);
+    return process.env.NODE_ENV !== 'production';
+  }
+
+  function requireTrustedVoiceWebhook(req: any, res: any) {
+    if (trustedVoiceWebhook(req)) return true;
+    res.status(403).json({ error: 'Webhook de voz no autorizado' });
+    return false;
+  }
 
   function authAudit(req: any, accion: string, entidad: string, detalle: string | null = null) {
     AuditLog.insert({
@@ -852,7 +934,7 @@ async function startServer() {
       return ValidationRequests.getById(validationId) as any;
     }
     const attempts = Number(validation.attempts || 0) + 1;
-    const fallbacks = String(process.env.VOICE_PROVIDER_FALLBACKS || 'twilio-basic')
+    const fallbacks = String(getSecretValue('VOICE_PROVIDER_FALLBACKS', process.env.VOICE_PROVIDER_FALLBACKS || 'twilio-basic'))
       .split(',')
       .map(item => item.trim())
       .filter(Boolean) as any[];
@@ -1203,7 +1285,7 @@ async function startServer() {
   }
 
   const FIXED_MANAGER_EMAIL = 'edgarlovera20@gmail.com';
-  const FIXED_MANAGER_USERNAME = 'edgarlovera20';
+  const FIXED_MANAGER_USERNAME = 'edgarlovera20@gmail.com';
 
   function isFixedManagerUser(user: any) {
     return String(user?.email || '').toLowerCase() === FIXED_MANAGER_EMAIL
@@ -1260,7 +1342,7 @@ async function startServer() {
       } catch {
         return res.status(401).json({ error: 'Token requerido' });
       }
-    } else if (process.env.PUBLIC_REGISTRATION_ENABLED === 'false') {
+    } else if (process.env.PUBLIC_REGISTRATION_ENABLED !== 'true') {
       return res.status(403).json({
         error: 'Registro público deshabilitado. Solicita una invitación a gerencia.',
         code: 'PUBLIC_REGISTRATION_DISABLED',
@@ -2059,7 +2141,7 @@ async function startServer() {
     res.json(DocumentFiles.getAll(300));
   }));
 
-  app.post("/api/document-files", authOnly, wrap((req: any, res: any) => {
+  app.post("/api/document-files", authOnly, uploadLimiter, wrap((req: any, res: any) => {
     const body = req.body || {};
     if (!body.contentBase64 || !body.fileName || !body.docType) {
       return res.status(400).json({ error: 'contentBase64, fileName y docType son requeridos' });
@@ -2338,7 +2420,7 @@ async function startServer() {
     res.json({ ok: true, ...result });
   }));
 
-  app.post("/api/morosidad/import-file", managerOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/morosidad/import-file", managerOnly, uploadLimiter, wrap(async (req: any, res: any) => {
     const content = String(req.body?.contentBase64 || '');
     if (!content) return res.status(400).json({ error: 'contentBase64 requerido' });
     const result = await importMorososSource({
@@ -2740,7 +2822,7 @@ async function startServer() {
     res.json({ ok: true, ...result });
   }));
 
-  app.post("/api/siac/import-file", managerOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/siac/import-file", managerOnly, uploadLimiter, wrap(async (req: any, res: any) => {
     const content = String(req.body?.contentBase64 || '');
     if (!content) return res.status(400).json({ error: 'contentBase64 requerido' });
     const result = await importSiacSource({
@@ -2825,16 +2907,40 @@ async function startServer() {
   }));
 
   // ── TICKETS ────────────────────────────────────────────────
-  app.get("/api/tickets", authOnly, wrap((_req: any, res: any) => res.json(Tickets.getAll())));
+  app.get("/api/tickets", authOnly, wrap((req: any, res: any) => {
+    if (canOperateAuth(req.auth)) return res.json(Tickets.getAll());
+    const rows = (db as any).prepare(`
+      SELECT * FROM tickets
+      WHERE asesor_id=@userId OR asignado_a=@userId
+      ORDER BY created_at DESC
+    `).all({ userId: req.auth.sub });
+    res.json(rows);
+  }));
 
   app.post("/api/tickets", authOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), status: 'abierto', prioridad: 'media', categoria: null, ...req.body };
+    if (!canOperateAuth(req.auth)) {
+      data.asesor_id = req.auth.sub;
+      delete data.asignado_a;
+    }
     Tickets.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
   app.put("/api/tickets/:id", authOnly, wrap((req: any, res: any) => {
-    Tickets.update(req.params.id, req.body);
+    const current = (db as any).prepare('SELECT * FROM tickets WHERE id=?').get(req.params.id) as any;
+    if (!current) return res.status(404).json({ error: 'Ticket no encontrado' });
+    if (!canOperateAuth(req.auth) && current.asesor_id !== req.auth.sub && current.asignado_a !== req.auth.sub) {
+      return res.status(403).json({ error: 'Permisos insuficientes' });
+    }
+    const payload = canOperateAuth(req.auth)
+      ? req.body
+      : {
+          descripcion: req.body?.descripcion ?? current.descripcion,
+          status: req.body?.status ?? current.status,
+          prioridad: req.body?.prioridad ?? current.prioridad,
+        };
+    Tickets.update(req.params.id, payload);
     res.json({ ok: true });
   }));
 
@@ -2842,7 +2948,7 @@ async function startServer() {
   app.get("/api/voice-providers/status", opsOnly, wrap((_req: any, res: any) => {
     res.json({
       defaultProvider: configuredVoiceProvider(),
-      fallbacks: String(process.env.VOICE_PROVIDER_FALLBACKS || 'twilio-basic').split(',').map(item => item.trim()).filter(Boolean),
+      fallbacks: String(getSecretValue('VOICE_PROVIDER_FALLBACKS', process.env.VOICE_PROVIDER_FALLBACKS || 'twilio-basic')).split(',').map(item => item.trim()).filter(Boolean),
       autoEnabled: validationAutoEnabled(),
       providers: listVoiceProviderStatus(),
     });
@@ -2946,16 +3052,33 @@ async function startServer() {
   }));
 
   // ── REFERIDOS ──────────────────────────────────────────────
-  app.get("/api/referrals", authOnly, wrap((_req: any, res: any) => res.json(Referrals.getAll())));
+  app.get("/api/referrals", authOnly, wrap((req: any, res: any) => {
+    if (canOperateAuth(req.auth)) return res.json(Referrals.getAll());
+    const rows = (db as any).prepare('SELECT * FROM referrals WHERE referred_by=? ORDER BY created_at DESC').all(req.auth.sub);
+    res.json(rows);
+  }));
 
   app.post("/api/referrals", authOnly, wrap((req: any, res: any) => {
     const data = { id: randomUUID(), status: 'pendiente', convertido: 0, ...req.body };
+    if (!canOperateAuth(req.auth)) data.referred_by = req.auth.sub;
     Referrals.create(data);
     res.json({ ok: true, id: data.id });
   }));
 
   app.put("/api/referrals/:id", authOnly, wrap((req: any, res: any) => {
-    Referrals.update(req.params.id, req.body);
+    const current = (db as any).prepare('SELECT * FROM referrals WHERE id=?').get(req.params.id) as any;
+    if (!current) return res.status(404).json({ error: 'Referido no encontrado' });
+    if (!canOperateAuth(req.auth) && current.referred_by !== req.auth.sub) {
+      return res.status(403).json({ error: 'Permisos insuficientes' });
+    }
+    const payload = canOperateAuth(req.auth)
+      ? req.body
+      : {
+          nombre: req.body?.nombre ?? current.nombre,
+          telefono: req.body?.telefono ?? current.telefono,
+          status: req.body?.status ?? current.status,
+        };
+    Referrals.update(req.params.id, payload);
     res.json({ ok: true });
   }));
 
@@ -3125,6 +3248,55 @@ async function startServer() {
     res.json({ ok: true });
   }));
 
+  app.get("/api/admin/integration-secrets", managerOnly, wrap((_req: any, res: any) => {
+    res.json({ value: listMaskedSecrets() });
+  }));
+
+  app.post("/api/admin/integration-secrets", managerOnly, wrap((req: any, res: any) => {
+    const saved = saveSecret({
+      id: req.body?.id,
+      provider: req.body?.provider,
+      label: req.body?.label,
+      keyName: req.body?.keyName || req.body?.key_name,
+      value: req.body?.value,
+      status: req.body?.status || 'active',
+      metadata: req.body?.metadata || {},
+    }, req.auth);
+    res.json({ ok: true, value: saved });
+  }));
+
+  app.patch("/api/admin/integration-secrets/:id", managerOnly, wrap((req: any, res: any) => {
+    const saved = patchSecret(req.params.id, req.body || {}, req.auth);
+    if (!saved) return res.status(404).json({ error: 'Clave API no encontrada' });
+    res.json({ ok: true, value: saved });
+  }));
+
+  app.post("/api/admin/integration-secrets/:id/revoke", managerOnly, wrap((req: any, res: any) => {
+    const saved = revokeSecret(req.params.id, req.auth);
+    if (!saved) return res.status(404).json({ error: 'Clave API no encontrada' });
+    res.json({ ok: true, value: saved });
+  }));
+
+  app.delete("/api/admin/integration-secrets/:id", managerOnly, wrap((req: any, res: any) => {
+    if (!deleteSecret(req.params.id, req.auth)) return res.status(404).json({ error: 'Clave API no encontrada' });
+    res.json({ ok: true });
+  }));
+
+  app.post("/api/admin/integration-secrets/:id/test", managerOnly, wrap(async (req: any, res: any) => {
+    const secret = getSecretForServerUse(req.params.id) as any;
+    if (!secret) return res.status(404).json({ error: 'Clave API no encontrada o revocada' });
+    const result = await testIntegrationSecret(secret);
+    AuditLog.insert({
+      accion: 'INTEGRATION_SECRET_TESTED',
+      entidad: 'integration_secrets',
+      entidad_id: req.params.id,
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.name || null,
+      detalle: JSON.stringify({ provider: secret.provider, keyName: secret.keyName, ok: result.ok, message: result.message }).slice(0, 900),
+    });
+    res.status(result.ok ? 200 : 502).json(result);
+  }));
+
   // ── EMAIL SYNC: Gmail/CSV/XLSX -> CRM ─────────────────────
   app.get("/api/email-sync/status", managerOnly, wrap((_req: any, res: any) => {
     res.json(emailSyncStatus());
@@ -3180,7 +3352,7 @@ async function startServer() {
     res.json(result);
   }));
 
-  app.post("/api/email-sync/upload", managerOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/email-sync/upload", managerOnly, uploadLimiter, wrap(async (req: any, res: any) => {
     const fileName = String(req.body?.fileName || req.body?.filename || '').trim();
     const contentBase64 = String(req.body?.contentBase64 || req.body?.content || '').trim();
     if (!fileName || !contentBase64) return res.status(400).json({ error: 'fileName y contentBase64 son requeridos.' });
@@ -3229,7 +3401,15 @@ async function startServer() {
 
   // ── ENTERPRISE CONTROL PLANE ──────────────────────────────
   app.get("/api/enterprise/health", wrap((_req: any, res: any) => {
-    res.json(enterpriseHealth());
+    const health = enterpriseHealth();
+    if (process.env.PUBLIC_HEALTH_DETAILED === 'true') return res.json(health);
+    res.json({
+      ok: health.readiness.critical === 0,
+      mode: health.mode,
+      readiness: {
+        status: health.readiness.critical > 0 ? 'critical' : health.readiness.warning > 0 ? 'warning' : 'ok',
+      },
+    });
   }));
 
   app.get("/api/enterprise/readiness", managerOnly, wrap(async (_req: any, res: any) => {
@@ -3554,8 +3734,15 @@ async function startServer() {
     if (!token) return res.status(400).json({ error: 'token requerido' });
     const result = await initTelegram(token);
     if (result.ok) {
-      // Persistir token solo en servidor para sobrevivir reinicios.
-      Settings.set('telegram_bot_token', token);
+      saveSecret({
+        provider: 'telegram',
+        label: 'Telegram Bot',
+        keyName: 'TELEGRAM_BOT_TOKEN',
+        value: token,
+        status: 'active',
+        metadata: { botName: result.botName || '' },
+      }, req.auth);
+      Settings.set('telegram_bot_token', '');
     }
     res.json(result);
   }));
@@ -3662,7 +3849,7 @@ async function startServer() {
 
   // ── TWILIO VOICE AGENT ───────────────────────────────────
   app.get("/api/twilio/status", managerOnly, wrap((_req: any, res: any) => {
-    res.json({ configured: twilioConfigured(), from: process.env.TWILIO_FROM_NUMBER || null });
+    res.json({ configured: twilioConfigured(), from: getTwilioFromNumber() });
   }));
 
   app.post("/api/twilio/calls", managerOnly, wrap(async (req: any, res: any) => {
@@ -3676,16 +3863,19 @@ async function startServer() {
   }));
 
   app.get("/api/twilio/voice-agent", wrap((req: any, res: any) => {
+    if (!requireTrustedVoiceWebhook(req, res)) return;
     res.setHeader('Content-Type', 'text/xml; charset=utf-8');
     res.send(buildValidationTwiML(String(req.query.message || '')));
   }));
 
   app.post("/api/voice-providers/openai-realtime/twiml", wrap((req: any, res: any) => {
+    if (!requireTrustedVoiceWebhook(req, res)) return;
     res.setHeader('Content-Type', 'text/xml; charset=utf-8');
     res.send(buildOpenAIRealtimeTwiML(String(req.query.validationId || req.body?.validationId || ''), String(req.query.message || req.body?.message || '')));
   }));
 
   app.get("/api/voice-providers/openai-realtime/twiml", wrap((req: any, res: any) => {
+    if (!requireTrustedVoiceWebhook(req, res)) return;
     res.setHeader('Content-Type', 'text/xml; charset=utf-8');
     res.send(buildOpenAIRealtimeTwiML(String(req.query.validationId || ''), String(req.query.message || '')));
   }));
@@ -4039,7 +4229,7 @@ async function startServer() {
     res.json(listAgentVideos());
   }));
 
-  app.post("/api/agents/videos", managerOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/agents/videos", managerOnly, uploadLimiter, wrap(async (req: any, res: any) => {
     const body = req.body || {};
     if (!String(body.title || body.topic || '').trim()) return res.status(400).json({ error: 'titulo o tema requerido' });
     if (!body.base64 || !body.mimeType) return res.status(400).json({ error: 'video base64 y mimeType requeridos' });
@@ -4673,15 +4863,15 @@ async function startServer() {
 
   // ── OCR LOCAL PRIVADO (rutas /api/vision/* mantenidas por compatibilidad) ──
   // Acepta { image: "..." } o { images: ["frente","reverso"] } — múltiples mejoran precisión.
-  app.post("/api/vision/ocr", authOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/vision/ocr", authOnly, uploadLimiter, wrap(async (req: any, res: any) => {
     return runOcrEndpoint(req, res, 'ine', runIneOcr);
   }));
 
-  app.post("/api/vision/siac", authOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/vision/siac", authOnly, uploadLimiter, wrap(async (req: any, res: any) => {
     return runOcrEndpoint(req, res, 'siac', runSiacOcr);
   }));
 
-  app.post("/api/vision/comprobante", authOnly, wrap(async (req: any, res: any) => {
+  app.post("/api/vision/comprobante", authOnly, uploadLimiter, wrap(async (req: any, res: any) => {
     return runOcrEndpoint(req, res, 'comprobante', runComprobanteOcr);
   }));
 
@@ -4795,7 +4985,7 @@ async function startServer() {
   const storedTelegramToken = Settings.get('telegram_bot_token');
   const savedToken = typeof storedTelegramToken === 'string'
     ? storedTelegramToken
-    : (process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN || '');
+    : getSecretValue('TELEGRAM_BOT_TOKEN', process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN || '');
   if (savedToken) {
     initTelegram(savedToken)
       .then(r => r.ok

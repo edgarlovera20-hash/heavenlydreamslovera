@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { elevenLabsProvider } from './elevenlabs';
 import { openAIRealtimeProvider } from './openai-realtime';
+import { getSecretValue } from '../secret-vault';
 import { buildDynamicVariables, buildValidationMessage, detectScriptType } from './scripts';
 import { twilioBasicProvider } from './twilio-basic';
 import type {
@@ -31,12 +32,12 @@ export function listVoiceProviderStatus(): VoiceProviderStatus[] {
 }
 
 export function getDefaultVoiceProvider(): VoiceProviderId {
-  const configured = String(process.env.VOICE_PROVIDER_DEFAULT || 'elevenlabs') as VoiceProviderId;
+  const configured = String(getSecretValue('VOICE_PROVIDER_DEFAULT', process.env.VOICE_PROVIDER_DEFAULT || 'elevenlabs')) as VoiceProviderId;
   return providers[configured] ? configured : 'elevenlabs';
 }
 
 export function getVoiceFallbacks(): VoiceProviderId[] {
-  return String(process.env.VOICE_PROVIDER_FALLBACKS || 'twilio-basic')
+  return String(getSecretValue('VOICE_PROVIDER_FALLBACKS', process.env.VOICE_PROVIDER_FALLBACKS || 'twilio-basic'))
     .split(',')
     .map((item) => item.trim() as VoiceProviderId)
     .filter((item) => Boolean(providers[item]));

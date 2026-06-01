@@ -32,6 +32,7 @@ import {
 import { toast } from 'sonner';
 
 type ChatChannel = 'whatsapp' | 'telegram';
+type InboxFilter = 'all' | ChatChannel;
 
 interface ChannelMessage {
   id: string;
@@ -312,6 +313,10 @@ function customerName(client?: ClientChatRow | null) {
   return client?.nombre || 'Cliente sin nombre';
 }
 
+function channelLabel(channel: ChatChannel) {
+  return channel === 'whatsapp' ? 'WhatsApp' : 'Telegram';
+}
+
 function statusCopy(channel: ChatChannel, status?: string) {
   if (channel === 'whatsapp') {
     if (status === 'connected') return 'Conectado';
@@ -360,6 +365,7 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [agentBusy, setAgentBusy] = useState<Record<string, boolean>>({});
+  const [inboxFilter, setInboxFilter] = useState<InboxFilter>('all');
   const [query, setQuery] = useState('');
   const [target, setTarget] = useState('');
   const [memory, setMemory] = useState<BotMemory>(() => loadBotMemory());
@@ -521,9 +527,67 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
     conversations.filter(conversation => conversation.channel === activeChannel)
   ), [activeChannel, conversations]);
 
+  const allConversationRows = useMemo<ChannelConversation[]>(() => {
+    const rows = new Map<string, ChannelConversation>();
+
+    conversations.forEach(conversation => {
+      rows.set(conversation.id, {
+        ...conversation,
+        last_message_at: Number(conversation.last_message_at || 0),
+      });
+    });
+
+    messages.forEach(msg => {
+      const externalId = String(msg.chatId || msg.from || msg.to || msg.conversationId || 'sin-contacto');
+      const rowId = msg.conversationId || `${msg.channel}-${externalId}`;
+      const existing = rows.get(rowId);
+      const isNewest = Number(msg.timestamp || 0) >= Number(existing?.last_message_at || 0);
+      const displayName = msg.direction === 'outgoing'
+        ? existing?.display_name || msg.to || externalId
+        : msg.fromName || existing?.display_name || msg.from || externalId;
+
+      rows.set(rowId, {
+        id: rowId,
+        channel: existing?.channel || msg.channel,
+        external_chat_id: existing?.external_chat_id || externalId,
+        display_name: displayName,
+        status: existing?.status || 'activo',
+        intent: existing?.intent || (msg.isGroup ? 'grupo' : 'chat directo'),
+        pending_outbox: existing?.pending_outbox || 0,
+        last_body: isNewest ? msg.body : existing?.last_body || msg.body,
+        last_message_at: Math.max(Number(existing?.last_message_at || 0), Number(msg.timestamp || 0)),
+      });
+    });
+
+    return Array.from(rows.values()).sort((a, b) => Number(b.last_message_at || 0) - Number(a.last_message_at || 0));
+  }, [conversations, messages]);
+
+  const inboxConversations = useMemo(() => {
+    const term = normalizeText(query);
+    return allConversationRows.filter(conversation => {
+      if (inboxFilter !== 'all' && conversation.channel !== inboxFilter) return false;
+      if (!term) return true;
+      return [
+        conversation.display_name,
+        conversation.external_chat_id,
+        conversation.intent,
+        conversation.status,
+        conversation.last_body,
+      ].some(value => normalizeText(value).includes(term));
+    });
+  }, [allConversationRows, inboxFilter, query]);
+
   const selectedConversation = useMemo(() => (
-    conversations.find(conversation => conversation.id === selectedConversationId) || null
-  ), [conversations, selectedConversationId]);
+    allConversationRows.find(conversation => conversation.id === selectedConversationId) || inboxConversations[0] || null
+  ), [allConversationRows, inboxConversations, selectedConversationId]);
+
+  useEffect(() => {
+    if (!selectedConversation) return;
+    if (selectedConversationId === selectedConversation.id) return;
+    setSelectedConversationId(selectedConversation.id);
+    setActiveChannel(selectedConversation.channel);
+    setTarget(phone10(selectedConversation.external_chat_id) || selectedConversation.external_chat_id);
+  }, [selectedConversation, selectedConversationId]);
 
   const selectedCrmClient = useMemo(() => {
     if (!selectedConversation) return null;
@@ -557,6 +621,27 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
   const pendingOutbox = useMemo(() => (
     outbox.filter(item => item.status === 'pending_approval')
   ), [outbox]);
+
+  const selectedThreadMessages = useMemo(() => {
+    if (!selectedConversation) return [];
+    const phoneCandidate = phone10(selectedConversation.external_chat_id);
+    const rawCandidates = [
+      selectedConversation.id,
+      selectedConversation.external_chat_id,
+      selectedConversation.display_name,
+    ].filter(Boolean).map(String);
+
+    return messages
+      .filter(msg => {
+        if (msg.channel !== selectedConversation.channel) return false;
+        if (msg.conversationId && rawCandidates.includes(String(msg.conversationId))) return true;
+        if (msg.chatId && rawCandidates.includes(String(msg.chatId))) return true;
+        if (rawCandidates.some(candidate => [msg.from, msg.to, msg.fromName].filter(Boolean).map(String).includes(candidate))) return true;
+        if (!phoneCandidate) return false;
+        return [msg.from, msg.to, msg.chatId].map(phone10).includes(phoneCandidate);
+      })
+      .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+  }, [messages, selectedConversation]);
 
   const filteredMessages = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -1040,279 +1125,303 @@ export default function ChatsView({ onOpenSettings, onOpenAgents, onStartCapture
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_430px]">
-        <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Conversaciones</p>
-              <h2 className="text-xl font-black text-white">{activeChannel === 'whatsapp' ? 'WhatsApp ventas' : 'Telegram'}</h2>
+      <section className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/75 shadow-[0_0_34px_rgba(8,145,178,0.10)]">
+        <div className="flex flex-col gap-3 border-b border-white/10 p-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Inbox omnicanal</p>
+            <h2 className="text-2xl font-black text-white">Todas las conversaciones</h2>
+            <p className="mt-1 text-sm text-slate-400">WhatsApp y Telegram en una sola bandeja operativa para reclutamiento.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {(['all', 'whatsapp', 'telegram'] as InboxFilter[]).map(filter => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setInboxFilter(filter)}
+                className={`rounded-xl border px-4 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
+                  inboxFilter === filter
+                    ? 'border-cyan-400/60 bg-cyan-400/15 text-cyan-100'
+                    : 'border-white/10 bg-black/20 text-slate-400 hover:border-cyan-400/30 hover:text-white'
+                }`}
+              >
+                {filter === 'all' ? 'Todos' : channelLabel(filter)}
+                <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px]">
+                  {filter === 'all' ? allConversationRows.length : allConversationRows.filter(row => row.channel === filter).length}
+                </span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={loadMessages}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-300 hover:border-cyan-400/30 hover:text-white"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Sincronizar
+            </button>
+          </div>
+        </div>
+
+        <div className="grid min-h-[720px] grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)_340px]">
+          <aside className="border-b border-white/10 bg-black/20 xl:border-b-0 xl:border-r">
+            <div className="space-y-3 border-b border-white/10 p-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  value={query}
+                  onChange={event => setQuery(event.target.value)}
+                  placeholder="Buscar nombre, numero o mensaje..."
+                  className="w-full rounded-xl border border-white/10 bg-slate-950/90 py-3 pl-10 pr-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-400/60"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300">No leidos</span>
+                <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300">Prioridad</span>
+                <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300">Pendientes</span>
+              </div>
             </div>
-            {selectedConversationId && (
+
+            <div className="custom-scrollbar max-h-[650px] overflow-y-auto">
+              {loading ? (
+                <div className="flex h-64 flex-col items-center justify-center gap-3 text-slate-400">
+                  <Loader2 className="h-7 w-7 animate-spin text-cyan-300" />
+                  <p className="text-sm">Cargando conversaciones...</p>
+                </div>
+              ) : inboxConversations.length === 0 ? (
+                <div className="p-5 text-center">
+                  <MessageSquare className="mx-auto h-10 w-10 text-slate-600" />
+                  <p className="mt-3 text-sm font-bold text-white">Sin conversaciones</p>
+                  <p className="mt-1 text-xs text-slate-500">Cuando entren chats apareceran en esta bandeja.</p>
+                </div>
+              ) : inboxConversations.map(conversation => {
+                const selected = selectedConversation?.id === conversation.id;
+                const title = conversation.display_name || conversation.external_chat_id || 'Contacto sin nombre';
+                return (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedConversationId(conversation.id);
+                      setActiveChannel(conversation.channel);
+                      setTarget(phone10(conversation.external_chat_id) || conversation.external_chat_id);
+                    }}
+                    className={`flex w-full gap-3 border-b border-white/5 p-4 text-left transition-colors ${
+                      selected ? 'bg-cyan-400/10 shadow-[inset_3px_0_0_rgba(34,211,238,0.9)]' : 'hover:bg-white/[0.04]'
+                    }`}
+                  >
+                    <div className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border text-sm font-black ${
+                      conversation.channel === 'whatsapp'
+                        ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+                        : 'border-sky-400/30 bg-sky-400/10 text-sky-200'
+                    }`}>
+                      {title.slice(0, 1).toUpperCase()}
+                      <span className="absolute -bottom-1 -right-1 rounded-full border border-slate-950 bg-slate-900 p-1">
+                        {conversation.channel === 'whatsapp'
+                          ? <MessageCircle className="h-3.5 w-3.5 text-emerald-300" />
+                          : <Send className="h-3.5 w-3.5 text-sky-300" />}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="truncate text-sm font-black text-white">{title}</p>
+                        <span className="shrink-0 text-[10px] font-bold text-slate-500">{formatTime(Number(conversation.last_message_at || 0))}</span>
+                      </div>
+                      <p className="mt-1 truncate text-xs font-bold uppercase tracking-widest text-cyan-300">{channelLabel(conversation.channel)} · {conversation.intent || conversation.status}</p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-400">{conversation.last_body || 'Sin mensajes registrados.'}</p>
+                    </div>
+                    {Number(conversation.pending_outbox || 0) > 0 && (
+                      <span className="mt-1 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white">{conversation.pending_outbox}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <main className="flex min-w-0 flex-col bg-slate-950/35">
+            <div className="flex flex-col gap-3 border-b border-white/10 p-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 text-lg font-black text-cyan-100">
+                  {(selectedConversation?.display_name || selectedConversation?.external_chat_id || '?').slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="truncate text-lg font-black text-white">
+                    {selectedConversation?.display_name || selectedConversation?.external_chat_id || 'Selecciona una conversacion'}
+                  </h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                    <span className={`rounded-full border px-2 py-0.5 font-black uppercase tracking-widest ${statusClass(activeChannel, activeStatus.status)}`}>
+                      {channelLabel(activeChannel)} · {statusCopy(activeChannel, activeStatus.status)}
+                    </span>
+                    <span>{selectedThreadMessages.length} mensajes</span>
+                    <span>{activeStats.total} totales del canal</span>
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setSelectedConversationId(null)}
-                className="rounded-lg border border-slate-700 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white"
+                className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-300 hover:border-cyan-400/30 hover:text-white"
               >
-                Ver todas
+                Ver primera disponible
               </button>
+            </div>
+
+            {activeStatus.error && (
+              <div className="mx-4 mt-4 flex gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="min-w-0 break-words">{activeStatus.error}</span>
+              </div>
             )}
-          </div>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3">
-            {activeConversations.length === 0 ? (
-              <p className="text-sm text-slate-500">Sin conversaciones persistidas en este canal.</p>
-            ) : activeConversations.slice(0, 9).map(conversation => (
-              <button
-                key={conversation.id}
-                type="button"
-                onClick={() => setSelectedConversationId(conversation.id)}
-                className={`rounded-xl border p-3 text-left transition-colors ${
-                  selectedConversationId === conversation.id
-                    ? 'border-cyan-400/60 bg-cyan-400/10'
-                    : 'border-white/10 bg-black/20 hover:border-cyan-400/30'
-                }`}
-              >
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="truncate text-sm font-black text-white">{conversation.display_name || conversation.external_chat_id}</p>
-                  {Number(conversation.pending_outbox || 0) > 0 && (
-                    <span className="rounded-full bg-yellow-400/15 px-2 py-0.5 text-[9px] font-black text-yellow-200">
-                      {conversation.pending_outbox}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300">{conversation.intent || 'sin clasificar'} · {conversation.status}</p>
-                <p className="mt-1 truncate text-xs text-slate-400">{conversation.last_body || 'Sin mensajes'}</p>
-              </button>
-            ))}
-          </div>
-        </div>
 
-        <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-4">
-          <div className="mb-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-yellow-200">Bandeja de aprobacion</p>
-            <h2 className="text-xl font-black text-white">{pendingOutbox.length} pendientes</h2>
-          </div>
-          <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
-            {pendingOutbox.length === 0 ? (
-              <p className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-slate-500">Sin respuestas o acciones pendientes.</p>
-            ) : pendingOutbox.slice(0, 6).map(item => (
-              <div key={item.id} className="rounded-xl border border-yellow-400/20 bg-slate-950/80 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-yellow-200">
-                    {item.action || item.type}
-                  </span>
-                  <span className="text-[9px] text-slate-500">{new Date(item.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+            {!isChannelReady && (
+              <div className="mx-4 mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-3">
+                <div className="flex items-start gap-2">
+                  <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-yellow-300" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-yellow-100">Canal sin conexión</p>
+                    <p className="mt-1 text-xs leading-relaxed text-yellow-100/70">{connectorAction.help}</p>
+                  </div>
                 </div>
-                <p className="text-xs font-bold text-white">{item.display_name || item.target}</p>
-                {item.message && <p className="mt-2 whitespace-pre-wrap text-xs text-slate-300">{item.message}</p>}
-                {item.action === 'create_sale' && (
-                  <p className="mt-2 text-xs text-slate-300">
-                    Crear venta para <b>{item.payload?.nombre || 'cliente'}</b> · {item.payload?.telefono || 'sin telefono'}
-                  </p>
+                {connectorAction.onClick && (
+                  <button
+                    type="button"
+                    onClick={connectorAction.onClick}
+                    className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl border border-yellow-300/30 bg-yellow-300/10 px-3 py-2 text-xs font-black uppercase tracking-widest text-yellow-100 transition-colors hover:bg-yellow-300/20"
+                  >
+                    <ConnectorIcon className="h-4 w-4" />
+                    {connectorAction.label}
+                  </button>
                 )}
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => approveOutbox(item.id)}
-                    className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-200 hover:bg-emerald-400/20"
-                  >
-                    Aprobar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => rejectOutbox(item.id)}
-                    className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 hover:bg-rose-400/20"
-                  >
-                    Rechazar
-                  </button>
+              </div>
+            )}
+
+            <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
+              {selectedThreadMessages.length === 0 ? (
+                <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 text-center">
+                  <MessageSquare className="h-12 w-12 text-slate-600" />
+                  <div>
+                    <p className="text-lg font-bold text-white">No hay historial para este contacto</p>
+                    <p className="mt-1 text-sm text-slate-500">Puedes escribir desde el compositor inferior.</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
-        <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-          <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Canal activo</p>
-              <h2 className="truncate text-2xl font-black text-white">{activeChannel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}</h2>
-            </div>
-            <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${statusClass(activeChannel, activeStatus.status)}`}>
-              {statusCopy(activeChannel, activeStatus.status)}
-            </span>
-          </div>
-
-          {activeStatus.error && (
-            <div className="mt-4 flex gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span className="min-w-0 break-words">{activeStatus.error}</span>
-            </div>
-          )}
-
-          {!isChannelReady && (
-            <div className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-3">
-              <div className="flex items-start gap-2">
-                <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-yellow-300" />
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-yellow-100">Canal sin conexión</p>
-                  <p className="mt-1 text-xs leading-relaxed text-yellow-100/70">{connectorAction.help}</p>
-                </div>
-              </div>
-              {connectorAction.onClick && (
-                <button
-                  type="button"
-                  onClick={connectorAction.onClick}
-                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-yellow-300/30 bg-yellow-300/10 px-3 py-2 text-xs font-black uppercase tracking-widest text-yellow-100 transition-colors hover:bg-yellow-300/20"
-                >
-                  <ConnectorIcon className="h-4 w-4" />
-                  {connectorAction.label}
-                </button>
-              )}
-            </div>
-          )}
-
-          <ChatCrmCard
-            client={selectedCrmClient}
-            conversation={selectedConversation}
-            onStartCapture={onStartCapture}
-          />
-
-          <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-black/25 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-sm font-black text-white">
-                {isChannelReady ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <WifiOff className="h-4 w-4 text-slate-500" />}
-                Enviar mensaje
-              </div>
-              <span className="text-xs font-semibold text-slate-500">
-                {activeStats.sent} enviados
-              </span>
-            </div>
-
-            <label className="block space-y-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                {activeChannel === 'whatsapp' ? 'Número WhatsApp' : 'Chat ID Telegram'}
-              </span>
-              <div className="relative">
-                {activeChannel === 'whatsapp'
-                  ? <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                  : <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />}
-                <input
-                  value={target}
-                  onChange={event => setTarget(event.target.value)}
-                  placeholder={activeChannel === 'whatsapp' ? 'Ej. 5512345678' : 'Ej. 123456789'}
-                  className="w-full rounded-xl border border-white/10 bg-slate-950/90 py-3 pl-10 pr-3 text-sm text-white outline-none transition-colors focus:border-cyan-400/60"
-                />
-              </div>
-            </label>
-
-            <label className="block space-y-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Mensaje</span>
-              <textarea
-                value={message}
-                onChange={event => setMessage(event.target.value)}
-                placeholder="Escribe el mensaje para el cliente..."
-                rows={4}
-                className="w-full resize-none rounded-xl border border-white/10 bg-slate-950/90 p-3 text-sm text-white outline-none transition-colors focus:border-cyan-400/60"
-              />
-            </label>
-
-            <button
-              onClick={handleSend}
-              disabled={sending || !isChannelReady}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-black uppercase tracking-widest text-slate-950 transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-            >
-              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Enviar
-            </button>
-          </div>
-        </section>
-
-        <section className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70">
-          <div className="flex flex-col gap-3 border-b border-white/10 p-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="min-w-0">
-              <h2 className="text-xl font-black text-white">Mensajes en vivo</h2>
-              <p className="text-sm text-slate-400">
-                {activeStats.total} mensajes de {activeChannel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}
-              </p>
-            </div>
-            <div className="relative w-full xl:w-[360px]">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                placeholder="Buscar por nombre, número o texto..."
-                className="w-full rounded-xl border border-white/10 bg-black/30 py-3 pl-10 pr-3 text-sm text-white outline-none transition-colors focus:border-cyan-400/60"
-              />
-            </div>
-          </div>
-
-          <div className="custom-scrollbar min-h-[420px] max-h-[620px] space-y-2 overflow-y-auto p-4">
-            {loading ? (
-              <div className="flex h-72 flex-col items-center justify-center gap-3 text-slate-400">
-                <Loader2 className="h-8 w-8 animate-spin text-cyan-300" />
-                <p className="text-sm">Cargando chats...</p>
-              </div>
-            ) : filteredMessages.length === 0 ? (
-              <div className="flex h-72 flex-col items-center justify-center gap-3 text-center">
-                <MessageSquare className="h-11 w-11 text-slate-600" />
-                <div>
-                  <p className="text-lg font-bold text-white">Sin mensajes en este canal</p>
-                  <p className="text-sm text-slate-500">Cuando entren o se envíen mensajes aparecerán aquí.</p>
-                </div>
-              </div>
-            ) : (
-              filteredMessages.map(msg => {
+              ) : selectedThreadMessages.map(msg => {
                 const outgoing = msg.direction === 'outgoing';
                 return (
-                  <article
-                    key={`${msg.channel}-${msg.id}-${msg.timestamp}`}
-                    className={`rounded-xl border p-3 transition-colors ${
+                  <article key={`${msg.channel}-${msg.id}-${msg.timestamp}`} className={`flex ${outgoing ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[82%] rounded-2xl border px-4 py-3 ${
                       outgoing
-                        ? 'border-cyan-400/20 bg-cyan-400/5'
-                        : 'border-white/10 bg-slate-900/70'
-                    }`}
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="min-w-0">
-                        <div className="mb-2 flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${
-                            msg.channel === 'whatsapp'
-                              ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
-                              : 'border-sky-400/20 bg-sky-400/10 text-sky-300'
-                          }`}>
-                            {msg.channel}
-                          </span>
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${
-                            outgoing
-                              ? 'border-cyan-400/20 bg-cyan-400/10 text-cyan-200'
-                              : 'border-white/10 bg-slate-800 text-slate-300'
-                          }`}>
-                            {outgoing ? 'Enviado' : 'Recibido'}
-                          </span>
-                          {msg.isGroup && (
-                            <span className="rounded-full border border-purple-400/20 bg-purple-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-purple-200">
-                              Grupo
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="truncate font-bold text-white">
-                          {outgoing ? `Para ${msg.to || msg.chatId || 'cliente'}` : msg.fromName || msg.from}
-                        </h3>
-                        <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-300">{msg.body}</p>
+                        ? 'border-emerald-300/30 bg-emerald-300/15 text-emerald-50'
+                        : 'border-white/10 bg-black/35 text-slate-100'
+                    }`}>
+                      <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+                        <span className={outgoing ? 'text-emerald-200' : 'text-cyan-300'}>{outgoing ? 'Enviado' : 'Recibido'}</span>
+                        <span className="text-slate-500">{formatTime(msg.timestamp)}</span>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2 text-xs text-slate-500">
-                        <Clock className="h-3.5 w-3.5" />
-                        {formatTime(msg.timestamp)}
-                      </div>
+                      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{msg.body}</p>
                     </div>
                   </article>
                 );
-              })
-            )}
-          </div>
-        </section>
-      </div>
+              })}
+            </div>
+
+            <div className="border-t border-white/10 bg-black/20 p-4">
+              <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="relative">
+                  {activeChannel === 'whatsapp'
+                    ? <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    : <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />}
+                  <input
+                    value={target}
+                    onChange={event => setTarget(event.target.value)}
+                    placeholder={activeChannel === 'whatsapp' ? 'Numero WhatsApp' : 'Chat ID Telegram'}
+                    className="w-full rounded-xl border border-white/10 bg-slate-950/90 py-3 pl-10 pr-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-400/60"
+                  />
+                </label>
+                <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/90 px-3 text-xs text-slate-400">
+                  {isChannelReady ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <WifiOff className="h-4 w-4 text-slate-500" />}
+                  {activeChannel === 'whatsapp' ? 'Responde por WhatsApp' : 'Responde por Telegram'}
+                </div>
+              </div>
+              <div className="flex gap-2 rounded-2xl border border-white/10 bg-slate-950/90 p-2">
+                <textarea
+                  value={message}
+                  onChange={event => setMessage(event.target.value)}
+                  placeholder={`Responde en ${channelLabel(activeChannel)}...`}
+                  rows={2}
+                  className="min-h-[64px] flex-1 resize-none bg-transparent p-2 text-sm text-white outline-none placeholder:text-slate-600"
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={sending || !isChannelReady}
+                  className="self-end rounded-xl bg-cyan-500 px-4 py-3 text-sm font-black uppercase tracking-widest text-slate-950 transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                >
+                  {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
+          </main>
+
+          <aside className="border-t border-white/10 bg-black/20 xl:border-l xl:border-t-0">
+            <div className="border-b border-white/10 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl font-black text-white">
+                  {(selectedConversation?.display_name || selectedConversation?.external_chat_id || '?').slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="truncate text-lg font-black text-white">
+                    {selectedCrmClient ? customerName(selectedCrmClient) : selectedConversation?.display_name || 'Contacto'}
+                  </h3>
+                  <p className="truncate text-xs text-slate-400">{selectedConversation?.external_chat_id || 'Sin identificador'}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="custom-scrollbar max-h-[650px] space-y-4 overflow-y-auto p-4">
+              <ChatCrmCard
+                client={selectedCrmClient}
+                conversation={selectedConversation}
+                onStartCapture={onStartCapture}
+              />
+
+              <div className="rounded-xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-yellow-200">Aprobaciones IA</p>
+                <h4 className="mt-1 text-lg font-black text-white">{pendingOutbox.length} pendientes</h4>
+                <div className="mt-3 space-y-2">
+                  {pendingOutbox.length === 0 ? (
+                    <p className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-500">Sin respuestas o acciones pendientes.</p>
+                  ) : pendingOutbox.slice(0, 4).map(item => (
+                    <div key={item.id} className="rounded-xl border border-yellow-400/20 bg-yellow-400/5 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-yellow-200">
+                          {item.action || item.type}
+                        </span>
+                        <span className="text-[9px] text-slate-500">{new Date(item.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <p className="text-xs font-bold text-white">{item.display_name || item.target}</p>
+                      {item.message && <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs text-slate-300">{item.message}</p>}
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => approveOutbox(item.id)}
+                          className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-200 hover:bg-emerald-400/20"
+                        >
+                          Aprobar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => rejectOutbox(item.id)}
+                          className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 hover:bg-rose-400/20"
+                        >
+                          Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
     </div>
   );
 }

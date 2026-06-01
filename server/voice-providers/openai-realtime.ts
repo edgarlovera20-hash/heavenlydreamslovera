@@ -1,16 +1,17 @@
 import type { Server } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { createTwilioCall, twilioConfigured } from '../twilio';
+import { createTwilioCall, getTwilioWebhookToken, twilioConfigured } from '../twilio';
+import { getSecretValue } from '../secret-vault';
 import type { ValidationCallPayload, ValidationSyncResult, VoiceProviderAdapter } from './types';
 
 const STREAM_PATH = '/api/voice-providers/openai-realtime/stream';
 
 function env(name: string) {
-  return process.env[name]?.trim() || '';
+  return getSecretValue(name);
 }
 
 function publicBaseUrl() {
-  return (process.env.TWILIO_WEBHOOK_BASE_URL || process.env.APP_URL || '').replace(/\/$/, '');
+  return (getSecretValue('TWILIO_WEBHOOK_BASE_URL') || process.env.APP_URL || '').replace(/\/$/, '');
 }
 
 function websocketUrlFor(validationId: string, message: string) {
@@ -20,6 +21,8 @@ function websocketUrlFor(validationId: string, message: string) {
   const url = new URL(`${wsBase}${STREAM_PATH}`);
   url.searchParams.set('validationId', validationId);
   url.searchParams.set('message', message.slice(0, 1400));
+  const token = getTwilioWebhookToken();
+  if (token) url.searchParams.set('token', token);
   return url.toString();
 }
 
@@ -39,6 +42,12 @@ export function attachOpenAIRealtimeStream(server: Server) {
   const wss = new WebSocketServer({ server, path: STREAM_PATH });
   wss.on('connection', (twilioWs, req) => {
     const requestUrl = new URL(req.url || STREAM_PATH, `http://${req.headers.host || 'localhost'}`);
+    const expectedToken = getTwilioWebhookToken();
+    const providedToken = requestUrl.searchParams.get('token') || '';
+    if ((expectedToken && providedToken !== expectedToken) || (process.env.NODE_ENV === 'production' && !expectedToken)) {
+      twilioWs.close(1008, 'Unauthorized');
+      return;
+    }
     const instructions = requestUrl.searchParams.get('message') || 'Realiza la validacion del cliente de acuerdo al script capturado.';
     const openai = new WebSocket(`wss://api.openai.com/v1/realtime?model=${encodeURIComponent(env('OPENAI_REALTIME_MODEL') || 'gpt-realtime')}`, {
       headers: { Authorization: `Bearer ${env('OPENAI_API_KEY')}` },
@@ -98,7 +107,7 @@ export const openAIRealtimeProvider: VoiceProviderAdapter = {
   },
   missingConfig() {
     const missing = ['OPENAI_API_KEY', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM_NUMBER']
-      .filter((name) => !process.env[name]);
+      .filter((name) => !getSecretValue(name));
     if (!publicBaseUrl()) missing.push('TWILIO_WEBHOOK_BASE_URL');
     return missing;
   },
