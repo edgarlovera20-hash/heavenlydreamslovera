@@ -46,6 +46,13 @@ export const AVATAR_CONCEPTS: AvatarOption[] = [
   { value: 'robot', label: 'Robot IA', hint: 'Tecnologico, asistente o androide' },
   { value: 'creature', label: 'Criatura fantastica', hint: 'Guardian, elemental o ser mistico' },
   { value: 'object', label: 'Objeto vivo', hint: 'Cualquier cosa con personalidad' },
+  { value: 'burger', label: 'Hamburguesa', hint: 'Mascota sonriente para food brands' },
+  { value: 'phone', label: 'Telefono', hint: 'Icono tech con cara amable' },
+  { value: 'computer', label: 'Computadora', hint: 'Mascota SaaS o soporte tecnico' },
+  { value: 'house', label: 'Casa', hint: 'Ideal inmobiliarias y CRM' },
+  { value: 'car', label: 'Automovil', hint: 'Mascota comercial o flotilla' },
+  { value: 'dog', label: 'Perro', hint: 'Mascota cercana y confiable' },
+  { value: 'cat', label: 'Gato', hint: 'Mascota elegante y memorable' },
 ];
 
 export const AVATAR_SILHOUETTES: AvatarOption[] = [
@@ -84,6 +91,10 @@ export const AVATAR_MOODS: AvatarOption[] = [
 export const AVATAR_OUTFITS: AvatarOption[] = [
   { value: 'executive_suit', label: 'Traje ejecutivo' },
   { value: 'field_uniform', label: 'Uniforme tecnico' },
+  { value: 'recruiter_blazer', label: 'Blazer reclutador' },
+  { value: 'manager_uniform', label: 'Uniforme gerente' },
+  { value: 'support_polo', label: 'Polo soporte tecnico' },
+  { value: 'customer_service', label: 'Atencion a clientes' },
   { value: 'neon_hoodie', label: 'Hoodie neon' },
   { value: 'futuristic_armor', label: 'Armadura futurista' },
   { value: 'streetwear', label: 'Streetwear' },
@@ -341,10 +352,10 @@ export function generateAvatarDataUrl(config: AvatarStudioConfig, name = 'Usuari
     aura: `<circle cx="256" cy="228" r="168" fill="${accent}" opacity=".15"/><circle cx="256" cy="228" r="118" fill="${light}" opacity=".08"/>`,
   }[normalized.background] || '';
 
-  const ears = normalized.concept === 'animal'
+  const ears = normalized.concept === 'animal' || normalized.concept === 'dog' || normalized.concept === 'cat'
     ? `<path d="M166 176 L182 102 L222 166 Z" fill="${faceColor}" stroke="${accent}" stroke-width="5"/><path d="M346 176 L330 102 L290 166 Z" fill="${faceColor}" stroke="${accent}" stroke-width="5"/>`
     : '';
-  const foodTop = normalized.concept === 'food'
+  const foodTop = normalized.concept === 'food' || normalized.concept === 'burger'
     ? `<path d="M258 142 C246 112 270 92 304 88 C298 122 286 142 258 142 Z" fill="#34D399"/><path d="M246 142 C234 114 214 100 184 104 C194 132 214 150 246 142 Z" fill="#84CC16"/>`
     : '';
   const robotBits = normalized.concept === 'robot'
@@ -356,10 +367,16 @@ export function generateAvatarDataUrl(config: AvatarStudioConfig, name = 'Usuari
   const objectBits = normalized.concept === 'object'
     ? `<path d="M256 132 L352 216 L312 320 H200 L160 216 Z" fill="${mid}" stroke="${accent}" stroke-width="7"/>`
     : '';
+  const commercialObjectBits = {
+    phone: `<rect x="190" y="128" width="132" height="190" rx="28" fill="${mid}" stroke="${accent}" stroke-width="7"/><rect x="214" y="160" width="84" height="118" rx="16" fill="${dark}" opacity=".64"/><circle cx="256" cy="296" r="8" fill="${light}"/>`,
+    computer: `<rect x="164" y="150" width="184" height="124" rx="22" fill="${mid}" stroke="${accent}" stroke-width="7"/><path d="M226 274 H286 L300 318 H212 Z" fill="${dark}" opacity=".72"/><path d="M196 192 H316M196 224 H286" stroke="${light}" stroke-width="7" opacity=".55"/>`,
+    house: `<path d="M158 218 L256 132 L354 218 V318 H178 V218 Z" fill="${mid}" stroke="${accent}" stroke-width="7"/><rect x="232" y="256" width="48" height="62" rx="10" fill="${dark}" opacity=".72"/>`,
+    car: `<path d="M152 248 L188 190 H320 L360 248 V296 H152 Z" fill="${mid}" stroke="${accent}" stroke-width="7"/><circle cx="204" cy="300" r="22" fill="${dark}"/><circle cx="308" cy="300" r="22" fill="${dark}"/><path d="M208 206 H302 L324 242 H184 Z" fill="${light}" opacity=".28"/>`,
+  }[normalized.concept] || '';
   const head = normalized.concept === 'robot'
     ? robotBits
-    : normalized.concept === 'object'
-      ? objectBits
+    : normalized.concept === 'object' || commercialObjectBits
+      ? commercialObjectBits || objectBits
       : `${ears}${creatureBits}${foodTop}<circle cx="256" cy="220" r="88" fill="${faceColor}" stroke="${accent}" stroke-width="7"/>`;
 
   const bodyBase = normalized.silhouette === 'emblem'
@@ -369,6 +386,10 @@ export function generateAvatarDataUrl(config: AvatarStudioConfig, name = 'Usuari
   const outfit = {
     executive_suit: `<path d="M188 430 L226 316 L256 356 L286 316 L324 430 Z" fill="#07111F" opacity=".86"/><path d="M246 354 H266 L276 430 H236 Z" fill="${accent}"/>`,
     field_uniform: `<path d="M164 430 C178 348 206 316 256 316 C306 316 334 348 348 430 Z" fill="${mid}"/><path d="M182 368 H330" stroke="${light}" stroke-width="8" opacity=".48"/><rect x="220" y="348" width="72" height="28" rx="8" fill="${dark}" opacity=".55"/>`,
+    recruiter_blazer: `<path d="M180 430 L224 318 L256 350 L288 318 L332 430 Z" fill="#111827" opacity=".9"/><path d="M220 338 H292" stroke="${accent}" stroke-width="7"/><rect x="304" y="348" width="42" height="28" rx="8" fill="${light}" opacity=".24"/>`,
+    manager_uniform: `<path d="M160 430 C174 344 208 314 256 314 C304 314 338 344 352 430 Z" fill="${mid}"/><path d="M190 354 H322M190 386 H322" stroke="${light}" stroke-width="7" opacity=".42"/><path d="M256 324 V430" stroke="${dark}" stroke-width="5" opacity=".42"/>`,
+    support_polo: `<path d="M166 430 C176 348 210 316 256 316 C302 316 336 348 346 430 Z" fill="${accent}" opacity=".76"/><path d="M224 318 L256 354 L288 318" fill="#F8FAFC" opacity=".84"/><path d="M306 352 C330 358 344 376 348 404" stroke="${dark}" stroke-width="6" opacity=".48"/>`,
+    customer_service: `<path d="M164 430 C176 346 210 316 256 316 C302 316 336 346 348 430 Z" fill="#0F172A"/><path d="M218 338 H294" stroke="${accent}" stroke-width="8"/><path d="M174 218 C174 156 338 156 338 218" fill="none" stroke="${dark}" stroke-width="11"/><rect x="328" y="206" width="26" height="50" rx="12" fill="${dark}"/>`,
     neon_hoodie: `<path d="M166 430 C172 338 206 302 256 302 C306 302 340 338 346 430 Z" fill="${dark}"/><path d="M198 332 C226 298 286 298 314 332" fill="none" stroke="${accent}" stroke-width="18" stroke-linecap="round"/>`,
     futuristic_armor: `<path d="M154 430 L190 328 H322 L358 430 Z" fill="${dark}"/><path d="M190 350 H322M176 386 H336" stroke="${accent}" stroke-width="7" opacity=".65"/><path d="M256 326 L286 386 L256 430 L226 386 Z" fill="${accent}" opacity=".38"/>`,
     streetwear: `<path d="M158 430 C174 348 202 316 256 316 C310 316 338 348 354 430 Z" fill="${mid}"/><path d="M216 342 L256 390 L296 342" stroke="${light}" stroke-width="7" opacity=".7"/>`,

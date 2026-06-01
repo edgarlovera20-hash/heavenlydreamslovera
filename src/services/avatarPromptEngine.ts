@@ -17,6 +17,53 @@ export type AvatarPromptInput = {
   details?: string;
 };
 
+export const AVATARIA_MASTER_PROMPT = [
+  'Create a premium 3D clay character avatar.',
+  'Ultra clean corporate mascot style.',
+  'Rounded shapes.',
+  'Soft matte materials.',
+  'Friendly facial expression.',
+  'Pixar quality.',
+  'Modern SaaS branding.',
+  'Studio lighting.',
+  'Centered composition.',
+  'Highly detailed.',
+  '4k render.',
+  'Transparent background.',
+  'Professional corporate clothing.',
+  'Smooth clay texture.',
+  'Cute but professional.',
+].join(' ');
+
+export const AVATARIA_BUSINESS_PROMPT = [
+  'Create a professional business avatar in premium 3D clay style.',
+  'Corporate executive.',
+  'Friendly smile.',
+  'Suit and tie.',
+  'Rounded geometry.',
+  'Soft shadows.',
+  'Minimalist design.',
+  'Pixar inspired.',
+  'Modern SaaS branding.',
+  'Transparent background.',
+  'Ultra detailed.',
+  '4k render.',
+].join(' ');
+
+export const AVATARIA_MASCOT_PROMPT = [
+  'Create a cute corporate mascot in premium clay 3D style.',
+  'Friendly expression.',
+  'Rounded proportions.',
+  'Bright colors.',
+  'Studio lighting.',
+  'Transparent background.',
+  'Pixar quality.',
+  'Professional branding mascot.',
+  'Highly detailed.',
+  'Sticker ready.',
+  '4k render.',
+].join(' ');
+
 const RARITY_EFFECTS: Record<AvatarRarity, string> = {
   common: 'acabado limpio, luz suave, borde discreto, calidad premium sobria',
   rare: 'aura azul, rim light visible, particulas sutiles, acabado coleccionable',
@@ -66,6 +113,8 @@ export function generateAvatarPrompt(input: AvatarPromptInput) {
     : 'Sin detalles extra del usuario.';
 
   return [
+    'AvatarIA Studio: Convierte cualquier foto o idea en una identidad visual 3D profesional en segundos.',
+    AVATARIA_MASTER_PROMPT,
     `Crea un avatar 3D premium para ${input.name}, rol ${input.role}.`,
     `Tipo: ${input.concept}; silueta: ${input.silhouette}; estilo: ${input.style}; personalidad: ${input.mood}.`,
     `Atuendo: ${input.outfit}; accesorio principal: ${input.accessory}; paleta: ${input.palette}.`,
@@ -75,6 +124,6 @@ export function generateAvatarPrompt(input: AvatarPromptInput) {
     `Identidad visual: ${input.identity}.`,
     phrase,
     details,
-    'Composicion centrada, personaje memorable, estilo mobile game AAA + SaaS futurista, materiales tipo clay/3D glass, ojos expresivos, lectura clara en tamano pequeno, sin texto ilegible, sin marcas externas, render limpio en alta calidad.',
+    'Entregables comerciales: avatar principal, icono, sticker, banner y PNG transparente. Mantener consistencia de equipo, iluminacion de estudio, branding corporativo y lectura clara en tamano pequeno. Sin texto ilegible, sin marcas externas, render limpio en alta calidad.',
   ].filter(Boolean).join(' ');
 }
