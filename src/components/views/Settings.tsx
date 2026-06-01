@@ -979,16 +979,23 @@ function CanalesTab() {
     setConnectModal(null);
   };
 
-  const disconnect = (which: ChannelKey) => {
+  const disconnect = async (which: ChannelKey) => {
     const isTelegram = which === 'telegram';
     const label = which === 'whatsappPromotores' ? 'WhatsApp Promotores' : which === 'whatsappClientes' ? 'WhatsApp Clientes' : 'Telegram';
     if (!confirm(`¿Desconectar la cuenta de ${label}? El agente IA dejará de atender los mensajes entrantes de esa cuenta.`)) return;
     const endpoint = isTelegram ? '/api/telegram/stop' : '/api/whatsapp/logout';
     const body = isTelegram ? {} : { account: which === 'whatsappClientes' ? 'clientes' : 'promotores' };
-    fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
-    setChannel(messagingKey(which), null);
-    setChannels({ ...channels, [which]: { connected: false } });
-    toast.success(`${label} desconectado.`);
+    try {
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || `No se pudo desconectar ${label}.`);
+      setChannel(messagingKey(which), null);
+      setChannels(current => ({ ...current, [which]: { connected: false, status: 'disconnected', identifier: '' } }));
+      await loadChannels();
+      toast.success(`${label} desconectado.`);
+    } catch (err: any) {
+      toast.error(err?.message || `No se pudo desconectar ${label}.`);
+    }
   };
 
   // Gate de acceso
@@ -1116,6 +1123,7 @@ function ChannelCard({
   const Icon = isWA ? MessageCircle : Send;
   const waitingQr = isWA && state.status === 'qr';
   const authenticating = isWA && state.status === 'authenticating';
+  const canDisconnect = state.connected || state.credentialsPresent || waitingQr || authenticating;
   const statusLabel = state.connected ? 'Activa' : waitingQr ? 'Esperando QR' : authenticating ? 'Autenticando' : 'Sin conectar';
   const statusClasses = state.connected
     ? isWA
@@ -1224,17 +1232,28 @@ function ChannelCard({
                 ? state.error
                 : description}
           </p>
-          <button
-            onClick={onConnect}
-            className={cn(
-              'w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg',
-              isWA
-                ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
-                : 'bg-sky-600 hover:bg-sky-500 shadow-sky-500/20',
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              onClick={onConnect}
+              className={cn(
+                'w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg',
+                isWA
+                  ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
+                  : 'bg-sky-600 hover:bg-sky-500 shadow-sky-500/20',
+                !canDisconnect && 'sm:col-span-2',
+              )}
+            >
+              {isWA ? <><QrCode className="w-4 h-4" /> {waitingQr ? 'Escanear QR' : 'Vincular con QR'}</> : <><Send className="w-4 h-4" /> Conectar bot</>}
+            </button>
+            {canDisconnect && (
+              <button
+                onClick={onDisconnect}
+                className="w-full bg-red-600/15 hover:bg-red-600/25 text-red-400 border border-red-500/20 py-3 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2"
+              >
+                <Power className="w-3.5 h-3.5" /> Desconectar
+              </button>
             )}
-          >
-            {isWA ? <><QrCode className="w-4 h-4" /> {waitingQr ? 'Escanear QR' : 'Vincular con QR'}</> : <><Send className="w-4 h-4" /> Conectar bot</>}
-          </button>
+          </div>
         </div>
       )}
     </div>

@@ -411,6 +411,27 @@ export default function AgentHubView() {
     await loadAll();
   };
 
+  const disconnectWhatsApp = async (account: 'promotores' | 'clientes') => {
+    const label = account === 'clientes' ? 'WhatsApp Clientes' : 'WhatsApp Promotores';
+    if (!confirm(`¿Desconectar ${label}? El agente dejará de recibir mensajes de esa cuenta.`)) return;
+    setLoading(l => ({ ...l, [`wa_logout_${account}`]: true }));
+    try {
+      const res = await fetch('/api/whatsapp/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || `No se pudo desconectar ${label}`);
+      pop(`${label} desconectado`);
+      await loadAll();
+    } catch (err: any) {
+      pop(`Error: ${err.message || `No se pudo desconectar ${label}`}`);
+    } finally {
+      setLoading(l => ({ ...l, [`wa_logout_${account}`]: false }));
+    }
+  };
+
   const approveOutbox = async (id: string) => {
     setLoading(l => ({ ...l, [`approve_${id}`]: true }));
     try {
@@ -633,8 +654,8 @@ export default function AgentHubView() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {[
-          { title: 'WhatsApp Promotores', agent: 'ARIUX Promotores', number: waPromotores?.externalId || 'Numero 1', status: waPromotores?.status || 'disconnected', tone: 'cyan' },
-          { title: 'WhatsApp Clientes', agent: 'ARIA Atencion Cliente', number: waClientes?.externalId || 'Numero 2', status: waClientes?.status || 'disconnected', tone: 'blue' },
+          { title: 'WhatsApp Promotores', agent: 'ARIUX Promotores', account: 'promotores' as const, number: waPromotores?.externalId || 'Numero 1', status: waPromotores?.status || 'disconnected', tone: 'cyan' },
+          { title: 'WhatsApp Clientes', agent: 'ARIA Atencion Cliente', account: 'clientes' as const, number: waClientes?.externalId || 'Numero 2', status: waClientes?.status || 'disconnected', tone: 'blue' },
         ].map(item => (
           <div key={item.title} className={`rounded-2xl border p-4 ${item.tone === 'cyan' ? 'border-cyan-400/25 bg-cyan-400/5' : 'border-blue-400/25 bg-blue-400/5'}`}>
             <div className="flex items-start justify-between gap-3">
@@ -654,6 +675,16 @@ export default function AgentHubView() {
             <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
               Esta linea trabaja independiente; sus conversaciones, respuestas y videos no se mezclan con el otro numero.
             </p>
+            {item.status !== 'disconnected' && (
+              <button
+                onClick={() => disconnectWhatsApp(item.account)}
+                disabled={loading[`wa_logout_${item.account}`]}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-300 transition-all hover:bg-rose-500/20 disabled:opacity-60"
+              >
+                {loading[`wa_logout_${item.account}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                Desconectar cuenta
+              </button>
+            )}
           </div>
         ))}
       </div>
