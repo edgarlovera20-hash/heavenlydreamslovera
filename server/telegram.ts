@@ -1,6 +1,8 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { ingestChannelMessage, recordOutgoingChannelMessage, upsertChannelAccount } from './messaging';
+import { storeDocument } from './document-storage';
+import { transcribeAudioBuffer } from './audio-transcription';
 
 export interface TgMessage {
   id: string;
@@ -87,6 +89,62 @@ function extractTelegramBody(msg: any) {
   return '[mensaje recibido sin texto]';
 }
 
+function telegramAudioDescriptor(msg: any) {
+  const audio = msg?.voice || msg?.audio;
+  if (!audio?.file_id) return null;
+  const mimeType = String(audio.mime_type || (msg?.voice ? 'audio/ogg' : 'audio/mpeg'));
+  const fileName = String(msg?.audio?.file_name || `telegram-audio-${msg.message_id}.${mimeType.includes('mpeg') ? 'mp3' : 'ogg'}`);
+  return {
+    kind: 'audio',
+    fileId: String(audio.file_id),
+    mimeType,
+    fileName,
+    duration: audio.duration || null,
+    fileSize: audio.file_size || null,
+    docType: 'AUDIO',
+  };
+}
+
+async function extractTelegramAudioMedia(token: string, msg: any) {
+  const descriptor = telegramAudioDescriptor(msg);
+  if (!descriptor) return null;
+  try {
+    const file = await tgApi(token, 'getFile', { file_id: descriptor.fileId });
+    if (!file?.ok || !file.result?.file_path) throw new Error(file?.description || 'Telegram no entrego ruta del audio.');
+    const res = await fetch(`https://api.telegram.org/file/bot${token}/${file.result.file_path}`);
+    if (!res.ok) throw new Error(`Telegram file HTTP ${res.status}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const contentBase64 = `data:${descriptor.mimeType};base64,${buffer.toString('base64')}`;
+    const stored = storeDocument({
+      contentBase64,
+      fileName: descriptor.fileName,
+      mimeType: descriptor.mimeType,
+      captureId: null,
+      docType: descriptor.docType,
+    });
+    const transcription = await transcribeAudioBuffer({
+      buffer,
+      mimeType: descriptor.mimeType,
+      fileName: descriptor.fileName,
+    });
+    return {
+      ...descriptor,
+      documentId: stored.id,
+      storageProvider: stored.storageProvider,
+      storagePath: stored.storagePath,
+      sha256: stored.sha256,
+      sizeBytes: stored.sizeBytes,
+      transcription,
+    };
+  } catch (err: any) {
+    return {
+      ...descriptor,
+      transcription: { status: 'failed', provider: 'openai', error: err?.message || String(err) },
+      error: err?.message || String(err),
+    };
+  }
+}
+
 function telegramMessageTypes(msg: any) {
   return ['text', 'caption', 'sticker', 'photo', 'document', 'audio', 'voice', 'video', 'video_note', 'contact', 'location']
     .filter(key => msg?.[key]);
@@ -113,6 +171,7 @@ async function pollLoop(token: string, abort: AbortController) {
         const msg = update.message;
         if (!msg) continue;
         const body = extractTelegramBody(msg);
+        const media = await extractTelegramAudioMedia(token, msg);
 
         const entry: TgMessage = {
           id: String(update.update_id),
@@ -138,7 +197,11 @@ async function pollLoop(token: string, abort: AbortController) {
           fromName: entry.fromName,
           timestamp: entry.timestamp,
           isGroup: entry.isGroup,
-          metadata: { from: entry.from, messageTypes: telegramMessageTypes(msg) },
+          metadata: {
+            from: entry.from,
+            messageTypes: telegramMessageTypes(msg),
+            ...(media ? { media } : {}),
+          },
         });
 
         if (onMessageCallback) onMessageCallback(entry);
