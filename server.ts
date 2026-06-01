@@ -30,7 +30,7 @@ import db, {
   Nominas, Territories, ValidationRequests, Announcements,
   InventoryItems, AutomationRules, AiJobs, Metrics, Sessions,
   Capturas, DocumentosCliente, DocumentFiles, ClientesCrm, EstatusFolios, LogsSistema,
-  AgentOutbox, AgentProfiles, CrmFollowups, CrmNotes, CrmVisibilityRules, CrmSavedSearches,
+  AgentOutbox, AgentProfiles, AgentTasks, ChannelConversations, CrmFollowups, CrmNotes, CrmVisibilityRules, CrmSavedSearches,
   EmailSync,
 } from "./server/db";
 import {
@@ -3890,10 +3890,13 @@ async function startServer() {
     validador:   { active: false, lastRun: null, processed: 0, errors: 0 },
     promotores:  { active: false, lastRun: null, processed: 0, errors: 0 },
     clientes:    { active: false, lastRun: null, processed: 0, errors: 0 },
+    cobranza:    { active: false, lastRun: null, processed: 0, errors: 0 },
+    seguimiento: { active: false, lastRun: null, processed: 0, errors: 0 },
+    calidad:     { active: false, lastRun: null, processed: 0, errors: 0 },
   };
 
   const agentTimers: Record<string, ReturnType<typeof setInterval> | null> = {
-    capturista: null, archivero: null, consultor: null, telmex: null, validador: null, promotores: null, clientes: null,
+    capturista: null, archivero: null, consultor: null, telmex: null, validador: null, promotores: null, clientes: null, cobranza: null, seguimiento: null, calidad: null,
   };
 
   const AGENT_STATE_SETTINGS_KEY = 'agent_runtime_state_v1';
@@ -4051,6 +4054,235 @@ async function startServer() {
     agentState.telmex.lastRun = new Date().toISOString();
   }
 
+  function systemAgentConversation(agent: string, label: string) {
+    return ChannelConversations.upsert({
+      channel: 'system',
+      external_chat_id: `agent:${agent}`,
+      display_name: label,
+      status: 'open',
+      intent: 'agent_review',
+      confidence: 1,
+      memory: { agent, system: true },
+      last_message_at: Date.now(),
+    }) as any;
+  }
+
+  function hasAgentProposal(action: string, entityId: string) {
+    return Boolean((db as any).prepare(`
+      SELECT id FROM agent_outbox
+      WHERE action=@action
+        AND payload LIKE @needle
+        AND status IN ('pending_approval','approved')
+      LIMIT 1
+    `).get({ action, needle: `%"entityId":"${String(entityId).replace(/"/g, '')}"%` }));
+  }
+
+  function createAgentProposal(agent: string, label: string, input: {
+    action: string;
+    entity: string;
+    entityId: string;
+    title: string;
+    message: string;
+    priority?: 'baja' | 'media' | 'alta';
+    payload?: Record<string, any>;
+    taskType?: string;
+    dueAt?: string | null;
+  }) {
+    if (!input.entityId || hasAgentProposal(input.action, input.entityId)) return null;
+    const conversation = systemAgentConversation(agent, label);
+    const payload = {
+      agent,
+      entity: input.entity,
+      entityId: input.entityId,
+      priority: input.priority || 'media',
+      ...(input.payload || {}),
+    };
+    const outbox = AgentOutbox.create({
+      conversation_id: conversation.id,
+      decision_id: null,
+      type: 'action',
+      status: 'pending_approval',
+      channel: 'app',
+      target: 'gerencia',
+      message: input.message,
+      action: input.action,
+      payload,
+      result: null,
+      error: null,
+    });
+    AgentTasks.create({
+      conversation_id: conversation.id,
+      type: input.taskType || input.action,
+      title: input.title,
+      status: 'open',
+      due_at: input.dueAt || null,
+      assigned_to: null,
+      metadata: payload,
+    });
+    recordMetric(`agent.${agent}.proposal`, 1, { action: input.action, priority: input.priority || 'media' });
+    return outbox;
+  }
+
+  async function runArchiveroAgent() {
+    const rows = (db as any).prepare(`
+      SELECT df.*, c.cliente_nombre, c.folio
+      FROM document_files df
+      LEFT JOIN capturas c ON c.id=df.captura_id
+      WHERE UPPER(COALESCE(df.review_status, 'PENDIENTE')) IN ('PENDIENTE','RECHAZADO','OBSERVADO')
+         OR COALESCE(df.manipulation_score, 0) >= 0.7
+      ORDER BY COALESCE(df.manipulation_score, 0) DESC, datetime(df.created_at) DESC
+      LIMIT 30
+    `).all() as any[];
+    let processed = 0;
+    for (const row of rows) {
+      const risk = Number(row.manipulation_score || 0);
+      const priority = risk >= 0.7 || String(row.review_status || '').toUpperCase() === 'RECHAZADO' ? 'alta' : 'media';
+      const created = createAgentProposal('archivero', 'Agente Archivero', {
+        action: 'review_document',
+        entity: 'document_files',
+        entityId: row.id,
+        title: `Revisar documento ${row.tipo_documento}`,
+        priority,
+        message: [
+          `Documento ${row.tipo_documento} pendiente de revisión.`,
+          row.cliente_nombre ? `Cliente: ${row.cliente_nombre}.` : null,
+          row.folio ? `Folio/captura: ${row.folio}.` : null,
+          risk ? `Score de manipulación: ${Math.round(risk * 100)}%.` : null,
+          `Archivo: ${row.archivo_nombre}.`,
+        ].filter(Boolean).join(' '),
+        payload: { reviewStatus: row.review_status, captureId: row.captura_id, saleId: row.venta_id, manipulationScore: risk },
+        taskType: 'document_review',
+      });
+      if (created) processed++;
+    }
+    agentState.archivero.processed += processed;
+    agentState.archivero.lastRun = new Date().toISOString();
+  }
+
+  async function runValidadorAgent() {
+    const rows = (db as any).prepare(`
+      SELECT * FROM validation_requests
+      WHERE UPPER(COALESCE(status, 'PENDIENTE')) IN ('PENDIENTE','PENDING','ESPERANDO_REVISION','ERROR')
+      ORDER BY datetime(created_at) ASC
+      LIMIT 25
+    `).all() as any[];
+    let processed = 0;
+    for (const row of rows) {
+      const created = createAgentProposal('validador', 'Agente Validador', {
+        action: 'review_validation',
+        entity: 'validation_requests',
+        entityId: row.id,
+        title: `Validar solicitud ${row.client_name || row.sale_id || row.id}`,
+        priority: String(row.status || '').toUpperCase() === 'ERROR' ? 'alta' : 'media',
+        message: `Validación pendiente: ${row.client_name || 'cliente sin nombre'} ${row.client_phone ? `(${row.client_phone})` : ''}. Estado actual: ${row.status || 'PENDIENTE'}. Revisar llamada, reintentar o cerrar resultado.`,
+        payload: { saleId: row.sale_id, clientName: row.client_name, clientPhone: row.client_phone, status: row.status },
+        taskType: 'validation_review',
+      });
+      if (created) processed++;
+    }
+    agentState.validador.processed += processed;
+    agentState.validador.lastRun = new Date().toISOString();
+  }
+
+  async function runCobranzaAgent() {
+    const rows = (db as any).prepare(`
+      SELECT m.*, c.nombre, c.telefono, c.whatsapp, c.folio AS cliente_folio
+      FROM morosidad m
+      LEFT JOIN clientes_crm c ON c.id=m.cliente_id
+      WHERE COALESCE(m.monto_adeudo, 0) > 0
+        AND COALESCE(m.convenio, 0) = 0
+        AND UPPER(COALESCE(m.status_cobranza, '')) NOT IN ('PAGADO','CERRADO','CONVENIO')
+      ORDER BY COALESCE(m.dias_atraso, 0) DESC, COALESCE(m.monto_adeudo, 0) DESC
+      LIMIT 30
+    `).all() as any[];
+    let processed = 0;
+    for (const row of rows) {
+      const dias = Number(row.dias_atraso || 0);
+      const priority = dias >= 30 ? 'alta' : dias >= 8 ? 'media' : 'baja';
+      const contact = row.whatsapp || row.telefono || 'sin contacto';
+      const created = createAgentProposal('cobranza', 'Agente Cobranza', {
+        action: 'collect_payment',
+        entity: 'morosidad',
+        entityId: row.id,
+        title: `Cobranza ${row.nombre || row.folio || row.id}`,
+        priority,
+        message: `Cliente ${row.nombre || row.folio || 'sin nombre'} con adeudo de $${Number(row.monto_adeudo || 0).toLocaleString('es-MX')} y ${dias} días de atraso. Contacto: ${contact}. Sugerencia: revisar convenio o enviar recordatorio aprobado.`,
+        payload: { folio: row.folio, clienteId: row.cliente_id, montoAdeudo: row.monto_adeudo, diasAtraso: dias, contact },
+        taskType: 'collections_followup',
+      });
+      if (created) processed++;
+    }
+    agentState.cobranza.processed += processed;
+    agentState.cobranza.lastRun = new Date().toISOString();
+  }
+
+  async function runSeguimientoAgent() {
+    const rows = (db as any).prepare(`
+      SELECT * FROM clientes_crm
+      WHERE (proximo_seguimiento IS NOT NULL AND date(proximo_seguimiento) <= date('now'))
+         OR UPPER(COALESCE(riesgo_cancelacion, 'BAJO')) IN ('ALTO','CRITICO')
+         OR (ultimo_contacto IS NULL AND datetime(created_at) <= datetime('now', '-3 days'))
+      ORDER BY
+        CASE UPPER(COALESCE(riesgo_cancelacion, 'BAJO')) WHEN 'CRITICO' THEN 0 WHEN 'ALTO' THEN 1 ELSE 2 END,
+        date(COALESCE(proximo_seguimiento, created_at)) ASC
+      LIMIT 30
+    `).all() as any[];
+    let processed = 0;
+    for (const row of rows) {
+      const priority = /ALTO|CRITICO/i.test(String(row.riesgo_cancelacion || '')) ? 'alta' : 'media';
+      const created = createAgentProposal('seguimiento', 'Agente Seguimiento CRM', {
+        action: 'customer_followup',
+        entity: 'clientes_crm',
+        entityId: row.id,
+        title: `Seguimiento a ${row.nombre || row.folio || row.id}`,
+        priority,
+        dueAt: row.proximo_seguimiento || null,
+        message: `Seguimiento pendiente para ${row.nombre || 'cliente sin nombre'}. Riesgo: ${row.riesgo_cancelacion || 'BAJO'}. Último contacto: ${row.ultimo_contacto || 'sin registro'}. Próximo seguimiento: ${row.proximo_seguimiento || 'sin fecha'}.`,
+        payload: { folio: row.folio, telefono: row.telefono, whatsapp: row.whatsapp, vendedorAsignado: row.vendedor_asignado, riesgo: row.riesgo_cancelacion },
+        taskType: 'customer_followup',
+      });
+      if (created) processed++;
+    }
+    agentState.seguimiento.processed += processed;
+    agentState.seguimiento.lastRun = new Date().toISOString();
+  }
+
+  async function runCalidadAgent() {
+    const rows = (db as any).prepare(`
+      SELECT id, folio, cliente_nombre, telefono, correo, paquete, direccion_completa, colonia, ciudad, status_captura, status_documentos, created_at
+      FROM capturas
+      WHERE cliente_nombre IS NULL OR telefono IS NULL OR paquete IS NULL OR direccion_completa IS NULL OR colonia IS NULL
+         OR UPPER(COALESCE(status_documentos, 'PENDIENTE')) NOT IN ('VALIDADO','COMPLETO')
+      ORDER BY datetime(created_at) DESC
+      LIMIT 35
+    `).all() as any[];
+    let processed = 0;
+    for (const row of rows) {
+      const missing = [
+        !row.cliente_nombre && 'nombre',
+        !row.telefono && 'telefono',
+        !row.paquete && 'paquete',
+        !row.direccion_completa && 'direccion',
+        !row.colonia && 'colonia',
+        !/VALIDADO|COMPLETO/i.test(String(row.status_documentos || '')) && 'documentos',
+      ].filter(Boolean);
+      if (!missing.length) continue;
+      const created = createAgentProposal('calidad', 'Agente Calidad de Captura', {
+        action: 'fix_capture_quality',
+        entity: 'capturas',
+        entityId: row.id,
+        title: `Completar captura ${row.folio || row.cliente_nombre || row.id}`,
+        priority: missing.includes('telefono') || missing.includes('documentos') ? 'alta' : 'media',
+        message: `Captura ${row.folio || row.id} requiere corrección antes de operación. Faltan: ${missing.join(', ')}.`,
+        payload: { folio: row.folio, missing, statusCaptura: row.status_captura, statusDocumentos: row.status_documentos },
+        taskType: 'capture_quality',
+      });
+      if (created) processed++;
+    }
+    agentState.calidad.processed += processed;
+    agentState.calidad.lastRun = new Date().toISOString();
+  }
+
   async function autoSendAriuxReplies(result: any) {
     const replies = (result?.outbox || []).filter((item: any) => (item?.type === 'reply' && item?.message) || item?.action === 'send_video');
     let lastApproved: any = null;
@@ -4178,8 +4410,11 @@ async function startServer() {
     telmex: async () => { await runTelmexAgent(); await autoSendPendingAriuxReplies(); },
     promotores: async () => { await runCapturistaAgent(); await runConsultorAgent(); await autoSendPendingAriuxReplies(); agentState.promotores.lastRun = new Date().toISOString(); },
     clientes: async () => { await autoSendPendingAriuxReplies(); agentState.clientes.lastRun = new Date().toISOString(); },
-    archivero: async () => { agentState.archivero.lastRun = new Date().toISOString(); },
-    validador: async () => { agentState.validador.lastRun = new Date().toISOString(); },
+    archivero: runArchiveroAgent,
+    validador: runValidadorAgent,
+    cobranza: runCobranzaAgent,
+    seguimiento: runSeguimientoAgent,
+    calidad: runCalidadAgent,
   };
 
   async function startAgentTimer(agent: string, runImmediately = false) {

@@ -22,6 +22,9 @@ interface AgentState {
   validador: AgentStatus;
   promotores?: AgentStatus;
   clientes?: AgentStatus;
+  cobranza?: AgentStatus;
+  seguimiento?: AgentStatus;
+  calidad?: AgentStatus;
 }
 interface ChannelMsg {
   id: string;
@@ -175,11 +178,11 @@ const AGENT_META = [
   {
     id: 'archivero',
     name: 'Agente Archivero',
-    desc: 'Analiza documentos subidos (INE, comprobante, contrato) y detecta inconsistencias.',
+    desc: 'Revisa expedientes y documentos pendientes, rechazados o con score de manipulación alto; genera tareas para gerencia antes de que avancen mal.',
     icon: Archive,
     color: 'blue',
     channels: ['App'],
-    hint: 'Se activa cuando un asesor sube documentos en Captura y Validación.',
+    hint: 'Busca document_files pendientes/observados y crea propuestas de revisión documental.',
   },
   {
     id: 'consultor',
@@ -202,11 +205,38 @@ const AGENT_META = [
   {
     id: 'validador',
     name: 'Agente Validador',
-    desc: 'Realiza llamadas de validación autónomas vía Twilio para confirmar ventas.',
+    desc: 'Vigila validaciones pendientes, con error o esperando revisión; propone reintento, cierre o revisión humana.',
     icon: Phone,
     color: 'yellow',
-    channels: ['Twilio'],
-    hint: 'Requiere credenciales Twilio en Config. Llamadas.',
+    channels: ['Twilio', 'App'],
+    hint: 'No aprueba ventas solo; crea tareas de validación para revisión gerencial.',
+  },
+  {
+    id: 'cobranza',
+    name: 'Agente Cobranza',
+    desc: 'Detecta clientes con saldo, atraso y sin convenio; prepara seguimiento de pago para aprobación.',
+    icon: Activity,
+    color: 'yellow',
+    channels: ['CRM', 'WhatsApp Clientes'],
+    hint: 'Lee morosidad y clientes_crm. Sugiere contacto, convenio o recordatorio aprobado.',
+  },
+  {
+    id: 'seguimiento',
+    name: 'Agente Seguimiento CRM',
+    desc: 'Encuentra clientes con seguimiento vencido, sin contacto o riesgo alto de cancelación.',
+    icon: Workflow,
+    color: 'purple',
+    channels: ['CRM', 'App'],
+    hint: 'Crea tareas de seguimiento para que no se pierdan clientes ni promesas.',
+  },
+  {
+    id: 'calidad',
+    name: 'Agente Calidad de Captura',
+    desc: 'Audita capturas incompletas: teléfono, paquete, dirección, colonia y documentos.',
+    icon: CheckCircle2,
+    color: 'emerald',
+    channels: ['App', 'Campo'],
+    hint: 'Genera propuestas para corregir capturas antes de validación, nómina o instalación.',
   },
 ] as const;
 
