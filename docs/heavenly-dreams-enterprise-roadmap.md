@@ -10,7 +10,19 @@ La migracion debe ser progresiva. La app actual sigue siendo el runtime principa
 
 ## Arquitectura objetivo
 
+La plataforma productiva se aloja en DigitalOcean. Vercel no forma parte del diseño objetivo de despliegue para CRM, API ni automatizaciones web.
+
 ```text
+DigitalOcean Droplet
+  NGINX
+  PM2 o Docker
+  Node.js API
+  Frontend CRM
+  Redis/BullMQ
+  PostgreSQL
+  Playwright workers
+  IA
+
 apps/
   web/
   mobile/
@@ -37,6 +49,8 @@ storage/
   logs/
   backups/
 ```
+
+Blueprint detallado: `docs/digitalocean-automation-architecture.md`.
 
 ## Fase 1: Base enterprise
 
@@ -73,6 +87,7 @@ storage/
 - BullMQ/Redis para colas separadas.
 - WhatsApp engine con recepcion de documentos, OCR y actualizacion CRM.
 - Notification engine para WhatsApp, Telegram, push y email.
+- Playwright workers para automatizaciones web con concurrencia limitada, logs y apagado seguro ante CAPTCHA o restricciones externas.
 
 ## Fase 6: Enterprise hardening
 
@@ -82,6 +97,16 @@ storage/
 - Cifrado de tokens y archivos sensibles.
 - Backups automaticos.
 - Docker/PM2/NGINX y CI/CD.
+
+## Fase 7: Validador Telmex enterprise
+
+- Prototipo Playwright de consulta individual antes de construir carga masiva.
+- Tabla `telmex_consultas` en PostgreSQL para historial y reportes.
+- Cola Redis/BullMQ para procesar Excel y lotes grandes.
+- Workers con concurrencia configurable.
+- Clasificador IA para Moroso, Al corriente, Convenio o Error.
+- Exportacion Excel y dashboard de estadisticas.
+- Auditoria de cada consulta y detencion automatica ante CAPTCHA, bloqueo o restriccion del sitio.
 
 ## Criterios de avance
 
