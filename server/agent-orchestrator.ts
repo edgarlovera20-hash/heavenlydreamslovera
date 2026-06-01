@@ -348,6 +348,17 @@ function messageMedia(message: any) {
   return media && typeof media === 'object' ? media : null;
 }
 
+function audioTranscript(media: any) {
+  const text = media?.transcription?.text;
+  return typeof text === 'string' && text.trim() ? text.trim() : '';
+}
+
+function messageTextForUnderstanding(message: any) {
+  const raw = String(message?.body || '');
+  const transcript = audioTranscript(messageMedia(message));
+  return transcript ? `${transcript}\n[transcripcion de audio]` : raw;
+}
+
 function mediaLooksLikeCaptureDocument(media: any, text: string) {
   const haystack = normalizedBody(`${text} ${media?.fileName || ''} ${media?.kind || ''} ${media?.docType || ''}`);
   if (/(ine|curp|comprobante|domicilio|recibo|cfe|telmex|expediente|pdf|documento)/i.test(haystack)) return true;
@@ -671,7 +682,7 @@ function buildAutonomousReply(text: string, profile: any) {
     return `Ya recibí el documento. Pásame nombre del cliente, teléfono o folio para guardarlo donde corresponde.`;
   }
   if (lower.includes('audio recibido')) {
-    return `Recibí tu audio. Para avanzar sin error, escríbeme el dato clave: folio, cliente o trámite.`;
+    return `Ya recibí tu audio. Si no alcanzo a transcribirlo completo, mándame solo el dato clave: folio, cliente o trámite, y lo avanzo contigo.`;
   }
   if (lower.includes('video recibido')) {
     return `Ya tengo el video. ¿A qué cliente o folio lo relaciono?`;
@@ -785,7 +796,10 @@ function buildFolioReply(text: string) {
 }
 
 function decideWithRules(conversation: any, message: any): AgentDecision {
-  const text = String(message.body || '');
+  const text = messageTextForUnderstanding(message);
+  const rawText = String(message.body || '');
+  const media = messageMedia(message);
+  const transcript = audioTranscript(media);
   const audience = conversationAudience(conversation);
   const profile = AgentProfiles.getById(profileIdForConversation(conversation)) as any;
   const matchedVideo = findAgentVideoForQuestion(text, audience);
@@ -798,12 +812,17 @@ function decideWithRules(conversation: any, message: any): AgentDecision {
   const fields = {
     audience,
     ...extractFields(text, conversation),
-    ...extractCaptureFields(text, conversation, messageMedia(message)),
+    ...extractCaptureFields(text, conversation, media),
     ...(promoterName ? {
       promoterName: promoterName.fullName,
       promoterFirstName: promoterName.firstName,
       promoterNameConfirmed: true,
       promoterNameSource: promoterName.source,
+    } : {}),
+    ...(transcript ? {
+      audioTranscript: transcript,
+      audioTranscriptionStatus: media?.transcription?.status || 'completed',
+      originalMessageBody: rawText,
     } : {}),
   };
 
@@ -1024,6 +1043,8 @@ function buildAiDecisionPrompt(conversation: any, message: any, rules: AgentDeci
   const profile = AgentProfiles.getById(profileIdForConversation(conversation)) as any;
   const memory = conversation?.memory || {};
   const promoter = memory.promoter || {};
+  const media = messageMedia(message);
+  const transcript = audioTranscript(media);
   return `/no_think
 Analiza el mensaje entrante para Heavenly Dreams CRM.
 
@@ -1058,7 +1079,9 @@ Reglas:
 - Si habla de adeudo/pago/promesa de pago, usa intent "morosidad".
 - Si recibe un email, pregunta si debe guardarlo en expediente, usarlo para seguimiento o asociarlo a cliente.
 - Si recibe INE, imagen, PDF o documento, confirma recepcion y pide nombre/folio/telefono para relacionar expediente.
-- Si recibe sticker, audio o video, responde natural y pide el dato operativo que falta.
+- Si recibe audio con transcripcion, responde al contenido del audio como si lo hubieras escuchado. No pidas que lo escriba otra vez salvo que la transcripcion sea incompleta.
+- Si recibe audio sin transcripcion, confirma que lo recibiste y pide solo el dato operativo necesario.
+- Si recibe sticker o video, responde natural y pide el dato operativo que falta.
 - Si el mensaje coincide con un macro activo del diseñador, respeta ese macro como respuesta base y conserva su intencion.
 - Si no entiendes el mensaje, ofrece opciones: consultar folio, guardar expediente o iniciar captura.
 - proposedActions solo puede usar: create_sale, update_lead, schedule_followup, escalate_human.
@@ -1099,8 +1122,19 @@ ${JSON.stringify({
 Mensaje:
 ${String(message.body || '').slice(0, 2500)}
 
+Audio transcrito:
+${transcript ? transcript.slice(0, 2500) : 'N/D'}
+
 Metadata del mensaje:
-${JSON.stringify(message.metadata || {})}
+${JSON.stringify({
+    ...(message.metadata || {}),
+    audioTranscription: transcript ? {
+      status: media?.transcription?.status,
+      provider: media?.transcription?.provider,
+      model: media?.transcription?.model,
+      text: transcript,
+    } : undefined,
+  })}
 
 Devuelve exactamente:
 {
@@ -1134,8 +1168,9 @@ function decisionFromModel(conversation: any, rules: AgentDecision, modelPayload
   };
 
   if (intent === 'consulta_folio') {
-    const folio = extractedFields.folio || String(message.body || '').match(/\b([A-Z0-9]{5,}|\d{5,})\b/i)?.[1] || '';
-    const { reply, fields } = buildFolioReply(folio ? `folio ${folio}` : String(message.body || ''));
+    const sourceText = messageTextForUnderstanding(message);
+    const folio = extractedFields.folio || sourceText.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i)?.[1] || '';
+    const { reply, fields } = buildFolioReply(folio ? `folio ${folio}` : sourceText);
     return personalizeDecision(conversation, {
       intent,
       confidence: clampConfidence(modelPayload?.confidence, Math.max(rules.confidence, 0.88)),
@@ -1173,7 +1208,7 @@ function decisionFromModel(conversation: any, rules: AgentDecision, modelPayload
 
 async function decide(conversation: any, message: any): Promise<AgentDecision> {
   const rules = decideWithRules(conversation, message);
-  const text = String(message?.body || '');
+  const text = messageTextForUnderstanding(message);
   if (rules.intent === 'busqueda_web') {
     try {
       const web = await withTimeout(answerWebQuestion(text, { promoterName: promoterFirstName(conversation) }), 15_000, 'Web search');

@@ -12,6 +12,7 @@ import path from 'node:path';
 import { ingestChannelMessage, recordOutgoingChannelMessage, upsertChannelAccount } from './messaging';
 import { storeDocument } from './document-storage';
 import { runComprobanteOcr, runIneOcr } from './ocr-service';
+import { transcribeAudioBuffer } from './audio-transcription';
 
 type Status = 'disconnected' | 'qr' | 'authenticating' | 'connected';
 export type WhatsAppAccount = 'promotores' | 'clientes';
@@ -293,6 +294,27 @@ async function runMediaOcr(descriptor: any, contentDataUrl: string) {
   }
 }
 
+async function runAudioTranscription(descriptor: any, buffer: Buffer) {
+  if (descriptor.kind !== 'audio') return null;
+  try {
+    return await withTimeout(
+      transcribeAudioBuffer({
+        buffer,
+        mimeType: descriptor.mimeType,
+        fileName: descriptor.fileName,
+      }),
+      90_000,
+      'Transcripcion WhatsApp',
+    );
+  } catch (err: any) {
+    return {
+      status: 'failed',
+      provider: 'openai',
+      error: err?.message || String(err),
+    };
+  }
+}
+
 async function extractAndStoreMedia(runtime: WaRuntime, message: any, body: string) {
   const descriptor = mediaDescriptor(message, body);
   if (!descriptor) return null;
@@ -312,7 +334,10 @@ async function extractAndStoreMedia(runtime: WaRuntime, message: any, body: stri
       captureId: null,
       docType: descriptor.docType,
     });
-    const ocr = await runMediaOcr(descriptor, contentBase64);
+    const [ocr, transcription] = await Promise.all([
+      runMediaOcr(descriptor, contentBase64),
+      runAudioTranscription(descriptor, buffer),
+    ]);
     return {
       ...descriptor,
       documentId: stored.id,
@@ -321,6 +346,7 @@ async function extractAndStoreMedia(runtime: WaRuntime, message: any, body: stri
       sha256: stored.sha256,
       sizeBytes: stored.sizeBytes,
       ocr,
+      ...(transcription ? { transcription } : {}),
     };
   } catch (err: any) {
     return {

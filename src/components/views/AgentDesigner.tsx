@@ -46,6 +46,7 @@ type AgentProfile = {
 const PROFILE_ID = 'promoter_receptionist';
 
 const DEFAULT_DIRECTIVE = 'Responde como asistente operativo de Heavenly Dreams para promotores. Ayuda a consultar folios SIAC, guardar expedientes, iniciar capturas, explicar paquetes Telmex y escalar a un humano cuando haga falta.';
+const DEFAULT_AUDIO_INSTRUCTIONS = 'Cuando reciba un audio, usa la transcripcion como mensaje principal. Responde natural, breve y humano, como si lo hubieras escuchado. Si la transcripcion viene incompleta, pide solo el dato puntual que falta.';
 
 const DEFAULT_MACROS: MacroConfig[] = [
   {
@@ -150,6 +151,13 @@ function sliderSpeedLabel(value: number) {
   return `${(0.65 + (value / 120)).toFixed(1)}x`;
 }
 
+function sliderHumanityLabel(value: number) {
+  if (value >= 85) return 'Muy humana';
+  if (value >= 65) return 'Natural';
+  if (value >= 40) return 'Neutral';
+  return 'Robotica';
+}
+
 export function AgentDesigner({ onClose }: AgentDesignerProps) {
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -160,6 +168,10 @@ export function AgentDesigner({ onClose }: AgentDesignerProps) {
   const [tone, setTone] = useState(60);
   const [speed, setSpeed] = useState(55);
   const [voice, setVoice] = useState('Alloy (OAI)');
+  const [voiceHumanity, setVoiceHumanity] = useState(88);
+  const [transcribeIncomingAudio, setTranscribeIncomingAudio] = useState(true);
+  const [replyToAudio, setReplyToAudio] = useState(true);
+  const [audioInstructions, setAudioInstructions] = useState(DEFAULT_AUDIO_INSTRUCTIONS);
   const [temperature, setTemperature] = useState(0.4);
   const [maxTokens, setMaxTokens] = useState(1200);
   const [fallbackLevel, setFallbackLevel] = useState('Avanzado');
@@ -191,7 +203,11 @@ export function AgentDesigner({ onClose }: AgentDesignerProps) {
         setDirective(designer.directive || data.knowledgeBase || DEFAULT_DIRECTIVE);
         setTone(Number(designer.voice?.tone ?? 60));
         setSpeed(Number(designer.voice?.speed ?? 55));
-        setVoice(designer.voice?.provider || 'Alloy (OAI)');
+        setVoice(designer.voice?.provider || 'Coral (OpenAI humana)');
+        setVoiceHumanity(Number(designer.voice?.humanity ?? 88));
+        setTranscribeIncomingAudio(designer.audio?.transcribeIncoming !== false);
+        setReplyToAudio(designer.audio?.replyToAudio !== false);
+        setAudioInstructions(designer.audio?.instructions || DEFAULT_AUDIO_INSTRUCTIONS);
         setTemperature(Number(designer.advanced?.temperature ?? 0.4));
         setMaxTokens(Number(designer.advanced?.maxTokens ?? 1200));
         setFallbackLevel(designer.advanced?.fallbackLevel || 'Avanzado');
@@ -255,8 +271,9 @@ export function AgentDesigner({ onClose }: AgentDesignerProps) {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 220));
     utterance.lang = 'es-MX';
-    utterance.rate = Math.max(0.7, Math.min(1.6, 0.65 + (speed / 120)));
-    utterance.pitch = Math.max(0.6, Math.min(1.8, 0.7 + (tone / 100)));
+    const humanityOffset = (voiceHumanity - 50) / 500;
+    utterance.rate = Math.max(0.72, Math.min(1.25, 0.82 + (speed / 180) - humanityOffset));
+    utterance.pitch = Math.max(0.72, Math.min(1.35, 0.86 + (tone / 180) + humanityOffset));
     const voices = window.speechSynthesis.getVoices();
     const spanishVoice = voices.find(item => /es-|spanish|mex/i.test(`${item.lang} ${item.name}`));
     if (spanishVoice) utterance.voice = spanishVoice;
@@ -290,6 +307,16 @@ export function AgentDesigner({ onClose }: AgentDesignerProps) {
           speed,
           speedLabel: sliderSpeedLabel(speed),
           provider: voice,
+          humanity: voiceHumanity,
+          humanityLabel: sliderHumanityLabel(voiceHumanity),
+          style: 'humana, cercana, mexicana, clara y sin tono robotico',
+        },
+        audio: {
+          transcribeIncoming: transcribeIncomingAudio,
+          replyToAudio,
+          provider: 'openai',
+          transcriptionModel: 'gpt-4o-mini-transcribe',
+          instructions: audioInstructions.trim() || DEFAULT_AUDIO_INSTRUCTIONS,
         },
         advanced: {
           temperature,
@@ -436,6 +463,19 @@ export function AgentDesigner({ onClose }: AgentDesignerProps) {
 
                   <div className="space-y-6 flex-1 flex flex-col justify-between">
                     <div className="space-y-5">
+                      <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-purple-200">Voz humana</p>
+                            <p className="mt-1 text-[11px] leading-5 text-slate-400">ARIUX habla menos robótico: pausas naturales, tono cálido y respuesta corta.</p>
+                          </div>
+                          <span className="rounded-full border border-purple-400/25 bg-purple-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-purple-100">
+                            {sliderHumanityLabel(voiceHumanity)}
+                          </span>
+                        </div>
+                        <input type="range" min="0" max="100" value={voiceHumanity} onChange={event => setVoiceHumanity(Number(event.target.value))} className="mt-3 w-full h-1.5 bg-slate-800 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-fuchsia-300 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(217,70,239,0.6)]" />
+                      </div>
+
                       <div>
                         <div className="flex justify-between mb-2">
                           <label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Tono Cognitivo</label>
@@ -450,6 +490,28 @@ export function AgentDesigner({ onClose }: AgentDesignerProps) {
                         </div>
                         <input type="range" min="0" max="100" value={speed} onChange={event => setSpeed(Number(event.target.value))} className="w-full h-1.5 bg-slate-800 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-purple-400 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(168,85,247,0.5)]" />
                       </div>
+
+                      <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 space-y-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-cyan-200">Audios entrantes</p>
+                          <p className="mt-1 text-[11px] leading-5 text-slate-400">WhatsApp guarda el audio, intenta transcribirlo y ARIUX responde al contenido como mensaje normal.</p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                            <input type="checkbox" checked={transcribeIncomingAudio} onChange={event => setTranscribeIncomingAudio(event.target.checked)} className="accent-cyan-300" />
+                            Transcribir audio
+                          </label>
+                          <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                            <input type="checkbox" checked={replyToAudio} onChange={event => setReplyToAudio(event.target.checked)} className="accent-cyan-300" />
+                            Responder audio
+                          </label>
+                        </div>
+                        <textarea
+                          value={audioInstructions}
+                          onChange={event => setAudioInstructions(event.target.value.slice(0, 320))}
+                          className="min-h-[72px] w-full resize-none rounded-lg border border-slate-700/50 bg-black/35 p-2 text-[10px] leading-5 text-slate-300 outline-none transition-all focus:border-cyan-400/60"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex gap-3 pt-2">
@@ -458,8 +520,9 @@ export function AgentDesigner({ onClose }: AgentDesignerProps) {
                       </button>
                       <div className="relative flex-1">
                         <select value={voice} onChange={event => setVoice(event.target.value)} className="w-full h-10 bg-black/40 border border-slate-700/50 rounded-lg px-3 text-[11px] text-slate-300 focus:outline-none focus:border-purple-500/50 focus:bg-black/60 appearance-none font-mono transition-all">
+                          <option>Coral (OpenAI humana)</option>
+                          <option>Marin (OpenAI natural)</option>
                           <option>Alloy (OAI)</option>
-                          <option>Echo (OAI)</option>
                           <option>Nova (OAI)</option>
                           <option>Voz local navegador</option>
                         </select>
