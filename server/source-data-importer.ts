@@ -193,7 +193,7 @@ export async function importSiacSource(input: SourceInput = {}) {
   let skipped = 0;
   for (const row of rows) {
     const folio = headerValue(row, ['Folio SIAC']);
-      const osAlta = headerValue(row, ['Orden de Servicio', 'Orrden de Servicio', 'OS de Pago', 'OS de Servicio', 'OS']);
+      const osAlta = headerValue(row, ['osalta', 'os_pago', 'OS Pago', 'Orden de Servicio', 'Orrden de Servicio', 'OS de Pago', 'OS de Servicio', 'OS']);
       const telefono = digits10(headerValue(row, ['Telefono']));
       const telefonoAsignado = digits10(headerValue(row, ['Telefono Asignado', 'Telfono Asignado', 'Tel Pago', 'Telefono Pago'])) || null;
       const telefonoPortado = digits10(headerValue(row, ['Telefono de Portabilidad', 'Telefono Portado', 'Numero a Portar']));
@@ -203,7 +203,7 @@ export async function importSiacSource(input: SourceInput = {}) {
         const sourceId = headerValue(row, ['ID']) || String(imported + skipped + 1);
         const estatusSecundario = headerValueAt(row, ['Estatus'], 1);
         const tipoLinea = headerValue(row, ['Tipo de Linea', 'Linea Contratada']);
-        const tipoCliente = headerValue(row, ['Tipo de Cliente', 'Tipo Cliente', 'Segmento']);
+        const tipoCliente = headerValue(row, ['Tipo de Cliente', 'Tipo Cliente', 'Tipo de Ciente', 'Segmento']);
         const segmentoLinea = headerValue(row, ['Segmento']) || tipoCliente || headerValueLast(row, ['Tipo de Linea']) || tipoLinea;
       const tipoServicio = headerValue(row, ['Tipo de Servicio', 'Tipo Serv']) || headerValueAt(row, ['Tipo de Cliente', 'Tipo Cliente'], 1);
       const usuario = headerValue(row, ['Usuario', 'Promotor']);
