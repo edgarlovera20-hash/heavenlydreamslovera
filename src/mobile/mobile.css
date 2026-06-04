@@ -2384,3 +2384,15 @@ body,
     --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
   }
 }
+
+/* Logo cleanup: mobile login mark without exterior contour. */
+#mobile-root :where(.hd-mobile-login-logo, .hd-app-logo, img[alt*="logo" i], img[alt*="heavenly" i]) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+#mobile-root .hd-mobile-login-logo :where(picture, img, svg) {
+  object-fit: contain !important;
+}
