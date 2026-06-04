@@ -7,9 +7,10 @@ interface LogoProps {
 export default function Logo({ className = "w-32 h-32" }: LogoProps) {
   return (
     <picture className="shrink-0">
+      <source srcSet="/logo-mobile.webp" type="image/webp" />
       <img
-        src="/heavenly-dreams-brand.png"
-        alt="Heavenly Dreams"
+        src="/logo-192.png"
+        alt="HD"
         className={`hd-app-logo rounded-full object-cover shrink-0 ${className}`}
         draggable={false}
         decoding="async"

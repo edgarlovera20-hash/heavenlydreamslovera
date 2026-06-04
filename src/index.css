@@ -9010,24 +9010,3 @@ body,
     --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
   }
 }
-
-/* Logo cleanup: keep the mark clean, without decorative contour rings. */
-:where(.hd-app-logo, .aether-logo, .hd-entry-logo, img[alt*="logo" i], img[alt*="heavenly" i]) {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  filter: none !important;
-}
-
-:where(.aether-logo-shell, .hd-entry-logo-shell, .hd-mobile-login-logo) {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  filter: none !important;
-}
-
-:where(.aether-logo-shell, .hd-entry-logo-shell)::before,
-:where(.aether-logo-shell, .hd-entry-logo-shell)::after,
-:where(.hd-entry-logo-glow, .aether-logo-glow) {
-  display: none !important;
-}

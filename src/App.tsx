@@ -6,7 +6,6 @@ import Logo from './components/ui/Logo';
 import { MatrixInput } from './components/ui/MatrixInput';
 import { MatrixText } from './components/ui/matrix-text';
 import { LoadingOverlay } from './components/ui/LoadingOverlay';
-import AetherFlowHero from './components/ui/aether-flow-hero';
 import { Camera, X, Shield, Smartphone, Lock, Eye, EyeOff, ArrowLeft, Crown, Binoculars, ClipboardList, UserPlus, Fingerprint, ArrowRight, Activity, Tag } from 'lucide-react';
 import { clearSession as clearApiSession, forgetRememberedUsername, loadRememberedUsername, persistSession, rememberUsername } from './lib/apiClient';
 
@@ -311,7 +310,7 @@ export default function App() {
       )}
 
       {!role && (
-        <AetherFlowHero mode="background" className="z-0 opacity-80" />
+        <div className="aether-clean-bg absolute inset-0 z-0 pointer-events-none" aria-hidden="true" />
       )}
       {/* Role Selector */}
       {role === null && pendingRole === null && !isRegistering && (

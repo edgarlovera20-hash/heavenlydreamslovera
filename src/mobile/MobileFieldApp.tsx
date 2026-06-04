@@ -1129,7 +1129,7 @@ function LoginView({ onLogin, onNotice, onRegister }: { onLogin: (session: Sessi
     <main className="hd-cyber-screen hd-mobile-login-screen min-h-dvh px-5 py-8">
       <div className="hd-mobile-login-shell mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center">
         <div className="hd-mobile-login-brand mb-8 flex flex-col items-center text-center">
-          <div className="hd-mobile-login-logo mb-5 flex h-32 w-32 items-center justify-center text-cyber-neon">
+          <div className="hd-mobile-login-logo mb-5 flex h-32 w-32 items-center justify-center rounded-[2rem] border bg-white/10 text-cyber-neon">
             <Logo className="h-28 w-28" />
           </div>
           <h1 className="text-center text-3xl font-semibold tracking-[0.08em] text-slate-50">Heavenly Dreams</h1>

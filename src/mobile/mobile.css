@@ -4,7 +4,7 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --color-cyber-electric: #12dfff;
   --color-cyber-deep: #063a78;
-  --color-cyber-dark: var(--hd-color-card, #161F33);
+  --color-cyber-dark: #061b3a;
   --color-cyber-black: #031126;
   --color-cyber-neon: #67f4ff;
   --color-cyber-matrix: #40e9b4;
@@ -12,10 +12,10 @@
 
 @layer base {
   :root {
-    --hd-mobile-bg: var(--hd-color-bg, #0A0F1C);
-    --hd-mobile-bg-soft: var(--hd-color-bg-secondary, #111827);
-    --hd-mobile-panel: var(--hd-color-card, #161F33);
-    --hd-mobile-panel-2: var(--hd-color-bg-secondary, #111827);
+    --hd-mobile-bg: #071426;
+    --hd-mobile-bg-soft: #082a5e;
+    --hd-mobile-panel: #061b3a;
+    --hd-mobile-panel-2: #082a5e;
     --hd-mobile-border: rgba(18, 223, 255, 0.26);
     --hd-mobile-border-strong: rgba(103, 244, 255, 0.66);
     --hd-mobile-text: #ffffff;
@@ -2383,16 +2383,4 @@ body,
   #mobile-root :where(a, button.hd-no-liquid, .hd-no-liquid) {
     --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
   }
-}
-
-/* Logo cleanup: mobile login mark without exterior contour. */
-#mobile-root :where(.hd-mobile-login-logo, .hd-app-logo, img[alt*="logo" i], img[alt*="heavenly" i]) {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  filter: none !important;
-}
-
-#mobile-root .hd-mobile-login-logo :where(picture, img, svg) {
-  object-fit: contain !important;
 }
