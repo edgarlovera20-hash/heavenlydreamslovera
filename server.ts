@@ -22,6 +22,13 @@ import {
   hasWhatsAppCredentials,
   type WaMessage,
 } from "./server/whatsapp";
+import {
+  getWhatsAppCloudStatus,
+  ingestWhatsAppCloudWebhook,
+  sendWhatsAppCloudMessage,
+  verifyWhatsAppCloudChallenge,
+  verifyWhatsAppCloudSignature,
+} from "./server/whatsapp-cloud";
 import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, sendTelegramVideo, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
 import { runIneOcr, runComprobanteOcr, runSiacOcr, checkOcrStatus } from "./server/ocr-service";
 import db, {
@@ -869,6 +876,11 @@ async function startServer() {
     return Settings.get('client_chat_agent_enabled') === true;
   }
 
+  function clientChatWhatsappEngine(): 'baileys' | 'cloud-api' {
+    const saved = String(Settings.get('client_chat_whatsapp_engine') || process.env.CLIENT_CHAT_WHATSAPP_ENGINE || '').trim().toLowerCase();
+    return saved === 'cloud-api' || saved === 'cloud' || saved === 'meta' ? 'cloud-api' : 'baileys';
+  }
+
   function validationAutoEnabled() {
     const saved = Settings.get('validation_calls_auto_enabled');
     if (saved !== null) return saved === true;
@@ -1051,7 +1063,10 @@ async function startServer() {
   async function sendClientChatMessage(client: any, type: string, message: string) {
     const phone = clientChatPhone(client);
     if (phone.length !== 10) throw new Error('Cliente sin WhatsApp valido de 10 digitos');
-    const result = await sendWhatsAppClientMessage(phone, message);
+    const engine = clientChatWhatsappEngine();
+    const result = engine === 'cloud-api'
+      ? await sendWhatsAppCloudMessage(phone, message)
+      : await sendWhatsAppClientMessage(phone, message);
     markClientChatContact(client, type, message);
     return result;
   }
@@ -3659,9 +3674,24 @@ async function startServer() {
 
   function withLiveChannelAccountStatus(row: any) {
     if (row?.channel !== 'whatsapp') return row;
+    const metadata = parseMetadata(row.metadata);
+    if (metadata.engine === 'cloud-api') {
+      const live = getWhatsAppCloudStatus();
+      return {
+        ...row,
+        status: live.status || row.status,
+        metadata: JSON.stringify({
+          ...metadata,
+          account: 'seguimiento',
+          liveStatus: live.status || row.status,
+          configured: live.configured,
+          engine: 'cloud-api',
+          webhookPath: live.webhookPath,
+        }),
+      };
+    }
     const account = whatsappAccountFromRow(row);
     const live = getWhatsAppStatus(account) as any;
-    const metadata = parseMetadata(row.metadata);
     return {
       ...row,
       status: live.status || row.status,
@@ -3688,10 +3718,58 @@ async function startServer() {
     return safeStatus;
   };
 
+  app.get("/webhooks/whatsapp-cloud", wrap((req: any, res: any) => {
+    const challenge = verifyWhatsAppCloudChallenge(req.query);
+    if (challenge == null) return res.sendStatus(403);
+    res.type('text/plain').send(challenge);
+  }));
+
+  app.post("/webhooks/whatsapp-cloud", wrap(async (req: any, res: any) => {
+    if (!verifyWhatsAppCloudSignature(req.rawBody || Buffer.from(''), req.headers?.['x-hub-signature-256'])) {
+      return res.status(403).json({ error: 'Firma de Meta invalida' });
+    }
+    await ingestWhatsAppCloudWebhook(req.body);
+    res.status(200).send('EVENT_RECEIVED');
+  }));
+
   app.get("/api/whatsapp/status", chatUserOnly, (req: any, res) => {
     const account = req.query?.account ? whatsappAccountFromReq(req) : undefined;
     res.json(safeWhatsAppStatus(getWhatsAppStatus(account), req.auth?.role));
   });
+
+  app.get("/api/whatsapp-cloud/status", chatUserOnly, wrap((_req: any, res: any) => {
+    res.json(getWhatsAppCloudStatus());
+  }));
+
+  app.post("/api/whatsapp-cloud/send", chatUserOnly, wrap(async (req: any, res: any) => {
+    const { phone, message } = req.body;
+    if (!phone || !message) return res.status(400).json({ error: 'phone y message son requeridos' });
+    res.json(await sendWhatsAppCloudMessage(phone, message));
+  }));
+
+  app.get("/api/client-chat-crm/whatsapp-engine", authOnly, wrap((_req: any, res: any) => {
+    res.json({
+      engine: clientChatWhatsappEngine(),
+      baileys: getWhatsAppStatus('clientes'),
+      cloud: getWhatsAppCloudStatus(),
+    });
+  }));
+
+  app.post("/api/client-chat-crm/whatsapp-engine", opsOnly, wrap((req: any, res: any) => {
+    const engine = String(req.body?.engine || '').trim().toLowerCase();
+    if (!['baileys', 'cloud-api'].includes(engine)) return res.status(400).json({ error: 'engine invalido' });
+    Settings.set('client_chat_whatsapp_engine', engine);
+    AuditLog.insert({
+      accion: 'CLIENT_CHAT_WHATSAPP_ENGINE_CHANGED',
+      entidad: 'settings',
+      entidad_id: 'client_chat_whatsapp_engine',
+      user_id: req.auth?.sub || null,
+      user_nombre: req.auth?.username || req.auth?.name || null,
+      detalle: engine,
+    });
+    res.json({ ok: true, engine, cloud: getWhatsAppCloudStatus(), baileys: getWhatsAppStatus('clientes') });
+  }));
+
   app.get("/api/whatsapp/qr", managerOnly, (req: any, res) => {
     const account = whatsappAccountFromReq(req);
     res.json({ account, qr: getWhatsAppQR(account), status: getWhatsAppStatus(account) });

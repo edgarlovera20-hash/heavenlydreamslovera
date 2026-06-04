@@ -64,7 +64,12 @@ export function createApp() {
     ],
     express.json({ limit: largeJsonLimit }),
   );
-  app.use(express.json({ limit: defaultJsonLimit }));
+  app.use(express.json({
+    limit: defaultJsonLimit,
+    verify: (req: any, _res, buf) => {
+      req.rawBody = Buffer.from(buf);
+    },
+  }));
   app.use(requestLogger);
   return app;
 }
