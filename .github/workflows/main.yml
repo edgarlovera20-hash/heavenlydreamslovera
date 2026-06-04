@@ -1,0 +1,6 @@
+Settings → Secrets and variables → Actions → New repository secret
+
+SERVER_HOST = 159.89.87.91
+SERVER_USER = elovera9719@gmail.com
+SERVER_PASSWORD = Elovera9984+
+SERVER_PORT = 22
