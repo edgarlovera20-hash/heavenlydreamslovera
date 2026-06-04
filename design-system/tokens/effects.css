@@ -1,0 +1,11 @@
+:root {
+  --hd-shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.22);
+  --hd-shadow-md: 0 18px 48px rgba(0, 0, 0, 0.28);
+  --hd-shadow-lg: 0 28px 80px rgba(0, 0, 0, 0.36);
+  --hd-glow-primary: 0 0 0 1px rgba(56, 189, 248, 0.18), 0 18px 48px rgba(0, 102, 255, 0.18);
+  --hd-blur-glass: blur(18px);
+  --hd-duration-fast: 150ms;
+  --hd-duration-base: 250ms;
+  --hd-duration-slow: 350ms;
+  --hd-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}

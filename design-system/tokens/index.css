@@ -1,0 +1,38 @@
+@import url("./colors.css");
+@import url("./typography.css");
+@import url("./spacing.css");
+@import url("./effects.css");
+
+:root {
+  --hd-focus-ring: 0 0 0 3px rgba(56, 189, 248, 0.28);
+}
+
+html {
+  background: var(--hd-color-bg);
+  color: var(--hd-color-text);
+  font-family: var(--hd-font-primary);
+}
+
+body {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(0, 102, 255, 0.2), transparent 32rem),
+    radial-gradient(circle at 88% 18%, rgba(56, 189, 248, 0.14), transparent 28rem),
+    linear-gradient(180deg, var(--hd-color-bg), var(--hd-color-bg-secondary));
+  color: var(--hd-color-text);
+  font-family: var(--hd-font-primary);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--hd-font-secondary);
+  letter-spacing: 0;
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.32);
+  color: var(--hd-color-text);
+}
