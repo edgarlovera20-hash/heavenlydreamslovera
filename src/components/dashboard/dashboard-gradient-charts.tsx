@@ -111,7 +111,7 @@ export function DashboardGradientCharts({
           ]}
         />
       </div>
-      <div className="xl:col-span-6 rounded-2xl border border-cyan-300/20 bg-[#061b3a] p-4 shadow-[0_16px_38px_rgba(0,5,20,0.34),0_0_18px_rgba(18,223,255,0.08)]">
+      <div className="xl:col-span-6 hd-card rounded-[var(--hd-radius-lg)] border-[color:var(--hd-color-border)] bg-[var(--hd-color-glass)] p-4 shadow-[var(--hd-shadow-sm)]">
         <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-300">
           <Badge variant="cyan" dot><MessageCircle className="h-3 w-3" /> {conversations} conversaciones</Badge>
           <Badge variant="orange" dot>{pendingApprovals} aprobaciones IA</Badge>

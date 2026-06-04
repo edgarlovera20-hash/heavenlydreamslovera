@@ -33,7 +33,7 @@ export type GradientAreaChartProps<T extends Record<string, any>> = {
   compact?: boolean;
 };
 
-const DEFAULT_COLORS = ['#00D9FF', '#005EFF', '#00FF85', '#A855F7', '#FF8A1F'];
+const DEFAULT_COLORS = ['#38BDF8', '#0066FF', '#22C55E', '#00A3FF', '#F59E0B'];
 
 function ChartTooltip({
   active,
@@ -43,7 +43,7 @@ function ChartTooltip({
 }: any & { valueFormatter?: (value: number, key: string) => string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-2xl border border-cyan-200/24 bg-[#061b3a] px-4 py-3 text-xs shadow-[0_16px_34px_rgba(0,5,20,0.36),0_0_18px_rgba(18,223,255,0.12)]">
+    <div className="hd-card rounded-[var(--hd-radius-lg)] border-[color:var(--hd-color-border)] bg-[var(--hd-color-glass)] px-4 py-3 text-xs shadow-[var(--hd-shadow-sm)]">
       <p className="mb-2 font-black uppercase tracking-[0.18em] text-cyan-100/80">{label}</p>
       <div className="space-y-1.5">
         {payload.map((item: any) => (

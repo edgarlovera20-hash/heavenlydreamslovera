@@ -5,12 +5,13 @@
   "start_url": "/m/",
   "scope": "/m/",
   "display": "standalone",
-  "background_color": "#07111f",
-  "theme_color": "#071527",
+  "background_color": "#0A0F1C",
+  "theme_color": "#0066FF",
   "orientation": "portrait-primary",
   "icons": [
     { "src": "/logo-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/heavenly-dreams-brand.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
   ],
   "shortcuts": [
     { "name": "Nueva venta", "short_name": "Venta", "url": "/m/?section=venta", "description": "Capturar nueva venta" },
