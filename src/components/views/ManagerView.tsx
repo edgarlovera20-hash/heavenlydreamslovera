@@ -288,7 +288,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       <aside className="hd-holographic-sidebar w-64 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col min-h-0 relative z-20">
         
         <div className="h-32 flex flex-col items-center justify-center px-5 relative overflow-hidden border-b border-white/5 gap-2 z-10">
-          <Logo className="w-16 h-16 drop-shadow-[0_0_14px_rgba(0,168,255,0.22)] hover:scale-105 transition-transform duration-500" />
+          <Logo className="w-16 h-16 hover:scale-105 transition-transform duration-500" />
           <div className="text-center">
             <h1 className="text-sm font-semibold text-white tracking-[0.08em] leading-none">Heavenly Dreams</h1>
             <p className="text-[10px] text-cyan-300/70 tracking-[0.08em] font-semibold mt-1 leading-tight">

@@ -134,8 +134,7 @@ export default function MobileUserView({ role, onBack, currentUser: _currentUser
             <span className="hidden sm:inline-block ml-1">Regresar</span>
           </button>
           <div className="relative">
-            <div className="absolute inset-0 bg-cyber-neon/20 blur-md rounded-full"></div>
-            <Logo className="w-12 h-12 sm:w-16 sm:h-16 relative z-10 drop-shadow-[0_0_18px_rgba(34,255,136,0.38)]" />
+            <Logo className="w-12 h-12 sm:w-16 sm:h-16 relative z-10" />
           </div>
           <div className="min-w-0">
             <h1 className="truncate text-sm sm:text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyber-neon to-cyber-electric tracking-tight leading-tight">Heavenly Dreams</h1>
