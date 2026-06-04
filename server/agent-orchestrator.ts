@@ -17,6 +17,18 @@ import { findAgentVideoForQuestion, type AgentVideoAudience } from './agent-vide
 
 type Intent = 'venta' | 'consulta_folio' | 'soporte' | 'morosidad' | 'busqueda_web' | 'otro';
 type ProposedAction = 'create_sale' | 'update_lead' | 'schedule_followup' | 'escalate_human';
+export type AgentRouteKey =
+  | 'supervisor'
+  | 'capturista'
+  | 'consultor'
+  | 'telmex'
+  | 'clientes'
+  | 'cobranza'
+  | 'seguimiento'
+  | 'promotores'
+  | 'calidad'
+  | 'archivero'
+  | 'validador';
 
 interface AgentDecision {
   intent: Intent;
@@ -25,6 +37,17 @@ interface AgentDecision {
   proposedReply?: string;
   proposedActions: ProposedAction[];
   requiresApproval: true;
+}
+
+export interface SupervisorRoute {
+  nextAgent: AgentRouteKey;
+  handoffFrom: string | null;
+  reason: string;
+  channel: string;
+  audience: AgentVideoAudience;
+  intent: Intent;
+  stage: string;
+  confidence: number;
 }
 
 type SendChannelMessage = (channel: string, target: string, message: string, payload?: any) => Promise<any>;
@@ -77,6 +100,69 @@ function profileIdForConversation(conversation: any) {
 function agentLabelForDecision(conversation: any, decision: AgentDecision) {
   if (conversationAudience(conversation) === 'clientes') return 'atencion_cliente';
   return decision.intent === 'venta' ? 'capturista' : decision.intent === 'consulta_folio' ? 'consultor' : 'recepcionista_promotores';
+}
+
+function routeReason(nextAgent: AgentRouteKey, intent: Intent, audience: AgentVideoAudience) {
+  const labels: Record<AgentRouteKey, string> = {
+    supervisor: 'Supervision y ruteo',
+    capturista: 'Captura de venta o alta detectada',
+    consultor: 'Consulta de folio, SIAC o estatus',
+    telmex: 'Informacion externa, paquetes, cobertura o ruta',
+    clientes: 'Atencion general para cliente final',
+    cobranza: 'Pago, adeudo, morosidad o convenio',
+    seguimiento: 'Seguimiento de cliente o continuidad post etapa',
+    promotores: 'Recepcion general de promotores',
+    calidad: 'Revision de datos, documentos o calidad de captura',
+    archivero: 'Gestion documental',
+    validador: 'Validacion operativa',
+  };
+  return `${labels[nextAgent] || 'Ruta operativa'} (${audience}, intent=${intent})`;
+}
+
+function classifyOperationalStage(conversation: any, decision: AgentDecision) {
+  const current = String(conversation?.status || conversation?.memory?.stage || '').toLowerCase();
+  if (/venta_creada|captura_pendiente|datos_incompletos/.test(current)) return current;
+  return nextStatus(decision);
+}
+
+function supervisorRouteForDecision(conversation: any, message: any, decision: AgentDecision): SupervisorRoute {
+  const audience = conversationAudience(conversation);
+  const text = messageTextForUnderstanding(message).toLowerCase();
+  const stage = classifyOperationalStage(conversation, decision);
+  let nextAgent: AgentRouteKey = audience === 'clientes' ? 'clientes' : 'promotores';
+
+  if (decision.intent === 'morosidad' || /\b(pago|pagar|adeudo|debo|atraso|convenio|cobranza)\b/i.test(text)) {
+    nextAgent = 'cobranza';
+  } else if (decision.intent === 'consulta_folio' || /\b(folio|siac|estatus)\b/i.test(text)) {
+    nextAgent = 'consultor';
+  } else if (decision.intent === 'busqueda_web' || shouldUseWebSearch(text) || /\b(telmex|cobertura|paquete|fibra|mapa|ruta|como llegar)\b/i.test(text)) {
+    nextAgent = 'telmex';
+  } else if (decision.intent === 'venta') {
+    nextAgent = audience === 'clientes' ? 'seguimiento' : 'capturista';
+  } else if (audience === 'clientes') {
+    nextAgent = /seguimiento|post|agenda|instalaci[oó]n|cita|reagendar|confirmar/.test(text)
+      ? 'seguimiento'
+      : 'clientes';
+  } else if (/documento|ine|comprobante|expediente|archivo|pdf|foto/.test(text)) {
+    nextAgent = 'archivero';
+  } else if (/validar|validacion|llamada|otp|firma|confirmar datos/.test(text)) {
+    nextAgent = 'validador';
+  }
+
+  if (/venta_creada|captura_pendiente_aprobacion/.test(stage) && nextAgent === 'capturista') nextAgent = 'seguimiento';
+  if (/datos_incompletos/.test(stage) && /documento|ine|comprobante|expediente|archivo|pdf|foto/.test(text)) nextAgent = 'archivero';
+
+  const handoffFrom = String(conversation?.memory?.supervisor?.nextAgent || conversation?.memory?.lastAgent || conversation?.assigned_to || '').trim() || null;
+  return {
+    nextAgent,
+    handoffFrom,
+    reason: routeReason(nextAgent, decision.intent, audience),
+    channel: conversation?.channel || 'unknown',
+    audience,
+    intent: decision.intent,
+    stage,
+    confidence: decision.confidence,
+  };
 }
 
 function firstNameForDecision(conversation: any, decision: AgentDecision) {
@@ -1269,7 +1355,7 @@ function nextStatus(decision: AgentDecision) {
   return 'calificando';
 }
 
-function mergeMemory(conversation: any, decision: AgentDecision) {
+function mergeMemory(conversation: any, decision: AgentDecision, supervisor?: SupervisorRoute) {
   const previous = conversation?.memory || {};
   const transientFields = new Set([
     'missing',
@@ -1336,8 +1422,14 @@ function mergeMemory(conversation: any, decision: AgentDecision) {
     summary: decision.intent === 'venta'
       ? `Cliente interesado en venta. Datos conocidos: ${Object.keys(knownFields).join(', ') || 'sin datos completos'}.`
       : `Ultima intencion detectada: ${decision.intent}.`,
-    stage: nextStatus(decision),
-    lastAgent: agentLabelForDecision(conversation, decision),
+    stage: supervisor?.stage || nextStatus(decision),
+    lastAgent: supervisor?.nextAgent || agentLabelForDecision(conversation, decision),
+    supervisor: supervisor ? {
+      ...(previous.supervisor || {}),
+      ...supervisor,
+      previousAgent: supervisor.handoffFrom,
+      routedAt: new Date().toISOString(),
+    } : previous.supervisor,
     nextAction: decision.proposedActions.length ? decision.proposedActions.join(',') : 'responder',
     updatedAt: new Date().toISOString(),
   };
@@ -1434,15 +1526,40 @@ export async function runAgentForMessage(conversation: any, message: any) {
   if (!conversation || !message || message.direction === 'outgoing') return null;
   if (ChannelMessages.getById(message.id)?.direction !== 'incoming') return null;
   const existing = AgentDecisions.getByMessage(message.id);
-  if (existing) return { decision: existing, duplicate: true };
+  if (existing) {
+    const route = supervisorRouteForDecision(conversation, message, {
+      intent: normalizeIntent(existing.intent, 'otro'),
+      confidence: Number(existing.confidence || 0.5),
+      extractedFields: existing.extractedFields || {},
+      proposedReply: existing.proposed_reply || existing.proposedReply || undefined,
+      proposedActions: Array.isArray(existing.proposedActions) ? existing.proposedActions : [],
+      requiresApproval: true,
+    });
+    ChannelConversations.update(conversation.id, {
+      assigned_to: route.nextAgent,
+      status: route.stage,
+      intent: route.intent,
+      confidence: route.confidence,
+      memory: mergeMemory(conversation, {
+        intent: route.intent,
+        confidence: route.confidence,
+        extractedFields: existing.extractedFields || {},
+        proposedReply: existing.proposed_reply || existing.proposedReply || undefined,
+        proposedActions: Array.isArray(existing.proposedActions) ? existing.proposedActions : [],
+        requiresApproval: true,
+      }, route),
+    });
+    return { decision: existing, supervisor: route, duplicate: true };
+  }
 
   const decision = await decide(conversation, message);
+  const supervisor = supervisorRouteForDecision(conversation, message, decision);
   const decisionId = randomUUID();
   AgentDecisions.create({
     id: decisionId,
     conversation_id: conversation.id,
     message_id: message.id,
-    agent: agentLabelForDecision(conversation, decision),
+    agent: supervisor.nextAgent,
     intent: decision.intent,
     confidence: decision.confidence,
     extracted_fields: decision.extractedFields,
@@ -1453,15 +1570,17 @@ export async function runAgentForMessage(conversation: any, message: any) {
   });
 
   ChannelConversations.update(conversation.id, {
-    status: nextStatus(decision),
+    status: supervisor.stage,
+    assigned_to: supervisor.nextAgent,
     intent: decision.intent,
     confidence: decision.confidence,
-    memory: mergeMemory(conversation, decision),
+    memory: mergeMemory(conversation, decision, supervisor),
   });
 
   const outbox = createOutboxItems(conversation, message, decisionId, decision);
-  recordMetric('agent.decision.created', { intent: decision.intent, channel: conversation.channel });
-  return { decision: { id: decisionId, ...decision }, outbox };
+  recordMetric('agent.decision.created', { intent: decision.intent, channel: conversation.channel, routedTo: supervisor.nextAgent });
+  recordMetric('agent.supervisor.routed', { intent: decision.intent, channel: conversation.channel, routedTo: supervisor.nextAgent, audience: supervisor.audience });
+  return { decision: { id: decisionId, ...decision }, supervisor, outbox };
 }
 
 export async function runAgentForConversation(conversationId: string) {
@@ -1471,6 +1590,23 @@ export async function runAgentForConversation(conversationId: string) {
   const lastIncoming = [...messages].reverse().find((msg: any) => msg.direction === 'incoming');
   if (!lastIncoming) return { ok: true, idle: true };
   return runAgentForMessage(conversation, lastIncoming);
+}
+
+export async function superviseConversation(conversationId: string) {
+  const conversation = ChannelConversations.getById(conversationId);
+  if (!conversation) throw new Error('Conversacion no encontrada');
+  const messages = ChannelMessages.getByConversation(conversationId, 200);
+  const lastIncoming = [...messages].reverse().find((msg: any) => msg.direction === 'incoming');
+  if (!lastIncoming) return { ok: true, idle: true, reason: 'sin_mensaje_entrante' };
+  const result: any = await runAgentForMessage(conversation, lastIncoming);
+  return {
+    ok: true,
+    conversationId,
+    routedTo: result?.supervisor?.nextAgent || conversation.assigned_to || conversation.memory?.supervisor?.nextAgent || null,
+    supervisor: result?.supervisor || conversation.memory?.supervisor || null,
+    duplicate: Boolean(result?.duplicate),
+    idle: Boolean(result?.idle),
+  };
 }
 
 function salePayloadFromOutbox(item: any, actor: any) {

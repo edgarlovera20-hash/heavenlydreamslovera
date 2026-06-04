@@ -123,6 +123,7 @@ import {
   rejectAgentOutbox,
   runAgentForConversation,
   runAgentForMessage,
+  superviseConversation,
 } from "./server/agent-orchestrator";
 import { registerFinanceEnterpriseRoutes } from "./server/finance-enterprise";
 import { registerDiditRoutes } from "./server/didit";
@@ -3901,6 +3902,10 @@ async function startServer() {
     res.json(await runAgentForConversation(req.params.id) || { ok: true, idle: true });
   }));
 
+  app.post("/api/agents/conversations/:id/supervise", chatUserOnly, wrap(async (req: any, res: any) => {
+    res.json(await superviseConversation(req.params.id));
+  }));
+
   app.get("/api/agents/outbox", chatUserOnly, wrap((req: any, res: any) => {
     res.json(AgentOutbox.getAll(parseLimit(req.query.limit, 200, 500)));
   }));
@@ -3961,6 +3966,7 @@ async function startServer() {
   // ── AGENTES AUTÓNOMOS ─────────────────────────────────────
   // Estado de agentes en memoria
   const agentState: Record<string, { active: boolean; lastRun: string | null; processed: number; errors: number }> = {
+    supervisor:  { active: false, lastRun: null, processed: 0, errors: 0 },
     capturista:  { active: false, lastRun: null, processed: 0, errors: 0 },
     archivero:   { active: false, lastRun: null, processed: 0, errors: 0 },
     consultor:   { active: false, lastRun: null, processed: 0, errors: 0 },
@@ -3974,7 +3980,7 @@ async function startServer() {
   };
 
   const agentTimers: Record<string, ReturnType<typeof setInterval> | null> = {
-    capturista: null, archivero: null, consultor: null, telmex: null, validador: null, promotores: null, clientes: null, cobranza: null, seguimiento: null, calidad: null,
+    supervisor: null, capturista: null, archivero: null, consultor: null, telmex: null, validador: null, promotores: null, clientes: null, cobranza: null, seguimiento: null, calidad: null,
   };
 
   const AGENT_STATE_SETTINGS_KEY = 'agent_runtime_state_v1';
@@ -4074,6 +4080,36 @@ async function startServer() {
         await replyToMsg(msg, 'Envía el número de folio para consultar. Ej: folio 123456');
       }
     }
+  }
+
+  async function runSupervisorAgent() {
+    const conversations = getChannelConversations(160).filter((conversation: any) => {
+      const channel = String(conversation.channel || '').toLowerCase();
+      const status = String(conversation.status || '').toLowerCase();
+      if (!['whatsapp', 'telegram'].includes(channel)) return false;
+      if (['cerrado', 'closed', 'venta_creada'].includes(status)) return false;
+      return true;
+    });
+    let processed = 0;
+    for (const conversation of conversations) {
+      try {
+        const result: any = await runAgentForConversation(conversation.id);
+        if (result && !result.idle) {
+          if (!result.duplicate) await autoSendAriuxReplies(result);
+          const routedTo = result.supervisor?.nextAgent;
+          if (routedTo && agentState[routedTo]) {
+            agentState[routedTo].processed++;
+            agentState[routedTo].lastRun = new Date().toISOString();
+          }
+          processed++;
+        }
+      } catch (err: any) {
+        agentState.supervisor.errors++;
+        console.warn('[ARIUX Supervisor] No pudo enrutar conversacion:', err?.message || err);
+      }
+    }
+    agentState.supervisor.processed += processed;
+    agentState.supervisor.lastRun = new Date().toISOString();
   }
 
   // Agente Capturista: detecta ventas en WA + Telegram
@@ -4452,8 +4488,14 @@ async function startServer() {
       if (!result || result.duplicate) return;
       await autoSendAriuxReplies(result);
       const intent = result.decision?.intent;
+      const routedTo = result.supervisor?.nextAgent;
       const audience = result.decision?.extractedFields?.audience || conversation.memory?.audience || (String(conversation.external_chat_id || '').startsWith('clientes:') ? 'clientes' : 'promotores');
-      if (audience === 'clientes') {
+      agentState.supervisor.processed++;
+      agentState.supervisor.lastRun = new Date().toISOString();
+      if (routedTo && agentState[routedTo]) {
+        agentState[routedTo].processed++;
+        agentState[routedTo].lastRun = new Date().toISOString();
+      } else if (audience === 'clientes') {
         agentState.clientes.processed++;
         agentState.clientes.lastRun = new Date().toISOString();
       } else if (intent === 'venta') {
@@ -4473,6 +4515,7 @@ async function startServer() {
       }
       persistAgentState();
     } catch (err: any) {
+      agentState.supervisor.errors++;
       agentState.capturista.errors++;
       persistAgentState();
       console.warn('[ARIUX] Error procesando mensaje entrante:', err?.message || err);
@@ -4483,6 +4526,7 @@ async function startServer() {
   setTelegramMessageHandler(() => {});
 
   const AGENT_RUNNERS: Record<string, () => Promise<void>> = {
+    supervisor: async () => { await runSupervisorAgent(); await autoSendPendingAriuxReplies(); },
     capturista: async () => { await runCapturistaAgent(); await autoSendPendingAriuxReplies(); },
     consultor: async () => { await runConsultorAgent(); await autoSendPendingAriuxReplies(); },
     telmex: async () => { await runTelmexAgent(); await autoSendPendingAriuxReplies(); },
