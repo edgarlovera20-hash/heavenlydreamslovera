@@ -2690,7 +2690,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                         )}
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <label className="border-2 border-dashed border-amber-500/40 bg-amber-500/10 rounded-xl p-5 text-center hover:bg-amber-500/20 transition-colors cursor-pointer flex flex-col items-center gap-2">
                           <input type="file" accept="image/*,application/pdf" className="hidden"
                             onChange={e => handleComprobanteUpload(e.target.files?.[0])} />

@@ -238,7 +238,7 @@ export default function UserManagementView() {
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button onClick={() => setFilter('pending')} className={`bg-[#0a0d14] border rounded-[14px] p-4 text-left transition-all hover:border-yellow-400/50 ${filter === 'pending' ? 'border-yellow-400/60' : 'border-slate-800/80'}`}>
           <div className="flex items-center gap-2 mb-1"><Clock className="w-4 h-4 text-yellow-400" /><span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Pendientes</span></div>
           <p className="text-3xl font-bold text-yellow-400">{pending}</p>

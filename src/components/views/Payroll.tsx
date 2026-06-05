@@ -433,12 +433,12 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[180px_180px_1fr_auto] gap-5 items-end">
+        <div className="grid grid-cols-1 gap-4 items-end md:grid-cols-2 lg:grid-cols-[160px_160px_minmax(220px,1fr)_auto]">
           <div>
             <label className="block text-lg font-bold text-slate-100 mb-2">Año</label>
             <input
               type="number"
-              className="w-full bg-blue-950/45 border border-blue-300/20 rounded-xl px-5 py-4 text-2xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+              className="w-full bg-blue-950/45 border border-blue-300/20 rounded-xl px-4 py-3 text-base font-semibold text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400/50 md:text-lg"
               value={year}
               onChange={(event) => setYear(event.target.value)}
             />
@@ -449,7 +449,7 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
               type="number"
               min={1}
               max={53}
-              className="w-full bg-blue-950/45 border border-blue-300/20 rounded-xl px-5 py-4 text-2xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+              className="w-full bg-blue-950/45 border border-blue-300/20 rounded-xl px-4 py-3 text-base font-semibold text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400/50 md:text-lg"
               value={week}
               onChange={(event) => setWeek(event.target.value)}
             />
@@ -457,7 +457,7 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
           <div>
             <label className="block text-lg font-bold text-slate-100 mb-2">Usuario</label>
             <select
-              className="w-full bg-blue-950/45 border border-blue-300/20 rounded-xl px-5 py-4 text-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+              className="w-full bg-blue-950/45 border border-blue-300/20 rounded-xl px-4 py-3 text-base font-semibold text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400/50 md:text-lg"
               value={userId}
               onChange={(event) => setUserId(event.target.value)}
             >
@@ -469,7 +469,7 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
           <button
             type="button"
             onClick={runSearch}
-            className="h-[62px] px-8 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-lg font-black shadow-lg shadow-blue-500/20 flex items-center justify-center gap-3"
+            className="min-h-12 w-full px-6 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-black shadow-lg shadow-blue-500/20 flex items-center justify-center gap-3 lg:w-auto"
           >
             <Search className="w-5 h-5" />
             Buscar

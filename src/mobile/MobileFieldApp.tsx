@@ -4591,7 +4591,7 @@ export default function MobileFieldApp() {
               ))}
             </div>
           )}
-          <button onClick={clearDraft} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-amber-300/20 bg-amber-300/10 font-black text-amber-100">
+          <button onClick={() => clearDraft()} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-amber-300/20 bg-amber-300/10 font-black text-amber-100">
             <MobileIcon name="cloud-off" className="h-4 w-4" />
             Limpiar borrador offline
           </button>

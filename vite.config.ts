@@ -21,8 +21,8 @@ export default defineConfig(({mode}) => {
     build: {
       target: 'esnext',
       sourcemap: false,
-      modulePreload: false,
-      chunkSizeWarningLimit: 1200,
+      modulePreload: true,
+      chunkSizeWarningLimit: 900,
       rollupOptions: {
         input: {
           app: path.resolve(__dirname, 'index.html'),

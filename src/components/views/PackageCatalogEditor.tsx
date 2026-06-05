@@ -144,7 +144,7 @@ export default function PackageCatalogEditor() {
             <p className="text-sm font-bold text-purple-400">Nuevo paquete</p>
             <button onClick={() => setShowNew(false)} className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-white/5"><X className="w-4 h-4" /></button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <FormRow label="Nombre"><input value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: Ultra 500MB" className={inputCls} /></FormRow>
             <FormRow label="Megas"><input type="number" value={form.megas} onChange={e => setForm(f => ({ ...f, megas: +e.target.value }))} className={inputCls} /></FormRow>
             <FormRow label="Renta mensual $"><input type="number" value={form.rentaMensual} onChange={e => setForm(f => ({ ...f, rentaMensual: +e.target.value }))} className={inputCls} /></FormRow>

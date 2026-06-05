@@ -109,13 +109,13 @@ export function PortabilidadAnexo({ data, onClose }: Props) {
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex flex-col items-center overflow-y-auto py-6 px-4">
       {/* Toolbar */}
-      <div className="w-full max-w-4xl flex items-center justify-between mb-4 flex-shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="w-full max-w-4xl flex flex-col gap-3 mb-4 flex-shrink-0 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
           <Phone className="w-5 h-5 text-blue-400" />
-          <span className="text-white font-semibold">Anexo de Portabilidad — Telmex</span>
-          <span className="text-slate-400 text-sm">(auto-llenado)</span>
+          <span className="min-w-0 truncate text-white font-semibold">Anexo de Portabilidad — Telmex</span>
+          <span className="hidden text-slate-400 text-sm sm:inline">(auto-llenado)</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={handlePrint} disabled={printing}
             className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-colors disabled:opacity-50">
             <Printer className="w-4 h-4" /> Imprimir
@@ -133,19 +133,20 @@ export function PortabilidadAnexo({ data, onClose }: Props) {
       </div>
 
       {/* Formulario imprimible */}
-      <div ref={printRef} className="bg-white w-full max-w-4xl p-8 rounded shadow-xl text-black" style={{ fontFamily: 'Arial, sans-serif', fontSize: '9pt' }}>
+      <div className="w-full max-w-4xl overflow-x-auto rounded shadow-xl">
+        <div ref={printRef} className="bg-white w-full min-w-[820px] p-8 text-black" style={{ fontFamily: 'Arial, sans-serif', fontSize: '9pt' }}>
 
-        {/* Header */}
-        <div className="flex justify-between items-start mb-2">
-          <div>
-            <p className="text-blue-700 font-bold text-lg">ANEXO ÚNICO</p>
-            <p className="font-bold text-sm">FORMATO DE SOLICITUD DE PORTABILIDAD DE NÚMERO(S) TELEFÓNICO(S)</p>
+          {/* Header */}
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <p className="text-blue-700 font-bold text-lg">ANEXO ÚNICO</p>
+              <p className="font-bold text-sm">FORMATO DE SOLICITUD DE PORTABILIDAD DE NÚMERO(S) TELEFÓNICO(S)</p>
+            </div>
+            <div className="text-right">
+              <p className="text-blue-700 font-black text-2xl tracking-tight">TELMEX<span className="text-sm align-super">®</span></p>
+              <p className="text-blue-700 text-xs">está contigo</p>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-blue-700 font-black text-2xl tracking-tight">TELMEX<span className="text-sm align-super">®</span></p>
-            <p className="text-blue-700 text-xs">está contigo</p>
-          </div>
-        </div>
 
         {/* Folio / Fecha / Hora */}
         <div className="flex items-center gap-6 mb-3 border border-black p-2">
@@ -340,6 +341,7 @@ export function PortabilidadAnexo({ data, onClose }: Props) {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

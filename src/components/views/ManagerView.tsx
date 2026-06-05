@@ -14,9 +14,11 @@ import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
 import { PremiumBadge, PremiumCard, PremiumKpiCard, SectionHeader } from '../ui/premium';
 import DashboardLayout from '../../layouts/dashboard-layout';
-import { DashboardGradientCharts } from '../dashboard/dashboard-gradient-charts';
 
 const Settings = lazy(() => import('./Settings'));
+const DashboardGradientCharts = lazy(() =>
+  import('../dashboard/dashboard-gradient-charts').then((module) => ({ default: module.DashboardGradientCharts }))
+);
 const Payroll = lazy(() => import('./Payroll'));
 const Announcements = lazy(() => import('./Announcements'));
 const CaptureValidation = lazy(() => import('./CaptureValidation'));
@@ -283,9 +285,9 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   };
 
   return (
-    <div className="hd-screen flex h-[100dvh] w-full min-w-0 text-white relative z-10 overflow-hidden">
+    <div className="hd-screen hd-app-shell flex h-[100dvh] w-full min-w-0 text-white relative z-10 overflow-hidden">
       {/* Sidebar */}
-      <aside className="hd-holographic-sidebar w-64 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col min-h-0 relative z-20">
+      <aside className="hd-holographic-sidebar hd-app-sidebar w-64 shrink-0 bg-[var(--hd-surface-strong)]/90 backdrop-blur-xl border-r border-[var(--hd-border)] hidden md:flex flex-col min-h-0 relative z-20">
         
         <div className="h-32 flex flex-col items-center justify-center px-5 relative overflow-hidden border-b border-white/5 gap-2 z-10">
           <Logo className="w-16 h-16 drop-shadow-[0_0_14px_rgba(0,168,255,0.22)] hover:scale-105 transition-transform duration-500" />
@@ -419,7 +421,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
+      <main className="hd-app-main flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
         <DashboardLayout
           activity={pendingSales > 0 || pendingUsers > 0 ? 'message' : waStatus === 'connected' || tgStatus === 'polling' ? 'active' : 'idle'}
           className="hd-module-stage flex min-h-0 flex-1 flex-col"
@@ -429,7 +431,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
           {/* Subtle Top Nav */}
-          <div className="hd-dashboard-breadcrumb shrink-0 px-6 py-4 flex items-center gap-2 w-full">
+          <div className="hd-dashboard-breadcrumb hd-topbar shrink-0 px-6 py-4 flex items-center gap-2 w-full">
              <button
                onClick={() => activeSection !== 'Dashboard' ? setActiveSection('Dashboard') : null}
                className="hd-no-liquid text-slate-500 hover:text-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 rounded p-1"
@@ -444,7 +446,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 </>
              )}
           </div>
-          <div className="hd-dashboard-clean flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar">
+          <div className="hd-dashboard-clean hd-scroll-zone flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar">
           {activeSection === 'Dashboard' && (
             <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                <SectionHeader
@@ -599,18 +601,20 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 </PremiumCard>
               </div>
 
-              <DashboardGradientCharts
-                userCount={userCount}
-                saleCount={saleCount}
-                approvedSales={approvedSales}
-                pendingSales={pendingSales}
-                rejectedSales={rejectedSales}
-                todaySales={todaySales}
-                conversations={channelSummary.conversations}
-                pendingApprovals={channelSummary.pendingApprovals}
-                inventoryItems={inventoryItems}
-                compact
-              />
+              <Suspense fallback={<SectionLoader />}>
+                <DashboardGradientCharts
+                  userCount={userCount}
+                  saleCount={saleCount}
+                  approvedSales={approvedSales}
+                  pendingSales={pendingSales}
+                  rejectedSales={rejectedSales}
+                  todaySales={todaySales}
+                  conversations={channelSummary.conversations}
+                  pendingApprovals={channelSummary.pendingApprovals}
+                  inventoryItems={inventoryItems}
+                  compact
+                />
+              </Suspense>
 
               {/* Quick Actions */}
               <PremiumCard className="p-6" tone="cyan">
