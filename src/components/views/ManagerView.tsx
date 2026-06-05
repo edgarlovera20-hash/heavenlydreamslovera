@@ -1,84 +1,46 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
-  BarChart3, Users, Activity, Bell,
-  LogOut, TrendingUp, ArrowUpRight, ArrowDownRight,
-  LayoutDashboard, Settings as SettingsIcon, ChevronRight,
-  User, ClipboardCheck, FileSearch, Wallet, Headphones, AlertTriangle, Megaphone, FolderOpen,
-  Database, Sun, Moon, Crown, Zap, Bot, Home, MessageSquare,
-  MapPin, CheckCircle2, Shield, Package, FileSpreadsheet, PhoneCall, ReceiptText, Target, DollarSign
+  Users, Bell,
+  LogOut, TrendingUp,
+  LayoutDashboard, Settings as SettingsIcon,
+  User, ClipboardCheck, FileSearch, Wallet, Headphones,
+  Sun, Moon, Crown, Zap, Bot, Home, MessageSquare,
+  CheckCircle2, PhoneCall, ReceiptText, Target, DollarSign
 } from 'lucide-react';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { useFollowUpReminders } from '../../hooks/useFollowUpReminders';
 import { OfflineBanner } from '../ui/OfflineBanner';
 import Logo from '../ui/Logo';
 import { CyberIcon } from '../ui/CyberIcon';
-import { PremiumBadge, PremiumCard, PremiumKpiCard, SectionHeader } from '../ui/premium';
+import { PremiumBadge, PremiumCard, SectionHeader } from '../ui/premium';
 import DashboardLayout from '../../layouts/dashboard-layout';
 
 const Settings = lazy(() => import('./Settings'));
-const DashboardGradientCharts = lazy(() =>
-  import('../dashboard/dashboard-gradient-charts').then((module) => ({ default: module.DashboardGradientCharts }))
-);
 const Payroll = lazy(() => import('./Payroll'));
-const Announcements = lazy(() => import('./Announcements'));
 const CaptureValidation = lazy(() => import('./CaptureValidation'));
 const Profile = lazy(() => import('./Profile'));
 const ConsultasSeguimiento = lazy(() => import('./ConsultasSeguimiento'));
 const CustomerSupport = lazy(() => import('./CustomerSupport'));
-const ClientChatCrmView = lazy(() => import('./ClientChatCrmView'));
-const Morosidad = lazy(() => import('./Morosidad'));
-const MyFilesView = lazy(() => import('./MyFilesView'));
 const Integrations = lazy(() => import('./Integrations'));
-const AgentDesigner = lazy(() => import('./AgentDesigner').then(m => ({ default: m.AgentDesigner })));
-const ZoneHistoryView = lazy(() => import('./ZoneHistoryView'));
-const AnalyticsView = lazy(() => import('./AnalyticsView'));
 const TeamManagementView = lazy(() => import('./TeamManagementView'));
 const ApprovalFlowView = lazy(() => import('./ApprovalFlowView'));
-const TerritoriesView = lazy(() => import('./TerritoriesView'));
-const PackageCatalogEditor = lazy(() => import('./PackageCatalogEditor'));
-const AuditLogView = lazy(() => import('./AuditLogView'));
-const DataManagerView = lazy(() => import('./DataManagerView'));
-const SIACView = lazy(() => import('./SIACView'));
-const ValidationConfigView = lazy(() => import('./ValidationConfigView'));
 const ValidationRequestsView = lazy(() => import('./ValidationRequestsView'));
 const AgentHubView = lazy(() => import('./AgentHubView'));
 const UserManagementView = lazy(() => import('./UserManagementView'));
-const EnterpriseOpsView = lazy(() => import('./EnterpriseOpsView'));
 const ChatsView = lazy(() => import('./ChatsView'));
 const CustomerFollowUpView = lazy(() => import('./CustomerFollowUpView'));
-const FinancesEnterpriseView = lazy(() => import('./FinancesEnterpriseView'));
 const CommissionsView = lazy(() => import('./CommissionsView'));
-const ProductionSimulationView = lazy(() => import('./ProductionSimulationView'));
 const OPS_ROLES = ['GERENTE', 'ADMINISTRACION', 'SUPERVISOR'];
 const ADMIN_ROLES = ['GERENTE'];
 const MANAGER_ONLY_SECTIONS = new Set([
   'Ajustes',
-  'Analytics',
   'Equipo y Metas',
   'Aprobaciones',
   'Hub de Agentes',
-  'Finanzas Enterprise',
   'Gestión de Usuarios',
-  'Territorios',
-  'Catálogo',
-  'Auditoría',
-  'Arquitectura Empresarial',
-  'Simulación Producción',
-  'Datos y Backup',
-  'Base SIAC',
   'Validaciones',
-  'Config. Llamadas',
   'Integraciones',
 ]);
-const MOTIVATIONAL_PHRASES = [
-  'Hoy cada seguimiento puede convertirse en una venta cerrada.',
-  'La constancia gana: una captura clara hoy evita retrabajo manana.',
-  'Tu energia mueve al equipo; enfocate en el siguiente cliente.',
-  'Las metas grandes se cumplen con acciones pequenas, bien hechas.',
-  'Vende con orden, valida con calma y avanza con confianza.',
-  'Cada folio atendido a tiempo mejora la experiencia del cliente.',
-  'El mejor resultado empieza con una buena captura.',
-];
 
 const SectionLoader = () => (
   <div className="flex flex-col items-center justify-center h-48 gap-4" role="status" aria-live="polite">
@@ -111,29 +73,12 @@ function ClockText() {
   return <>{time}</>;
 }
 
-function getLoginGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Buenos dias';
-  if (hour < 19) return 'Buenas tardes';
-  return 'Buenas noches';
-}
-
-function getMotivationalPhrase() {
-  const dayIndex = Math.floor(Date.now() / 86400000) % MOTIVATIONAL_PHRASES.length;
-  return MOTIVATIONAL_PHRASES[dayIndex];
-}
-
 function formatMoney(value: number) {
   return new Intl.NumberFormat('es-MX', {
     style: 'currency',
     currency: 'MXN',
     maximumFractionDigits: 0,
   }).format(value || 0);
-}
-
-function clampPercent(value: number) {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 import { Role } from '../../App';
@@ -152,14 +97,11 @@ function normalizeWhatsAppStatus(data: any) {
 
 export default function ManagerView({ role, onBack, currentUser, isLightMode, onToggleTheme }: ManagerViewProps) {
   const [activeSection, setActiveSection] = useState(OPS_ROLES.includes(role) ? 'Dashboard' : 'Perfil');
-  const [showAgentDesigner, setShowAgentDesigner] = useState(false);
   const [captureInitialView, setCaptureInitialView] = useState<'menu' | 'new_sale'>('menu');
   const { isOnline, pendingCount, syncing, syncNow } = useOfflineSync();
   useFollowUpReminders();
 
   // Real CRM stats
-  const [userCount, setUserCount] = useState(0);
-  const [saleCount, setSaleCount] = useState(0);
   const [pendingSales, setPendingSales] = useState(0);
   const [approvedSales, setApprovedSales] = useState(0);
   const [rejectedSales, setRejectedSales] = useState(0);
@@ -170,7 +112,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
   const [channelSummary, setChannelSummary] = useState({ conversations: 0, pendingApprovals: 0 });
   const [pendingUsers, setPendingUsers] = useState(0);
-  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const hasFullModuleAccess = ADMIN_ROLES.includes(role);
 
   const loadStats = async () => {
@@ -179,9 +120,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       const res = await fetch('/api/dashboard/summary');
       if (!res.ok) return;
       const data = await res.json();
-      setUserCount(data.userCount || 0);
       setPendingUsers(data.pendingUsers || 0);
-      setSaleCount(data.saleCount || 0);
       setPendingSales(data.pendingSales || 0);
       setApprovedSales(data.approvedSales || 0);
       setRejectedSales(data.rejectedSales || 0);
@@ -195,13 +134,12 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
     const loadChannels = async () => {
       if (!OPS_ROLES.includes(role)) return;
       try {
-        const [ws, tgs, msgs, conversations, outbox, inventory] = await Promise.all([
+        const [ws, tgs, msgs, conversations, outbox] = await Promise.all([
           fetch('/api/whatsapp/status?account=promotores', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
           fetch('/api/telegram/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
           fetch('/api/channels/messages', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
           fetch('/api/channels/conversations', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
           fetch('/api/agents/outbox', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
-          fetch('/api/inventory', { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
         ]);
         if (ws) setWaStatus(normalizeWhatsAppStatus(ws).status || 'disconnected');
         if (tgs) setTgStatus(tgs.status);
@@ -210,7 +148,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           conversations: (conversations as any[]).filter(c => c.channel === 'whatsapp').length,
           pendingApprovals: (outbox as any[]).filter(item => item.status === 'pending_approval').length,
         });
-        setInventoryItems(Array.isArray(inventory) ? inventory : []);
       } catch {}
     };
     loadChannels();
@@ -236,10 +173,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
     if (MANAGER_ONLY_SECTIONS.has(activeSection) && !hasFullModuleAccess) {
       setActiveSection(OPS_ROLES.includes(role) ? 'Dashboard' : 'Perfil');
     }
-    if (showAgentDesigner && !hasFullModuleAccess) {
-      setShowAgentDesigner(false);
-    }
-  }, [activeSection, hasFullModuleAccess, role, showAgentDesigner]);
+  }, [activeSection, hasFullModuleAccess, role]);
 
   const userName = currentUser?.displayName || 'Usuario';
   const userRoleLabel = (currentUser?.role || role) === 'GERENTE'
@@ -248,30 +182,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
       ? 'ADMINISTRACION'
     : (currentUser?.role || role);
   const notificationCount = pendingSales + pendingUsers;
-  const greeting = getLoginGreeting();
-  const motivationalPhrase = getMotivationalPhrase();
-  const conversionRate = saleCount > 0 ? clampPercent((approvedSales / saleCount) * 100) : 0;
-  const monthlyGoal = Math.max(30, Math.ceil(Math.max(approvedSales, saleCount, todaySales, 1) / 10) * 10);
-  const goalProgress = clampPercent((approvedSales / monthlyGoal) * 100);
-  const pipelineProspects = Math.max(channelSummary.conversations + saleCount + pendingSales + rejectedSales, saleCount, 1);
-  const pipelineStages = [
-    { label: 'Prospectos', value: pipelineProspects, color: 'from-cyan-300 to-sky-500', detail: 'Canales + capturas' },
-    { label: 'Contactados', value: channelSummary.conversations, color: 'from-emerald-300 to-emerald-600', detail: 'Conversaciones' },
-    { label: 'Citas', value: pendingSales + channelSummary.pendingApprovals, color: 'from-violet-300 to-violet-600', detail: 'Por validar / IA' },
-    { label: 'Ventas', value: saleCount, color: 'from-amber-300 to-orange-500', detail: 'Capturas totales' },
-    { label: 'Instalados', value: approvedSales, color: 'from-lime-300 to-emerald-500', detail: 'Aprobadas' },
-  ];
-  const directorSignals = [
-    pendingSales > 0
-      ? `${pendingSales} ventas requieren validacion para liberar avance comercial.`
-      : 'Validaciones al dia; el flujo operativo esta despejado.',
-    rejectedSales > 0
-      ? `${rejectedSales} rechazos activos: conviene revisar causa y recuperar oportunidad.`
-      : 'Sin rechazo critico visible en el tablero actual.',
-    channelSummary.pendingApprovals > 0
-      ? `${channelSummary.pendingApprovals} aprobaciones IA esperan decision gerencial.`
-      : 'Automatizaciones sin aprobaciones pendientes.',
-  ];
   const openCaptureMenu = () => {
     setCaptureInitialView('menu');
     setActiveSection('Captura y Validación');
@@ -330,6 +240,14 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                     </span>
                   )}
                 </div>
+                <button
+                  onClick={onBack}
+                  aria-label="Cerrar sesión"
+                  title="Cerrar sesión"
+                  className="hd-no-liquid text-rose-300 hover:text-rose-100 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60 rounded p-1"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
              </div>
           </div>
         </div>
@@ -346,25 +264,18 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             <NavItem icon={FileSearch} color="cyan" label="Consultas" active={activeSection === 'Consulta y Seguimiento'} onClick={() => setActiveSection('Consulta y Seguimiento')} />
             <NavItem icon={MessageSquare} color="green" label="Chats" active={activeSection === 'Chats'} onClick={() => setActiveSection('Chats')} />
             <NavItem icon={Users} color="blue" label="Clientes" active={activeSection === 'Seguimiento de Clientes'} onClick={() => setActiveSection('Seguimiento de Clientes')} />
-            <NavItem icon={MapPin} color="cyan" label="Zonas" active={activeSection === 'Historial por Zona'} onClick={() => setActiveSection('Historial por Zona')} />
-            <NavItem icon={FolderOpen} color="purple" label="Docs" active={activeSection === 'Documentación'} onClick={() => setActiveSection('Documentación')} />
           </NavGroup>
 
           <NavGroup label="Administración">
             <NavItem icon={Wallet} color="yellow" label="Nóminas" active={activeSection === 'Nóminas'} onClick={() => setActiveSection('Nóminas')} />
             {OPS_ROLES.includes(role) && <NavItem icon={ReceiptText} color="green" label="Comisiones" active={activeSection === 'Comisiones'} onClick={() => setActiveSection('Comisiones')} />}
             <NavItem icon={CheckCircle2} color="green" label="Aprobaciones" active={activeSection === 'Aprobaciones'} onClick={() => setActiveSection('Aprobaciones')} />
-            <NavItem icon={BarChart3} color="cyan" label="Efectividad" active={activeSection === 'Analytics'} onClick={() => setActiveSection('Analytics')} />
           </NavGroup>
 
           {hasFullModuleAccess && (
             <NavGroup label="Gerencia" compact>
               <NavItem icon={Users} color="blue" label="Equipo" active={activeSection === 'Equipo y Metas'} onClick={() => setActiveSection('Equipo y Metas')} />
               <NavItem icon={Users} color="cyan" label="Usuarios" active={activeSection === 'Gestión de Usuarios'} onClick={() => setActiveSection('Gestión de Usuarios')} badge={pendingUsers > 0 ? pendingUsers : undefined} />
-              <NavItem icon={ReceiptText} color="yellow" label="Finanzas" active={activeSection === 'Finanzas Enterprise'} onClick={() => setActiveSection('Finanzas Enterprise')} />
-              <NavItem icon={MapPin} color="cyan" label="Territorios" active={activeSection === 'Territorios'} onClick={() => setActiveSection('Territorios')} />
-              <NavItem icon={Package} color="purple" label="Catálogo" active={activeSection === 'Catálogo'} onClick={() => setActiveSection('Catálogo')} />
-              <NavItem icon={FileSpreadsheet} color="cyan" label="Base SIAC" active={activeSection === 'Base SIAC'} onClick={() => setActiveSection('Base SIAC')} />
               <NavItem icon={PhoneCall} color="green" label="Validaciones" active={activeSection === 'Validaciones'} onClick={() => setActiveSection('Validaciones')} />
               <NavItem icon={Bot} color="purple" label="Agentes IA" active={activeSection === 'Hub de Agentes'} onClick={() => setActiveSection('Hub de Agentes')} />
             </NavGroup>
@@ -372,28 +283,14 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
 
           <NavGroup label="Comunicación">
             <NavItem icon={Headphones} color="purple" label="Soporte a Clientes" active={activeSection === 'Soporte a Clientes'} onClick={() => setActiveSection('Soporte a Clientes')} />
-            <NavItem icon={AlertTriangle} color="red" label="Morosidad" active={activeSection === 'Morosidad'} onClick={() => setActiveSection('Morosidad')} />
-            <NavItem icon={Megaphone} color="cyan" label="Anuncios" active={activeSection === 'Anuncios'} onClick={() => setActiveSection('Anuncios')} />
           </NavGroup>
 
           <NavGroup label="Sistema">
             <NavItem icon={User} color="blue" label="Perfil" active={activeSection === 'Perfil'} onClick={() => setActiveSection('Perfil')} />
             {hasFullModuleAccess && <NavItem icon={Zap} color="yellow" label="Integraciones" active={activeSection === 'Integraciones'} onClick={() => setActiveSection('Integraciones')} />}
-            {hasFullModuleAccess && <NavItem icon={Bot} color="purple" label="Diseñador IA" active={showAgentDesigner} onClick={() => setShowAgentDesigner(true)} />}
-            {hasFullModuleAccess && <NavItem icon={Shield} color="yellow" label="Auditoría" active={activeSection === 'Auditoría'} onClick={() => setActiveSection('Auditoría')} />}
-            {hasFullModuleAccess && <NavItem icon={Database} color="blue" label="Backup" active={activeSection === 'Datos y Backup'} onClick={() => setActiveSection('Datos y Backup')} />}
+            {hasFullModuleAccess && <NavItem icon={SettingsIcon} color="slate" label="Ajustes" active={activeSection === 'Ajustes'} onClick={() => setActiveSection('Ajustes')} />}
           </NavGroup>
         </nav>
-
-        <div className="hd-sidebar-footer shrink-0 p-3 border-t border-white/5 relative z-20">
-          <button 
-            onClick={onBack}
-            className="hd-no-liquid w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/60 transition-all group text-rose-500"
-          >
-            <LogOut className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-            <span className="text-xs font-black uppercase tracking-[0.2em] group-hover:drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]">Cerrar Sesión</span>
-          </button>
-        </div>
 
       </aside>
 
@@ -441,165 +338,24 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                  action={<PremiumBadge tone="emerald" dot>Sistema activo</PremiumBadge>}
                />
 
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_.75fr]">
-                <PremiumCard className="overflow-hidden p-6" tone="slate">
-                  <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <PremiumCard className="overflow-hidden p-5" tone="slate">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">CEO Dashboard</p>
-                      <h2 className="mt-1 text-2xl font-semibold text-white">Centro ejecutivo Heavenly Dreams</h2>
-                      <p className="mt-2 text-sm text-slate-400">Primer bloque del plan 95+: ventas, instalaciones, reclutamiento, conversion y meta mensual.</p>
+                      <h2 className="mt-1 text-xl font-semibold text-white">Centro ejecutivo Heavenly Dreams</h2>
+                      <p className="mt-2 text-sm text-slate-400">Resumen limpio: ventas, instalaciones, pendientes e ingreso mensual.</p>
                     </div>
                     <PremiumBadge tone={hasFullModuleAccess ? 'emerald' : 'amber'} dot>
                       {hasFullModuleAccess ? 'Vista gerente completa' : 'Vista operativa limitada'}
                     </PremiumBadge>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <ExecutiveMetric icon={TrendingUp} label="Ventas del dia" value={todaySales} detail="Capturas nuevas" tone="cyan" />
                     <ExecutiveMetric icon={CheckCircle2} label="Instalaciones" value={approvedSales} detail="Aprobadas / procedieron" tone="emerald" />
-                    <ExecutiveMetric icon={Users} label="Reclutas" value={pendingUsers} detail="Pendientes por aprobar" tone="purple" />
-                    <ExecutiveMetric icon={Target} label="Conversion" value={`${conversionRate}%`} detail={`${approvedSales}/${saleCount} ventas`} tone="amber" />
+                    <ExecutiveMetric icon={Target} label="Pendientes" value={pendingSales + pendingUsers + channelSummary.pendingApprovals} detail="Requieren accion" tone="amber" />
                     <ExecutiveMetric icon={DollarSign} label="Ingreso mensual" value={formatMoney(monthRevenue)} detail="Renta mensual capturada" tone="green" />
-                    <ExecutiveMetric icon={Activity} label="Meta mensual" value={`${goalProgress}%`} detail={`${approvedSales}/${monthlyGoal} objetivo`} tone="blue" />
                   </div>
-                </PremiumCard>
-
-                <PremiumCard className="p-6" tone="purple">
-                  <div className="flex items-start gap-4">
-                    <div className="rounded-2xl border border-violet-300/20 bg-violet-400/10 p-3 text-violet-200">
-                      <Bot className="h-6 w-6" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">Director operativo IA</p>
-                      <h3 className="mt-1 text-xl font-semibold text-white">Lectura ejecutiva</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">Heavenly AI inicia como capa de supervision: detecta pendientes, riesgo y decisiones que bloquean avance.</p>
-                    </div>
-                  </div>
-                  <div className="mt-5 space-y-3">
-                    {directorSignals.map(signal => (
-                      <div key={signal} className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-xs font-semibold leading-5 text-slate-200">
-                        {signal}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-5 grid grid-cols-2 gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
-                    <span className="rounded-xl border border-emerald-300/15 bg-emerald-400/5 px-3 py-2 text-emerald-200">Gerente: todo</span>
-                    <span className="rounded-xl border border-cyan-300/15 bg-cyan-400/5 px-3 py-2 text-cyan-200">Supervisor: operativo</span>
-                    <span className="rounded-xl border border-violet-300/15 bg-violet-400/5 px-3 py-2 text-violet-200">Reclutador: equipo</span>
-                    <span className="rounded-xl border border-amber-300/15 bg-amber-400/5 px-3 py-2 text-amber-200">Vendedor: campo</span>
-                  </div>
-                </PremiumCard>
-              </div>
-
-              <PremiumCard className="p-6" tone="amber">
-                <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">Embudo comercial visual</p>
-                    <h3 className="mt-1 text-xl font-semibold text-white">Prospectos a instalaciones</h3>
-                  </div>
-                  <p className="text-xs text-slate-400">Construido con canales, aprobaciones IA y ventas reales disponibles.</p>
-                </div>
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
-                  {pipelineStages.map(stage => (
-                    <div key={stage.label}>
-                      <PipelineStage stage={stage} maxValue={pipelineProspects} />
-                    </div>
-                  ))}
-                </div>
               </PremiumCard>
-
-              {/* KPI Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 hover-group">
-                <PremiumKpiCard
-                  title="VENTAS HOY"
-                  value={todaySales.toString()}
-                  detail="Capturas del dia"
-                  icon={TrendingUp}
-                  tone="cyan"
-                />
-                <PremiumKpiCard
-                  title="VENTAS TOTALES"
-                  value={saleCount.toString()}
-                  detail={`${approvedSales} aprobadas`}
-                  icon={Activity}
-                  tone="purple"
-                />
-                <PremiumKpiCard
-                  title="PENDIENTES"
-                  value={pendingSales.toString()}
-                  detail="Por validar"
-                  icon={ClipboardCheck}
-                  tone="emerald"
-                />
-              </div>
-
-              <PremiumCard className="p-6 overflow-hidden" tone="cyan">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="max-w-3xl">
-                    <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-100">
-                      <Zap className="h-3.5 w-3.5" />
-                      Inicio de sesion activo
-                    </div>
-                    <h2 className="text-2xl font-semibold text-white">
-                      {greeting}, {userName}. Listo para avanzar.
-                    </h2>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">
-                      {motivationalPhrase}
-                    </p>
-                  </div>
-                  <button
-                    onClick={startSaleCapture}
-                    className="hd-liquid-button hd-card-interactive flex min-h-[58px] items-center justify-center gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-400/10 px-5 text-sm font-semibold text-emerald-100 transition-all hover:border-emerald-300/50 hover:bg-emerald-400/15"
-                  >
-                    <ClipboardCheck className="h-5 w-5" />
-                    Iniciar captura de venta
-                  </button>
-                </div>
-              </PremiumCard>
-
-              {/* Secondary Stats Row */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <PremiumCard className="p-5" tone="blue">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Users className="w-5 h-5 text-blue-400" />
-                    <h4 className="text-slate-400 text-xs font-semibold">Personal registrado</h4>
-                  </div>
-                  <p className="text-3xl font-semibold text-white">{userCount}</p>
-                  <p className="text-xs text-slate-500 mt-2">Asesores + supervisores</p>
-                </PremiumCard>
-                <PremiumCard className="p-5" tone="emerald">
-                  <div className="flex items-center gap-3 mb-2">
-                    <ArrowUpRight className="w-5 h-5 text-emerald-400" />
-                    <h4 className="text-slate-400 text-xs font-semibold">Tasa de aprobación</h4>
-                  </div>
-                  <p className="text-3xl font-semibold text-white">
-                    {saleCount > 0 ? `${Math.round((approvedSales / saleCount) * 100)}%` : '—'}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-2">{approvedSales}/{saleCount} ventas</p>
-                </PremiumCard>
-                <PremiumCard className="p-5" tone="rose">
-                  <div className="flex items-center gap-3 mb-2">
-                    <ArrowDownRight className="w-5 h-5 text-rose-400" />
-                    <h4 className="text-slate-400 text-xs font-semibold">Rechazos</h4>
-                  </div>
-                  <p className="text-3xl font-semibold text-white">{rejectedSales}</p>
-                  <p className="text-xs text-slate-500 mt-2">No procedieron</p>
-                </PremiumCard>
-              </div>
-
-              <Suspense fallback={<SectionLoader />}>
-                <DashboardGradientCharts
-                  userCount={userCount}
-                  saleCount={saleCount}
-                  approvedSales={approvedSales}
-                  pendingSales={pendingSales}
-                  rejectedSales={rejectedSales}
-                  todaySales={todaySales}
-                  conversations={channelSummary.conversations}
-                  pendingApprovals={channelSummary.pendingApprovals}
-                  inventoryItems={inventoryItems}
-                  compact
-                />
-              </Suspense>
 
               {/* Quick Actions */}
               <PremiumCard className="p-5" tone="cyan">
@@ -621,101 +377,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
                 </div>
               </PremiumCard>
 
-              {/* ── SYNC RELAYS: Canal Status + Mensajes Recientes ── */}
-              {OPS_ROLES.includes(role) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* WhatsApp panel */}
-                  <PremiumCard className="p-5 space-y-4" tone="emerald">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${waStatus === 'connected' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : waStatus === 'qr' ? 'bg-yellow-400 animate-pulse' : 'bg-slate-600'}`} />
-                        <h4 className="text-sm font-semibold text-slate-200">WhatsApp</h4>
-                        <span className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full ${
-                          waStatus === 'connected' ? 'bg-emerald-400/10 text-emerald-400' :
-                          waStatus === 'qr' ? 'bg-yellow-400/10 text-yellow-400' :
-                          'bg-slate-700 text-slate-500'
-                        }`}>{waStatus}</span>
-                      </div>
-                      {hasFullModuleAccess && (
-                        <button
-                          onClick={() => setActiveSection('Integraciones')}
-                          className="hd-no-liquid text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
-                        >
-                          Gestionar <ChevronRight className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    {recentMessages.length === 0 ? (
-                      <p className="text-xs text-slate-600 italic">Sin mensajes recientes</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {recentMessages.map((m: any) => (
-                          <div key={m.id} className="flex gap-2 items-start">
-                            <div className="w-6 h-6 rounded-full bg-emerald-400/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <MessageSquare className="w-3 h-3 text-emerald-400" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[10px] font-bold text-white truncate">{m.fromName}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{m.body}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-                        <p className="text-lg font-bold text-white">{channelSummary.conversations}</p>
-                        <p className="text-[9px] text-slate-500 uppercase tracking-widest">Conversaciones</p>
-                      </div>
-                      <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-2">
-                        <p className="text-lg font-bold text-yellow-200">{channelSummary.pendingApprovals}</p>
-                        <p className="text-[9px] text-slate-500 uppercase tracking-widest">Aprobaciones</p>
-                      </div>
-                    </div>
-                    {hasFullModuleAccess && (
-                      <button
-                        onClick={() => setActiveSection('Hub de Agentes')}
-                        className="w-full text-xs text-emerald-300 border border-emerald-400/20 rounded-lg py-2 hover:bg-emerald-400/5 transition-colors font-semibold"
-                      >
-                        Ver en Hub de Agentes
-                      </button>
-                    )}
-                  </PremiumCard>
-
-                  {/* Telegram panel */}
-                  <PremiumCard className="p-5 space-y-4" tone="blue">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${tgStatus === 'polling' ? 'bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]' : tgStatus === 'error' ? 'bg-rose-400' : 'bg-slate-600'}`} />
-                        <h4 className="text-sm font-semibold text-slate-200">Telegram</h4>
-                        <span className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full ${
-                          tgStatus === 'polling' ? 'bg-blue-400/10 text-blue-400' :
-                          tgStatus === 'error'   ? 'bg-rose-400/10 text-rose-400' :
-                                                   'bg-slate-700 text-slate-500'
-                        }`}>{tgStatus}</span>
-                      </div>
-                      {hasFullModuleAccess && (
-                        <button
-                          onClick={() => setActiveSection('Hub de Agentes')}
-                          className="hd-no-liquid text-[9px] text-slate-500 hover:text-cyan-400 uppercase tracking-widest font-bold transition-colors flex items-center gap-1"
-                        >
-                          {tgStatus === 'polling' ? 'Ver mensajes' : 'Configurar'} <ChevronRight className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    {tgStatus === 'polling' ? (
-                      <p className="text-xs text-blue-300">✅ Bot activo — los agentes están escuchando</p>
-                    ) : (
-                      <>
-                        <p className="text-xs text-slate-500">Activa el bot en Hub de Agentes → pestaña Telegram</p>
-                        <div className="bg-blue-400/5 border border-blue-400/20 rounded-xl p-3">
-                          <p className="text-[10px] text-blue-300 font-mono">@BotFather → /newbot → Token → Hub Agentes</p>
-                        </div>
-                      </>
-                    )}
-                  </PremiumCard>
-                </div>
-              )}
             </div>
           )}
 
@@ -724,30 +385,15 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
             {activeSection === 'Perfil' && <Profile />}
             {activeSection === 'Nóminas' && <Payroll />}
             {activeSection === 'Comisiones' && <CommissionsView />}
-            {activeSection === 'Anuncios' && <Announcements />}
             {activeSection === 'Captura y Validación' && <CaptureValidation key={captureInitialView} initialView={captureInitialView} />}
             {activeSection === 'Consulta y Seguimiento' && <ConsultasSeguimiento />}
             {activeSection === 'Soporte a Clientes' && <CustomerSupport />}
-            {activeSection === 'Chat para Clientes' && <ClientChatCrmView />}
-            {activeSection === 'Morosidad' && <Morosidad />}
             {activeSection === 'Integraciones' && hasFullModuleAccess && <Integrations />}
-            {activeSection === 'Documentación' && <MyFilesView onBack={() => setActiveSection('Dashboard')} />}
-            {activeSection === 'Historial por Zona' && <ZoneHistoryView />}
-            {activeSection === 'Analytics' && hasFullModuleAccess && <AnalyticsView />}
             {activeSection === 'Equipo y Metas' && hasFullModuleAccess && <TeamManagementView />}
             {activeSection === 'Aprobaciones' && hasFullModuleAccess && <ApprovalFlowView />}
-            {activeSection === 'Territorios' && hasFullModuleAccess && <TerritoriesView />}
-            {activeSection === 'Catálogo' && hasFullModuleAccess && <PackageCatalogEditor />}
-            {activeSection === 'Auditoría' && hasFullModuleAccess && <AuditLogView />}
-            {activeSection === 'Arquitectura Empresarial' && hasFullModuleAccess && <EnterpriseOpsView />}
-            {activeSection === 'Simulación Producción' && hasFullModuleAccess && <ProductionSimulationView />}
-            {activeSection === 'Datos y Backup' && hasFullModuleAccess && <DataManagerView />}
-            {activeSection === 'Base SIAC' && hasFullModuleAccess && <SIACView />}
             {activeSection === 'Validaciones' && hasFullModuleAccess && <ValidationRequestsView />}
-            {activeSection === 'Config. Llamadas' && hasFullModuleAccess && <ValidationConfigView />}
             {activeSection === 'Hub de Agentes' && hasFullModuleAccess && <AgentHubView />}
             {activeSection === 'Gestión de Usuarios' && hasFullModuleAccess && <UserManagementView />}
-            {activeSection === 'Finanzas Enterprise' && hasFullModuleAccess && <FinancesEnterpriseView />}
             {activeSection === 'Chats' && (
               <ChatsView
                 onOpenSettings={hasFullModuleAccess ? () => setActiveSection('Ajustes') : undefined}
@@ -760,7 +406,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
           </Suspense>
 
           {/* Placeholder for other sections */}
-          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Comisiones', 'Anuncios', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Chat para Clientes', 'Morosidad', 'Documentación', 'Integraciones', 'Historial por Zona', 'Analytics', 'Equipo y Metas', 'Aprobaciones', 'Territorios', 'Catálogo', 'Auditoría', 'Arquitectura Empresarial', 'Simulación Producción', 'Datos y Backup', 'Base SIAC', 'Validaciones', 'Config. Llamadas', 'Hub de Agentes', 'Gestión de Usuarios', 'Finanzas Enterprise'].includes(activeSection) && (
+          {!['Dashboard', 'Ajustes', 'Perfil', 'Nóminas', 'Comisiones', 'Captura y Validación', 'Consulta y Seguimiento', 'Chats', 'Seguimiento de Clientes', 'Soporte a Clientes', 'Integraciones', 'Equipo y Metas', 'Aprobaciones', 'Validaciones', 'Hub de Agentes', 'Gestión de Usuarios'].includes(activeSection) && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-cyber-electric/50">
                 <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-wide">{activeSection}</h2>
@@ -772,13 +418,6 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
         </div>
         </DashboardLayout>
       </main>
-
-      {/* Agent Designer Modal */}
-      {showAgentDesigner && (
-        <Suspense fallback={null}>
-          <AgentDesigner onClose={() => setShowAgentDesigner(false)} />
-        </Suspense>
-      )}
 
       <OfflineBanner isOnline={isOnline} pendingCount={pendingCount} syncing={syncing} onSync={syncNow} />
     </div>
@@ -816,31 +455,6 @@ function ExecutiveMetric({
       </div>
       <p className="mt-4 truncate text-2xl font-semibold tracking-tight text-white">{value}</p>
       <p className="mt-1 text-xs font-semibold text-slate-500">{detail}</p>
-    </div>
-  );
-}
-
-function PipelineStage({
-  stage,
-  maxValue,
-}: {
-  stage: { label: string; value: number; color: string; detail: string };
-  maxValue: number;
-}) {
-  const progress = clampPercent((stage.value / Math.max(maxValue, 1)) * 100);
-  return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{stage.label}</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{stage.value}</p>
-        </div>
-        <span className="text-xs font-black text-slate-500">{progress}%</span>
-      </div>
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-        <div className={`h-full rounded-full bg-gradient-to-r ${stage.color}`} style={{ width: `${Math.max(progress, stage.value ? 8 : 0)}%` }} />
-      </div>
-      <p className="mt-3 text-[11px] font-semibold text-slate-500">{stage.detail}</p>
     </div>
   );
 }

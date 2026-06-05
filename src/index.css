@@ -9251,3 +9251,109 @@ body,
     --tw-ring-color: rgba(255, 255, 255, 0.28) !important;
   }
 }
+
+/* Final shell decongestion pass: compact dashboard and uncovered navigation. */
+.hd-app-sidebar {
+  width: 13.5rem !important;
+  max-width: 13.5rem !important;
+}
+
+.hd-app-sidebar > div:first-child {
+  height: 6.75rem !important;
+  padding-inline: 0.75rem !important;
+}
+
+.hd-sidebar-nav {
+  padding: 0.65rem 0.65rem 2rem !important;
+  scrollbar-gutter: stable;
+}
+
+.hd-sidebar-nav .hd-nav-item {
+  min-height: 2.25rem !important;
+  padding: 0.45rem 0.65rem !important;
+  border-radius: 0.75rem !important;
+  gap: 0.55rem !important;
+}
+
+.hd-sidebar-nav .hd-nav-item span {
+  font-size: 0.68rem !important;
+  letter-spacing: 0 !important;
+}
+
+.hd-sidebar-nav .hd-nav-item-icon {
+  width: 1rem !important;
+  height: 1rem !important;
+}
+
+.hd-topbar,
+.hd-dashboard-breadcrumb {
+  min-height: 3rem !important;
+  padding-block: 0.55rem !important;
+}
+
+.hd-scroll-zone {
+  width: min(100%, 1280px) !important;
+  padding-inline: clamp(0.85rem, 1.4vw, 1.35rem) !important;
+}
+
+.hd-dashboard-clean {
+  padding-top: 0.85rem !important;
+}
+
+.hd-dashboard-clean > div {
+  gap: 1rem !important;
+}
+
+.hd-dashboard-clean h1 {
+  font-size: 2rem !important;
+  line-height: 1.1 !important;
+}
+
+.hd-dashboard-clean h2 {
+  font-size: 1.2rem !important;
+  line-height: 1.2 !important;
+}
+
+.hd-dashboard-clean :where(.hd-premium-card, .hd-card, .hd-panel, .glass-panel, .glass-panel-neon, .hd-chart-card, .hd-cyber-card, .hd-cyber-panel, .hd-glass-card) {
+  border-radius: 0.95rem !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.hd-dashboard-clean :where(.hd-premium-card, .hd-card) {
+  padding: 1rem !important;
+}
+
+.hd-dashboard-clean .rounded-2xl {
+  border-radius: 0.8rem !important;
+}
+
+.hd-dashboard-clean :where(svg, .lucide, .hd-quick-action-icon, .hd-nav-item-icon) {
+  filter: none !important;
+}
+
+.hd-quick-action {
+  min-height: 2.65rem !important;
+  padding: 0.55rem 0.75rem !important;
+  border-radius: 0.75rem !important;
+  box-shadow: none !important;
+}
+
+.hd-quick-action span {
+  font-size: 0.67rem !important;
+  letter-spacing: 0 !important;
+}
+
+.hd-quick-action-icon {
+  width: 1rem !important;
+  height: 1rem !important;
+}
+
+@media (min-width: 1280px) {
+  .hd-dashboard-clean .xl\:grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .hd-dashboard-clean .xl\:grid-cols-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  }
+}
