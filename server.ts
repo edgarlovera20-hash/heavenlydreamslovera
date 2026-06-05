@@ -2414,6 +2414,7 @@ async function startServer() {
     const result = await importMorososSource({
       sourcePath: req.body?.sourcePath || DEFAULT_MOROSOS_SOURCE,
       replace: req.query.replace === '1' || req.body?.replace !== false,
+      sheetName: queryString(req.body?.sheetName),
     });
     Settings.set('morosos_source_fingerprint', result.fingerprint);
     AuditLog.insert({ accion: 'IMPORT_MOROSOS_SOURCE', entidad: 'morosidad', entidad_id: null, user_id: req.auth?.sub || null, user_nombre: null, detalle: `imported:${result.imported};skipped:${result.skipped};source:${result.source}` });
@@ -2427,6 +2428,7 @@ async function startServer() {
       buffer: Buffer.from(content, 'base64'),
       fileName: req.body?.fileName || 'morosos.csv',
       replace: req.body?.replace === true,
+      sheetName: queryString(req.body?.sheetName),
     });
     AuditLog.insert({ accion: 'IMPORT_MOROSOS_FILE', entidad: 'morosidad', entidad_id: null, user_id: req.auth?.sub || null, user_nombre: null, detalle: `imported:${result.imported};skipped:${result.skipped};source:${result.source}` });
     res.json({ ok: true, ...result });
@@ -2808,6 +2810,7 @@ async function startServer() {
     const result = await importSiacSource({
       sourcePath: req.body?.sourcePath || DEFAULT_SIAC_SOURCE,
       replace: req.query.replace === '1' || req.body?.replace !== false,
+      sheetName: queryString(req.body?.sheetName),
     });
     Settings.set('siac_primary_source_fingerprint', result.fingerprint);
     Settings.set('siac_primary_importer_version', SIAC_IMPORTER_VERSION);
@@ -2829,6 +2832,7 @@ async function startServer() {
       buffer: Buffer.from(content, 'base64'),
       fileName: req.body?.fileName || 'siac.xlsx',
       replace: req.body?.replace === true,
+      sheetName: queryString(req.body?.sheetName),
     });
     Settings.set('siac_primary_source_fingerprint', result.fingerprint);
     Settings.set('siac_primary_importer_version', SIAC_IMPORTER_VERSION);

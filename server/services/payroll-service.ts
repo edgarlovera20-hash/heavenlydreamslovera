@@ -95,7 +95,7 @@ export function buildSiacWeekPayroll(options: SiacWeekPayrollOptions) {
   const rowOwnerMatchesAuth = (row: any) => payrollOwnerMatches(row.promotor || row.usuario, authAliases);
   const weekRows = (db as any).prepare(`
     SELECT * FROM siac_records
-    WHERE UPPER(COALESCE(estatus_siac,'')) LIKE '%POSTEA%'
+    WHERE UPPER(COALESCE(estatus_pisa, estatus_etapa, estatus_siac, '')) LIKE '%POSTEA%'
     ORDER BY fecha_os_alta DESC, fecha_captura DESC
   `).all()
     .filter((row: any) => {

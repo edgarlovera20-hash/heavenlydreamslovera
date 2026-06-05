@@ -6,13 +6,20 @@ import db, { ClientesCrm, Morosidad, SiacRecords } from './db';
 
 const REPO_SIAC_SOURCE = path.join(process.cwd(), 'server', 'source-data', 'siac-current.xlsx');
 const REPO_MOROSOS_SOURCE = path.join(process.cwd(), 'server', 'source-data', 'morosos-current.xlsx');
+const REPO_EDGAR_DAVID_SOURCE = path.join(process.cwd(), 'server', 'source-data', 'edgar-david-current.xlsx');
+const DEFAULT_EDGAR_DAVID_SOURCE = process.env.EDGAR_DAVID_SOURCE
+  || (existsSync(REPO_EDGAR_DAVID_SOURCE) ? REPO_EDGAR_DAVID_SOURCE : '');
 export const DEFAULT_SIAC_SOURCE = process.env.SIAC_PRIMARY_SOURCE
+  || DEFAULT_EDGAR_DAVID_SOURCE
   || (existsSync(REPO_SIAC_SOURCE) ? REPO_SIAC_SOURCE : '');
 export const DEFAULT_MOROSOS_SOURCE = process.env.MOROSOS_PRIMARY_SOURCE
+  || DEFAULT_EDGAR_DAVID_SOURCE
   || (existsSync(REPO_MOROSOS_SOURCE) ? REPO_MOROSOS_SOURCE : '');
-export const SIAC_IMPORTER_VERSION = 'siac-ppies-v2';
+const DEFAULT_SIAC_SHEET = process.env.SIAC_PRIMARY_SHEET || (DEFAULT_EDGAR_DAVID_SOURCE && DEFAULT_SIAC_SOURCE === DEFAULT_EDGAR_DAVID_SOURCE ? 'Hoja2' : '');
+const DEFAULT_MOROSOS_SHEET = process.env.MOROSOS_PRIMARY_SHEET || (DEFAULT_EDGAR_DAVID_SOURCE && DEFAULT_MOROSOS_SOURCE === DEFAULT_EDGAR_DAVID_SOURCE ? 'Hoja1' : '');
+export const SIAC_IMPORTER_VERSION = 'siac-ppies-v3-edgar-david';
 
-export type SourceInput = { sourcePath?: string; buffer?: Buffer; fileName?: string; replace?: boolean };
+export type SourceInput = { sourcePath?: string; buffer?: Buffer; fileName?: string; replace?: boolean; sheetName?: string; sheetIndex?: number };
 
 function fingerprintBuffer(buffer: Buffer) {
   return createHash('sha256').update(buffer).digest('hex');
@@ -113,19 +120,54 @@ function colIndex(ref: string) {
   return letters.split('').reduce((sum, ch) => sum * 26 + ch.charCodeAt(0) - 64, 0) - 1;
 }
 
-async function parseXlsxRows(buffer: Buffer) {
+function readWorkbookRelationships(relsXml: string) {
+  const rels = new Map<string, string>();
+  for (const match of relsXml.matchAll(/<Relationship\b([^>]*)\/>/g)) {
+    const attrs = Object.fromEntries([...match[1].matchAll(/([\w:]+)="([^"]*)"/g)].map((m) => [m[1], xmlDecode(m[2])]));
+    if (attrs.Id && attrs.Target) rels.set(attrs.Id, attrs.Target);
+  }
+  return rels;
+}
+
+function workbookSheets(workbookXml: string, relsXml: string) {
+  const rels = readWorkbookRelationships(relsXml);
+  return [...workbookXml.matchAll(/<sheet\b([^>]*)\/>/g)].map((match, index) => {
+    const attrs = Object.fromEntries([...match[1].matchAll(/([\w:]+)="([^"]*)"/g)].map((m) => [m[1], xmlDecode(m[2])]));
+    const relId = attrs['r:id'];
+    const target = relId ? rels.get(relId) : '';
+    const sheetPath = target
+      ? (target.startsWith('/') ? target.slice(1) : path.posix.join('xl', target))
+      : `xl/worksheets/sheet${index + 1}.xml`;
+    return { name: attrs.name || `Hoja${index + 1}`, path: sheetPath };
+  });
+}
+
+async function parseXlsxRows(buffer: Buffer, options: Pick<SourceInput, 'sheetName' | 'sheetIndex'> = {}) {
   const zip = await JSZip.loadAsync(buffer);
   const sharedXml = await zip.file('xl/sharedStrings.xml')?.async('string').catch(() => '') || '';
   const shared = [...sharedXml.matchAll(/<si[^>]*>([\s\S]*?)<\/si>/g)].map(match => {
     const text = [...match[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(t => xmlDecode(t[1])).join('');
     return text.trim();
   });
-  const sheetXml = await zip.file('xl/worksheets/sheet1.xml')?.async('string');
+  const workbookXml = await zip.file('xl/workbook.xml')?.async('string').catch(() => '') || '';
+  const relsXml = await zip.file('xl/_rels/workbook.xml.rels')?.async('string').catch(() => '') || '';
+  const sheets = workbookSheets(workbookXml, relsXml);
+  const sheet = options.sheetName
+    ? sheets.find(item => item.name.toLowerCase() === options.sheetName!.toLowerCase())
+    : sheets[options.sheetIndex ?? 0];
+  const sheetXml = await zip.file(sheet?.path || 'xl/worksheets/sheet1.xml')?.async('string');
   if (!sheetXml) return [];
   const rows: string[][] = [];
-  for (const rowMatch of sheetXml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
+  let blankStreakAfterData = 0;
+  for (const rowMatch of sheetXml.matchAll(/<row\b[^>]*(?:\/>|>[\s\S]*?<\/row>)/g)) {
+    const rowXml = rowMatch[0];
+    if (!/<(?:v|t)\b/.test(rowXml)) {
+      if (rows.length && ++blankStreakAfterData > 500) break;
+      continue;
+    }
+    blankStreakAfterData = 0;
     const row: string[] = [];
-    for (const cellMatch of rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+    for (const cellMatch of rowXml.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
       const attrs = cellMatch[1];
       const body = cellMatch[2];
       const ref = (attrs.match(/\br="([^"]+)"/) || [])[1] || '';
@@ -181,19 +223,19 @@ export async function rowsFromSource(input: SourceInput) {
   const fileName = input.fileName || sourcePath || '';
   const lower = fileName.toLowerCase();
   const rows = lower.endsWith('.xlsx') || lower.endsWith('.xlsm')
-    ? await parseXlsxRows(buffer)
+    ? await parseXlsxRows(buffer, { sheetName: input.sheetName, sheetIndex: input.sheetIndex })
     : parseCsvRows(decodeText(buffer));
   return { rows, fingerprint: fingerprintBuffer(buffer), source: sourcePath || fileName || 'upload' };
 }
 
 export async function importSiacSource(input: SourceInput = {}) {
-  const { rows, fingerprint, source } = await rowsFromSource({ sourcePath: DEFAULT_SIAC_SOURCE, ...input });
+  const { rows, fingerprint, source } = await rowsFromSource({ sourcePath: DEFAULT_SIAC_SOURCE, sheetName: DEFAULT_SIAC_SHEET, ...input });
   if (input.replace) SiacRecords.deleteAll();
   let imported = 0;
   let skipped = 0;
   for (const row of rows) {
     const folio = headerValue(row, ['Folio SIAC']);
-      const osAlta = headerValue(row, ['osalta', 'os_pago', 'OS Pago', 'Orden de Servicio', 'Orrden de Servicio', 'OS de Pago', 'OS de Servicio', 'OS']);
+      const osAlta = headerValue(row, ['osalta', 'OS Alta Linea o Multiorden', 'os_pago', 'OS Pago', 'Orden de Servicio', 'Orrden de Servicio', 'OS de Pago', 'OS de Servicio', 'OS']);
       const telefono = digits10(headerValue(row, ['Telefono']));
       const telefonoAsignado = digits10(headerValue(row, ['Telefono Asignado', 'Telfono Asignado', 'Tel Pago', 'Telefono Pago'])) || null;
       const telefonoPortado = digits10(headerValue(row, ['Telefono de Portabilidad', 'Telefono Portado', 'Numero a Portar']));
@@ -208,7 +250,8 @@ export async function importSiacSource(input: SourceInput = {}) {
       const tipoServicio = headerValue(row, ['Tipo de Servicio', 'Tipo Serv']) || headerValueAt(row, ['Tipo de Cliente', 'Tipo Cliente'], 1);
       const usuario = headerValue(row, ['Usuario', 'Promotor']);
       const promotor = headerValue(row, ['Nombre Promotor', 'Nombre']) || usuario;
-      const etapaPisa = headerValue(row, ['Etapa PISA']) || headerValue(row, ['Elaborada', 'Estatus Elaborada', 'Estatus Etapa']) || estatusSecundario;
+      const etapaPisa = headerValue(row, ['Etapa PISA', 'Estatus PISA Multiorden', 'Estatus de Atencion Multiorden', 'Estatus de Atenciýn Multiorden']) || headerValue(row, ['Elaborada', 'Estatus Elaborada', 'Estatus Etapa']) || estatusSecundario;
+      const fechaPosteo = dateValue(row, ['Orden de Servicio TV', 'Fecha de Os TV', 'Pisa OS Fecha POSTEO Multiorden', 'Fecha Posteo', 'Fecha de Posteo', 'Fecha OS Alta']);
       SiacRecords.upsert({
         id: randomUUID(),
         source_id: sourceId,
@@ -231,7 +274,7 @@ export async function importSiacSource(input: SourceInput = {}) {
         telefono_asignado: telefonoAsignado,
         telefono_portado: telefonoPortado,
         os_alta: osAlta,
-        fecha_os_alta: dateValue(row, ['Fecha Posteo', 'Fecha de Posteo', 'Fecha OS Alta']),
+        fecha_os_alta: fechaPosteo,
         estatus_pisa: etapaPisa,
         fecha_cambio_estatus: dateValue(row, ['Fecha cambio estatus', 'Fecha Posteo']),
         tipo_cliente: tipoCliente,
@@ -262,28 +305,58 @@ function morosityLevel(amount: number, months = 0) {
   return 'PREVENTIVA';
 }
 
+function firstValidFolio(values: any[]) {
+  for (const value of values) {
+    const raw = String(value || '').trim();
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length >= 7) return digits;
+  }
+  return clean(values.find(Boolean));
+}
+
+function delayDaysFromRange(value: any, amount = 0, months = 0) {
+  const raw = normalizeHeader(String(value || ''));
+  if (raw.includes('MAS DE 90') || raw.includes('90 DIAS')) return 91;
+  const numbers = [...raw.matchAll(/\d+/g)].map(match => Number(match[0])).filter(Number.isFinite);
+  if (numbers.length) return Math.max(...numbers);
+  return Math.max(1, months ? Math.round(months * 30) : Math.ceil(amount / 100));
+}
+
+function levelFromDelay(value: any, amount = 0, months = 0) {
+  const days = delayDaysFromRange(value, amount, months);
+  if (days >= 90) return 'CRITICA';
+  if (days >= 60) return 'ALTA';
+  if (days >= 30) return 'MEDIA';
+  return morosityLevel(amount, months);
+}
+
 export async function importMorososSource(input: SourceInput = {}) {
-  const { rows, fingerprint, source } = await rowsFromSource({ sourcePath: DEFAULT_MOROSOS_SOURCE, ...input });
+  const { rows, fingerprint, source } = await rowsFromSource({ sourcePath: DEFAULT_MOROSOS_SOURCE, sheetName: DEFAULT_MOROSOS_SHEET, ...input });
   if (input.replace) {
     (db as any).prepare('DELETE FROM morosidad').run();
   }
   let imported = 0;
   let skipped = 0;
   for (const row of rows) {
-    const folio = headerValue(row, ['Folio SIAC', 'Folio']);
+    const folio = firstValidFolio([
+      headerValue(row, ['Folio SIAC']),
+      headerValue(row, ['Folio']),
+      headerValue(row, ['Fecha']),
+    ]);
     if (!folio) { skipped++; continue; }
     const telefono = digits10(headerValue(row, ['Telefono', 'Tel Contacto', 'Telcontacto']));
     const celular = digits10(headerValue(row, ['Celular', 'Celular 1', 'Tel Celular', 'Telcelular']));
     const correo = headerValue(row, ['Correo']);
     const saldo = Number(String(headerValue(row, ['Saldo Total', 'Adeudo', 'Monto Adeudo']) || '0').replace(/[^0-9.-]/g, '')) || 0;
     const mesesAdeudo = Number(String(headerValue(row, ['Meses Adeudo', 'Meses de Adeudo']) || '0').replace(/[^0-9.-]/g, '')) || 0;
+    const rangoDilacion = headerValue(row, ['Rango Dilacion', 'Rango Dilación']);
     const importePagos = Number(String(headerValue(row, ['Importe Pagos', 'Pagos']) || '0').replace(/[^0-9.-]/g, '')) || 0;
     const diaVencimiento = headerValue(row, ['Dia Vencimiento Recibo', 'Dia de Vencimiento', 'Vencimiento Recibo']);
     const existingClient = (db as any).prepare('SELECT id FROM clientes_crm WHERE folio=?').get(folio) as any;
     const clienteId = existingClient?.id || `MOR-CLI-${folio}`;
     const metadata = {
-      paquete: headerValue(row, ['Paq Ofic C', 'Paquete']),
-      promotor: headerValue(row, ['Promotor']),
+      paquete: headerValue(row, ['Paq Ofic C', 'Paquete', 'Estatus']),
+      promotor: headerValue(row, ['Promotor', 'Gerente', 'Master']),
       usuario: headerValue(row, ['Folioprom', 'Estrategia']),
       area: headerValue(row, ['Area']),
       mercado: headerValue(row, ['Mercado C', 'Ciudad', 'Cat']),
@@ -301,6 +374,7 @@ export async function importMorososSource(input: SourceInput = {}) {
       mesesAdeudo,
       importePagos,
       diaVencimiento,
+      rangoDilacion,
       saldos: {
         telecom: headerValue(row, ['Saldo Telecom']),
         tercero: headerValue(row, ['Saldo Tercero']),
@@ -324,7 +398,7 @@ export async function importMorososSource(input: SourceInput = {}) {
         ultimo_contacto: null,
         proximo_seguimiento: null,
         nivel_satisfaccion: null,
-        riesgo_cancelacion: saldo >= 3000 ? 'ALTO' : 'MEDIO',
+        riesgo_cancelacion: delayDaysFromRange(rangoDilacion, saldo, mesesAdeudo) >= 60 || saldo >= 3000 ? 'ALTO' : 'MEDIO',
         vendedor_asignado: null,
         metadata: JSON.stringify(metadata),
       });
@@ -333,13 +407,13 @@ export async function importMorososSource(input: SourceInput = {}) {
         folio,
         cliente_id: clienteId,
         monto_adeudo: saldo,
-        dias_atraso: Math.max(1, mesesAdeudo ? Math.round(mesesAdeudo * 30) : Math.ceil(saldo / 100)),
+        dias_atraso: delayDaysFromRange(rangoDilacion, saldo, mesesAdeudo),
         fecha_vencimiento: null,
         ultimo_pago: null,
-        status_cobranza: morosityLevel(saldo, mesesAdeudo),
+        status_cobranza: levelFromDelay(rangoDilacion, saldo, mesesAdeudo),
         gestor_asignado: null,
         convenio: 0,
-        observaciones: `Importado de MOROSOS APP. Meses adeudo: ${mesesAdeudo || 'N/D'}. Dia vencimiento: ${diaVencimiento || 'N/D'}. Promotor: ${metadata.promotor || 'N/D'}`,
+        observaciones: `Importado de EDGAR DAVID.xlsx. Rango: ${rangoDilacion || 'N/D'}. Meses adeudo: ${mesesAdeudo || 'N/D'}. Dia vencimiento: ${diaVencimiento || 'N/D'}. Promotor: ${metadata.promotor || 'N/D'}`,
         metadata: JSON.stringify(metadata),
       });
       imported++;
