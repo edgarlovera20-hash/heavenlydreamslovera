@@ -249,9 +249,14 @@ export async function importSiacSource(input: SourceInput = {}) {
         const segmentoLinea = headerValue(row, ['Segmento']) || tipoCliente || headerValueLast(row, ['Tipo de Linea']) || tipoLinea;
       const tipoServicio = headerValue(row, ['Tipo de Servicio', 'Tipo Serv']) || headerValueAt(row, ['Tipo de Cliente', 'Tipo Cliente'], 1);
       const usuario = headerValue(row, ['Usuario', 'Promotor']);
-      const promotor = headerValue(row, ['Nombre Promotor', 'Nombre']) || usuario;
-      const etapaPisa = headerValue(row, ['Etapa PISA', 'Estatus PISA Multiorden', 'Estatus de Atencion Multiorden', 'Estatus de Atenciýn Multiorden']) || headerValue(row, ['Elaborada', 'Estatus Elaborada', 'Estatus Etapa']) || estatusSecundario;
-      const fechaPosteo = dateValue(row, ['Orden de Servicio TV', 'Fecha de Os TV', 'Pisa OS Fecha POSTEO Multiorden', 'Fecha Posteo', 'Fecha de Posteo', 'Fecha OS Alta']);
+      const promotor = headerValue(row, ['Nombre Promotor', 'Promotor Nombre']) || usuario;
+      const etapaPisa = headerValue(row, ['Estatus PISA Multiorden'])
+        || headerValue(row, ['Estatus PISA TV'])
+        || headerValue(row, ['Estatus de Atencion Multiorden', 'Estatus de Atenciýn Multiorden'])
+        || headerValue(row, ['Etapa PISA', 'Elaborada', 'Estatus Elaborada', 'Estatus Etapa'])
+        || estatusSecundario;
+      const fechaPosteo = dateValue(row, ['Pisa OS Fecha POSTEO Multiorden', 'Pisa OS Fecha POSTEO TV'])
+        || dateValue(row, ['Orden de Servicio TV', 'Fecha de Os TV', 'Fecha Posteo', 'Fecha de Posteo', 'Fecha OS Alta']);
       SiacRecords.upsert({
         id: randomUUID(),
         source_id: sourceId,
