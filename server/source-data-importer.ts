@@ -17,7 +17,7 @@ export const DEFAULT_MOROSOS_SOURCE = process.env.MOROSOS_PRIMARY_SOURCE
   || (existsSync(REPO_MOROSOS_SOURCE) ? REPO_MOROSOS_SOURCE : '');
 const DEFAULT_SIAC_SHEET = process.env.SIAC_PRIMARY_SHEET || (DEFAULT_EDGAR_DAVID_SOURCE && DEFAULT_SIAC_SOURCE === DEFAULT_EDGAR_DAVID_SOURCE ? 'Hoja2' : '');
 const DEFAULT_MOROSOS_SHEET = process.env.MOROSOS_PRIMARY_SHEET || (DEFAULT_EDGAR_DAVID_SOURCE && DEFAULT_MOROSOS_SOURCE === DEFAULT_EDGAR_DAVID_SOURCE ? 'Hoja1' : '');
-export const SIAC_IMPORTER_VERSION = 'siac-ppies-v3-edgar-david';
+export const SIAC_IMPORTER_VERSION = 'siac-ppies-v4-edgar-david';
 
 export type SourceInput = { sourcePath?: string; buffer?: Buffer; fileName?: string; replace?: boolean; sheetName?: string; sheetIndex?: number };
 
