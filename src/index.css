@@ -21,7 +21,21 @@
   }
 
   .hd-app-sidebar {
-    width: clamp(15.5rem, 18vw, 18rem) !important;
+    width: clamp(13.75rem, 15vw, 15.5rem) !important;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .hd-sidebar-nav {
+    padding-bottom: 0.75rem !important;
+  }
+
+  .hd-sidebar-footer {
+    position: sticky;
+    bottom: 0;
+    background:
+      linear-gradient(180deg, rgba(0, 0, 0, 0.68), rgba(0, 0, 0, 0.96)) !important;
+    backdrop-filter: blur(14px);
   }
 
   .hd-app-main,
@@ -101,6 +115,51 @@
     min-height: 2.75rem;
   }
 
+  .hd-nav-item {
+    min-height: 2.6rem;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012)),
+      rgba(8, 8, 8, 0.82) !important;
+  }
+
+  .hd-nav-item:hover,
+  .hd-nav-item.is-active {
+    border-color: color-mix(in srgb, currentColor 52%, rgba(255, 255, 255, 0.12)) !important;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.022)),
+      rgba(14, 14, 14, 0.94) !important;
+  }
+
+  .hd-nav-item-icon,
+  .hd-quick-action-icon {
+    opacity: 1 !important;
+    stroke-width: 2.35 !important;
+    color: currentColor !important;
+    filter: drop-shadow(0 0 10px color-mix(in srgb, currentColor 46%, transparent)) !important;
+  }
+
+  .hd-quick-action {
+    min-height: 3.25rem;
+    overflow: hidden;
+    border-color: color-mix(in srgb, currentColor 36%, rgba(255, 255, 255, 0.1)) !important;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.018)),
+      rgba(12, 12, 12, 0.92) !important;
+  }
+
+  .hd-quick-action:hover {
+    transform: translateY(-1px);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03)),
+      rgba(18, 18, 18, 0.96) !important;
+  }
+
+  .hd-dashboard-clean .hd-premium-card,
+  .hd-dashboard-clean .hd-card {
+    border-radius: 1rem !important;
+  }
+
   @media (max-width: 767px) {
     .hd-app-shell {
       flex-direction: column;
@@ -160,7 +219,7 @@
 
   @media (min-width: 768px) and (max-width: 1180px) {
     .hd-app-sidebar {
-      width: 15.5rem !important;
+      width: 13.75rem !important;
     }
 
     .hd-scroll-zone {
