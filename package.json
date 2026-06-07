@@ -17,6 +17,9 @@
     "import:morosos": "node scripts/import-morosos-xlsx.mjs",
     "test:api": "node scripts/api-smoke.mjs",
     "test": "npm run lint && npm run enterprise:check && npm run preprod:check && npm run test:api",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "turbo:build": "turbo run build",
     "turbo:lint": "turbo run lint",
     "turbo:dev": "turbo run dev --parallel"
@@ -79,10 +82,12 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.19.19",
     "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^2.0.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
     "turbo": "^2.5.8",
     "typescript": "~5.8.3",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^2.0.0"
   }
 }
