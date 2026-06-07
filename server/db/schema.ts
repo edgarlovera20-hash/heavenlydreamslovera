@@ -1,4 +1,4 @@
-import { db, updateById } from './connection';
+import { db, updateById, encryptSecret } from './connection';
 import { hashPassword, isPasswordHash } from '../passwords';
 import { randomUUID } from 'crypto';
 
@@ -1084,7 +1084,6 @@ db.exec(`
 `);
 
 // Migrate existing plaintext email_sync_accounts credentials to AES-256-GCM
-import { encryptSecret } from './connection';
 (function migrateEmailSyncCredentials() {
   try {
     const rows = db.prepare('SELECT id, client_secret, refresh_token FROM email_sync_accounts').all() as any[];

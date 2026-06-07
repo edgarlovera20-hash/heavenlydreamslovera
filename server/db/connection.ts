@@ -4,9 +4,9 @@ import { randomUUID } from 'crypto';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
-import { encryptSecret } from '../crypto-helpers';
+import { encryptSecret, decryptSecret } from '../crypto-helpers';
 
-export { randomUUID };
+export { randomUUID, encryptSecret, decryptSecret };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = join(__dirname, '..', '..', 'data', 'heavenlydreams.db');
@@ -48,4 +48,10 @@ export function parseJson(value: any, fallback: any = null) {
 export function encryptField(value: string | null | undefined): string | null {
   if (!value) return null;
   try { return encryptSecret(value); } catch { return value; }
+}
+
+export function decryptField(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (!value.startsWith('v1:')) return value;
+  try { return decryptSecret(value); } catch { return null; }
 }
