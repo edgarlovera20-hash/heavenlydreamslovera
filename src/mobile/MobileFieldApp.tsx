@@ -8,7 +8,6 @@ import { CURP_REGEX, generateCurpCandidate, normalizeCurpValue } from '../lib/cu
 import { getMobilePosition } from './mobileLocation';
 import { runMobileOcr } from './mobileOcr';
 
-const AvatarStudio = lazy(() => import('../components/ui/AvatarStudio'));
 const MapPicker = lazy(() => import('../components/ui/MapPicker').then(m => ({ default: m.MapPicker })));
 const NewSaleForm = lazy(() => import('../components/views/NewSaleForm'));
 const RegisterForm = lazy(() => import('../components/views/RegisterForm').then(m => ({ default: m.RegisterForm })));
@@ -33,7 +32,7 @@ const SUPPORTED_FILE_EXTENSIONS = new Set([
 ]);
 
 type IconName = 'badge' | 'camera' | 'check' | 'chevron-left' | 'chevron-right' | 'clipboard' | 'cloud-off' | 'eye' | 'eye-off' | 'folder' | 'home' | 'id' | 'loader' | 'logout' | 'map' | 'message' | 'phone' | 'refresh' | 'save' | 'search' | 'send' | 'settings' | 'shield' | 'smartphone' | 'sparkles' | 'user' | 'users' | 'wallet' | 'wifi' | 'wifi-off';
-type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'usuarios' | 'aprobaciones' | 'perfil' | 'avatar' | 'ajustes';
+type MobileSection = 'inicio' | 'venta' | 'folios' | 'clientes' | 'documentos' | 'seguimiento' | 'nominas' | 'chats' | 'usuarios' | 'aprobaciones' | 'perfil' | 'ajustes';
 type DraftSaveState = 'idle' | 'saving' | 'saved';
 type Notice = { kind: 'success' | 'error'; message: string } | null;
 type QueueStatus = 'queued' | 'syncing' | 'failed';
@@ -321,7 +320,6 @@ const PRIMARY_NAV: Array<{ id: MobileSection; label: string; icon: IconName }> =
   { id: 'perfil', label: 'Perfil', icon: 'user' },
   { id: 'venta', label: 'Venta', icon: 'clipboard' },
   { id: 'folios', label: 'Consulta', icon: 'search' },
-  { id: 'avatar', label: 'Avatar', icon: 'sparkles' },
   { id: 'nominas', label: 'Nóminas', icon: 'wallet' },
   { id: 'documentos', label: 'Expedientes', icon: 'folder' },
 ];
@@ -330,7 +328,6 @@ const MODULES: Array<{ id: MobileSection; label: string; icon: IconName; caption
   { id: 'perfil', label: 'Mi perfil', icon: 'user', caption: 'Datos personales, nivel, frase y progreso' },
   { id: 'venta', label: 'Captura venta nueva', icon: 'clipboard', caption: 'Flujo completo con INE, CURP, mapa, PDF y firma' },
   { id: 'folios', label: 'Consulta y seguimiento', icon: 'search', caption: 'SIAC, estatus operativo y seguimiento 360' },
-  { id: 'avatar', label: 'Crear avatar', icon: 'sparkles', caption: 'Avatar IA, frase, color, estilo y efecto visual' },
   { id: 'nominas', label: 'Nóminas', icon: 'wallet', caption: 'Pagos y comisiones propias' },
   { id: 'documentos', label: 'Expedientes', icon: 'folder', caption: 'Documentos, evidencias y archivos por captura' },
 ];
@@ -3019,10 +3016,6 @@ export default function MobileFieldApp() {
               <MobileIcon name="search" className="h-6 w-6" />
               <span className="block text-sm font-black uppercase tracking-[0.08em]">Consulta</span>
             </button>
-            <button onClick={() => setActive('avatar')} className="hd-neon-action hd-mobile-quick-action hd-tone-violet min-h-20 px-4 py-4 text-left">
-              <MobileIcon name="sparkles" className="h-6 w-6" />
-              <span className="block text-sm font-black uppercase tracking-[0.08em]">Crear avatar</span>
-            </button>
             <button onClick={() => setActive('nominas')} className="hd-neon-action hd-mobile-quick-action hd-tone-amber min-h-20 px-4 py-4 text-left">
               <MobileIcon name="wallet" className="h-6 w-6" />
               <span className="block text-sm font-black uppercase tracking-[0.08em]">Nóminas</span>
@@ -3089,7 +3082,6 @@ export default function MobileFieldApp() {
     if (active === 'usuarios') return canApproveMobile ? renderUserApprovals() : renderSettings();
     if (active === 'aprobaciones') return canApproveMobile ? renderAgentApprovals() : renderSettings();
     if (active === 'perfil') return renderProfile();
-    if (active === 'avatar') return renderAvatarStudio();
     return renderSettings();
   };
 
@@ -4308,43 +4300,6 @@ export default function MobileFieldApp() {
     );
   }
 
-  function renderAvatarStudio() {
-    return (
-      <div className="space-y-4 pb-4">
-        <Panel className="border-cyan-300/25 bg-cyan-300/8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/25 bg-cyan-300/10 text-cyan-100">
-              <MobileIcon name="sparkles" className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-base font-black text-white">Crear avatar IA</p>
-              <p className="mt-1 text-xs leading-5 text-slate-300">
-                Personaliza tu identidad visual, frase, colores, atuendo y estilo.
-              </p>
-            </div>
-          </div>
-        </Panel>
-        <Suspense fallback={
-          <Panel>
-            <div className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
-          </Panel>
-        }>
-          <AvatarStudio
-            uid={profileUid}
-            name={profileName}
-            role={profileRoleLabel}
-            currentAvatar={profileAvatarUrl}
-            phrase={profilePhrase}
-            compact
-            onAvatarChange={persistGeneratedProfileAvatar}
-            onPhraseChange={saveProfilePhraseLocal}
-            onUploadClick={() => profileFileInputRef.current?.click()}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
   function renderProfile() {
     return (
       <div className="space-y-4 pb-4">
@@ -4420,24 +4375,6 @@ export default function MobileFieldApp() {
             </div>
           </div>
         </Panel>
-
-        <Suspense fallback={
-          <Panel>
-            <div className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
-          </Panel>
-        }>
-          <AvatarStudio
-            uid={profileUid}
-            name={profileName}
-            role={profileRoleLabel}
-            currentAvatar={profileAvatarUrl}
-            phrase={profilePhrase}
-            compact
-            onAvatarChange={persistGeneratedProfileAvatar}
-            onPhraseChange={saveProfilePhraseLocal}
-            onUploadClick={() => profileFileInputRef.current?.click()}
-          />
-        </Suspense>
 
         <div className="grid grid-cols-2 gap-3">
           <Metric label="Success rate" value={`${profileModel.successRate}%`} />

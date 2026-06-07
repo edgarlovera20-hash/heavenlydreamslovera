@@ -2,20 +2,13 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Crown, Flame, Trophy, Target, TrendingUp,
   Award, Star, Zap, ChevronRight, Medal, Clock,
-  BarChart2, Shield, Sparkles, DollarSign, Edit3, Save
+  BarChart2, Shield, Sparkles, DollarSign, Edit3, Save,
+  User,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { auth } from '../../lib/firebase';
 import { UsersAPI, VentasAPI } from '../../services/db';
 import { sendPushNotification } from '../../lib/notifications';
-import AvatarStudio from '../ui/AvatarStudio';
-import { AvatarFrame } from '../ui/avatar-frame';
-import { fetchAvatarIdentity, upsertAvatarIdentity } from '../../features/avatar/avatar-api';
-import {
-  AVATAR_IDENTITY_EVENT,
-  loadAvatarIdentity,
-  saveAvatarIdentity,
-} from '../../features/avatar/avatar-store';
 
 interface Sale {
   id?: string;
@@ -73,7 +66,6 @@ export default function Profile() {
   const [avatar, setAvatar] = useState<string | null>(
     session?.uid ? localStorage.getItem(`hd_avatar_${session.uid}`) : null
   );
-  const [avatarIdentity, setAvatarIdentity] = useState(() => loadAvatarIdentity(session?.uid));
   const [profilePhrase, setProfilePhrase] = useState(() => (
     phraseKey ? localStorage.getItem(phraseKey) || '' : ''
   ));
@@ -98,24 +90,12 @@ export default function Profile() {
     if (!session?.uid) return;
     const uid = session.uid;
     setAvatar(localStorage.getItem(`hd_avatar_${uid}`));
-    setAvatarIdentity(loadAvatarIdentity(uid));
-    void fetchAvatarIdentity(uid).then(setAvatarIdentity);
-
-    const onIdentity = (event: Event) => {
-      const detail = (event as CustomEvent).detail || {};
-      if (!detail.uid || detail.uid === uid) setAvatarIdentity(loadAvatarIdentity(uid));
-      if (detail.identity && (!detail.uid || detail.uid === uid)) setAvatarIdentity(detail.identity);
-    };
     const onAvatar = (event: Event) => {
       const detail = (event as CustomEvent).detail || {};
       if ((!detail.uid || detail.uid === uid) && detail.url) setAvatar(detail.url);
     };
-    window.addEventListener(AVATAR_IDENTITY_EVENT, onIdentity);
     window.addEventListener('hd-avatar-updated', onAvatar);
-    return () => {
-      window.removeEventListener(AVATAR_IDENTITY_EVENT, onIdentity);
-      window.removeEventListener('hd-avatar-updated', onAvatar);
-    };
+    return () => window.removeEventListener('hd-avatar-updated', onAvatar);
   }, [session?.uid]);
 
   useEffect(() => {
@@ -146,9 +126,7 @@ export default function Profile() {
     try {
       if (localStorage.getItem(key) === goal.notified_at) return;
       localStorage.setItem(key, goal.notified_at);
-    } catch {
-      // ignore storage errors; still show the in-app message once for this render
-    }
+    } catch { /* ignore */ }
     sendPushNotification('Meta actualizada', {
       body: goal.mensaje || `Tu meta es de ${goal.meta || 10} ventas aprobadas.`,
       type: 'success',
@@ -161,7 +139,6 @@ export default function Profile() {
     ? 'gerente'
     : userRoleRaw === 'supervisor' ? 'supervisor' : 'asesor';
 
-  // Per-user stats
   const mySales = useMemo(
     () => sales.filter(s => s.asesorId === session?.uid),
     [sales, session?.uid]
@@ -182,13 +159,10 @@ export default function Profile() {
   const goalProgress = goalMeta > 0 ? Math.min(100, Math.round((goalApproved / goalMeta) * 100)) : 0;
   const goalMissing = Math.max(0, goalMeta - goalApproved);
 
-  // Streak: consecutive days with at least one sale, counting back from today
   const streakDays = useMemo(() => {
     if (mySales.length === 0) return 0;
     const dates = new Set(
-      mySales
-        .map(s => (s.fechaSolicitud || '').split('T')[0])
-        .filter(Boolean)
+      mySales.map(s => (s.fechaSolicitud || '').split('T')[0]).filter(Boolean)
     );
     let streak = 0;
     const day = new Date();
@@ -198,7 +172,6 @@ export default function Profile() {
         streak += 1;
         day.setDate(day.getDate() - 1);
       } else if (streak === 0) {
-        // Allow today to be empty, count from yesterday
         day.setDate(day.getDate() - 1);
         if (!dates.has(day.toISOString().split('T')[0])) break;
       } else {
@@ -210,14 +183,13 @@ export default function Profile() {
   }, [mySales]);
 
   const points = (foliosTotales * 10) + (ventasPagadas * 25);
-  const xp = points; // Use points as XP equivalent
+  const xp = points;
   const level = Math.floor(xp / 100);
   const xpNextLevel = (level + 1) * 100;
   const xpCurrentLevel = xp % 100;
-  const progressPercent = xpCurrentLevel; // already 0-100
+  const progressPercent = xpCurrentLevel;
   const missingXP = xpNextLevel - xp;
 
-  // Leaderboard built from all users + their sales
   const leaderboard = useMemo(() => {
     const board = users.map(u => {
       const userSales = sales.filter(s => s.asesorId === u.uid);
@@ -231,7 +203,6 @@ export default function Profile() {
         level: Math.floor(pts / 100),
       };
     });
-    // Include current session user if not in users list (e.g., built-in admin)
     if (session?.uid && !users.find(u => u.uid === session.uid)) {
       board.push({
         id: session.uid,
@@ -251,7 +222,6 @@ export default function Profile() {
   const hasFireStreak = streakDays >= 7;
   const isTop3 = myRank <= 3;
 
-  // Medals derived from real progress
   const medals = [
     { id: 1, name: 'Primera Venta', icon: Star, color: 'text-yellow-400', bg: 'bg-yellow-400/10', unlocked: foliosTotales >= 1 },
     { id: 2, name: 'Vendedor Activo', icon: TrendingUp, color: 'text-blue-400', bg: 'bg-blue-400/10', unlocked: foliosTotales >= 5 },
@@ -261,7 +231,6 @@ export default function Profile() {
   ];
   const unlockedCount = medals.filter(m => m.unlocked).length;
 
-  // Timeline from the 3 most recent sales
   const timeline: TimelineEntry[] = useMemo(() => {
     const recent = [...mySales]
       .sort((a, b) => (b.fechaSolicitud || '').localeCompare(a.fechaSolicitud || ''))
@@ -280,37 +249,15 @@ export default function Profile() {
     });
   }, [mySales]);
 
-  const persistAvatar = (url: string) => {
-    setAvatar(url);
-    if (session?.uid) {
-      try { localStorage.setItem(`hd_avatar_${session.uid}`, url); } catch { /* quota */ }
-    }
-  };
-
-  const persistProfilePhrase = (value: string) => {
-    const clean = value.trim().slice(0, 140);
-    setProfilePhrase(clean);
-    setPhraseDraft(clean);
-    if (phraseKey) {
-      try { localStorage.setItem(phraseKey, clean); } catch { /* quota */ }
-    }
-  };
-
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onloadend = () => {
       const url = reader.result as string;
-      persistAvatar(url);
+      setAvatar(url);
       if (session?.uid) {
-        const nextIdentity = saveAvatarIdentity(session.uid, {
-          ...avatarIdentity,
-          avatarUrl: url,
-          aiGenerated: false,
-        });
-        setAvatarIdentity(nextIdentity);
-        void upsertAvatarIdentity(session.uid, nextIdentity);
+        try { localStorage.setItem(`hd_avatar_${session.uid}`, url); } catch { /* quota */ }
         window.dispatchEvent(new CustomEvent('hd-avatar-updated', { detail: { uid: session.uid, url } }));
       }
     };
@@ -319,7 +266,11 @@ export default function Profile() {
 
   const saveProfilePhrase = () => {
     const value = phraseDraft.trim().slice(0, 140);
-    persistProfilePhrase(value);
+    setProfilePhrase(value);
+    setPhraseDraft(value);
+    if (phraseKey) {
+      try { localStorage.setItem(phraseKey, value); } catch { /* quota */ }
+    }
     setEditingPhrase(false);
   };
 
@@ -346,7 +297,7 @@ export default function Profile() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* LEFT COLUMN: PROFILE CARD & METRICS */}
+        {/* LEFT COLUMN */}
         <div className="lg:col-span-1 space-y-6">
 
           {/* PROFILE CARD */}
@@ -359,37 +310,45 @@ export default function Profile() {
             )}
 
             <div className="relative z-10 flex flex-col items-center text-center">
-              <div className="relative mb-4 group">
-                <AvatarFrame
-                  identity={avatarIdentity}
-                  avatarUrl={avatar}
-                  name={userName}
-                  size="lg"
-                  editable
+              {/* Avatar */}
+              <div className="relative mb-4">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
                   className={cn(
-                    isTop3 && "ring-2 ring-yellow-300/40",
+                    "relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-2 transition-all",
+                    isTop3 ? "border-yellow-300/60" : "border-cyan-400/40",
                     hasFireStreak && "shadow-[0_0_34px_rgba(249,115,22,0.36)]"
                   )}
-                  onClick={() => fileInputRef.current?.click()}
+                  title="Cambiar foto"
                 >
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    ref={fileInputRef}
-                    onChange={handleImageUpload}
-                    aria-label="Subir avatar"
-                  />
-                </AvatarFrame>
-
+                  {avatar ? (
+                    <img src={avatar} alt="Avatar" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-cyan-800/60 to-slate-800">
+                      <User className="h-10 w-10 text-cyan-300/60" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity hover:opacity-100">
+                    <Edit3 className="h-5 w-5 text-white" />
+                  </div>
+                </button>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleImageUpload}
+                  aria-label="Subir foto de perfil"
+                />
                 {isManager && (
-                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-tr from-yellow-500 to-yellow-300 rounded-full flex items-center justify-center shadow-lg border-2 border-[#020617]" title="Gerente">
-                    <Crown className="w-4 h-4 text-yellow-950" />
+                  <div className="absolute -top-1 -right-1 w-7 h-7 bg-gradient-to-tr from-yellow-500 to-yellow-300 rounded-full flex items-center justify-center shadow-lg border-2 border-[#020617]" title="Gerente">
+                    <Crown className="w-3.5 h-3.5 text-yellow-950" />
                   </div>
                 )}
                 {hasFireStreak && (
-                  <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-gradient-to-tr from-orange-500 to-red-500 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(249,115,22,0.8)] border-2 border-[#020617]" title={`${streakDays} días en racha`}>
-                    <Flame className="w-4 h-4 text-white" />
+                  <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-gradient-to-tr from-orange-500 to-red-500 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(249,115,22,0.8)] border-2 border-[#020617]" title={`${streakDays} días en racha`}>
+                    <Flame className="w-3.5 h-3.5 text-white" />
                   </div>
                 )}
               </div>
@@ -412,17 +371,15 @@ export default function Profile() {
                 {editingPhrase ? (
                   <textarea
                     value={phraseDraft}
-                    onChange={(event) => setPhraseDraft(event.target.value.slice(0, 140))}
-                    onKeyDown={(event) => {
-                      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') saveProfilePhrase();
-                    }}
+                    onChange={(e) => setPhraseDraft(e.target.value.slice(0, 140))}
+                    onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') saveProfilePhrase(); }}
                     placeholder="Escribe tu frase, lema o meta personal..."
                     rows={3}
                     className="min-h-[78px] w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm leading-5 text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-400/20"
                   />
                 ) : (
                   <p className="min-h-[44px] rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-sm italic leading-6 text-slate-200">
-                    “{profilePhrase || 'Sin frase todavía. Agrega una para personalizar tu perfil.'}”
+                    "{profilePhrase || 'Sin frase todavía. Agrega una para personalizar tu perfil.'}"
                   </p>
                 )}
                 <p className="mt-2 text-right text-[10px] text-slate-500">{phraseDraft.length}/140</p>
@@ -513,9 +470,9 @@ export default function Profile() {
             </p>
           </div>
 
-          {/* NEXT TARGET ENGINE */}
+          {/* NEXT TARGET */}
           <div className="glass-panel bg-gradient-to-br from-transparent to-black/20 rounded-2xl p-5 relative overflow-hidden">
-            <div className="absolute -right-4 -top-4 w-24 h-24 bg-sky-500/10 rounded-full blur-2xl pointer-events-none"></div>
+            <div className="absolute -right-4 -top-4 w-24 h-24 bg-sky-500/10 rounded-full blur-2xl pointer-events-none" />
             <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
               <Target className="w-4 h-4 text-sky-400" /> Próximo Objetivo
             </h3>
@@ -525,27 +482,16 @@ export default function Profile() {
                 <span className="text-xs font-bold text-sky-400">Faltan {missingXP} XP</span>
               </div>
               <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-sky-500 rounded-full" style={{ width: `${progressPercent}%` }}></div>
+                <div className="h-full bg-sky-500 rounded-full" style={{ width: `${progressPercent}%` }} />
               </div>
             </div>
           </div>
-
         </div>
 
         {/* RIGHT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
-          <AvatarStudio
-            uid={session?.uid}
-            name={userName}
-            role={userRoleLabel}
-            currentAvatar={avatar}
-            phrase={profilePhrase}
-            onAvatarChange={persistAvatar}
-            onPhraseChange={persistProfilePhrase}
-            onUploadClick={() => fileInputRef.current?.click()}
-          />
 
-          {/* MEDALS SYSTEM */}
+          {/* MEDALS */}
           <div className="glass-panel rounded-2xl p-6">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -555,7 +501,6 @@ export default function Profile() {
                 {unlockedCount} / {medals.length} Desbloqueadas
               </span>
             </div>
-
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
               {medals.map(medal => (
                 <div
@@ -579,14 +524,12 @@ export default function Profile() {
           {/* LEADERBOARD & TIMELINE */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-            {/* LEADERBOARD */}
             <div className="glass-panel rounded-2xl p-6 flex flex-col">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-yellow-400" /> Leaderboard
                 </h3>
               </div>
-
               <div className="flex bg-slate-800/50 rounded-lg p-1 mb-4" role="tablist">
                 {(['weekly', 'monthly', 'all-time'] as const).map(filter => (
                   <button
@@ -605,7 +548,6 @@ export default function Profile() {
                   </button>
                 ))}
               </div>
-
               <div className="flex-1 space-y-2">
                 {leaderboard.length === 0 ? (
                   <div className="text-center py-8 text-slate-500 text-sm">
@@ -642,12 +584,10 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* TIMELINE */}
             <div className="glass-panel rounded-2xl p-6">
               <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-6">
                 <Clock className="w-5 h-5 text-sky-400" /> Historial de Logros
               </h3>
-
               {timeline.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
                   <Clock className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -661,9 +601,7 @@ export default function Profile() {
                         <item.icon className={cn("w-4 h-4", item.color)} />
                       </div>
                       <div className="flex-1 bg-slate-800/50 p-4 rounded-xl border border-white/5 shadow-sm">
-                        <div className="flex items-center justify-between mb-1">
-                          <h4 className="font-bold text-slate-200 text-sm">{item.title}</h4>
-                        </div>
+                        <h4 className="font-bold text-slate-200 text-sm mb-1">{item.title}</h4>
                         <time className="text-xs font-medium text-slate-500">{item.time}</time>
                       </div>
                     </div>
