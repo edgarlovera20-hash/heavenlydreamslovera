@@ -429,7 +429,7 @@ export function buildCaptureDecision(conversation: any, message: any, baseFields
   const stage = stageForMissing(missing);
   const draft = {
     ...previousDraft,
-    stage: wantsStart && missing.length ? stage : stage,
+    stage,
     fields: mergedFields,
     documents,
     ocr: media?.ocr || previousDraft.ocr || null,

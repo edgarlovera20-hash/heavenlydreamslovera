@@ -7,12 +7,10 @@ export function json(value: any) {
   return JSON.stringify(value ?? {});
 }
 
-export function recordMetric(name: string, tags: any = {}) {
-  // Metrics import is deferred to avoid circular deps — caller passes the Metrics db handle
-  // This is a re-export shim; actual insertion happens via the imported Metrics in core.ts
-  void name; void tags;
-  throw new Error('Use recordMetricWith(Metrics, name, tags) instead');
-}
+// NOTE: the canonical recordMetric lives in core.ts (private) and in
+// approval-handler.ts. This file intentionally does NOT export one to avoid
+// circular dependency with db.ts. Any module that needs metrics must import
+// from its own local copy or from core.ts.
 
 export function cleanPersonName(value: any) {
   const name = String(value || '')

@@ -474,8 +474,9 @@ Reglas:
 Perfil del agente:
 ${JSON.stringify({
     name: profile?.name || 'ARIUX',
-    selfKnowledge: profile?.selfKnowledge || '',
-    knowledgeBase: profile?.knowledgeBase || '',
+    // Truncate free-text knowledge fields to avoid LLM context overflow
+    selfKnowledge: String(profile?.selfKnowledge || '').slice(0, 1200),
+    knowledgeBase: String(profile?.knowledgeBase || '').slice(0, 1200),
     designer: getDesignerConfig(profile),
     macros: getProfileMacros(profile).map((macro: any) => ({
       name: macro.name,
@@ -490,7 +491,15 @@ ${JSON.stringify({
   })}
 
 Memoria de conversacion:
-${JSON.stringify(memory)}
+${JSON.stringify({
+    // Only send operationally relevant memory slices to keep prompt size bounded
+    promoter: memory.promoter,
+    captureDraft: memory.captureDraft,
+    knownFields: memory.knownFields,
+    stage: memory.stage,
+    summary: memory.summary,
+    audience: memory.audience,
+  })}
 
 Promotor registrado:
 ${JSON.stringify(promoter)}
@@ -521,21 +530,21 @@ ${JSON.stringify({
     } : undefined,
   })}
 
-Devuelve exactamente:
+Devuelve SOLO este JSON (sin markdown, sin texto fuera del objeto):
 {
-  "intent": "venta|consulta_folio|soporte|morosidad|busqueda_web|otro",
-  "confidence": 0.0,
+  "intent": "<uno de: venta | consulta_folio | soporte | morosidad | busqueda_web | otro>",
+  "confidence": <numero entre 0.0 y 1.0>,
   "extractedFields": {
-    "nombre": "",
-    "telefono": "",
-    "direccion": "",
-    "colonia": "",
-    "paquete": "",
-    "zona": "",
-    "folio": ""
+    "nombre": "<nombre completo del titular si esta en el mensaje, si no omitir o dejar vacio>",
+    "telefono": "<telefono de 10 digitos si esta en el mensaje>",
+    "direccion": "<direccion de instalacion si esta en el mensaje>",
+    "colonia": "<colonia si esta en el mensaje>",
+    "paquete": "<paquete o plan si esta en el mensaje>",
+    "zona": "<zona si esta en el mensaje>",
+    "folio": "<numero de folio si esta en el mensaje>"
   },
-  "proposedReply": "respuesta breve, natural y personal en espanol mexicano",
-  "proposedActions": []
+  "proposedReply": "<tu respuesta real en espanol mexicano, tono humano, max 2 oraciones>",
+  "proposedActions": ["<solo de: create_sale | update_lead | schedule_followup | escalate_human>"]
 }`;
 }
 
@@ -555,7 +564,10 @@ function decisionFromModel(conversation: any, rules: AgentDecision, modelPayload
   if (intent === 'consulta_folio') {
     const sourceText = messageTextForUnderstanding(message);
     const folio = extractedFields.folio || sourceText.match(/\b([A-Z0-9]{5,}|\d{5,})\b/i)?.[1] || '';
-    const { reply, fields } = buildFolioReply(folio ? `folio ${folio}` : sourceText);
+    // Pass the raw folio value directly so extractFolioCandidate can parse it
+    // without creating a "folio folio 12345" double-prefix when the value
+    // already starts with the word "folio".
+    const { reply, fields } = buildFolioReply(folio || sourceText);
     return personalizeDecision(conversation, {
       intent,
       confidence: clampConfidence(modelPayload?.confidence, Math.max(rules.confidence, 0.88)),
@@ -764,8 +776,13 @@ function createOutboxItems(conversation: any, message: any, decisionId: string, 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function runAgentForMessage(conversation: any, message: any) {
-  if (!conversation || !message || message.direction === 'outgoing') return null;
-  if (ChannelMessages.getById(message.id)?.direction !== 'incoming') return null;
+  if (!conversation || !message) return null;
+  // Use the canonical DB record as source of truth for direction.
+  // The in-memory `message` object may lack `direction` entirely (e.g. passed
+  // from an in-flight webhook payload), which would make the stale guard below
+  // silently pass even for outgoing messages.
+  const dbMessage = ChannelMessages.getById(message.id);
+  if (!dbMessage || dbMessage.direction !== 'incoming') return null;
   const existing = AgentDecisions.getByMessage(message.id);
   if (existing) return { decision: existing, duplicate: true };
 

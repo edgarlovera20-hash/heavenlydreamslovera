@@ -6,6 +6,7 @@ import {
   AgentTasks,
   AuditLog,
   ChannelConversations,
+  Metrics,
   Ventas,
 } from '../db';
 import { type SendChannelMessage } from './types';
@@ -16,7 +17,6 @@ function json(value: any) {
 
 function recordMetric(name: string, tags: any = {}) {
   try {
-    const { Metrics } = require('../db');
     Metrics.insert({ id: randomUUID(), name, value: 1, tags: JSON.stringify(tags || {}) });
   } catch {}
 }
