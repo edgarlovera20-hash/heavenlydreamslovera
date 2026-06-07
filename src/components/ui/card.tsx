@@ -42,3 +42,14 @@ export const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes
   ),
 );
 CardContent.displayName = 'CardContent';
+
+export const GlassCard = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn('glass-panel glass-panel-hover rounded-xl p-5', className)}
+      {...props}
+    />
+  ),
+);
+GlassCard.displayName = 'GlassCard';
