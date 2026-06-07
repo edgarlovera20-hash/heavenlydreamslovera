@@ -76,7 +76,14 @@ export function PremiumPanel({
   tone?: Tone;
   as?: React.ElementType;
 }) {
-  return <Comp className={cn('hd-panel', toneClassNames[tone], className)}>{children}</Comp>;
+  return (
+    <Comp
+      className={cn('hd-panel', toneClassNames[tone], className)}
+      style={{ borderRadius: 'var(--hd-radius-lg)', boxShadow: 'var(--hd-shadow-sm)' }}
+    >
+      {children}
+    </Comp>
+  );
 }
 
 export function PremiumCard({
@@ -90,7 +97,14 @@ export function PremiumCard({
   interactive?: boolean;
   tone?: Tone;
 }) {
-  return <div className={cn('hd-card', toneClassNames[tone], interactive && 'hd-card-interactive', className)}>{children}</div>;
+  return (
+    <div
+      className={cn('hd-card', toneClassNames[tone], interactive && 'hd-card-interactive', className)}
+      style={{ borderRadius: 'var(--hd-radius-lg)', boxShadow: 'var(--hd-shadow-sm)' }}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function PremiumButton({

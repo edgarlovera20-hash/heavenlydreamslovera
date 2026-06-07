@@ -31,7 +31,12 @@ try {
       console.log(`[DB] Migración: columna siac_records.${col.name} añadida`);
     }
   }
-} catch (e) { console.warn('[DB] Migración siac_records omitida:', e); }
+} catch (e: any) {
+  // Silently ignore "no such table" on first run — table is created right below
+  if (!(e?.code === 'SQLITE_ERROR' && String(e?.message || '').includes('no such table'))) {
+    console.warn('[DB] Migración siac_records omitida:', e);
+  }
+}
 
 // ─── SCHEMA ───────────────────────────────────────────────────────────────────
 

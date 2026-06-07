@@ -405,7 +405,7 @@ export default function App() {
                 </button>
               </div>
               <button type="submit" disabled={loggingIn}
-                className="hd-liquid-button w-full mt-6 py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 bg-[#8a3f0f] hover:bg-[#ff8a1f] text-orange-50 hover:text-[#1f1004] border border-orange-300/45 text-sm">
+                className="hd-liquid-button w-full mt-6 py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 [background-color:color-mix(in_srgb,var(--electric-orange)_40%,rgba(0,0,0,0.6))] hover:[background-color:var(--electric-orange)] text-orange-50 hover:text-slate-950 border border-orange-300/45 text-sm">
                 {loggingIn
                   ? <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />
                   : <><Lock className="w-4 h-4" /> Entrar</>}
@@ -448,7 +448,7 @@ export default function App() {
             <button
               onClick={handleContinueWithoutPasskey}
               disabled={continuingWithoutPasskey}
-              className="hd-liquid-button w-full mb-3 py-4 rounded-xl bg-[#8a3f0f] hover:bg-[#ff8a1f] text-orange-50 hover:text-[#1f1004] border border-orange-300/45 font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+              className="hd-liquid-button w-full mb-3 py-4 rounded-xl [background-color:color-mix(in_srgb,var(--electric-orange)_40%,rgba(0,0,0,0.6))] hover:[background-color:var(--electric-orange)] text-orange-50 hover:text-slate-950 border border-orange-300/45 font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
             >
               {continuingWithoutPasskey
                 ? <div className="w-5 h-5 border-2 border-cyber-black/30 border-t-cyber-black rounded-full animate-spin" />

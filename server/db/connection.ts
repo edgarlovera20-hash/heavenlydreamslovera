@@ -17,6 +17,8 @@ mkdirSync(join(__dirname, '..', '..', 'data'), { recursive: true });
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+db.pragma('cache_size = -32000');  // 32MB page cache
+db.pragma('temp_store = memory');
 
 export default db;
 export { db };

@@ -257,16 +257,24 @@ async function gmailAccessToken(account?: any) {
   if (!config.clientId || !config.clientSecret || !config.refreshToken) {
     throw new Error('Gmail Sync no configurado. Define client_id, client_secret y refresh_token.');
   }
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      refresh_token: config.refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30_000);
+  let res: Response;
+  try {
+    res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        refresh_token: config.refreshToken,
+        grant_type: 'refresh_token',
+      }),
+      signal: ctrl.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.access_token) throw new Error(data?.error_description || data?.error || 'No se pudo renovar token de Gmail.');
   return data.access_token as string;
@@ -289,9 +297,17 @@ function gmailParts(payload: any): any[] {
 }
 
 async function gmailJson(path: string, token: string) {
-  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30_000);
+  let res: Response;
+  try {
+    res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: ctrl.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error?.message || `Gmail API error ${res.status}`);
   return data;
@@ -304,35 +320,68 @@ export async function runGmailSync(input: { accountId?: string; limit?: number; 
     label: 'Gmail ENV',
     query: process.env.GMAIL_SYNC_QUERY || DEFAULT_GMAIL_QUERY,
   }) as any;
-  const token = await gmailAccessToken(account);
+
+  let token: string;
+  try {
+    token = await gmailAccessToken(account);
+  } catch (err: any) {
+    EmailSync.markAccountRun(account.id, err?.message || 'Error renovando token');
+    throw err;
+  }
+
   const query = gmailConfig(account).query;
   const limit = Math.max(1, Math.min(Number(input.limit || 10), 25));
-  const list = await gmailJson(`messages?q=${encodeURIComponent(query)}&maxResults=${limit}`, token);
   const processed: any[] = [];
+
+  let list: any;
+  try {
+    list = await gmailJson(`messages?q=${encodeURIComponent(query)}&maxResults=${limit}`, token);
+  } catch (err: any) {
+    EmailSync.markAccountRun(account.id, err?.message || 'Error listando mensajes Gmail');
+    throw err;
+  }
+
   for (const msg of list.messages || []) {
-    const message = await gmailJson(`messages/${msg.id}?format=full`, token);
+    let message: any;
+    try {
+      message = await gmailJson(`messages/${msg.id}?format=full`, token);
+    } catch (err: any) {
+      console.warn(`[EmailSync] No se pudo obtener mensaje ${msg.id}:`, err?.message || err);
+      continue;
+    }
     const headers = gmailHeaders(message.payload);
     for (const part of gmailParts(message.payload)) {
       const fileName = String(part.filename || '').trim();
       const attachmentId = part.body?.attachmentId;
       if (!fileName || !attachmentId || !SUPPORTED_FILE_RE.test(fileName)) continue;
       if (EmailSync.findJobByMessageFile(message.id, fileName)) continue;
-      const attachment = await gmailJson(`messages/${message.id}/attachments/${attachmentId}`, token);
+      let attachment: any;
+      try {
+        attachment = await gmailJson(`messages/${message.id}/attachments/${attachmentId}`, token);
+      } catch (err: any) {
+        console.warn(`[EmailSync] No se pudo descargar adjunto ${fileName} del mensaje ${message.id}:`, err?.message || err);
+        continue;
+      }
       const buffer = decodeGmailData(attachment.data);
-      const result = await processSyncAttachment({
-        accountId: account.id,
-        source: 'gmail',
-        messageId: message.id,
-        sender: headers.from,
-        subject: headers.subject,
-        fileName,
-        mimeType: part.mimeType || null,
-        buffer,
-        actor: input.actor || null,
-      });
-      processed.push(result);
+      try {
+        const result = await processSyncAttachment({
+          accountId: account.id,
+          source: 'gmail',
+          messageId: message.id,
+          sender: headers.from,
+          subject: headers.subject,
+          fileName,
+          mimeType: part.mimeType || null,
+          buffer,
+          actor: input.actor || null,
+        });
+        processed.push(result);
+      } catch (err: any) {
+        console.warn(`[EmailSync] Error procesando adjunto ${fileName}:`, err?.message || err);
+      }
     }
   }
+
   EmailSync.markAccountRun(account.id, null);
   Settings.set('email_sync_last_run', { at: new Date().toISOString(), processed: processed.length, query });
   return { ok: true, account: { id: account.id, label: account.label, email: account.email }, query, processed };
