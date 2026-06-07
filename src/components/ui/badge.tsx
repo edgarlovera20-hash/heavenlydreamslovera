@@ -7,14 +7,15 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        cyan: 'border-cyan-300/25 bg-cyan-400/10 text-cyan-200',
-        blue: 'border-blue-300/25 bg-blue-400/10 text-blue-200',
-        green: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-200',
-        purple: 'border-violet-300/25 bg-violet-400/10 text-violet-200',
-        gold: 'border-yellow-300/25 bg-yellow-400/10 text-yellow-200',
-        orange: 'border-orange-300/25 bg-orange-400/10 text-orange-200',
-        red: 'border-rose-300/25 bg-rose-400/10 text-rose-200',
-        slate: 'border-white/10 bg-white/6 text-slate-200',
+        // Colors mapped to RHDREAMSAPP2026 electric CSS vars
+        cyan: '[border-color:color-mix(in_srgb,var(--electric-cyan)_25%,transparent)] [background-color:color-mix(in_srgb,var(--electric-cyan)_10%,transparent)] [color:var(--electric-cyan)]',
+        blue: '[border-color:color-mix(in_srgb,var(--electric-blue)_25%,transparent)] [background-color:color-mix(in_srgb,var(--electric-blue)_10%,transparent)] [color:var(--electric-blue)]',
+        green: '[border-color:color-mix(in_srgb,var(--electric-mint)_25%,transparent)] [background-color:color-mix(in_srgb,var(--electric-mint)_10%,transparent)] [color:var(--electric-mint)]',
+        purple: '[border-color:color-mix(in_srgb,var(--electric-violet)_25%,transparent)] [background-color:color-mix(in_srgb,var(--electric-violet)_10%,transparent)] [color:var(--electric-violet)]',
+        gold: '[border-color:color-mix(in_srgb,var(--electric-amber)_25%,transparent)] [background-color:color-mix(in_srgb,var(--electric-amber)_10%,transparent)] [color:var(--electric-amber)]',
+        orange: '[border-color:color-mix(in_srgb,var(--electric-orange)_25%,transparent)] [background-color:color-mix(in_srgb,var(--electric-orange)_10%,transparent)] [color:var(--electric-orange)]',
+        red: '[border-color:color-mix(in_srgb,var(--electric-rose)_25%,transparent)] [background-color:color-mix(in_srgb,var(--electric-rose)_10%,transparent)] [color:var(--electric-rose)]',
+        slate: 'border-white/10 bg-white/5 text-slate-200',
       },
       dot: {
         true: '',
@@ -28,14 +29,15 @@ const badgeVariants = cva(
   },
 );
 
+// Dot uses currentColor from the variant so it inherits the electric CSS var
 const dotClass: Record<NonNullable<VariantProps<typeof badgeVariants>['variant']>, string> = {
-  cyan: 'bg-cyan-300',
-  blue: 'bg-blue-300',
-  green: 'bg-emerald-300',
-  purple: 'bg-violet-300',
-  gold: 'bg-yellow-300',
-  orange: 'bg-orange-300',
-  red: 'bg-rose-300',
+  cyan: '[background-color:var(--electric-cyan)]',
+  blue: '[background-color:var(--electric-blue)]',
+  green: '[background-color:var(--electric-mint)]',
+  purple: '[background-color:var(--electric-violet)]',
+  gold: '[background-color:var(--electric-amber)]',
+  orange: '[background-color:var(--electric-orange)]',
+  red: '[background-color:var(--electric-rose)]',
   slate: 'bg-slate-300',
 };
 
