@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { AuditLog, Sessions, Users } from './db';
+import Redis from 'ioredis';
 
 function parsePositiveNumberEnv(name: string, fallback: number) {
   const raw = Number(process.env[name]);
@@ -238,11 +239,50 @@ export function requireRole(...roles: AppRole[]) {
   };
 }
 
+let redisClient: Redis | null = null;
+let redisAvailable = false;
+
+function getRedis(): Redis | null {
+  if (redisClient) return redisAvailable ? redisClient : null;
+  const url = process.env.REDIS_URL || process.env.REDIS_TLS_URL || '';
+  if (!url) return null;
+  try {
+    redisClient = new Redis(url, { lazyConnect: true, enableOfflineQueue: false, maxRetriesPerRequest: 1 });
+    redisClient.on('connect', () => { redisAvailable = true; });
+    redisClient.on('error', () => { redisAvailable = false; });
+    redisClient.connect().catch(() => { redisAvailable = false; });
+  } catch {
+    redisClient = null;
+  }
+  return redisAvailable ? redisClient : null;
+}
+
 export function rateLimit(name: string, limit: number, windowMs: number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
   let lastPruned = Date.now();
+
+  async function checkRedis(key: string): Promise<boolean> {
+    const redis = getRedis();
+    if (!redis) return true;
+    try {
+      const count = await redis.incr(key);
+      if (count === 1) await redis.pexpire(key, windowMs);
+      return count <= limit;
+    } catch {
+      return true;
+    }
+  }
+
   return (req: Request, res: Response, next: NextFunction) => {
-    const key = `${name}:${req.ip}`;
+    const key = `rl:${name}:${req.ip}`;
+    const redis = getRedis();
+    if (redis) {
+      checkRedis(key).then(allowed => {
+        if (!allowed) return res.status(429).json({ error: 'Demasiadas solicitudes, intenta más tarde.' });
+        next();
+      }).catch(() => next());
+      return;
+    }
     const now = Date.now();
     if (now - lastPruned > windowMs) {
       for (const [k, v] of hits) { if (v.resetAt <= now) hits.delete(k); }

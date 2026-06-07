@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { hashPassword, isPasswordHash } from './passwords';
+import { encryptSecret, decryptSecret } from './crypto-helpers';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = join(__dirname, '..', 'data', 'heavenlydreams.db');
@@ -1097,6 +1098,24 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_user_avatars_user ON user_avatars (user_id);
 `);
 
+// Migrate existing plaintext email_sync_accounts credentials to AES-256-GCM
+(function migrateEmailSyncCredentials() {
+  try {
+    const rows = db.prepare('SELECT id, client_secret, refresh_token FROM email_sync_accounts').all() as any[];
+    const updateStmt = db.prepare('UPDATE email_sync_accounts SET client_secret=@cs, refresh_token=@rt WHERE id=@id');
+    for (const row of rows) {
+      let changed = false;
+      let cs = row.client_secret;
+      let rt = row.refresh_token;
+      if (cs && !String(cs).startsWith('v1:')) { cs = encryptSecret(cs); changed = true; }
+      if (rt && !String(rt).startsWith('v1:')) { rt = encryptSecret(rt); changed = true; }
+      if (changed) updateStmt.run({ id: row.id, cs, rt });
+    }
+  } catch {
+    // Table may not exist yet on first run; schema creation above handles it
+  }
+})();
+
 function passwordForStorage(value: any) {
   const password = String(value || '');
   if (!password) throw new Error('Password requerido');
@@ -1503,14 +1522,34 @@ export const CrmSavedSearches = {
   }),
 };
 
+function encryptField(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try { return encryptSecret(value); } catch { return value; }
+}
+
+function decryptField(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (!value.startsWith('v1:')) return value;
+  try { return decryptSecret(value); } catch { return null; }
+}
+
+function decryptEmailAccount(row: any) {
+  if (!row) return row;
+  return {
+    ...row,
+    client_secret: decryptField(row.client_secret),
+    refresh_token: decryptField(row.refresh_token),
+  };
+}
+
 export const EmailSync = {
   listAccounts: () => db.prepare(`
     SELECT id,provider,label,email,query,enabled,last_run_at,last_error,created_by,created_at,updated_at
     FROM email_sync_accounts
     ORDER BY updated_at DESC
   `).all(),
-  getAccount: (id: string) => db.prepare('SELECT * FROM email_sync_accounts WHERE id=?').get(id),
-  getDefaultAccount: () => db.prepare('SELECT * FROM email_sync_accounts WHERE enabled=1 ORDER BY updated_at DESC LIMIT 1').get(),
+  getAccount: (id: string) => decryptEmailAccount(db.prepare('SELECT * FROM email_sync_accounts WHERE id=?').get(id)),
+  getDefaultAccount: () => decryptEmailAccount(db.prepare('SELECT * FROM email_sync_accounts WHERE enabled=1 ORDER BY updated_at DESC LIMIT 1').get()),
   upsertAccount: (data: any) => db.prepare(`
     INSERT INTO email_sync_accounts
       (id,provider,label,email,query,client_id,client_secret,refresh_token,enabled,created_by,updated_at)
@@ -1534,8 +1573,8 @@ export const EmailSync = {
     email: data.email || null,
     query: data.query || null,
     client_id: data.client_id || null,
-    client_secret: data.client_secret || null,
-    refresh_token: data.refresh_token || null,
+    client_secret: encryptField(data.client_secret),
+    refresh_token: encryptField(data.refresh_token),
     enabled: data.enabled ? 1 : 0,
     created_by: data.created_by || null,
   }),
