@@ -99,6 +99,19 @@ import {
 } from "./server/voice-providers";
 import { oauthCallback, oauthStart, oauthStatus } from "./server/oauth";
 import { emailSyncStatus, processSyncAttachment, runGmailSync } from "./server/email-sync";
+import {
+  createCalendarEvent, createContact, createSpreadsheet, appendToSheet, readSheet,
+  deleteCalendarEvent, exchangeGoogleServiceCode, getGoogleServiceAuthUrl,
+  googleServicesStatus, listCalendarEvents, listContacts, refreshGoogleToken,
+  auditGoogleService,
+} from "./server/google-services";
+import {
+  appendExcelRows, createOneDriveFolder, createOutlookEvent, deleteOutlookEvent,
+  exchangeMicrosoftServiceCode, getMicrosoftServiceAuthUrl, listChannels,
+  listExcelWorksheets, listOneDriveFiles, listOutlookEvents, listTeams,
+  microsoftServicesStatus, readExcelRange, sendTeamsMessage, sendTeamsWebhookMessage,
+  uploadToOneDrive, auditMicrosoftService,
+} from "./server/microsoft-graph";
 import { createTelmexAutomationJob, getTelmexJob, listTelmexJobs, updateTelmexAutomationJob } from "./server/telmex-automation";
 import {
   assignConversation,
@@ -3378,6 +3391,253 @@ async function startServer() {
       actor: req.auth,
     });
     res.json({ ok: true, result });
+  }));
+
+  // ── GOOGLE SERVICES ────────────────────────────────────────
+  app.get("/api/integrations/google/status", authOnly, wrap((_req: any, res: any) => {
+    res.json(googleServicesStatus());
+  }));
+
+  app.get("/api/integrations/google/:service/connect", authOnly, wrap((req: any, res: any) => {
+    const service = req.params.service as any;
+    const base = String(process.env.APP_URL || process.env.OAUTH_CALLBACK_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    const url = getGoogleServiceAuthUrl(service, base, req.auth?.sub);
+    res.json({ url });
+  }));
+
+  app.get("/api/integrations/google/:service/callback", wrap(async (req: any, res: any) => {
+    try {
+      const service = req.params.service as any;
+      const code = String(req.query.code || '');
+      const base = String(process.env.APP_URL || process.env.OAUTH_CALLBACK_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+      if (!code) throw new Error('Código OAuth faltante');
+      const tokens = await exchangeGoogleServiceCode(service, code, base);
+      const stateRaw = String(req.query.state || '');
+      const state = stateRaw ? JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8')) : {};
+      auditGoogleService(`GOOGLE_${String(service).toUpperCase()}_CONNECTED`, state.userId || null, { service, scope: tokens.scope });
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(`<!doctype html><html><head><script>window.opener&&window.opener.postMessage({type:'google_connected',service:'${service}',hasRefreshToken:${Boolean(tokens.refresh_token)}},location.origin);setTimeout(()=>window.close(),800);</script></head><body style="background:#071323;color:#e5f4ff;font-family:sans-serif;display:grid;place-items:center;min-height:100vh"><p>✅ Google ${service} conectado. Cerrando…</p></body></html>`);
+    } catch (err: any) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(400).send(`<!doctype html><html><body style="background:#071323;color:#ef4444;font-family:sans-serif;padding:24px"><p>${err?.message || 'Error al conectar'}</p></body></html>`);
+    }
+  }));
+
+  app.get("/api/integrations/google/calendar/events", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-google-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-google-token requerido' });
+    const events = await listCalendarEvents(token, String(req.query.calendarId || 'primary'), Number(req.query.maxResults || 20));
+    res.json({ events });
+  }));
+
+  app.post("/api/integrations/google/calendar/events", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-google-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-google-token requerido' });
+    const event = await createCalendarEvent(token, req.body);
+    auditGoogleService('GOOGLE_CALENDAR_EVENT_CREATED', req.auth?.sub, { summary: req.body?.summary });
+    res.json(event);
+  }));
+
+  app.delete("/api/integrations/google/calendar/events/:id", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-google-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-google-token requerido' });
+    await deleteCalendarEvent(token, req.params.id, String(req.query.calendarId || 'primary'));
+    res.json({ ok: true });
+  }));
+
+  app.get("/api/integrations/google/sheets/read", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-google-token'] || '').trim();
+    const spreadsheetId = String(req.query.spreadsheetId || '').trim();
+    const range = String(req.query.range || 'A1:ZZ').trim();
+    if (!token || !spreadsheetId) return res.status(400).json({ error: 'x-google-token y spreadsheetId requeridos' });
+    const values = await readSheet(token, spreadsheetId, range);
+    res.json({ values });
+  }));
+
+  app.post("/api/integrations/google/sheets/append", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-google-token'] || '').trim();
+    const { spreadsheetId, range, rows } = req.body || {};
+    if (!token || !spreadsheetId || !rows) return res.status(400).json({ error: 'x-google-token, spreadsheetId y rows requeridos' });
+    const result = await appendToSheet(token, spreadsheetId, range || 'A1', rows);
+    res.json(result);
+  }));
+
+  app.post("/api/integrations/google/sheets/create", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-google-token'] || '').trim();
+    const { title, headers } = req.body || {};
+    if (!token || !title) return res.status(400).json({ error: 'x-google-token y title requeridos' });
+    const sheet = await createSpreadsheet(token, title, Array.isArray(headers) ? headers : []);
+    auditGoogleService('GOOGLE_SHEET_CREATED', req.auth?.sub, { title });
+    res.json(sheet);
+  }));
+
+  app.get("/api/integrations/google/contacts", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-google-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-google-token requerido' });
+    const contacts = await listContacts(token, Number(req.query.pageSize || 50));
+    res.json({ contacts });
+  }));
+
+  app.post("/api/integrations/google/contacts", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-google-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-google-token requerido' });
+    const contact = await createContact(token, req.body);
+    auditGoogleService('GOOGLE_CONTACT_CREATED', req.auth?.sub, { email: req.body?.email });
+    res.json(contact);
+  }));
+
+  app.post("/api/integrations/google/token/refresh", authOnly, wrap(async (req: any, res: any) => {
+    const refreshToken = String(req.body?.refreshToken || '').trim();
+    if (!refreshToken) return res.status(400).json({ error: 'refreshToken requerido' });
+    const accessToken = await refreshGoogleToken(refreshToken);
+    res.json({ accessToken });
+  }));
+
+  // ── MICROSOFT GRAPH ────────────────────────────────────────
+  app.get("/api/integrations/microsoft/status", authOnly, wrap((_req: any, res: any) => {
+    res.json(microsoftServicesStatus());
+  }));
+
+  app.get("/api/integrations/microsoft/:service/connect", authOnly, wrap((req: any, res: any) => {
+    const service = req.params.service as any;
+    const base = String(process.env.APP_URL || process.env.OAUTH_CALLBACK_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    const url = getMicrosoftServiceAuthUrl(service, base, req.auth?.sub);
+    res.json({ url });
+  }));
+
+  app.get("/api/integrations/microsoft/:service/callback", wrap(async (req: any, res: any) => {
+    try {
+      const service = req.params.service as any;
+      const code = String(req.query.code || '');
+      const base = String(process.env.APP_URL || process.env.OAUTH_CALLBACK_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+      if (!code) throw new Error('Código OAuth faltante');
+      const tokens = await exchangeMicrosoftServiceCode(service, code, base);
+      const stateRaw = String(req.query.state || '');
+      const state = stateRaw ? JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8')) : {};
+      auditMicrosoftService(`MICROSOFT_${String(service).toUpperCase()}_CONNECTED`, state.userId || null, { service, scope: tokens.scope });
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(`<!doctype html><html><head><script>window.opener&&window.opener.postMessage({type:'microsoft_connected',service:'${service}',hasRefreshToken:${Boolean(tokens.refresh_token)}},location.origin);setTimeout(()=>window.close(),800);</script></head><body style="background:#071323;color:#e5f4ff;font-family:sans-serif;display:grid;place-items:center;min-height:100vh"><p>✅ Microsoft ${service} conectado. Cerrando…</p></body></html>`);
+    } catch (err: any) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(400).send(`<!doctype html><html><body style="background:#071323;color:#ef4444;font-family:sans-serif;padding:24px"><p>${err?.message || 'Error al conectar'}</p></body></html>`);
+    }
+  }));
+
+  app.get("/api/integrations/microsoft/calendar/events", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-ms-token requerido' });
+    const events = await listOutlookEvents(token, Number(req.query.maxResults || 20));
+    res.json({ events });
+  }));
+
+  app.post("/api/integrations/microsoft/calendar/events", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-ms-token requerido' });
+    const event = await createOutlookEvent(token, req.body);
+    auditMicrosoftService('MICROSOFT_CALENDAR_EVENT_CREATED', req.auth?.sub, { subject: req.body?.subject });
+    res.json(event);
+  }));
+
+  app.delete("/api/integrations/microsoft/calendar/events/:id", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-ms-token requerido' });
+    await deleteOutlookEvent(token, req.params.id);
+    res.json({ ok: true });
+  }));
+
+  app.get("/api/integrations/microsoft/teams/list", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-ms-token requerido' });
+    const teams = await listTeams(token);
+    res.json({ teams });
+  }));
+
+  app.get("/api/integrations/microsoft/teams/:teamId/channels", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-ms-token requerido' });
+    const channels = await listChannels(token, req.params.teamId);
+    res.json({ channels });
+  }));
+
+  app.post("/api/integrations/microsoft/teams/message", authOnly, wrap(async (req: any, res: any) => {
+    const { teamId, channelId, message } = req.body || {};
+    const webhookUrl = process.env.MICROSOFT_TEAMS_WEBHOOK_URL || '';
+    if (webhookUrl) {
+      await sendTeamsWebhookMessage(webhookUrl, { title: 'Heavenly Dreams CRM', text: String(message || '') });
+      return res.json({ ok: true, via: 'webhook' });
+    }
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    if (!token || !teamId || !channelId) return res.status(400).json({ error: 'x-ms-token, teamId y channelId requeridos' });
+    const result = await sendTeamsMessage(token, teamId, channelId, String(message || ''));
+    auditMicrosoftService('MICROSOFT_TEAMS_MESSAGE_SENT', req.auth?.sub, { teamId, channelId });
+    res.json(result);
+  }));
+
+  app.post("/api/integrations/microsoft/teams/webhook", authOnly, wrap(async (req: any, res: any) => {
+    const { title, text, themeColor } = req.body || {};
+    const webhookUrl = process.env.MICROSOFT_TEAMS_WEBHOOK_URL || '';
+    if (!webhookUrl) return res.status(400).json({ error: 'MICROSOFT_TEAMS_WEBHOOK_URL no configurada' });
+    await sendTeamsWebhookMessage(webhookUrl, { title: String(title || ''), text: String(text || ''), themeColor });
+    auditMicrosoftService('MICROSOFT_TEAMS_WEBHOOK_SENT', req.auth?.sub, { title });
+    res.json({ ok: true });
+  }));
+
+  app.get("/api/integrations/microsoft/onedrive/files", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    if (!token) return res.status(400).json({ error: 'x-ms-token requerido' });
+    const files = await listOneDriveFiles(token, String(req.query.folderId || 'root'), Number(req.query.top || 50));
+    res.json({ files });
+  }));
+
+  app.post("/api/integrations/microsoft/onedrive/upload", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    const { fileName, contentBase64, folderId } = req.body || {};
+    if (!token || !fileName || !contentBase64) return res.status(400).json({ error: 'x-ms-token, fileName y contentBase64 requeridos' });
+    const raw = contentBase64.includes(',') ? contentBase64.split(',').pop() || '' : contentBase64;
+    const buffer = Buffer.from(raw, 'base64');
+    const result = await uploadToOneDrive(token, fileName, buffer, folderId || 'root');
+    auditMicrosoftService('MICROSOFT_ONEDRIVE_FILE_UPLOADED', req.auth?.sub, { fileName });
+    res.json(result);
+  }));
+
+  app.post("/api/integrations/microsoft/onedrive/folder", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    const { name, parentId } = req.body || {};
+    if (!token || !name) return res.status(400).json({ error: 'x-ms-token y name requeridos' });
+    const folder = await createOneDriveFolder(token, name, parentId || 'root');
+    res.json(folder);
+  }));
+
+  app.get("/api/integrations/microsoft/excel/worksheets", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    const driveItemId = String(req.query.driveItemId || '').trim();
+    if (!token || !driveItemId) return res.status(400).json({ error: 'x-ms-token y driveItemId requeridos' });
+    const sheets = await listExcelWorksheets(token, driveItemId);
+    res.json({ sheets });
+  }));
+
+  app.get("/api/integrations/microsoft/excel/read", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    const { driveItemId, worksheetId, address } = req.query as any;
+    if (!token || !driveItemId || !worksheetId) return res.status(400).json({ error: 'x-ms-token, driveItemId y worksheetId requeridos' });
+    const values = await readExcelRange(token, driveItemId, worksheetId, address || 'A1:ZZ1000');
+    res.json({ values });
+  }));
+
+  app.post("/api/integrations/microsoft/excel/append", authOnly, wrap(async (req: any, res: any) => {
+    const token = String(req.headers['x-ms-token'] || '').trim();
+    const { driveItemId, worksheetId, rows } = req.body || {};
+    if (!token || !driveItemId || !worksheetId || !rows) return res.status(400).json({ error: 'x-ms-token, driveItemId, worksheetId y rows requeridos' });
+    const result = await appendExcelRows(token, driveItemId, worksheetId, rows);
+    res.json(result);
+  }));
+
+  app.post("/api/integrations/microsoft/token/refresh", authOnly, wrap(async (req: any, res: any) => {
+    const refreshToken = String(req.body?.refreshToken || '').trim();
+    if (!refreshToken) return res.status(400).json({ error: 'refreshToken requerido' });
+    const { refreshMicrosoftToken } = await import("./server/microsoft-graph");
+    const accessToken = await refreshMicrosoftToken(refreshToken);
+    res.json({ accessToken });
   }));
 
   // ── AUDIT LOG ──────────────────────────────────────────────
