@@ -45,7 +45,7 @@ export function verifyPassword(plain: string, stored: string) {
     return safeEqual(Buffer.from(hash), Buffer.from(value));
   }
 
-  return safeEqual(Buffer.from(password), Buffer.from(value));
+  return false;
 }
 
 export function needsPasswordRehash(stored: string) {

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { extname, join, resolve, sep } from 'node:path';
 
 export interface StoredDocumentInput {
   contentBase64: string;
@@ -200,5 +200,10 @@ export function storeDocument(input: StoredDocumentInput): StoredDocumentResult 
 }
 
 export function readStoredDocument(storagePath: string) {
-  return readFileSync(storagePath);
+  const resolved = resolve(storagePath);
+  const root = resolve(STORAGE_ROOT);
+  if (!resolved.startsWith(root + sep) && resolved !== root) {
+    throw new Error('Ruta de documento fuera del directorio permitido');
+  }
+  return readFileSync(resolved);
 }

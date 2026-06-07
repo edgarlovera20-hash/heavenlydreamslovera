@@ -1291,7 +1291,7 @@ export const SiacRecords = {
     if (role === 'ASESOR' || role === 'VENDEDOR' || role === 'PROMOTOR') {
       where.push('(usuario = @authName OR promotor = @authName OR usuario = @authUsername OR promotor = @authUsername)');
       params.authName = String(auth?.name || '');
-      params.authUsername = String(auth?.username || auth?.sub || '');
+      params.authUsername = String(auth?.sub || '');
     }
     return db.prepare(`
       SELECT * FROM siac_records
@@ -1301,8 +1301,50 @@ export const SiacRecords = {
     `).all(params);
   },
   countPage: ({ q = '', updatedSince = '', filters = {}, auth = null }: { q?: string; updatedSince?: string; filters?: Record<string, any>; auth?: any }) => {
-    const rows = SiacRecords.getPage({ limit: 1000000, offset: 0, q, updatedSince, filters, auth });
-    return rows.length;
+    const where: string[] = [];
+    const params: Record<string, any> = {};
+    if (q) {
+      where.push(`(
+        folio_siac LIKE @q OR telefono_asignado LIKE @q OR telefono_portado LIKE @q
+        OR telefono_referencia LIKE @q OR os_alta LIKE @q OR tienda LIKE @q
+        OR zona LIKE @q OR distrito LIKE @q OR colonia LIKE @q OR correo LIKE @q
+        OR paquete LIKE @q OR usuario LIKE @q OR promotor LIKE @q
+      )`);
+      params.q = `%${q}%`;
+    }
+    if (updatedSince) {
+      where.push('datetime(created_at) >= datetime(@updatedSince)');
+      params.updatedSince = updatedSince;
+    }
+    const allowedFilters = ['estatus_siac', 'usuario', 'zona', 'tienda', 'estrategia', 'morosidad', 'tipo_linea', 'paquete', 'area', 'colonia'];
+    for (const key of allowedFilters) {
+      const value = filters?.[key];
+      if (value != null && String(value).trim() !== '') {
+        where.push(`${key} = @${key}`);
+        params[key] = String(value).trim();
+      }
+    }
+    const dateFrom = String(filters?.dateFrom || '').trim();
+    const dateTo = String(filters?.dateTo || '').trim();
+    if (dateFrom) {
+      where.push(`date(CASE WHEN fecha_captura LIKE '__/__/____' THEN substr(fecha_captura, 7, 4) || '-' || substr(fecha_captura, 4, 2) || '-' || substr(fecha_captura, 1, 2) ELSE fecha_captura END) >= date(@dateFrom)`);
+      params.dateFrom = dateFrom;
+    }
+    if (dateTo) {
+      where.push(`date(CASE WHEN fecha_captura LIKE '__/__/____' THEN substr(fecha_captura, 7, 4) || '-' || substr(fecha_captura, 4, 2) || '-' || substr(fecha_captura, 1, 2) ELSE fecha_captura END) <= date(@dateTo)`);
+      params.dateTo = dateTo;
+    }
+    const role = String(auth?.role || '').toUpperCase();
+    if (role === 'ASESOR' || role === 'VENDEDOR' || role === 'PROMOTOR') {
+      where.push('(usuario = @authName OR promotor = @authName OR usuario = @authUsername OR promotor = @authUsername)');
+      params.authName = String(auth?.name || '');
+      params.authUsername = String(auth?.sub || '');
+    }
+    const row = db.prepare(`
+      SELECT COUNT(*) as total FROM siac_records
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    `).get(params) as any;
+    return row?.total ?? 0;
   },
   search: (folio: string) => db.prepare(
     `SELECT * FROM siac_records

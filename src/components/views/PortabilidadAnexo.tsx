@@ -71,17 +71,17 @@ export function PortabilidadAnexo({ data, onClose }: Props) {
     const w = window.open('', '_blank', 'width=900,height=1200');
     if (!w) return;
     setPrinting(true);
-    w.document.write(`
-      <html><head><title>Anexo Portabilidad</title>
+    const printDoc = w.document;
+    printDoc.open();
+    printDoc.write(`<!doctype html><html><head><title>Anexo Portabilidad</title>
       <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Arial, sans-serif; font-size: 9pt; }
         .border { border: 1px solid black; }
         @media print { body { margin: 5mm; } }
-      </style></head>
-      <body>${el.innerHTML}</body></html>
-    `);
-    w.document.close();
+      </style></head><body></body></html>`);
+    printDoc.close();
+    printDoc.body.appendChild(el.cloneNode(true));
     setTimeout(() => { w.print(); setPrinting(false); }, 500);
   };
 

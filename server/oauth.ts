@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { AuditLog, OAuthAccounts, Users } from './db';
 import { issueSessionCookie } from './security';
@@ -49,9 +49,15 @@ function encodeState(payload: any) {
   return `${body}.${sign(body)}`;
 }
 
+function safeSignEqual(a: string, b: string) {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
 function decodeState(state: string) {
   const [body, sig] = String(state || '').split('.');
-  if (!body || !sig || sign(body) !== sig) throw new Error('Estado OAuth inválido');
+  if (!body || !sig || !safeSignEqual(sign(body), sig)) throw new Error('Estado OAuth inválido');
   const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
   if (!payload.exp || payload.exp < Date.now()) throw new Error('Estado OAuth expirado');
   return payload;

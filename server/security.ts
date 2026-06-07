@@ -117,16 +117,20 @@ function createSessionRecord(user: any, req?: Request, options: SessionOptions =
   const expiresAt = new Date(Date.now() + REFRESH_TTL_MS).toISOString();
   const webAuthnVerified = options.webAuthnVerified === true;
   const webAuthnEnrollmentRequired = options.webAuthnEnrollmentRequired === true;
-  Sessions.create({
-    id: randomUUID(),
-    user_id: user.uid,
-    refresh_token: refreshToken,
-    expires_at: expiresAt,
-    ip: req?.ip || null,
-    user_agent: req?.headers['user-agent'] || null,
-    webauthn_verified: webAuthnVerified ? 1 : 0,
-    webauthn_enrollment_required: webAuthnEnrollmentRequired ? 1 : 0,
-  });
+  try {
+    Sessions.create({
+      id: randomUUID(),
+      user_id: user.uid,
+      refresh_token: refreshToken,
+      expires_at: expiresAt,
+      ip: req?.ip || null,
+      user_agent: req?.headers['user-agent'] || null,
+      webauthn_verified: webAuthnVerified ? 1 : 0,
+      webauthn_enrollment_required: webAuthnEnrollmentRequired ? 1 : 0,
+    });
+  } catch (err) {
+    throw new Error('No se pudo crear la sesión. Intenta de nuevo.');
+  }
   return {
     refreshToken,
     expiresAt,
@@ -236,9 +240,14 @@ export function requireRole(...roles: AppRole[]) {
 
 export function rateLimit(name: string, limit: number, windowMs: number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
+  let lastPruned = Date.now();
   return (req: Request, res: Response, next: NextFunction) => {
     const key = `${name}:${req.ip}`;
     const now = Date.now();
+    if (now - lastPruned > windowMs) {
+      for (const [k, v] of hits) { if (v.resetAt <= now) hits.delete(k); }
+      lastPruned = now;
+    }
     const current = hits.get(key);
     if (!current || current.resetAt <= now) {
       hits.set(key, { count: 1, resetAt: now + windowMs });

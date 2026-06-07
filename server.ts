@@ -148,8 +148,10 @@ function parseCsvLine(line: string): string[] {
   let cur = '', inQ = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') { inQ = !inQ; }
-    else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else { inQ = !inQ; }
+    } else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
     else { cur += ch; }
   }
   result.push(cur.trim());
@@ -622,6 +624,9 @@ async function startServer() {
   const chatUserOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'RECLUTADOR', 'VENDEDOR', 'ASESOR');
   const mobileOnly = requireRole('GERENTE', 'ADMINISTRACION', 'SUPERVISOR', 'RECLUTADOR', 'VENDEDOR', 'ASESOR');
   const managerOnly = adminOnly;
+  if (process.env.NODE_ENV === 'production' && !process.env.HIGH_IMPACT_CONFIRMATION) {
+    throw new Error('HIGH_IMPACT_CONFIRMATION es obligatorio en producción');
+  }
   const highImpactConfirmation = process.env.HIGH_IMPACT_CONFIRMATION || 'HEAVENLY_DREAMS_CONFIRM';
   const sqliteDbPath = path.join(process.cwd(), 'data', 'heavenlydreams.db');
 
@@ -1284,8 +1289,8 @@ async function startServer() {
     return { ...auth, role: user.role, name: user.nombre };
   }
 
-  const FIXED_MANAGER_EMAIL = 'edgarlovera20@gmail.com';
-  const FIXED_MANAGER_USERNAME = 'edgarlovera20@gmail.com';
+  const FIXED_MANAGER_EMAIL = (process.env.FIXED_MANAGER_EMAIL || '').toLowerCase().trim();
+  const FIXED_MANAGER_USERNAME = (process.env.FIXED_MANAGER_USERNAME || FIXED_MANAGER_EMAIL).toLowerCase().trim();
 
   function isFixedManagerUser(user: any) {
     return String(user?.email || '').toLowerCase() === FIXED_MANAGER_EMAIL
@@ -1293,6 +1298,7 @@ async function startServer() {
   }
 
   function ensureFixedManagerAccount() {
+    if (!FIXED_MANAGER_EMAIL) return;
     const passwordHash = String(process.env.FIXED_MANAGER_PASSWORD_HASH || '').trim();
     const existing = (Users.getByEmail(FIXED_MANAGER_EMAIL) || Users.getByUsername(FIXED_MANAGER_USERNAME)) as any;
     if (!existing && !passwordHash) return;
