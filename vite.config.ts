@@ -24,6 +24,9 @@ export default defineConfig(({mode}) => {
       sourcemap: false,
       modulePreload: true,
       chunkSizeWarningLimit: 900,
+      minify: 'esbuild',
+      cssMinify: true,
+      reportCompressedSize: false,
       rollupOptions: {
         input: {
           app: path.resolve(__dirname, 'index.html'),

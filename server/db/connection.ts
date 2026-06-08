@@ -17,12 +17,17 @@ mkdirSync(join(__dirname, '..', '..', 'data'), { recursive: true });
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
-db.pragma('cache_size = -32000');      // 32MB page cache
+db.pragma('cache_size = -65536');      // 64MB page cache
 db.pragma('temp_store = memory');
-db.pragma('synchronous = NORMAL');     // Safe with WAL; reduces fsync overhead
-db.pragma('wal_autocheckpoint = 1000');// Batch WAL checkpoints
-db.pragma('busy_timeout = 5000');      // Retry write locks for 5s (1000-user contention)
-db.pragma('mmap_size = 268435456');    // 256MB memory-mapped I/O for read-heavy workloads
+db.pragma('synchronous = NORMAL');
+db.pragma('wal_autocheckpoint = 1000');
+db.pragma('busy_timeout = 5000');
+db.pragma('mmap_size = 536870912');    // 512MB memory-mapped I/O
+db.pragma('page_size = 4096');
+db.pragma('optimize');                 // Update query planner statistics
+
+process.on('exit', () => { try { db.pragma('optimize'); db.close(); } catch {} });
+process.on('SIGINT', () => { try { db.pragma('optimize'); db.close(); } catch {} process.exit(0); });
 
 export default db;
 export { db };

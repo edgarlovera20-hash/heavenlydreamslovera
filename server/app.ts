@@ -43,6 +43,9 @@ export function createApp() {
     res.set('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self), payment=()');
     res.set('X-Frame-Options', 'SAMEORIGIN');
     res.set('Content-Security-Policy', contentSecurityPolicy());
+    if (process.env.NODE_ENV === 'production') {
+      res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    }
     next();
   });
   app.use('/api', (_req, res, next) => {
