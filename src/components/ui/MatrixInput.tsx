@@ -11,6 +11,7 @@ interface MatrixInputProps extends InputHTMLAttributes<HTMLInputElement> {
   maxLength?: number;
   required?: boolean;
   inputMode?: 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
+  id?: string;
   autoComplete?: string;
   label?: string;
   error?: string;
