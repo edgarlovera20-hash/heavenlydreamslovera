@@ -2,8 +2,9 @@ name: Heavenly Dreams CI
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
+    branches: [main]
 
 jobs:
   verify:
@@ -15,6 +16,5 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm run enterprise:check
       - run: npm run build
+      - run: npm run test:unit

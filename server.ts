@@ -1,5 +1,7 @@
 import "dotenv/config";
 import "./server/domain";
+import { initSentry } from "./server/sentry";
+initSentry();
 import express from "express";
 import { createServer as createHttpServer } from "http";
 import { createServer as createViteServer } from "vite";
@@ -5534,6 +5536,12 @@ async function startServer() {
     console.log(`[SIAC] Registros en DB: ${SiacRecords.count()}`);
     console.log(`Server running on http://${HOST || 'localhost'}:${PORT}`);
   };
+  // Sentry error handler (must be after all routes, before other error handlers)
+  if (process.env.SENTRY_DSN) {
+    const { Sentry } = await import('./server/sentry');
+    app.use(Sentry.expressErrorHandler());
+  }
+
   const server = createHttpServer(app);
   attachOpenAIRealtimeStream(server);
   if (HOST) server.listen(PORT, HOST, onListening);

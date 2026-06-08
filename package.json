@@ -34,6 +34,8 @@
   "dependencies": {
     "@google/generative-ai": "^0.20.0",
     "@gsap/react": "^2.1.2",
+    "@sentry/node": "^8.55.2",
+    "@sentry/react": "^8.55.2",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.0",
     "@tailwindcss/vite": "^4.1.14",
