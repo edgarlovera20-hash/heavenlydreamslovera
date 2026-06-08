@@ -15,9 +15,11 @@ cp "$REPO_DIR/nginx/app.heavenlydreams.conf"  "$NGINX_AVAILABLE/app.heavenlydrea
 cp "$REPO_DIR/nginx/rh.heavenlydreams.conf"   "$NGINX_AVAILABLE/rh.heavenlydreams.com.mx"
 cp "$REPO_DIR/nginx/www.heavenlydreams.conf"  "$NGINX_AVAILABLE/www.heavenlydreams.com.mx"
 
-# Remove old generic config if present
+# Remove old/conflicting configs that point to the wrong ports
 rm -f "$NGINX_ENABLED/heavenlydreams.conf"
 rm -f "$NGINX_ENABLED/default"
+rm -f "$NGINX_ENABLED/heavenly-dreams-app"
+rm -f "$NGINX_ENABLED/rhdreamsapp2026"
 
 # Enable all 3
 ln -sf "$NGINX_AVAILABLE/app.heavenlydreams.com.mx" "$NGINX_ENABLED/app.heavenlydreams.com.mx"
