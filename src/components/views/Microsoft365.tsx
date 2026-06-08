@@ -60,6 +60,7 @@ export default function Microsoft365() {
   const [eventsLoading, setEventsLoading] = useState(false);
   const [newEvent, setNewEvent] = useState({ subject: '', start: '', end: '', body: '', isOnlineMeeting: false });
   const [creating, setCreating] = useState(false);
+  const [formError, setFormError] = useState('');
   const [webhookMsg, setWebhookMsg] = useState({ title: '', text: '' });
   const [sendingWebhook, setSendingWebhook] = useState(false);
   const [webhookResult, setWebhookResult] = useState('');
@@ -121,7 +122,11 @@ export default function Microsoft365() {
   }, []);
 
   const createOutlookEvent = useCallback(async (token: string) => {
-    if (!newEvent.subject || !newEvent.start || !newEvent.end) return;
+    setFormError('');
+    if (!newEvent.subject.trim()) { setFormError('El asunto del evento es obligatorio.'); return; }
+    if (!newEvent.start) { setFormError('La fecha de inicio es obligatoria.'); return; }
+    if (!newEvent.end) { setFormError('La fecha de fin es obligatoria.'); return; }
+    if (newEvent.end <= newEvent.start) { setFormError('La fecha de fin debe ser posterior al inicio.'); return; }
     setCreating(true);
     try {
       await fetch('/api/integrations/microsoft/calendar/events', {
@@ -134,6 +139,7 @@ export default function Microsoft365() {
         body: JSON.stringify(newEvent),
       });
       setNewEvent({ subject: '', start: '', end: '', body: '', isOnlineMeeting: false });
+      setFormError('');
       await loadOutlookEvents(token);
     } finally {
       setCreating(false);
@@ -208,10 +214,13 @@ export default function Microsoft365() {
           </div>
         )}
 
-        <div className="mt-5 flex gap-1 rounded-xl border border-white/8 bg-[#061b3a] p-1">
+        <div className="mt-5 flex gap-1 rounded-xl border border-white/8 bg-[#061b3a] p-1" role="tablist" aria-label="Microsoft 365">
           {tabs.map((t) => (
             <button
               key={t.id}
+              role="tab"
+              aria-selected={activeTab === t.id}
+              aria-controls={`ms-panel-${t.id}`}
               onClick={() => setActiveTab(t.id)}
               className={`flex-1 rounded-lg py-2 text-xs font-semibold transition-all ${activeTab === t.id ? 'bg-[#0078D4] text-white' : 'text-slate-400 hover:text-white'}`}
             >
@@ -320,9 +329,14 @@ export default function Microsoft365() {
               />
               Incluir reunión de Teams
             </label>
+            {formError && (
+              <p className="flex items-center gap-1.5 text-[10px] text-rose-400" role="alert">
+                <AlertCircle className="w-3 h-3 shrink-0" /> {formError}
+              </p>
+            )}
             <button
               onClick={() => createOutlookEvent('DEMO')}
-              disabled={creating || !newEvent.subject}
+              disabled={creating}
               className="flex items-center justify-center gap-2 w-full rounded-lg bg-[#0078D4] py-2 text-xs font-semibold text-white hover:bg-[#106EBE] disabled:opacity-40 transition-colors"
             >
               {creating ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}

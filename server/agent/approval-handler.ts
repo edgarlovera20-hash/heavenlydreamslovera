@@ -9,6 +9,7 @@ import {
   Metrics,
   Ventas,
 } from '../db';
+import db from '../db';
 import { type SendChannelMessage } from './types';
 
 function json(value: any) {
@@ -90,16 +91,19 @@ export async function approveAgentOutbox(id: string, actor: any, sendMessage: Se
       result = await sendMessage(item.channel, item.target, item.message || '');
     } else if (item.action === 'create_sale') {
       const sale = salePayloadFromOutbox(item, actor);
-      Ventas.create(sale);
-      ChannelConversations.update(item.conversation_id, { status: 'venta_creada' });
-      AuditLog.insert({
-        accion: 'AGENT_CREATE_VENTA_APPROVED',
-        entidad: 'ventas',
-        entidad_id: sale.id,
-        user_id: actor?.sub || actor?.uid || null,
-        user_nombre: actor?.nombre || actor?.name || null,
-        detalle: item.target,
-      });
+      // Atomic: sale creation + conversation update in one transaction
+      db.transaction(() => {
+        Ventas.create(sale);
+        ChannelConversations.update(item.conversation_id, { status: 'venta_creada' });
+        AuditLog.insert({
+          accion: 'AGENT_CREATE_VENTA_APPROVED',
+          entidad: 'ventas',
+          entidad_id: sale.id,
+          user_id: actor?.sub || actor?.uid || null,
+          user_nombre: actor?.nombre || actor?.name || null,
+          detalle: item.target,
+        });
+      })();
       result = { saleId: sale.id };
     } else if (item.action === 'schedule_followup') {
       AgentTasks.create({

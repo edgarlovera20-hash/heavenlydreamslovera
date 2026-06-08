@@ -1086,6 +1086,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_didit_checks_capture ON didit_checks (capture_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_didit_checks_status ON didit_checks (status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_user_avatars_user ON user_avatars (user_id);
+
+  -- Performance indexes for 1000-concurrent-user load
+  CREATE INDEX IF NOT EXISTS idx_crm_followups_folio_status  ON crm_followups (folio_siac, status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_crm_notes_folio_vis         ON crm_notes (folio_siac, visibility);
+  CREATE INDEX IF NOT EXISTS idx_morosidad_status_dias       ON morosidad (status_cobranza, dias_atraso DESC);
+  CREATE INDEX IF NOT EXISTS idx_clientes_crm_status_follow  ON clientes_crm (status_cliente, proximo_seguimiento);
+  CREATE INDEX IF NOT EXISTS idx_validation_req_status_order ON validation_requests (status, created_at ASC);
+  CREATE INDEX IF NOT EXISTS idx_siac_morosidad_field        ON siac_records (morosidad);
+  CREATE INDEX IF NOT EXISTS idx_agent_decisions_message     ON agent_decisions (message_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_outbox_status_conv    ON agent_outbox (status, conversation_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_channel_msgs_conv_dir       ON channel_messages (conversation_id, direction, created_at DESC);
 `);
 
 // Migrate existing plaintext email_sync_accounts credentials to AES-256-GCM

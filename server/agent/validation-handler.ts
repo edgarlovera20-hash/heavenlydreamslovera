@@ -421,10 +421,12 @@ export function buildCaptureDecision(conversation: any, message: any, baseFields
     ...baseFields,
     ...extractCaptureFields(text, conversation, media),
   };
-  const documents = [
+  const rawDocs = [
     ...(Array.isArray(previousDraft.documents) ? previousDraft.documents : []),
     ...(media ? [media] : []),
   ].filter((doc, index, list) => doc && list.findIndex(item => item.documentId === doc.documentId && item.fileName === doc.fileName) === index);
+  // Cap at 20 documents to prevent unbounded memory growth in long capture flows
+  const documents = rawDocs.length > 20 ? rawDocs.slice(-20) : rawDocs;
   const missing = captureMissing(mergedFields);
   const stage = stageForMissing(missing);
   const draft = {

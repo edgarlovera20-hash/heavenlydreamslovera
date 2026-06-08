@@ -158,6 +158,12 @@ export async function sendTeamsWebhookMessage(webhookUrl: string, payload: {
   themeColor?: string;
 }) {
   if (!webhookUrl) throw new Error('URL de webhook de Teams no configurada');
+  let parsedUrl: URL;
+  try { parsedUrl = new URL(webhookUrl); } catch { throw new Error('URL de webhook de Teams inválida'); }
+  if (parsedUrl.protocol !== 'https:') throw new Error('El webhook de Teams debe usar HTTPS');
+  if (!parsedUrl.hostname.endsWith('.webhook.office.com') && !parsedUrl.hostname.endsWith('.logic.azure.com')) {
+    throw new Error('URL de webhook no reconocida como Microsoft Teams u Office 365');
+  }
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 10_000);
   try {

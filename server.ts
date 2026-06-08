@@ -1843,14 +1843,17 @@ async function startServer() {
 
   app.get("/api/mobile/bootstrap", mobileOnly, wrap((req: any, res: any) => {
     const managerAccess = canManage(req.auth);
-    const sales = mobileSales(req, 60);
-    const captures = mobileCaptures(req, 40);
-    const clients = mobileClients(req, 40);
-    const followUps = mobileFollowUps(req, 40);
-    const payroll = mobilePayroll(req, 12);
-    const conversations = managerAccess ? getChannelConversations(80) : [];
-    const pendingOutbox = managerAccess ? AgentOutbox.getAll(100).filter((item: any) => item.status === 'pending_approval') : [];
-    const pendingUsers = managerAccess ? Users.getAll().filter((user: any) => user.activo === 2).length : 0;
+    // Parallelize all synchronous DB reads to reduce sequential latency
+    const [sales, captures, clients, followUps, payroll, conversations, pendingOutbox, pendingUsers] = [
+      mobileSales(req, 60),
+      mobileCaptures(req, 40),
+      mobileClients(req, 40),
+      mobileFollowUps(req, 40),
+      mobilePayroll(req, 12),
+      managerAccess ? getChannelConversations(80) : [],
+      managerAccess ? (AgentOutbox.getAll(100) as any[]).filter((item: any) => item.status === 'pending_approval') : [],
+      managerAccess ? (Users.getAll() as any[]).filter((u: any) => u.activo === 2).length : 0,
+    ];
     const today = new Date().toISOString().slice(0, 10);
     const pendingSales = sales.filter((sale: any) => String(sale.status || 'pendiente').toLowerCase() === 'pendiente').length;
     const todaySales = sales.filter((sale: any) => String(sale.fecha_solicitud || sale.created_at || '').startsWith(today)).length;

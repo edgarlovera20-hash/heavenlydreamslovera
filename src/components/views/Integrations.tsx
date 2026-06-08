@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
 import {
   Zap, Globe, Database, Cpu,
   MessageSquare, Share2, Plus,
@@ -252,15 +253,19 @@ export default function Integrations() {
       )}
 
       {activeSection === 'google' && (
-        <Suspense fallback={<div className="py-12 text-center text-xs text-slate-500">Cargando Google Workspace…</div>}>
-          <GoogleWorkspace />
-        </Suspense>
+        <ErrorBoundary label="Google Workspace">
+          <Suspense fallback={<div className="py-12 text-center text-xs text-slate-500">Cargando Google Workspace…</div>}>
+            <GoogleWorkspace />
+          </Suspense>
+        </ErrorBoundary>
       )}
 
       {activeSection === 'microsoft' && (
-        <Suspense fallback={<div className="py-12 text-center text-xs text-slate-500">Cargando Microsoft 365…</div>}>
-          <Microsoft365 />
-        </Suspense>
+        <ErrorBoundary label="Microsoft 365">
+          <Suspense fallback={<div className="py-12 text-center text-xs text-slate-500">Cargando Microsoft 365…</div>}>
+            <Microsoft365 />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </div>
   );

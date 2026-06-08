@@ -5,10 +5,12 @@ import {
   AgentDecisions,
   AgentOutbox,
   AgentProfiles,
+  AuditLog,
   ChannelConversations,
   ChannelMessages,
   Metrics,
 } from '../db';
+import db from '../db';
 import { runAiWithFallback } from '../enterprise';
 import { answerWebQuestion, shouldUseWebSearch } from '../web-search';
 import { findAgentVideoForQuestion } from '../agent-video-library';
@@ -514,10 +516,10 @@ ${JSON.stringify({
   })}
 
 Mensaje:
-${String(message.body || '').slice(0, 2500)}
+${String(message.body || '').slice(0, 2500).replace(/\n{3,}/g, '\n\n')}
 
 Audio transcrito:
-${transcript ? transcript.slice(0, 2500) : 'N/D'}
+${transcript ? transcript.slice(0, 2500).replace(/\n{3,}/g, '\n\n') : 'N/D'}
 
 Metadata del mensaje:
 ${JSON.stringify({
@@ -607,14 +609,13 @@ function decisionFromModel(conversation: any, rules: AgentDecision, modelPayload
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  const cleanup = () => { if (timer) { clearTimeout(timer); timer = null; } };
   return Promise.race([
-    promise.finally(() => {
-      if (timer) clearTimeout(timer);
-    }),
+    promise,
     new Promise<T>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${label} excedio ${ms}ms`)), ms);
+      timer = setTimeout(() => reject(new Error(`${label} excedió ${ms}ms`)), ms);
     }),
-  ]);
+  ]).finally(cleanup);
 }
 
 // ─── Main decision function ───────────────────────────────────────────────────
@@ -788,28 +789,42 @@ export async function runAgentForMessage(conversation: any, message: any) {
 
   const decision = await decide(conversation, message);
   const decisionId = randomUUID();
-  AgentDecisions.create({
-    id: decisionId,
-    conversation_id: conversation.id,
-    message_id: message.id,
-    agent: agentLabelForDecision(conversation, decision),
-    intent: decision.intent,
-    confidence: decision.confidence,
-    extracted_fields: decision.extractedFields,
-    proposed_reply: decision.proposedReply || null,
-    proposed_actions: decision.proposedActions,
-    requires_approval: true,
-    status: 'pending_approval',
-  });
+  const agentLabel = agentLabelForDecision(conversation, decision);
+  const nextConvStatus = nextStatus(decision);
 
-  ChannelConversations.update(conversation.id, {
-    status: nextStatus(decision),
-    intent: decision.intent,
-    confidence: decision.confidence,
-    memory: mergeMemory(conversation, decision, nextStatus, agentLabelForDecision),
-  });
+  // Atomic: decision + conversation update + outbox creation in one transaction
+  const outbox = db.transaction(() => {
+    AgentDecisions.create({
+      id: decisionId,
+      conversation_id: conversation.id,
+      message_id: message.id,
+      agent: agentLabel,
+      intent: decision.intent,
+      confidence: decision.confidence,
+      extracted_fields: decision.extractedFields,
+      proposed_reply: decision.proposedReply || null,
+      proposed_actions: decision.proposedActions,
+      requires_approval: true,
+      status: 'pending_approval',
+    });
+    ChannelConversations.update(conversation.id, {
+      status: nextConvStatus,
+      intent: decision.intent,
+      confidence: decision.confidence,
+      memory: mergeMemory(conversation, decision, nextStatus, agentLabelForDecision),
+    });
+    const items = createOutboxItems(conversation, message, decisionId, decision);
+    AuditLog.insert({
+      accion: 'AGENT_DECISION_CREATED',
+      entidad: 'agent_decisions',
+      entidad_id: decisionId,
+      user_id: null,
+      user_nombre: agentLabel,
+      detalle: `intent=${decision.intent},confidence=${decision.confidence},ai_failed=${decision.extractedFields?._ai?.error ? 'true' : 'false'},conv=${conversation.id}`.slice(0, 900),
+    });
+    return items;
+  })();
 
-  const outbox = createOutboxItems(conversation, message, decisionId, decision);
   recordMetric('agent.decision.created', { intent: decision.intent, channel: conversation.channel });
   return { decision: { id: decisionId, ...decision }, outbox };
 }
