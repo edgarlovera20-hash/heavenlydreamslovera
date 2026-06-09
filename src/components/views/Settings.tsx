@@ -866,7 +866,7 @@ function BotTab() {
               </div>
 
               <div className="pt-2 flex gap-2">
-                <button className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2 rounded-lg text-xs font-medium transition-colors border border-white/5 flex items-center justify-center gap-2">
+                <button className="flex-1 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 py-2 rounded-lg text-xs font-medium transition-colors border border-violet-500/20 flex items-center justify-center gap-2">
                   <FileText className="w-3.5 h-3.5" /> Prompt y Base
                 </button>
                 <button className="flex-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 py-2 rounded-lg text-xs font-medium transition-colors border border-blue-500/20 flex items-center justify-center gap-2">

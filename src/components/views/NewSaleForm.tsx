@@ -2939,7 +2939,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
             </div>
 
             <div className="flex justify-between mt-8">
-              <button onClick={handlePrev} className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-xl font-medium">Atrás</button>
+              <button onClick={handlePrev} className="bg-indigo-900/60 hover:bg-indigo-800/80 border border-indigo-500/20 text-indigo-200 px-6 py-3 rounded-xl font-medium">Atrás</button>
               <button onClick={handleNext} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2">
                 Ver Paquetes <ChevronRight className="w-4 h-4" />
               </button>
@@ -3011,7 +3011,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
               </div>
             )}
             <div className="flex justify-between mt-8">
-              <button onClick={() => { setError(''); handlePrev(); }} className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-xl font-medium">Atrás</button>
+              <button onClick={() => { setError(''); handlePrev(); }} className="bg-indigo-900/60 hover:bg-indigo-800/80 border border-indigo-500/20 text-indigo-200 px-6 py-3 rounded-xl font-medium">Atrás</button>
               <button 
                 onClick={() => {
                   if (!selectedPackage) {
@@ -3304,7 +3304,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
               </div>
             )}
             <div className="flex justify-between mt-8">
-              <button onClick={() => { setError(''); handlePrev(); }} className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-xl font-medium">Atrás</button>
+              <button onClick={() => { setError(''); handlePrev(); }} className="bg-indigo-900/60 hover:bg-indigo-800/80 border border-indigo-500/20 text-indigo-200 px-6 py-3 rounded-xl font-medium">Atrás</button>
               <button 
                 onClick={() => {
                   if (form.tipoCliente === 'portado' && !form.portabilidadVerificada) {
@@ -3531,7 +3531,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                   </div>
                   
                   <div className="flex gap-2">
-                    <button onClick={clearSignature} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white p-3 rounded-lg text-sm font-medium">
+                    <button onClick={clearSignature} className="flex-1 bg-amber-600/70 hover:bg-amber-500/80 text-white p-3 rounded-lg text-sm font-medium">
                       Limpiar Firma
                     </button>
                     <button onClick={stopVideoFirma} className="flex-1 bg-red-600 hover:bg-red-500 text-white p-3 rounded-lg text-sm font-medium">
@@ -3640,7 +3640,7 @@ export default function NewSaleForm({ onBack }: { onBack: () => void }) {
                 <MessageCircle className="w-5 h-5" /> ENVIAR COMPROBANTE POR WHATSAPP
               </button>
 
-              <button onClick={handlePrev} className="w-full bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-xl font-medium mt-4">
+              <button onClick={handlePrev} className="w-full bg-indigo-900/60 hover:bg-indigo-800/80 border border-indigo-500/20 text-indigo-200 px-6 py-3 rounded-xl font-medium mt-4">
                 Atrás
               </button>
             </div>
@@ -3716,7 +3716,7 @@ function UploadSlot({
         </div>
         <div className="absolute inset-x-0 bottom-0 flex gap-2 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
           <button type="button" onClick={onPick} disabled={disabled}
-            className="flex-1 text-[11px] font-medium text-slate-200 bg-slate-700/80 hover:bg-slate-600 rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors">
+            className="flex-1 text-[11px] font-medium text-sky-100 bg-sky-700/70 hover:bg-sky-600/80 rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors">
             <Upload className="w-3 h-3" /> Cambiar archivo
           </button>
           {onRotate && !isPdf && (

@@ -482,25 +482,34 @@ function QuickAction({ icon: Icon, label, color, onClick }: { icon: any; label: 
 
 // Subcomponents
 function NavItem({ icon: Icon, label, color, active = false, onClick, badge }: { icon: any, label: string, color: string, active?: boolean, onClick?: () => void, badge?: number }) {
+  const iconColor = {
+    cyan: active ? 'text-cyan-300' : 'text-cyan-400',
+    blue: active ? 'text-blue-300' : 'text-blue-400',
+    purple: active ? 'text-purple-300' : 'text-purple-400',
+    green: active ? 'text-emerald-300' : 'text-emerald-400',
+    yellow: active ? 'text-yellow-300' : 'text-yellow-400',
+    red: active ? 'text-rose-300' : 'text-rose-400',
+  }[color] ?? (active ? 'text-slate-200' : 'text-slate-400');
+
   const getColorClasses = () => {
-    if (color === 'cyan') return active ? 'text-cyan-200 bg-cyan-400/10 border-cyan-300/25' : 'text-slate-400 hover:text-cyan-200 hover:bg-cyan-300/5';
-    if (color === 'blue') return active ? 'text-blue-400 bg-blue-400/10 border-blue-400/30' : 'text-slate-400 hover:text-blue-400 hover:bg-blue-400/5';
-    if (color === 'purple') return active ? 'text-purple-400 bg-purple-400/10 border-purple-400/30' : 'text-slate-400 hover:text-purple-400 hover:bg-purple-400/5';
-    if (color === 'green') return active ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' : 'text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/5';
-    if (color === 'yellow') return active ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' : 'text-slate-400 hover:text-yellow-400 hover:bg-yellow-400/5';
-    if (color === 'red') return active ? 'text-rose-400 bg-rose-400/10 border-rose-400/30' : 'text-slate-400 hover:text-rose-400 hover:bg-rose-400/5';
-    return active ? 'text-slate-200 bg-slate-800' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50';
+    if (color === 'cyan') return active ? 'text-cyan-200 bg-cyan-400/10 border-cyan-300/25' : 'text-slate-300 hover:text-cyan-200 hover:bg-cyan-300/5';
+    if (color === 'blue') return active ? 'text-blue-400 bg-blue-400/10 border-blue-400/30' : 'text-slate-300 hover:text-blue-400 hover:bg-blue-400/5';
+    if (color === 'purple') return active ? 'text-purple-400 bg-purple-400/10 border-purple-400/30' : 'text-slate-300 hover:text-purple-400 hover:bg-purple-400/5';
+    if (color === 'green') return active ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' : 'text-slate-300 hover:text-emerald-400 hover:bg-emerald-400/5';
+    if (color === 'yellow') return active ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' : 'text-slate-300 hover:text-yellow-400 hover:bg-yellow-400/5';
+    if (color === 'red') return active ? 'text-rose-400 bg-rose-400/10 border-rose-400/30' : 'text-slate-300 hover:text-rose-400 hover:bg-rose-400/5';
+    return active ? 'text-slate-200 bg-slate-800' : 'text-slate-300 hover:text-slate-200 hover:bg-slate-800/50';
   };
 
   const colorClasses = getColorClasses();
 
   return (
-    <button 
-      onClick={onClick} 
+    <button
+      onClick={onClick}
       className={`hd-liquid-button hd-nav-item w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all relative overflow-hidden group border border-transparent ${active ? 'hd-liquid-selected is-active' : ''} ${colorClasses}`}
       data-tone={color}
     >
-      <Icon className={`hd-nav-item-icon w-4 h-4 transition-transform group-hover:scale-110`} />
+      <Icon className={`hd-nav-item-icon w-4 h-4 transition-transform group-hover:scale-110 ${iconColor}`} />
       <span className="text-[12px] font-bold flex-1">{label}</span>
       {badge !== undefined && badge > 0 && (
         <span className="min-w-[18px] h-[18px] px-1 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-black">

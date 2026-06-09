@@ -501,7 +501,7 @@ function PayrollWeekWorkbench({ isAdmin, managementMode = false }: { isAdmin: bo
               type="button"
               onClick={handleExport}
               disabled={isExporting}
-              className="bg-slate-800/90 hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
+              className="bg-sky-600/80 hover:bg-sky-500 text-white px-5 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
             >
               {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               PDF
