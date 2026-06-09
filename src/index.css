@@ -9511,3 +9511,38 @@ body::-webkit-scrollbar-thumb {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Circuit-board panel frame: cyan corner traces on every .hd-card ── */
+:root {
+  --hd-circuit-tl: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='150'%20height='150'%20viewBox='0%200%20150%20150'%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.85'%3E%3Cpath%20d='M8,72L8,34L34,8L72,8'/%3E%3Cpath%20d='M22,86L22,48L48,22L86,22'/%3E%3Cpath%20d='M36,100L36,60L60,36L100,36'/%3E%3C/g%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.95'%3E%3Ccircle%20cx='8'%20cy='72'%20r='3.5'/%3E%3Ccircle%20cx='72'%20cy='8'%20r='3.5'/%3E%3Ccircle%20cx='22'%20cy='86'%20r='3'/%3E%3Ccircle%20cx='86'%20cy='22'%20r='3'/%3E%3C/g%3E%3Cg%20fill='%2322d3ee'%20opacity='0.9'%3E%3Ccircle%20cx='36'%20cy='100'%20r='2.2'/%3E%3Ccircle%20cx='100'%20cy='36'%20r='2.2'/%3E%3C/g%3E%3C/svg%3E");
+  --hd-circuit-tr: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='150'%20height='150'%20viewBox='0%200%20150%20150'%3E%3Cg%20transform='rotate(90%2075%2075)'%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.85'%3E%3Cpath%20d='M8,72L8,34L34,8L72,8'/%3E%3Cpath%20d='M22,86L22,48L48,22L86,22'/%3E%3Cpath%20d='M36,100L36,60L60,36L100,36'/%3E%3C/g%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.95'%3E%3Ccircle%20cx='8'%20cy='72'%20r='3.5'/%3E%3Ccircle%20cx='72'%20cy='8'%20r='3.5'/%3E%3Ccircle%20cx='22'%20cy='86'%20r='3'/%3E%3Ccircle%20cx='86'%20cy='22'%20r='3'/%3E%3C/g%3E%3Cg%20fill='%2322d3ee'%20opacity='0.9'%3E%3Ccircle%20cx='36'%20cy='100'%20r='2.2'/%3E%3Ccircle%20cx='100'%20cy='36'%20r='2.2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  --hd-circuit-br: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='150'%20height='150'%20viewBox='0%200%20150%20150'%3E%3Cg%20transform='rotate(180%2075%2075)'%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.85'%3E%3Cpath%20d='M8,72L8,34L34,8L72,8'/%3E%3Cpath%20d='M22,86L22,48L48,22L86,22'/%3E%3Cpath%20d='M36,100L36,60L60,36L100,36'/%3E%3C/g%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.95'%3E%3Ccircle%20cx='8'%20cy='72'%20r='3.5'/%3E%3Ccircle%20cx='72'%20cy='8'%20r='3.5'/%3E%3Ccircle%20cx='22'%20cy='86'%20r='3'/%3E%3Ccircle%20cx='86'%20cy='22'%20r='3'/%3E%3C/g%3E%3Cg%20fill='%2322d3ee'%20opacity='0.9'%3E%3Ccircle%20cx='36'%20cy='100'%20r='2.2'/%3E%3Ccircle%20cx='100'%20cy='36'%20r='2.2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  --hd-circuit-bl: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='150'%20height='150'%20viewBox='0%200%20150%20150'%3E%3Cg%20transform='rotate(270%2075%2075)'%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.85'%3E%3Cpath%20d='M8,72L8,34L34,8L72,8'/%3E%3Cpath%20d='M22,86L22,48L48,22L86,22'/%3E%3Cpath%20d='M36,100L36,60L60,36L100,36'/%3E%3C/g%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.95'%3E%3Ccircle%20cx='8'%20cy='72'%20r='3.5'/%3E%3Ccircle%20cx='72'%20cy='8'%20r='3.5'/%3E%3Ccircle%20cx='22'%20cy='86'%20r='3'/%3E%3Ccircle%20cx='86'%20cy='22'%20r='3'/%3E%3C/g%3E%3Cg%20fill='%2322d3ee'%20opacity='0.9'%3E%3Ccircle%20cx='36'%20cy='100'%20r='2.2'/%3E%3Ccircle%20cx='100'%20cy='36'%20r='2.2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+.hd-card {
+  isolation: isolate;
+}
+
+.hd-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  background-image: var(--hd-circuit-tl), var(--hd-circuit-tr), var(--hd-circuit-bl), var(--hd-circuit-br);
+  background-repeat: no-repeat;
+  background-position: 7px 7px, calc(100% - 7px) 7px, 7px calc(100% - 7px), calc(100% - 7px) calc(100% - 7px);
+  background-size: 82px 82px;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.10);
+  opacity: 0.58;
+}
+
+/* Small/dense cards: shrink the circuit so it doesn't crowd the content */
+.hd-kpi.hd-card::after,
+.hd-card.p-3::after,
+.hd-card.p-4::after {
+  background-size: 60px 60px;
+  opacity: 0.5;
+}
