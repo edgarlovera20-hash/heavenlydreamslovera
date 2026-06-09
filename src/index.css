@@ -6,6 +6,7 @@
 @import "../design-system/components/components.css";
 @import "../design-system/layouts/layouts.css";
 @import "tailwindcss";
+@import "../shared/circuit-panel.css";
 
 /* ── Electric design system from RHDREAMSAPP2026 ── */
 :root {
