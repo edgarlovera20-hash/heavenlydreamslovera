@@ -551,80 +551,101 @@ const PayrollReceiptPreview = React.forwardRef<HTMLDivElement, {
   result: PayrollQueryResult;
   paymentMethod: string;
 }>(({ year, week, result, paymentMethod }, ref) => {
+  const Fill = ({ value, w = 'auto' }: { value?: React.ReactNode; w?: string }) => (
+    <span
+      className="inline-block border-b-2 border-slate-400 font-bold text-slate-900 text-center px-2 align-baseline"
+      style={{ minWidth: w === 'auto' ? '8rem' : w }}
+    >
+      {value || ' '}
+    </span>
+  );
   return (
-    <div className="bg-white text-slate-900 p-6 md:p-12 rounded-lg max-w-5xl mx-auto shadow-2xl" ref={ref}>
-      <header className="grid grid-cols-[140px_1fr] gap-8 items-center pb-10 border-b-2 border-slate-900">
-        <img src="/logo-mobile.webp" alt="Heavenly Dreams" className="w-28 h-28 rounded-full object-cover shadow-md" decoding="async" />
+    <div className="bg-white text-slate-900 p-6 md:p-12 rounded-lg max-w-5xl mx-auto shadow-2xl ring-1 ring-slate-200" ref={ref}>
+      <header className="grid grid-cols-[140px_1fr] gap-8 items-center pb-8 border-b-4 border-double border-slate-900">
+        <img src="/logo-mobile.webp" alt="Heavenly Dreams" className="w-28 h-28 rounded-full object-cover shadow-md ring-2 ring-blue-500/30" decoding="async" />
         <div className="text-center">
-          <h2 className="text-3xl md:text-4xl font-black tracking-wide">{COMPANY_NAME}</h2>
-          <p className="text-lg text-slate-600 mt-4 leading-relaxed">{COMPANY_ADDRESS}</p>
+          <h2 className="text-3xl md:text-4xl font-black tracking-wide text-slate-900">{COMPANY_NAME}</h2>
+          <p className="text-base text-slate-600 mt-3 leading-relaxed">{COMPANY_ADDRESS}</p>
         </div>
       </header>
 
-      <section className="text-center my-12">
-        <h3 className="text-3xl font-black">RECIBO DE PAGO DE COMISIONES</h3>
-        <p className="text-xl text-slate-600 mt-2">Semana {week} del Año {year}</p>
+      <section className="text-center my-8">
+        <span className="inline-block rounded-full bg-blue-600 px-6 py-2 text-sm font-black uppercase tracking-[0.2em] text-white shadow-md">
+          Recibo de Pago de Comisiones
+        </span>
+        <p className="text-lg text-slate-500 mt-3 font-semibold">Semana {week} · Año {year}</p>
       </section>
 
-      <section className="space-y-6 text-xl leading-relaxed">
+      <section className="space-y-5 text-lg leading-loose text-slate-800">
         <p>
-          Yo, <strong><u>{result.userLabel}</u></strong>, recibo el pago de mis comisiones por mis ventas posteadas de
-          la empresa <strong>Heavenly Dreams SAS de CV</strong> y del gerente <strong>Edgar David Lovera Juárez</strong>,
+          Yo, <Fill value={result.userLabel} w="14rem" />, recibo el pago de mis comisiones por mis ventas posteadas de
+          la empresa <strong className="text-slate-900">Heavenly Dreams SAS de CV</strong> y del gerente <strong className="text-slate-900">Edgar David Lovera Juárez</strong>,
           correspondiente a la semana en curso.
         </p>
         <p>
-          Recibiendo el pago el día <strong><u>{formatReceiptDate(result.paymentDate)}</u></strong>, que abarca mis ventas
-          posteadas del día <strong><u>{formatReceiptDate(result.weekStart)}</u></strong> al día <strong><u>{formatReceiptDate(result.weekEnd)}</u></strong>.
+          Recibiendo el pago el día <Fill value={formatReceiptDate(result.paymentDate)} />, que abarca mis ventas
+          posteadas del día <Fill value={formatReceiptDate(result.weekStart)} /> al día <Fill value={formatReceiptDate(result.weekEnd)} />.
         </p>
         <p>
           Recibiendo y aceptando el esquema de comisiones, recibiendo el pago por un total de{' '}
-          <strong>{formatCurrency(result.total)}</strong> vía <strong><u>{paymentMethod || '____________________'}</u></strong>.
+          <span className="inline-block rounded-lg bg-emerald-50 px-3 py-0.5 font-black text-emerald-700 ring-1 ring-emerald-200">{formatCurrency(result.total)}</span> vía <Fill value={paymentMethod} />.
         </p>
       </section>
 
-      <section className="mt-12">
-        <h4 className="text-2xl font-black mb-6">Detalle de Ventas Posteadas</h4>
-        <div className="border border-slate-400 rounded overflow-hidden">
+      <section className="mt-10">
+        <h4 className="text-xl font-black mb-4 text-slate-900 flex items-center gap-2">
+          <span className="h-5 w-1.5 rounded-full bg-blue-600" />
+          Detalle de Ventas Posteadas
+        </h4>
+        <div className="border border-slate-300 rounded-xl overflow-hidden shadow-sm">
           <table className="w-full text-base">
-            <thead className="bg-slate-100">
+            <thead className="bg-slate-900 text-white">
               <tr>
-                <th className="p-3 text-left border-b border-slate-300">Folio</th>
-                <th className="p-3 text-left border-b border-slate-300">Cliente</th>
-                <th className="p-3 text-left border-b border-slate-300">Paquete</th>
-                <th className="p-3 text-left border-b border-slate-300">Estatus</th>
-                <th className="p-3 text-right border-b border-slate-300">Comisión</th>
+                <th className="p-3 text-left font-bold">Folio</th>
+                <th className="p-3 text-left font-bold">Cliente</th>
+                <th className="p-3 text-left font-bold">Paquete</th>
+                <th className="p-3 text-left font-bold">Estatus</th>
+                <th className="p-3 text-right font-bold">Comisión</th>
               </tr>
             </thead>
             <tbody>
-              {result.sales.length ? result.sales.map(sale => (
-                <tr key={sale.id}>
-                  <td className="p-3 border-b border-slate-200 font-mono">{sale.folio}</td>
-                  <td className="p-3 border-b border-slate-200">{sale.client}</td>
-                  <td className="p-3 border-b border-slate-200">{sale.packageName}</td>
-                  <td className="p-3 border-b border-slate-200">{sale.status}</td>
-                  <td className="p-3 border-b border-slate-200 text-right font-bold">{formatCurrency(sale.commission)}</td>
+              {result.sales.length ? result.sales.map((sale, i) => (
+                <tr key={sale.id} className={i % 2 ? 'bg-slate-50' : 'bg-white'}>
+                  <td className="p-3 border-b border-slate-200 font-mono text-slate-700">{sale.folio}</td>
+                  <td className="p-3 border-b border-slate-200 text-slate-800">{sale.client}</td>
+                  <td className="p-3 border-b border-slate-200 text-slate-800">{sale.packageName}</td>
+                  <td className="p-3 border-b border-slate-200 text-slate-800">{sale.status}</td>
+                  <td className="p-3 border-b border-slate-200 text-right font-black text-emerald-700">{formatCurrency(sale.commission)}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={5} className="p-12 text-center text-slate-500 text-xl">
+                  <td colSpan={5} className="p-12 text-center text-slate-400 text-lg italic">
                     No hay folios posteados en esta semana
                   </td>
                 </tr>
               )}
             </tbody>
+            {result.sales.length ? (
+              <tfoot>
+                <tr className="bg-slate-100 border-t-2 border-slate-900">
+                  <td colSpan={4} className="p-3 text-right font-black uppercase tracking-wide text-slate-700">Total</td>
+                  <td className="p-3 text-right font-black text-lg text-emerald-700">{formatCurrency(result.total)}</td>
+                </tr>
+              </tfoot>
+            ) : null}
           </table>
         </div>
       </section>
 
-      <section className="mt-20 grid grid-cols-1 md:grid-cols-2 gap-12 text-center">
+      <section className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-12 text-center">
         <div>
-          <div className="border-b-2 border-slate-900 w-72 mx-auto mb-4" />
-          <p className="font-black">Firma del Promotor/Supervisor</p>
-          <p className="text-sm text-slate-500 mt-1">{result.userLabel}</p>
+          <div className="border-b-2 border-slate-900 w-64 mx-auto mb-3" />
+          <p className="font-black text-slate-900">Firma del Promotor/Supervisor</p>
+          <p className="text-sm text-slate-500 mt-1">{result.userLabel || ' '}</p>
         </div>
         <div>
-          <div className="border-b-2 border-slate-900 w-72 mx-auto mb-4" />
-          <p className="font-black">Firma del Gerente</p>
+          <div className="border-b-2 border-slate-900 w-64 mx-auto mb-3" />
+          <p className="font-black text-slate-900">Firma del Gerente</p>
           <p className="text-sm text-slate-500 mt-1">Edgar David Lovera Juárez</p>
         </div>
       </section>
