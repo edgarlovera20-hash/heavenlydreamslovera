@@ -1,0 +1,104 @@
+/* ============================================================
+   Heavenly Dreams — Marco de panel estilo circuito (PORTÁTIL)
+   ------------------------------------------------------------
+   Diseño visual compartido para los 3 proyectos:
+     • heavenlydreamslovera   (CRM)
+     • RHDREAMSAPP2026        (RH / WhatsApp)
+     • HEAVENLY-DREAMS-WEB    (sitio público)
+
+   CÓMO USARLO
+   -----------
+   1) Copia este archivo dentro del proyecto (p.ej. src/circuit-panel.css)
+   2) Impórtalo una sola vez:
+        - React/Vite:  import './circuit-panel.css'  (en main.tsx / App)
+        - CSS global:  @import './circuit-panel.css';
+        - HTML plano:  <link rel="stylesheet" href="circuit-panel.css">
+   3) Aplica la clase a cualquier tarjeta/panel:
+        <div class="circuit-panel"> ... </div>          // panel completo (fondo + borde + esquinas)
+        <div class="mi-tarjeta circuit-frame"> ... </div> // SOLO esquinas sobre tu tarjeta existente
+
+   Para aplicarlo a TODAS las tarjetas sin tocar el HTML, mapea tu
+   selector de tarjeta al final del archivo (ver ejemplos comentados).
+   ============================================================ */
+
+:root {
+  --hd-circuit-color: #22d3ee; /* color de los trazos (cyan) */
+  --hd-circuit-tl: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='150'%20height='150'%20viewBox='0%200%20150%20150'%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.85'%3E%3Cpath%20d='M8,72L8,34L34,8L72,8'/%3E%3Cpath%20d='M22,86L22,48L48,22L86,22'/%3E%3Cpath%20d='M36,100L36,60L60,36L100,36'/%3E%3C/g%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.95'%3E%3Ccircle%20cx='8'%20cy='72'%20r='3.5'/%3E%3Ccircle%20cx='72'%20cy='8'%20r='3.5'/%3E%3Ccircle%20cx='22'%20cy='86'%20r='3'/%3E%3Ccircle%20cx='86'%20cy='22'%20r='3'/%3E%3C/g%3E%3Cg%20fill='%2322d3ee'%20opacity='0.9'%3E%3Ccircle%20cx='36'%20cy='100'%20r='2.2'/%3E%3Ccircle%20cx='100'%20cy='36'%20r='2.2'/%3E%3C/g%3E%3C/svg%3E");
+  --hd-circuit-tr: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='150'%20height='150'%20viewBox='0%200%20150%20150'%3E%3Cg%20transform='rotate(90%2075%2075)'%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.85'%3E%3Cpath%20d='M8,72L8,34L34,8L72,8'/%3E%3Cpath%20d='M22,86L22,48L48,22L86,22'/%3E%3Cpath%20d='M36,100L36,60L60,36L100,36'/%3E%3C/g%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.95'%3E%3Ccircle%20cx='8'%20cy='72'%20r='3.5'/%3E%3Ccircle%20cx='72'%20cy='8'%20r='3.5'/%3E%3Ccircle%20cx='22'%20cy='86'%20r='3'/%3E%3Ccircle%20cx='86'%20cy='22'%20r='3'/%3E%3C/g%3E%3Cg%20fill='%2322d3ee'%20opacity='0.9'%3E%3Ccircle%20cx='36'%20cy='100'%20r='2.2'/%3E%3Ccircle%20cx='100'%20cy='36'%20r='2.2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  --hd-circuit-br: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='150'%20height='150'%20viewBox='0%200%20150%20150'%3E%3Cg%20transform='rotate(180%2075%2075)'%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.85'%3E%3Cpath%20d='M8,72L8,34L34,8L72,8'/%3E%3Cpath%20d='M22,86L22,48L48,22L86,22'/%3E%3Cpath%20d='M36,100L36,60L60,36L100,36'/%3E%3C/g%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.95'%3E%3Ccircle%20cx='8'%20cy='72'%20r='3.5'/%3E%3Ccircle%20cx='72'%20cy='8'%20r='3.5'/%3E%3Ccircle%20cx='22'%20cy='86'%20r='3'/%3E%3Ccircle%20cx='86'%20cy='22'%20r='3'/%3E%3C/g%3E%3Cg%20fill='%2322d3ee'%20opacity='0.9'%3E%3Ccircle%20cx='36'%20cy='100'%20r='2.2'/%3E%3Ccircle%20cx='100'%20cy='36'%20r='2.2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  --hd-circuit-bl: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='150'%20height='150'%20viewBox='0%200%20150%20150'%3E%3Cg%20transform='rotate(270%2075%2075)'%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.85'%3E%3Cpath%20d='M8,72L8,34L34,8L72,8'/%3E%3Cpath%20d='M22,86L22,48L48,22L86,22'/%3E%3Cpath%20d='M36,100L36,60L60,36L100,36'/%3E%3C/g%3E%3Cg%20fill='none'%20stroke='%2322d3ee'%20stroke-width='1.4'%20opacity='0.95'%3E%3Ccircle%20cx='8'%20cy='72'%20r='3.5'/%3E%3Ccircle%20cx='72'%20cy='8'%20r='3.5'/%3E%3Ccircle%20cx='22'%20cy='86'%20r='3'/%3E%3Ccircle%20cx='86'%20cy='22'%20r='3'/%3E%3C/g%3E%3Cg%20fill='%2322d3ee'%20opacity='0.9'%3E%3Ccircle%20cx='36'%20cy='100'%20r='2.2'/%3E%3Ccircle%20cx='100'%20cy='36'%20r='2.2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* ── Panel completo: fondo navy + borde + esquinas de circuito ── */
+.circuit-panel {
+  position: relative;
+  isolation: isolate;
+  border-radius: 18px;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  background:
+    radial-gradient(120% 120% at 50% 0%, rgba(13, 31, 58, 0.92), rgba(6, 16, 34, 0.97)),
+    #061022;
+  box-shadow: 0 18px 44px rgba(0, 8, 36, 0.45);
+  color: #e6f1ff;
+}
+
+/* ── Solo el marco de circuito (úsalo sobre tu tarjeta existente) ── */
+.circuit-frame {
+  position: relative;
+  isolation: isolate;
+}
+
+.circuit-panel::after,
+.circuit-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  background-image: var(--hd-circuit-tl), var(--hd-circuit-tr), var(--hd-circuit-bl), var(--hd-circuit-br);
+  background-repeat: no-repeat;
+  background-position:
+    7px 7px,
+    calc(100% - 7px) 7px,
+    7px calc(100% - 7px),
+    calc(100% - 7px) calc(100% - 7px);
+  background-size: 82px 82px;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.10);
+  opacity: 0.6;
+}
+
+/* Tarjetas pequeñas/densas: esquinas más chicas para no saturar */
+.circuit-panel.is-compact::after,
+.circuit-frame.is-compact::after {
+  background-size: 58px 58px;
+  opacity: 0.5;
+}
+
+@media (max-width: 640px) {
+  .circuit-panel::after,
+  .circuit-frame::after {
+    background-size: 64px 64px;
+  }
+}
+
+/* ============================================================
+   APLICAR A TODAS LAS TARJETAS SIN TOCAR EL HTML
+   ------------------------------------------------------------
+   Descomenta y ajusta el selector según cada proyecto:
+
+   // RHDREAMSAPP2026 — si usan .hd-card / .glass-panel:
+   .hd-card, .glass-panel { position: relative; isolation: isolate; }
+   .hd-card::after, .glass-panel::after {
+     content:""; position:absolute; inset:0; border-radius:inherit;
+     pointer-events:none; z-index:-1;
+     background-image: var(--hd-circuit-tl), var(--hd-circuit-tr), var(--hd-circuit-bl), var(--hd-circuit-br);
+     background-repeat:no-repeat;
+     background-position: 7px 7px, calc(100% - 7px) 7px, 7px calc(100% - 7px), calc(100% - 7px) calc(100% - 7px);
+     background-size:82px 82px; opacity:0.6;
+   }
+
+   // HEAVENLY-DREAMS-WEB — si las secciones usan .card / .panel / .feature:
+   .card, .panel, .feature { position: relative; isolation: isolate; }
+   .card::after, .panel::after, .feature::after { (mismo bloque ::after de arriba) }
+   ============================================================ */
