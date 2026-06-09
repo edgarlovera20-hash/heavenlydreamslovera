@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Users, CheckCircle, XCircle, Trash2, RefreshCw, Search, Shield, UserCheck, UserX, Clock, Phone, Mail, MapPin, Plus, KeyRound } from 'lucide-react';
 
 interface AppUser {
@@ -138,7 +138,7 @@ export default function UserManagementView() {
     else notify('Error al eliminar usuario.', false);
   };
 
-  const filtered = users.filter(u => {
+  const filtered = useMemo(() => users.filter(u => {
     const q = search.toLowerCase();
     const matchSearch = !q || (u.username || '').toLowerCase().includes(q) ||
       (u.email || '').toLowerCase().includes(q) ||
@@ -149,11 +149,13 @@ export default function UserManagementView() {
       filter === 'active' ? u.activo === 1 :
       u.activo === 0;
     return matchSearch && matchFilter;
-  });
+  }), [users, search, filter]);
 
-  const pending = users.filter(u => u.activo === 2).length;
-  const active  = users.filter(u => u.activo === 1).length;
-  const rejected = users.filter(u => u.activo === 0).length;
+  const { pending, active, rejected } = useMemo(() => ({
+    pending: users.filter(u => u.activo === 2).length,
+    active: users.filter(u => u.activo === 1).length,
+    rejected: users.filter(u => u.activo === 0).length,
+  }), [users]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

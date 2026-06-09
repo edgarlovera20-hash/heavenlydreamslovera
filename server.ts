@@ -1674,7 +1674,7 @@ async function startServer() {
 
   // Usuarios pendientes de aprobación
   app.get("/api/users/pending", managerOnly, wrap((_req: any, res: any) => {
-    res.json(Users.getAll().filter((u: any) => u.activo === 2));
+    res.json(db.prepare('SELECT * FROM users WHERE activo=2 ORDER BY nombre').all());
   }));
 
   // Aprobar cuenta
@@ -1720,8 +1720,8 @@ async function startServer() {
 
   // Contar pendientes (para notificaciones)
   app.get("/api/users/pending-count", adminOnly, wrap((_req: any, res: any) => {
-    const count = Users.getAll().filter((u: any) => u.activo === 2).length;
-    res.json({ count });
+    const row = db.prepare('SELECT COUNT(*) AS count FROM users WHERE activo=2').get() as any;
+    res.json({ count: row?.count || 0 });
   }));
 
   app.get("/api/users/:uid", authOnly, wrap((req: any, res: any) => {
@@ -2717,7 +2717,11 @@ async function startServer() {
         },
       });
     }
-    const rows = (SiacRecords.getAll() as any[]).filter(record => crmCanAccessRecord(req.auth, record));
+    // Non-paged fallback: bound the result via getPage (SQL LIMIT + role scoping)
+    // instead of loading the entire siac_records table into memory. Keep the
+    // crmCanAccessRecord post-filter to preserve exact access semantics (e.g. RECLUTADOR).
+    const rows = (SiacRecords.getPage({ limit: 2000, offset: 0, auth: req.auth }) as any[])
+      .filter(record => crmCanAccessRecord(req.auth, record));
     res.json(rows.map(record => maskSiacRecord(record, req.auth)));
   }));
 
@@ -2920,16 +2924,19 @@ async function startServer() {
     const rows = Array.isArray(req.body) ? req.body : Array.isArray(req.body?.records) ? req.body.records : [];
     if (!rows.length) return res.status(400).json({ error: 'records requerido' });
     let imported = 0, skipped = 0;
-    for (const row of rows) {
-      const data = normalizeSiacRow(row);
-      if (!data.folio_siac) { skipped++; continue; }
-      try {
-        SiacRecords.upsert(data);
-        imported++;
-      } catch {
-        skipped++;
+    const importAll = db.transaction((items: any[]) => {
+      for (const row of items) {
+        const data = normalizeSiacRow(row);
+        if (!data.folio_siac) { skipped++; continue; }
+        try {
+          SiacRecords.upsert(data);
+          imported++;
+        } catch {
+          skipped++;
+        }
       }
-    }
+    });
+    importAll(rows);
     AuditLog.insert({ accion: 'BULK_IMPORT_SIAC', entidad: 'siac_records', entidad_id: null, user_id: req.auth?.sub || null, user_nombre: null, detalle: `imported:${imported};skipped:${skipped}` });
     res.json({ imported, skipped });
   }));

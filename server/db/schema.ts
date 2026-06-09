@@ -1068,6 +1068,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_clientes_status  ON clientes_crm (status_cliente, proximo_seguimiento);
   CREATE INDEX IF NOT EXISTS idx_morosidad_dias   ON morosidad (dias_atraso DESC);
   CREATE INDEX IF NOT EXISTS idx_morosidad_status ON morosidad (status_cobranza, dias_atraso DESC);
+  CREATE INDEX IF NOT EXISTS idx_morosidad_cliente ON morosidad (cliente_id);
+  CREATE INDEX IF NOT EXISTS idx_morosidad_folio   ON morosidad (folio);
   CREATE INDEX IF NOT EXISTS idx_folios_status    ON estatus_folios (status_actual, fecha_movimiento DESC);
   CREATE INDEX IF NOT EXISTS idx_logs_created     ON logs_sistema (created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_logs_entidad     ON logs_sistema (entidad, entidad_id);

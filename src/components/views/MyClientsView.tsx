@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowLeft, Search, Filter, Download, Upload, MoreVertical, Edit, FileText, Database, ShieldAlert, Cpu } from 'lucide-react';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -46,13 +46,13 @@ export default function MyClientsView({ onBack }: { onBack: () => void }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const filteredClients = clients.filter(client => {
-    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          client.phone.includes(searchTerm) || 
+  const filteredClients = useMemo(() => clients.filter(client => {
+    const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          client.phone.includes(searchTerm) ||
                           client.id.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === 'all' || client.status === filterStatus;
     return matchesSearch && matchesFilter;
-  });
+  }), [clients, searchTerm, filterStatus]);
 
   const downloadClientCSV = (client: ClientData) => {
     const headers = ['ID', 'Nombre', 'Teléfono', 'Paquete', 'Estatus', 'Notas', 'Fecha'];

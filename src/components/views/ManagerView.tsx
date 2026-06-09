@@ -424,7 +424,7 @@ export default function ManagerView({ role, onBack, currentUser, isLightMode, on
   );
 }
 
-function ExecutiveMetric({
+const ExecutiveMetric = React.memo(function ExecutiveMetric({
   icon: Icon,
   label,
   value,
@@ -457,7 +457,7 @@ function ExecutiveMetric({
       <p className="mt-1 text-xs font-semibold text-slate-500">{detail}</p>
     </div>
   );
-}
+});
 
 function QuickAction({ icon: Icon, label, color, onClick }: { icon: any; label: string; color: string; onClick: () => void }) {
   const colors: Record<string, string> = {
