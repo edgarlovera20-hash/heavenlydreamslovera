@@ -24,6 +24,12 @@ import {
   hasWhatsAppCredentials,
   type WaMessage,
 } from "./server/whatsapp";
+import {
+  isCloudConfigured,
+  sendCloudMessage,
+  handleWebhookVerification,
+  handleWebhookPayload,
+} from "./server/whatsapp-cloud";
 import { initTelegram, stopTelegram, getTelegramStatus, getTelegramMessages, sendTelegramMessage, sendTelegramVideo, setTelegramMessageHandler, type TgMessage } from "./server/telegram";
 import { runIneOcr, runComprobanteOcr, runSiacOcr, checkOcrStatus } from "./server/ocr-service";
 import db, {
@@ -3992,6 +3998,39 @@ async function startServer() {
   app.get("/api/whatsapp/messages", chatUserOnly, wrap((req: any, res: any) => {
     const limit = parseLimit(req.query.limit, 100, 500);
     res.json(getRecentChannelMessages(limit, queryString(req.query.updatedSince)).filter((msg: any) => msg.channel === 'whatsapp'));
+  }));
+
+  // ── WHATSAPP CLOUD API (Meta Business Platform) ───────────
+  // Verificación del webhook (Meta hace GET para confirmar la URL)
+  app.get("/api/whatsapp/cloud/webhook", (req: any, res) => {
+    const result = handleWebhookVerification(req.query as Record<string, any>);
+    res.status(result.status).send(result.body);
+  });
+
+  // Recepción de mensajes entrantes desde Meta
+  app.post("/api/whatsapp/cloud/webhook", express.raw({ type: 'application/json' }), wrap(async (req: any, res: any) => {
+    try {
+      const signature = String(req.headers['x-hub-signature-256'] ?? '');
+      await handleWebhookPayload(req.body as Buffer, signature);
+      res.status(200).json({ status: 'ok' });
+    } catch (err: any) {
+      console.error('[WA-Cloud] Error procesando webhook:', err?.message);
+      res.status(400).json({ error: err?.message });
+    }
+  }));
+
+  // Estado de la integración Cloud
+  app.get("/api/whatsapp/cloud/status", chatUserOnly, (_req: any, res: any) => {
+    res.json({ configured: isCloudConfigured(), provider: 'meta_cloud' });
+  });
+
+  // Enviar mensaje de texto vía Cloud API
+  app.post("/api/whatsapp/cloud/send", chatUserOnly, wrap(async (req: any, res: any) => {
+    const { phone, message } = req.body;
+    if (!phone || !message) return res.status(400).json({ error: 'phone y message son requeridos' });
+    const result = await sendCloudMessage({ to: phone, text: message });
+    if (!result.ok) return res.status(502).json({ error: result.error });
+    res.json({ ok: true, messageId: result.messageId });
   }));
 
   // ── TELEGRAM ──────────────────────────────────────────────

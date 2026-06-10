@@ -23,6 +23,8 @@ export default defineConfig(({mode}) => {
       target: 'esnext',
       sourcemap: false,
       modulePreload: true,
+      cssCodeSplit: true,
+      reportCompressedSize: false,
       chunkSizeWarningLimit: 900,
       rollupOptions: {
         input: {
@@ -32,7 +34,7 @@ export default defineConfig(({mode}) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined;
-            if (id.includes('@google/generative-ai')) return 'vendor-ai';
+            if (id.includes('@google/generative-ai') || id.includes('/ai/')) return 'vendor-ai';
             if (id.includes('tesseract.js')) return 'vendor-ocr';
             if (id.includes('qrcode')) return 'vendor-qrcode';
             if (id.includes('@firebase') || id.includes('/firebase/')) return 'vendor-firebase';
@@ -45,6 +47,11 @@ export default defineConfig(({mode}) => {
             if (id.includes('jszip')) return 'vendor-zip';
             if (id.includes('motion') || id.includes('framer-motion')) return 'vendor-motion';
             if (id.includes('@simplewebauthn')) return 'vendor-auth';
+            // Chunks faltantes — evitan que estas libs pesadas caigan al bundle principal
+            if (id.includes('gsap') || id.includes('@gsap')) return 'vendor-gsap';
+            if (id.includes('heic2any')) return 'vendor-heic';
+            if (id.includes('idb-keyval')) return 'vendor-idb';
+            if (id.includes('zustand')) return 'vendor-state';
             return undefined;
           },
         },

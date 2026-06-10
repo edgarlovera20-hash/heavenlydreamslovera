@@ -31,7 +31,8 @@ export function createApp() {
   app.set('etag', false);
   app.disable('x-powered-by');
   app.use(compression({
-    threshold: 1024,
+    level: 6,
+    threshold: 512,
     filter: (req, res) => {
       if (req.headers['x-no-compression']) return false;
       return compression.filter(req, res);
