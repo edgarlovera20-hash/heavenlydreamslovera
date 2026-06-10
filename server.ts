@@ -4033,6 +4033,135 @@ async function startServer() {
     res.json({ ok: true, messageId: result.messageId });
   }));
 
+  // ── RECLUTAMIENTO ─────────────────────────────────────────
+  {
+    const { Candidates } = await import('./server/db/recruitment');
+    const {
+      PLANTILLAS, VACANTES, listarVacantesActivas, renderPlantilla, resumenVacante,
+    } = await import('./server/recruitment-templates');
+
+    const recruiterOnly = (req: any, res: any, next: any) => {
+      const role = req.auth?.role;
+      if (!['GERENTE','ADMINISTRACION','RECLUTADOR'].includes(role)) {
+        return res.status(403).json({ error: 'Acceso denegado' });
+      }
+      next();
+    };
+
+    // Vacantes públicas (sin auth)
+    app.get('/api/recruitment/vacantes', (_req, res) => {
+      res.json(listarVacantesActivas().map(v => ({
+        slug: v.slug, titulo: v.titulo, descripcion: v.descripcion,
+        requisitos: v.requisitos, ofrecemos: v.ofrecemos,
+        comision_detalle: v.comision_detalle, horario: v.horario, modalidad: v.modalidad,
+      })));
+    });
+
+    // Detalle de vacante
+    app.get('/api/recruitment/vacantes/:slug', (req: any, res) => {
+      const v = VACANTES[req.params.slug as keyof typeof VACANTES];
+      if (!v) return res.status(404).json({ error: 'Vacante no encontrada' });
+      res.json(v);
+    });
+
+    // Listado de plantillas
+    app.get('/api/recruitment/plantillas', recruiterOnly, (_req, res) => {
+      res.json(PLANTILLAS.map(p => ({
+        id: p.id, nombre: p.nombre, etapa: p.etapa,
+        descripcion: p.descripcion, variables_requeridas: p.variables_requeridas,
+      })));
+    });
+
+    // Render de plantilla con variables
+    app.post('/api/recruitment/plantillas/:id/render', recruiterOnly, wrap(async (req: any, res: any) => {
+      const rendered = renderPlantilla(req.params.id, req.body);
+      if (!rendered) return res.status(404).json({ error: 'Plantilla no encontrada' });
+      res.json({ ok: true, mensaje: rendered });
+    }));
+
+    // Crear candidato
+    app.post('/api/recruitment/candidates', recruiterOnly, wrap(async (req: any, res: any) => {
+      const { nombre, telefono } = req.body;
+      if (!nombre || !telefono) return res.status(400).json({ error: 'nombre y telefono son requeridos' });
+      const existente = Candidates.getByPhone(telefono);
+      if (existente) return res.status(409).json({ error: 'Ya existe un candidato con ese teléfono', candidato: existente });
+      const cand = Candidates.create({ ...req.body, reclutador_id: req.auth?.uid, reclutador_nombre: req.auth?.nombre });
+      logSystem(req, 'RECRUIT_CANDIDATE_CREATE', 'recruitment_candidates', cand.id, cand.nombre);
+      res.status(201).json(cand);
+    }));
+
+    // Listar candidatos
+    app.get('/api/recruitment/candidates', recruiterOnly, wrap(async (req: any, res: any) => {
+      const { status, vacante, limit, offset } = req.query;
+      const reclutador_id = req.auth?.role === 'RECLUTADOR' ? req.auth?.uid : (req.query.reclutador_id ?? undefined);
+      const candidates = Candidates.list({
+        status: status as any, vacante: vacante as any,
+        reclutador_id, limit: Number(limit) || 100, offset: Number(offset) || 0,
+      });
+      const total = Candidates.count({ status: status as any, vacante: vacante as any });
+      res.json({ candidates, total });
+    }));
+
+    // Detalle de candidato
+    app.get('/api/recruitment/candidates/:id', recruiterOnly, wrap(async (req: any, res: any) => {
+      const cand = Candidates.getById(req.params.id);
+      if (!cand) return res.status(404).json({ error: 'Candidato no encontrado' });
+      res.json(cand);
+    }));
+
+    // Actualizar status
+    app.patch('/api/recruitment/candidates/:id/status', recruiterOnly, wrap(async (req: any, res: any) => {
+      const { status, motivo_rechazo, detalle } = req.body;
+      if (!status) return res.status(400).json({ error: 'status requerido' });
+      const cand = Candidates.updateStatus(req.params.id, status, {
+        autor: req.auth?.nombre, detalle, motivo_rechazo,
+      });
+      if (!cand) return res.status(404).json({ error: 'Candidato no encontrado' });
+      logSystem(req, 'RECRUIT_STATUS_CHANGE', 'recruitment_candidates', cand.id, `${cand.nombre} → ${status}`);
+      res.json(cand);
+    }));
+
+    // Agendar entrevista
+    app.patch('/api/recruitment/candidates/:id/entrevista', recruiterOnly, wrap(async (req: any, res: any) => {
+      const { fecha, hora, tipo } = req.body;
+      if (!fecha || !hora) return res.status(400).json({ error: 'fecha y hora son requeridas' });
+      const cand = Candidates.scheduleInterview(req.params.id, fecha, hora, tipo, req.auth?.nombre);
+      if (!cand) return res.status(404).json({ error: 'Candidato no encontrado' });
+      res.json(cand);
+    }));
+
+    // Agregar nota
+    app.post('/api/recruitment/candidates/:id/notas', recruiterOnly, wrap(async (req: any, res: any) => {
+      const { nota } = req.body;
+      if (!nota) return res.status(400).json({ error: 'nota requerida' });
+      const cand = Candidates.addNote(req.params.id, nota, req.auth?.nombre);
+      if (!cand) return res.status(404).json({ error: 'Candidato no encontrado' });
+      res.json(cand);
+    }));
+
+    // Entrevistas de hoy
+    app.get('/api/recruitment/entrevistas/hoy', recruiterOnly, (_req, res) => {
+      res.json(Candidates.getEntrevistasHoy());
+    });
+
+    // Candidatos con seguimiento pendiente
+    app.get('/api/recruitment/seguimiento/pendiente', recruiterOnly, (req: any, res) => {
+      const dias = Number(req.query.dias) || 3;
+      res.json(Candidates.getSeguimientoPendiente(dias));
+    });
+
+    // Funnel / estadísticas
+    app.get('/api/recruitment/stats/funnel', recruiterOnly, (_req, res) => {
+      res.json(Candidates.getFunnelStats());
+    });
+
+    // Resumen de vacantes (texto WhatsApp-friendly)
+    app.get('/api/recruitment/vacantes/resumen/texto', (_req, res) => {
+      const texto = listarVacantesActivas().map(resumenVacante).join('\n\n─────────────\n\n');
+      res.type('text/plain').send(texto);
+    });
+  }
+
   // ── TELEGRAM ──────────────────────────────────────────────
   app.get("/api/telegram/status", chatUserOnly, wrap((_req: any, res: any) => {
     res.json(getTelegramStatus());
