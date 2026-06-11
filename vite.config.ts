@@ -21,6 +21,8 @@ export default defineConfig(({mode}) => {
     },
     build: {
       target: 'esnext',
+      minify: 'esbuild',
+      assetsInlineLimit: 4096,
       sourcemap: false,
       modulePreload: true,
       cssCodeSplit: true,
@@ -39,7 +41,8 @@ export default defineConfig(({mode}) => {
             if (id.includes('qrcode')) return 'vendor-qrcode';
             if (id.includes('@firebase') || id.includes('/firebase/')) return 'vendor-firebase';
             if (id.includes('socket.io-client') || id.includes('engine.io-client') || id.includes('socket.io-parser')) return 'vendor-realtime';
-            if (id.includes('maplibre-gl')) return 'vendor-maps';
+            // Split maplibre-gl into its own chunk (1 MB+) separate from other map deps
+            if (id.includes('maplibre-gl')) return 'vendor-maplibre';
             if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('scheduler')) return 'vendor-react';
             if (id.includes('lucide-react') || id.includes('sonner') || id.includes('clsx') || id.includes('tailwind-merge')) return 'vendor-ui';
             if (id.includes('recharts') || id.includes('d3-') || id.includes('victory-vendor')) return 'vendor-charts';
@@ -47,7 +50,6 @@ export default defineConfig(({mode}) => {
             if (id.includes('jszip')) return 'vendor-zip';
             if (id.includes('motion') || id.includes('framer-motion')) return 'vendor-motion';
             if (id.includes('@simplewebauthn')) return 'vendor-auth';
-            // Chunks faltantes — evitan que estas libs pesadas caigan al bundle principal
             if (id.includes('gsap') || id.includes('@gsap')) return 'vendor-gsap';
             if (id.includes('heic2any')) return 'vendor-heic';
             if (id.includes('idb-keyval')) return 'vendor-idb';
@@ -56,6 +58,19 @@ export default defineConfig(({mode}) => {
           },
         },
       },
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'lucide-react',
+        'clsx',
+        'tailwind-merge',
+        'sonner',
+        'recharts',
+        'zustand',
+        'idb-keyval',
+      ],
     },
   };
 });
