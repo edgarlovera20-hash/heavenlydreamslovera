@@ -31,3 +31,30 @@ html.light,
   --hd-color-glass: rgba(255, 255, 255, 0.78);
   --hd-color-glass-strong: rgba(255, 255, 255, 0.92);
 }
+
+/* HD Design System tokens v2 */
+:root {
+  --hd-bg: #02040a;
+  --hd-bg-soft: #050816;
+  --hd-surface: rgba(10, 18, 32, 0.78);
+  --hd-surface-strong: rgba(15, 23, 42, 0.92);
+  --hd-cyan: #00d9ff;
+  --hd-blue: #0066ff;
+  --hd-blue-soft: #2563eb;
+  --hd-purple: #7c3aed;
+  --hd-text: #ffffff;
+  --hd-text-muted: #94a3b8;
+  --hd-border: rgba(34, 211, 238, 0.28);
+  --hd-success: #22c55e;
+  --hd-warning: #f59e0b;
+  --hd-danger: #ef4444;
+  --hd-radius-sm: 10px;
+  --hd-radius-md: 16px;
+  --hd-radius-lg: 24px;
+  --hd-shadow-cyan: 0 0 28px rgba(0, 217, 255, 0.25);
+  --hd-shadow-blue: 0 0 32px rgba(37, 99, 235, 0.25);
+  --hd-font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --hd-font-title: 'Sora', 'Montserrat', system-ui, sans-serif;
+  --hd-font-display: 'Montserrat', 'Sora', system-ui, sans-serif;
+  --hd-font-mono: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+}
