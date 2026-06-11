@@ -9,29 +9,53 @@
 
 /* ── Electric design system from RHDREAMSAPP2026 ── */
 :root {
-  --neon-soft: rgba(34, 211, 238, 0.13);
-  --neon-mid: rgba(14, 165, 233, 0.18);
-  --neon-bright: rgba(34, 211, 238, 0.66);
-  --neon-panel-shadow: 0 0 0 1px rgba(34, 211, 238, 0.20), 0 18px 44px rgba(0, 0, 0, 0.56), 0 0 32px rgba(14, 165, 233, 0.12);
-  --electric-cyan: #22d3ee;
-  --electric-blue: #38bdf8;
+  /* === RHDreams Brand Palette === */
+  --bg-blue: #0071BC;
+  --bg-blue-dark: #0155A1;
+  --panel-dark: #091623;
+  --panel-navy: #0C1928;
+  --panel-shadow: #07131F;
+  --neon-cyan: #01EEEE;
+  --neon-teal: #06AAB1;
+  --teal-dark: #057C85;
+  --blue-glow: #0067B1;
+  --neon-soft: rgba(1, 238, 238, 0.13);
+  --neon-mid: rgba(6, 170, 177, 0.20);
+  --neon-bright: rgba(1, 238, 238, 0.66);
+  --neon-panel-shadow: 0 0 28px rgba(1, 238, 238, 0.35), 0 0 0 1px rgba(6, 170, 177, 0.28);
+  --electric-cyan: #01EEEE;
+  --electric-blue: #0071BC;
   --electric-violet: #a78bfa;
   --electric-pink: #f472b6;
   --electric-lime: #a3e635;
   --electric-amber: #fbbf24;
-  --electric-mint: #34d399;
+  --electric-mint: #06AAB1;
   --electric-rose: #fb7185;
   --electric-orange: #fb923c;
-  --panel-gray: linear-gradient(135deg, rgba(8, 23, 45, 0.78), rgba(14, 18, 40, 0.72) 48%, rgba(20, 8, 38, 0.68));
-  --panel-gray-solid: rgba(10, 24, 43, 0.82);
-  --panel-gray-hover: linear-gradient(135deg, rgba(10, 42, 68, 0.84), rgba(17, 29, 62, 0.82) 52%, rgba(45, 20, 78, 0.74));
-  --panel-border: rgba(56, 189, 248, 0.32);
-  --panel-highlight: rgba(125, 211, 252, 0.42);
-  --surface-polish: inset 0 1px 0 rgba(255,255,255,0.12), 0 18px 42px rgba(0,0,0,0.48), 0 0 34px rgba(34,211,238,0.12), 0 0 58px rgba(167,139,250,0.08);
+  --panel-gray: radial-gradient(circle at 50% 30%, #0C1928 0%, #091623 60%, #07131F 100%);
+  --panel-gray-solid: #091623;
+  --panel-gray-hover: radial-gradient(circle at 50% 30%, #0d2035 0%, #0a1c2a 60%, #08151f 100%);
+  --panel-border: rgba(6, 170, 177, 0.32);
+  --panel-highlight: rgba(1, 238, 238, 0.42);
+  --surface-polish: inset 0 1px 0 rgba(1, 238, 238, 0.09), 0 0 28px rgba(1, 238, 238, 0.28), 0 18px 42px rgba(7, 19, 31, 0.72);
 }
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* RHDreams brand body background */
+body {
+  background: linear-gradient(135deg, var(--bg-blue) 0%, var(--bg-blue-dark) 100%);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  background: radial-gradient(ellipse at 50% 0%, var(--panel-navy) 0%, var(--panel-dark) 55%, var(--panel-shadow) 100%);
 }
 
 /* Layout stabilization layer: keeps dense enterprise panels and forms usable across breakpoints. */
@@ -39,20 +63,20 @@
   /* glass-panel system */
   .glass-panel {
     --panel-accent: var(--electric-cyan);
-    --panel-accent-rgb: 34, 211, 238;
+    --panel-accent-rgb: 1, 238, 238;
     position: relative;
     background: var(--panel-gray) !important;
-    backdrop-filter: blur(24px) saturate(108%) contrast(104%);
-    -webkit-backdrop-filter: blur(24px) saturate(108%) contrast(104%);
-    border: 1px solid color-mix(in srgb, var(--panel-accent) 34%, transparent);
+    backdrop-filter: blur(20px) saturate(110%) contrast(102%);
+    -webkit-backdrop-filter: blur(20px) saturate(110%) contrast(102%);
+    border: 1px solid var(--neon-teal);
     box-shadow: var(--surface-polish);
     isolation: isolate;
     overflow: hidden;
     transition: border-color 0.28s ease, box-shadow 0.28s ease, background 0.28s ease, transform 0.28s ease;
   }
-  .glass-panel:nth-of-type(7n + 1) { --panel-accent: var(--electric-cyan); --panel-accent-rgb: 34, 211, 238; }
-  .glass-panel:nth-of-type(7n + 2) { --panel-accent: var(--electric-blue); --panel-accent-rgb: 56, 189, 248; }
-  .glass-panel:nth-of-type(7n + 3) { --panel-accent: var(--electric-mint); --panel-accent-rgb: 52, 211, 153; }
+  .glass-panel:nth-of-type(7n + 1) { --panel-accent: var(--electric-cyan); --panel-accent-rgb: 1, 238, 238; }
+  .glass-panel:nth-of-type(7n + 2) { --panel-accent: var(--electric-blue); --panel-accent-rgb: 0, 113, 188; }
+  .glass-panel:nth-of-type(7n + 3) { --panel-accent: var(--electric-mint); --panel-accent-rgb: 6, 170, 177; }
   .glass-panel:nth-of-type(7n + 4) { --panel-accent: var(--electric-violet); --panel-accent-rgb: 167, 139, 250; }
   .glass-panel:nth-of-type(7n + 5) { --panel-accent: var(--electric-pink); --panel-accent-rgb: 244, 114, 182; }
   .glass-panel:nth-of-type(7n + 6) { --panel-accent: var(--electric-amber); --panel-accent-rgb: 251, 191, 36; }
@@ -66,8 +90,8 @@
   }
   .glass-panel-hover:hover {
     background: var(--panel-gray-hover);
-    border-color: rgba(34, 211, 238, 0.42);
-    box-shadow: 0 20px 46px rgba(0,0,0,0.54), 0 0 28px rgba(34,211,238,0.16), inset 0 1px 0 rgba(255,255,255,0.10);
+    border-color: rgba(1, 238, 238, 0.42);
+    box-shadow: 0 20px 46px rgba(0,0,0,0.54), 0 0 28px rgba(1,238,238,0.16), inset 0 1px 0 rgba(1,238,238,0.12);
     transform: translateY(-2px);
   }
   /* neon-selected state */
@@ -77,8 +101,8 @@
   [aria-pressed="true"],
   [data-state="active"],
   [data-selected="true"] {
-    border-color: rgba(34, 211, 238, 0.48) !important;
-    box-shadow: 0 0 0 1px rgba(34,211,238,0.12), 0 16px 38px rgba(0,0,0,0.46), 0 0 26px rgba(34,211,238,0.18) !important;
+    border-color: rgba(1, 238, 238, 0.48) !important;
+    box-shadow: 0 0 0 1px rgba(1,238,238,0.12), 0 16px 38px rgba(0,0,0,0.46), 0 0 26px rgba(1,238,238,0.18) !important;
   }
   /* focus ring */
   button:focus-visible,
@@ -86,9 +110,9 @@
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible {
-    outline: 1px solid rgba(34,211,238,0.75);
+    outline: 1px solid rgba(1,238,238,0.75);
     outline-offset: 3px;
-    box-shadow: 0 0 0 4px rgba(34,211,238,0.08), 0 0 22px rgba(34,211,238,0.18);
+    box-shadow: 0 0 0 4px rgba(1,238,238,0.08), 0 0 22px rgba(1,238,238,0.18);
   }
   /* inputs */
   input,
@@ -106,15 +130,15 @@
   }
   input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.42); }
   input:focus, textarea:focus, select:focus {
-    border-color: rgba(34, 211, 238, 0.56) !important;
-    box-shadow: 0 0 0 3px rgba(34,211,238,0.08), 0 0 24px rgba(34,211,238,0.14), inset 0 1px 0 rgba(255,255,255,0.10);
+    border-color: rgba(1, 238, 238, 0.56) !important;
+    box-shadow: 0 0 0 3px rgba(1,238,238,0.08), 0 0 24px rgba(1,238,238,0.14), inset 0 1px 0 rgba(255,255,255,0.10);
   }
   /* buttons */
   button:not(:disabled):active, a:active, [role="button"]:active {
     transform: translateY(1px) scale(0.995);
   }
   /* electric icon helpers */
-  .electric-icon { color: var(--electric-cyan); filter: drop-shadow(0 0 9px rgba(34,211,238,0.42)); }
+  .electric-icon { color: var(--electric-cyan); filter: drop-shadow(0 0 9px rgba(1,238,238,0.42)); }
   .electric-icon-cyan { color: var(--electric-cyan); }
   .electric-icon-blue { color: var(--electric-blue); }
   .electric-icon-violet { color: var(--electric-violet); }
