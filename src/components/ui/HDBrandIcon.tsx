@@ -1,17 +1,14 @@
 import {
   siWhatsapp, siFacebook, siInstagram, siTiktok, siYoutube,
   siGoogle, siGmail, siGooglecalendar, siGoogledrive, siGooglemeet,
-  siMicrosoft, siMicrosoftoutlook, siMicrosoftteams, siMicrosoftoffice,
-  siTelegram, siX, siLinkedin, siGithub
+  siTelegram, siX, siGithub
 } from 'simple-icons';
 
 const brandIcons: Record<string, { path: string }> = {
   whatsapp: siWhatsapp, facebook: siFacebook, instagram: siInstagram,
   tiktok: siTiktok, youtube: siYoutube, google: siGoogle, gmail: siGmail,
   googleCalendar: siGooglecalendar, googleDrive: siGoogledrive, googleMeet: siGooglemeet,
-  microsoft: siMicrosoft, outlook: siMicrosoftoutlook, teams: siMicrosoftteams,
-  office: siMicrosoftoffice, telegram: siTelegram, x: siX,
-  linkedin: siLinkedin, github: siGithub,
+  telegram: siTelegram, x: siX, github: siGithub,
 };
 
 interface HDBrandIconProps {
