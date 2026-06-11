@@ -1,7 +1,6 @@
 import makeWASocket, {
   DisconnectReason,
   downloadMediaMessage,
-  fetchLatestBaileysVersion,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
 import Pino from 'pino';
@@ -409,32 +408,38 @@ function shouldReconnect(code: number | undefined) {
   ].includes(code as DisconnectReason);
 }
 
+// Exponential backoff: 1s, 2s, 4s, 8s, 16s (capped)
+function reconnectDelayMs(attempts: number) {
+  return Math.min(1000 * Math.pow(2, attempts), 16_000);
+}
+
 function scheduleRestart(runtime: WaRuntime, reason: string) {
   if (runtime.suppressReconnect || runtime.restartTimer) return;
-  runtime.status = 'authenticating';
   runtime.currentQR = null;
   runtime.lastError = null;
+  const delay = reconnectDelayMs(runtime.reconnectAttempts);
   runtime.restartTimer = setTimeout(async () => {
     runtime.restartTimer = null;
+    runtime.status = 'authenticating';
     try {
-      console.log(`[WA:${runtime.account}] Reiniciando socket: ${reason}`);
+      console.log(`[WA:${runtime.account}] Reiniciando socket (intento ${runtime.reconnectAttempts}): ${reason}`);
       await initWhatsApp(runtime.account);
     } catch (err) {
       runtime.status = 'disconnected';
       runtime.lastError = err instanceof Error ? err.message : 'No se pudo reiniciar WhatsApp.';
     }
-  }, 900);
+  }, delay);
 }
 
 async function startBaileysSocket(runtime: WaRuntime) {
   const { state, saveCreds } = await useMultiFileAuthState(runtime.authPath);
-  const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined as any }));
   const nextSocket = makeWASocket({
     auth: state,
     browser: [runtime.label, 'Chrome', '1.0.0'],
     logger: Pino({ level: 'silent' }),
     printQRInTerminal: false,
-    version,
+    syncFullHistory: false,
+    markOnlineOnConnect: false,
   });
 
   runtime.socket = nextSocket;
@@ -510,9 +515,11 @@ async function startBaileysSocket(runtime: WaRuntime) {
     if (type !== 'notify') return;
     for (const msg of messages || []) {
       if (!msg?.message || msg.key?.fromMe) continue;
+      const remoteJid = msg.key.remoteJid || '';
+      // Skip WhatsApp status broadcasts — they are not real conversations
+      if (remoteJid === 'status@broadcast') continue;
       const body = extractBody(msg);
       if (!body) continue;
-      const remoteJid = msg.key.remoteJid || '';
       const storedChatId = storageChatId(runtime.account, remoteJid);
       const media = await extractAndStoreMedia(runtime, msg, body);
       const entry: WaMessage = {
