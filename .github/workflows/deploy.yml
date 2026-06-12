@@ -15,8 +15,27 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
+            set -e
+
+            # ── App (heavenlydreamslovera) ─────────────────────────────────
             cd ~/heavenlydreams
             git pull origin main
             npm ci --production
             npm run build
-            pm2 restart all
+
+            # Aplicar configuración nginx si hay cambios
+            if ! diff -q nginx/app.heavenlydreams.com.mx.conf \
+                         /etc/nginx/sites-available/app.heavenlydreams.com.mx.conf \
+                         > /dev/null 2>&1; then
+              sudo cp nginx/app.heavenlydreams.com.mx.conf \
+                       /etc/nginx/sites-available/app.heavenlydreams.com.mx.conf
+              sudo ln -sf /etc/nginx/sites-available/app.heavenlydreams.com.mx.conf \
+                          /etc/nginx/sites-enabled/app.heavenlydreams.com.mx.conf
+              sudo nginx -t && sudo nginx -s reload
+            fi
+
+            # Reiniciar app con pm2
+            pm2 describe heavenlydreams-app > /dev/null 2>&1 \
+              && pm2 restart heavenlydreams-app \
+              || pm2 start ecosystem.config.js --env production
+            pm2 save
