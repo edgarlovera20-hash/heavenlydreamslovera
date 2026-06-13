@@ -1,6 +1,8 @@
-Settings → Secrets and variables → Actions → New repository secret
-
-SERVER_HOST = 159.89.87.91
-SERVER_USER = elovera9719@gmail.com
-SERVER_PASSWORD = Elovera9984+
-SERVER_PORT = 22
+# Configura estos secretos en GitHub:
+# Settings → Secrets and variables → Actions → New repository secret
+#
+#   SERVER_HOST     → IP del servidor VPS
+#   SERVER_USER     → usuario SSH (root o deploy)
+#   SERVER_SSH_KEY  → clave privada SSH (contenido del archivo ~/.ssh/id_rsa)
+#
+# NUNCA pongas contraseñas ni IPs en este archivo directamente.
