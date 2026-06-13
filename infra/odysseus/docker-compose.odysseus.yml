@@ -1,0 +1,45 @@
+# Odysseus AI Engine — Servicio interno Heavenly Dreams
+# IMPORTANTE: Nunca exponer a internet. Solo red Docker privada + 127.0.0.1.
+
+services:
+  odysseus:
+    build:
+      context: ./odysseus
+    container_name: heavenly-odysseus
+    restart: unless-stopped
+    env_file:
+      - .env.odysseus
+    ports:
+      - "127.0.0.1:7000:7000"
+    volumes:
+      - odysseus_data:/app/data
+      - odysseus_logs:/app/logs
+    networks:
+      - heavenly_ai_net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: heavenly-chromadb
+    restart: unless-stopped
+    volumes:
+      - chromadb_data:/chroma/chroma
+    networks:
+      - heavenly_ai_net
+    expose:
+      - "8000"
+
+networks:
+  heavenly_ai_net:
+    name: heavenly_ai_net
+    driver: bridge
+
+volumes:
+  odysseus_data:
+  odysseus_logs:
+  chromadb_data:
