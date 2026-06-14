@@ -1,0 +1,60 @@
+meta:
+  project: heavenlydreamslovera
+  stack:
+  - TypeScript
+  - Vite
+  - Firebase
+  - Node.js
+  - Python
+  created: 2026-06
+  last_updated: '2026-06-14'
+  project_root: /home/user/heavenlydreamslovera
+  last_captured_lines: 70
+exons:
+  current_state: Mnemo MCP server installed and connected. Main app is TypeScript/Vite
+    with Firebase backend.
+  decisions:
+  - Use Mnemo (https://github.com/bharat18/mnemo) as MCP memory server for session
+    context persistence
+  - Register mnemo as 'chat-gtf' MCP server at user scope in Claude Code
+  constants:
+    MNEMO_PATH: /home/user/mnemo/mcp_server.py
+    MCP_SERVER_NAME: chat-gtf
+    GTF_DEFAULT_FILE: chat_gtf.yaml
+  open_problems:
+  - Main app stack not fully explored yet (TypeScript/Vite/Firebase structure)
+  rejected_approaches: []
+nodes:
+  MnemoMCPServer:
+    type: tool
+    state: stable
+    decision: Registered as stdio MCP server 'chat-gtf' in /root/.claude.json
+    connects_to:
+    - ClaudeCode
+    file: /home/user/mnemo/mcp_server.py
+  MainApp:
+    type: component
+    state: in_progress
+    decision: TypeScript + Vite frontend with Firebase config and Node.js server
+    connects_to: []
+    file: src/
+failure_memory:
+- id: F001
+  what_tried: pip3 install -r requirements.txt on mnemo
+  exact_error: 'ERROR: Cannot uninstall PyJWT 2.7.0, RECORD file not found. Installed
+    by debian.'
+  time_wasted: 5 minutes
+  trigger_words:
+  - pip install
+  - pyjwt
+  - requirements.txt
+  - mnemo
+  never_again: false
+  unless: Always needed when installing mnemo deps on this system
+  safe_pattern: 'Use: pip3 install -r requirements.txt --ignore-installed pyjwt --break-system-packages'
+dependencies:
+  MnemoMCPServer:
+    if_changed:
+    - ClaudeCode MCP config at /root/.claude.json
+    safe_to_change: true
+    blast_radius: LOW
